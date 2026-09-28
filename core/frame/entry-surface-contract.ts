@@ -126,6 +126,32 @@ function witness(value: unknown): EntrySurfaceOutcomeWitness {
   });
 }
 
+export function diagnoseEntrySurfaceContract(value: unknown): readonly { path: string; code: string; message: string }[] {
+  const diagnostics: { path: string; code: string; message: string }[] = [];
+  const add = (path: string) => diagnostics.push({ path: `entrySurface.${path}`, code: 'MALFORMED_ENTRY_SURFACE_CONTRACT',
+    message: `entrySurface.${path} is invalid` });
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) { add('input'); return diagnostics; }
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).sort().join(',') !== [...CONTRACT_KEYS].sort().join(',')) add('keys');
+  if (row.schema !== ENTRY_SURFACE_CONTRACT_SCHEMA) add('schema');
+  for (const field of ['entryPath', 'purposeText', 'workObjectAnchorText', 'beforeText', 'afterText'] as const)
+    if (typeof row[field] !== 'string' || !row[field].trim() || row[field].length > 240) add(field);
+  for (const field of ['prerequisiteTaskId', 'dependentTaskId'] as const)
+    if (!isEntrySurfaceTaskId(row[field])) add(field);
+  if (row.nextActionName !== null && (typeof row.nextActionName !== 'string' || !row.nextActionName.trim() || row.nextActionName.length > 240)) add('nextActionName');
+  if (!Array.isArray(row.outcomeWitnesses) || row.outcomeWitnesses.length === 0) add('outcomeWitnesses');
+  else for (const [index, item] of row.outcomeWitnesses.entries()) {
+    try { witness(item); } catch (error) { if (!(error instanceof EntrySurfaceContractError)) throw error; add(`outcomeWitnesses[${index}]`); }
+  }
+  if (diagnostics.length === 0) {
+    try { parseEntrySurfaceContract(value); } catch (error) {
+      if (!(error instanceof EntrySurfaceContractError)) throw error;
+      add('contract');
+    }
+  }
+  return diagnostics;
+}
+
 export function parseEntrySurfaceContract(value: unknown): EntrySurfaceContract {
   try {
     const input = record(value);

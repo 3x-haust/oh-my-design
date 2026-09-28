@@ -55,6 +55,7 @@ export type ResearchSource = Readonly<{
 export type ResearchLane = Readonly<{
   queries: readonly string[];
   searches: readonly ResearchEvidence[];
+  leads?: readonly ResearchEvidence[];
   sources: readonly ResearchSource[];
   navigation?: readonly Readonly<{ url: string; evidence: ResearchEvidence; capture: ResearchEvidence }>[];
   discoveryRoots?: readonly ResearchDiscoveryRoot[];

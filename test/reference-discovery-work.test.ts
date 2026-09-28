@@ -7,6 +7,7 @@ import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { publishReferenceDiscoveryExclusion } from '../core/ref/discovery-exclusion.ts';
 import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
+import { publishSearchLeads } from '../core/ref/search-leads.ts';
 import { readStrictDiscoveryNavigation } from '../core/ref/discovery-record.ts';
 import { testPng } from './helpers/search-execution.ts';
 import { DOMAIN_OBSERVATION_LIMITATIONS, DOMAIN_OBSERVATION_SCHEMA, readDomainObservation } from '../core/ref/domain-observation.ts';
@@ -14,6 +15,11 @@ import { directRootAt } from './helpers/market-reference.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { fixture, routeInput, unavailableEntry, unavailableSearch } from './helpers/discovery-work.ts';
+function registerEmptyLead(root: string, route: ReturnType<typeof routeAdaptiveFlow>, lane: 'domain' | 'design', query: string): void {
+  publishSearchLeads(createTestProjectWriteAdapter(root), route.sourceContractSha256, {
+    schema: 'reference-search-leads-v1', lane, query, urls: [], provider: 'host', tool: 'web_search', observedAt: new Date().toISOString(),
+  });
+}
 function observeDomain(root: string, source: string, links: readonly string[] = [],
   capturedAt = new Date().toISOString(), language: 'korean' | 'non-korean' = 'korean',
   method: 'navigation' | 'direct-public' = 'direct-public'): void {
@@ -84,6 +90,24 @@ function visitedItem(root: string, url: string, lane: 'domain' | 'design' = 'des
   assert.equal(readStrictDiscoveryNavigation(root, receipt).url, url);
 }
 
+test('unsigned host lead becomes a follow-link only; signed destination observation then counts as material progress', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const initial = referenceDiscoveryWork(root, route);
+  assert.equal(initial.action?.kind, 'collect-leads');
+  const source = 'https://www.bokjiro.go.kr/service/';
+  publishSearchLeads(createTestProjectWriteAdapter(root), route.sourceContractSha256, {
+    schema: 'reference-search-leads-v1', lane: 'domain', query: initial.action.input!.query,
+    urls: [source], provider: 'host', tool: 'web_search', observedAt: new Date().toISOString(),
+  });
+  const withLead = referenceDiscoveryWork(root, route);
+  assert.equal(withLead.action?.kind, 'follow-link');
+  assert.equal(withLead.action?.url, source);
+  assert.deepEqual(withLead.materialProgressIdentities, []);
+  visitedItem(root, source, 'domain', ['https://www.bokjiro.go.kr/service/apply']);
+  assert.deepEqual(referenceDiscoveryWork(root, route).materialProgressIdentities, [ `domain:${source}` ]);
+});
+
 test('work-next names the first exact Korean search action when no board evidence exists', t => {
   // Given: a Korean welfare route without any captured reference.
   const root = fixture(t);
@@ -92,7 +116,7 @@ test('work-next names the first exact Korean search action when no board evidenc
   const work = referenceDiscoveryWork(root, route);
   // Then: it selects a bounded real search, not another brief/check and not a board.
   assert.equal(work.status, 'action');
-  assert.equal(work.action?.kind, 'search');
+  assert.equal(work.action?.kind, 'collect-leads');
   assert.equal(work.action?.lane, 'domain');
   assert.equal(work.action?.input?.query, '복지로');
   assert.deepEqual(work.action?.args, ['ref', 'advance', '--json']);
@@ -113,7 +137,7 @@ test('work-next moves to Korean design discovery once three distinct local domai
   // Then: it never recycles the domain search or substitutes a government portal as design evidence.
   assert.equal(work.status, 'action');
   assert.equal(work.action?.lane, 'design', JSON.stringify(work.progress));
-  assert.equal(work.action?.kind, 'search');
+  assert.equal(work.action?.kind, 'collect-leads');
   assert.equal(work.action?.input?.lane, 'design');
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
 });
@@ -129,7 +153,7 @@ test('retained families do not skip remaining required market searches after a s
   unavailableSearch(root, { lane: 'domain', query: '복지로', url: searchUrl.href, queryParam: 'q' });
   const after = referenceDiscoveryWork(root, route);
   assert.equal(after.action?.lane, 'domain');
-  assert.equal(after.action?.kind, 'search');
+  assert.equal(after.action?.kind, 'collect-leads');
   assert.equal(after.action?.input?.query, '정부24 혜택알리미');
 });
 
@@ -143,7 +167,7 @@ test('generic search labels and private links do not become candidate services w
     { url: 'https://www.welfarehello.com/recommend-policy/', text: '바로가기' },
   ]);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'search');
+  assert.equal(work.action?.kind, 'collect-leads');
   assert.notEqual(work.action?.input?.url, input.url);
 });
 
@@ -154,7 +178,7 @@ test('explicit Korean-market discovery does not follow an unrelated substantive 
   assert.ok(input);
   observedSearch(root, input, [{ url: 'https://weather.example/forecast', text: 'Weather Forecast Tomorrow' }]);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'search');
+  assert.equal(work.action?.kind, 'collect-leads');
   assert.notEqual(work.action?.input?.url, input.url);
 });
 
@@ -169,7 +193,7 @@ test('domain search does not promote explanatory articles or policy news as serv
     { url: 'https://www.gov.kr/portal/gvrnPolicy/listAll', text: '정부 정책정보' },
   ]);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'search');
+  assert.equal(work.action?.kind, 'collect-leads');
   assert.notEqual(work.action?.input?.url, input.url);
 });
 
@@ -206,7 +230,7 @@ test('a search header help link is not a domain task result or a next visit', t 
     { url: 'https://www.bing.com/images', text: '이미지' },
   ]);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'search');
+  assert.equal(work.action?.kind, 'collect-leads');
   assert.notEqual(work.action?.input?.url, input.url);
   assert.equal(work.progress.visits, 0);
 });
@@ -338,26 +362,26 @@ test('work-next resumes after a signed unavailable search instead of repeating t
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   const before = referenceDiscoveryWork(root, route);
-  assert.equal(before.action?.kind, 'search');
+  assert.equal(before.action?.kind, 'collect-leads');
   assert.ok(before.action?.input);
   unavailableSearch(root, before.action.input);
   const after = referenceDiscoveryWork(root, route);
   assert.equal(after.status, 'action');
-  assert.equal(after.action?.kind, 'search');
+  assert.equal(after.action?.kind, 'collect-leads');
   assert.notEqual(after.action?.input?.url, before.action.input.url);
   assert.notEqual(after.workSha256, before.workSha256);
   assert.equal(after.attempts[0]?.receipt.path.startsWith('.omd/discovery/domain/search-'), true);
 });
 
-test('work-next exhausts free design search then moves across signed failed gallery roots', t => {
+test('work-next exhausts free design leads then moves across signed failed gallery roots', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
   for (let remaining = 20; remaining > 0; remaining -= 1) {
     const work = referenceDiscoveryWork(root, route);
-    if (work.action?.kind !== 'search') break;
+    if (work.action?.kind !== 'collect-leads' || work.action.lane !== 'design') break;
     assert.ok(work.action.input);
-    unavailableSearch(root, work.action.input);
+    registerEmptyLead(root, route, 'design', work.action.input.query);
   }
   const direct = referenceDiscoveryWork(root, route);
   assert.equal(direct.action?.kind, 'direct-entry');
@@ -370,14 +394,14 @@ test('work-next exhausts free design search then moves across signed failed gall
   assert.ok(next.attempts.some(item => item.url === direct.action?.url && item.reason === 'network-failure'));
 });
 
-test('Korean domain discovery uses verified direct service leads after search transport failures', t => {
+test('Korean domain discovery uses verified direct service leads after empty host searches', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   for (let remaining = 5; remaining > 0; remaining -= 1) {
     const work = referenceDiscoveryWork(root, route);
-    if (work.action?.kind !== 'search') break;
+    if (work.action?.kind !== 'collect-leads' || work.action.lane !== 'domain') break;
     assert.ok(work.action.input);
-    unavailableSearch(root, work.action.input);
+    registerEmptyLead(root, route, 'domain', work.action.input.query);
   }
   const direct = referenceDiscoveryWork(root, route);
   assert.equal(direct.action?.kind, 'direct-entry');
@@ -396,9 +420,9 @@ test('unscoped route still begins a plan-derived public domain search', t => {
   const input = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8'));
   const work = referenceDiscoveryWork(root, routeAdaptiveFlow(input));
   assert.equal(work.status, 'action');
-  assert.equal(work.action?.kind, 'search');
+  assert.equal(work.action?.kind, 'collect-leads');
   assert.equal(work.action?.lane, 'domain');
-  assert.match(work.action?.input?.url ?? '', /^https:\/\/www\.google\.com\/search\?q=/u);
+  assert.match(work.action?.input?.url ?? '', /^https:\/\/html\.duckduckgo\.com\/html\/\?q=/u);
 });
 
 test('first-party pages merely mislabeled design never mark the board ready', t => {

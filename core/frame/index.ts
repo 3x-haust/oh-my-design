@@ -44,7 +44,12 @@ export function parseRealityLedger(value: unknown): RealityLedger {
   if (!Array.isArray(value.facts) || value.facts.length === 0 || value.facts.length > 12) {
     throw new Error('reality ledger facts must contain 1..12 entries');
   }
-  const facts = value.facts.map((fact, index): RealityFact => {
+  const facts = value.facts.map(parseRealityFact);
+  return { schema: 'reality-ledger-v1', mode: value.mode, facts };
+}
+
+/** Validate an independently authored fact without inventing ledger defaults. */
+export function parseRealityFact(fact: unknown, index: number): RealityFact {
     if (!plainRecord(fact)) throw new Error(`reality facts[${index}] must be an object`);
     const keys = Object.keys(fact).sort().join(',');
     if (keys !== 'category,statement,status' && keys !== 'category,source,statement,status') {
@@ -65,8 +70,6 @@ export function parseRealityLedger(value: unknown): RealityLedger {
       statement: boundedText(fact.statement, `reality facts[${index}].statement`),
       ...(source === undefined ? {} : { source }),
     };
-  });
-  return { schema: 'reality-ledger-v1', mode: value.mode, facts };
 }
 
 /**

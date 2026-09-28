@@ -191,8 +191,9 @@ test('a missing reference board points to discovery work instead of repeating en
   const work = nextStageWork(root, pack, invocation);
   assert.equal(work.stage, 'reference-board');
   assert.equal(work.action, 'acquire-reference');
-  assert.equal(work.next, 'omd ref advance --json');
   assert.equal(work.referenceWork?.status, 'action');
+  assert.equal(work.referenceWork?.action?.kind, 'collect-leads');
+  assert.ok(work.next.includes('omd ref leads add --input'));
   assert.match(work.referenceWork?.workSha256 ?? '', /^[a-f0-9]{64}$/);
 });
 

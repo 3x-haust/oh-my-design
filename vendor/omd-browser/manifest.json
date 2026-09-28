@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "component": "omd-browser",
+  "upstreamVersion": "0.0.1",
+  "sourceUrl": "https://github.com/code-yeongyu/omowright",
+  "sourceCommit": "293ca5002cbd4c8b0c104c5934683385ef7e0d3a",
+  "sourceDigest": "167dcc331041e909a54c6e9695ea8d09bbb96bc351d62333d7ac628f780b83f6",
+  "buildToolVersion": "1.4.2",
+  "sourceFiles": {
+    "index.js": "b6b064fab277031c6c51f5a58b84b31040f9960bf767bf646adc0540c1d25c1b",
+    "page-bundle.js": "bfd51e8383cf47200d57387bbbed258bce5a3a3d00c38fc108034d2888e23f0c"
+  },
+  "files": {
+    "index.js": "bc9a1517cfc1bdc2ff0f9d3f4f9c1c7f94e01bde0e70c0b39b03893198098aac",
+    "page-bundle.js": "6135e9f489ba7088e2285cbffb3fa64595dceee665a13fef654b9591e0a5b356"
+  }
+}

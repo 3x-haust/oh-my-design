@@ -14,9 +14,10 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects. Current design research compares at least two independent visual-direction source families, distinct gallery items and distinct PNG evidence, and carries both into the board. Repeated pages, crops, aliases or captures from one product count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
 | Reference capture quality | Every declared public feature screen is captured in a signed native flow at a viewport that visibly contains its asserted state. A fixed full-viewport app container needs a selected visible feature, not inferred safety from its navigation or recovery controls. Informational notices are visually suppressed without invoking their close controls before retained pixels; consent, unknown, or unclosable obstructions are gaps, not visual evidence. Interaction probes cannot change the saved initial-state image. | `omd benchmark record`/`check`; `ref add`/`add-batch` capture refusal; current v3 evidence validation |
 | Korean reference scope | A Korean-language task brief starts Korean-service reference discovery without asserting a Korean cultural style. Predominantly Korean-language source UI can qualify regardless of domain suffix. Foreign-only domain captures require validated published local-domain research; editable captures and `--from-user` alone do not unlock fallback. Design-gallery pixels remain judged by the research provenance gate. A blocked Korean provider redirects discovery to another Korean operator and public transport. | `omd ref discover-plan --json`; `ref add`/`add-batch` market admission; v7 market coverage |
-| Executed discovery | Query prose is not acquisition evidence. Retained non-user entries trace to actual observed links and separately captured visits. | `omd ref search --input <json>` or `omd ref navigate`; current v7 research publication/currentness checks |
+| Executed discovery | Host search results are unsigned leads, not acquisition evidence. Retained non-user entries require separate signed destination observations. | `omd ref leads add|search --input <json>` and `omd ref navigate`; current research publication/currentness checks |
 | Reference acquisition continuity | A selected missing board resolves to an acquisition action. Native failures remain diagnostics. Try the other unfinished lane and unused task-derived searches; initial catalogue exhaustion requires owner-authored novel acquisition, not terminal completion or an empty board. | `omd ref work-next --json`; `omd ref advance --json`; `ref discover-batch --recovery`; Pi owned-work refusal; stage-next work digest |
 | Rendered reference use | Every screen criterion has current desktop/mobile capture judgments; unresolved or stale results cannot complete. | Source seal binds the application; `omd ref apply-review-check --json`; terminal preflight |
+| Design language | Current exact-request translation binds measurable targets to stage brief, composition fingerprint/rows and production entry; pending ambiguity blocks design commitment. Current feedback requires native baseline, passing movement and independent review before refinement closure. Seed taste ranges remain advisory. | `omd language translate|check`; `omd feedback translate|check`; `DESIGN_LANGUAGE_*`, `FEEDBACK_*`; refinement checkpoint and completion preflight; see `protocol/design-language.md` |
 | Current copy and design inputs | Selected copy, current copy review, type proof, composition and candidate selection must exist and satisfy their applicable checks before source work. A PRD or stub is not their replacement. | Production readiness and its current-artifact validators |
 | Source ownership | Only the authorized owner and paths may change. A recipe is a source write too. | Pi write/edit boundary; routed `recipe add` inside the CLI |
 | Review closure | Inspect rendered findings, repair confirmed issues or record supported exclusions, and recheck the same scope. A new unreviewed scan cannot clear an old issue. | Slop review closure and final evidence preflight |
@@ -57,8 +58,10 @@ the pointer after native publication. Do not repeatedly run a passing board entr
 application decisions before their research exists. These actions do not add route stages or
 validated-progress credits; stale research takes precedence over a missing application file.
 When the board itself is missing, use `omd ref work-next --json` to read the current evidence-derived
-action. `omd ref advance --json` executes exactly one native public search or navigation action and
-records its outcome before the pointer is recomputed. A visited gallery item is still only discovery:
+action. For `collect-leads`, use the host web search tool and register caller-reported URLs with
+`omd ref leads add --input <json>`; these unsigned leads cannot satisfy evidence. `omd ref advance
+--json` executes one eligible destination navigation and records its signed observation or failure
+before the pointer is recomputed. A visited gallery item is still only discovery:
 Scout inspects its actual UI image or observed original, retains useful evidence with `ref add`, and
 authors the board with `ref board --input`. An unsuitable inspected item receives a CLI-owned
 `ref exclude` decision bound to its exact current native visit and a specific observed reason;
@@ -69,8 +72,8 @@ missing and execute `replan-reference-discovery`: Scout authors a new batch from
 The gate refuses repeated current requests before browser work; query/provider changes and newly
 observed destinations can collect new evidence without lowering admission rules. Do not repeat
 `discover-plan`, `brief --check`, or `stage next` while the same owned action remains outstanding.
-For a Korean welfare task, run the discovery plan's exact service-name searches on a public Korean
-search transport and follow current observed links. Korean copy on a `.com` service may qualify;
+For a Korean welfare task, submit the discovery plan's exact service-name queries with host web
+search, register the returned URLs as unsigned leads, and inspect their destinations with OMD. Korean copy on a `.com` service may qualify;
 an English foreign government page does not become a Korean reference by saving it under `domain`.
 If one Korean site is blocked, inspect another local operator before claiming a market gap.
 When `greenfield-task-flow-benchmark` is selected, inventory each comparable service's public feature controls and
@@ -158,15 +161,16 @@ inspection and research repair remain available while production is blocked.
   Research reachability extends from
   search pages and separately validated native navigation captures. Each optional lane `navigation`
   item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.
-  A blocked provider can be replaced with another free public source, never a paid
-  MCP or invented receipt. Native GET capture is not an automatic search-quality judgment.
+  A blocked provider can be replaced with another observed source. On the first design login wall,
+  unsolved challenge, or missing browser session, ask the user before setup: "Mobbin 같은 로그인 필요한 갤러리도 쓰려면 브라우저 로그인을 한 번 해두면 돼요. 지금 세팅할까요?" Offer setup, skip this run, and never ask. Only explicit consent authorizes `omd browser setup --consent`; OMD opens its dedicated headed profile and reuses it headlessly after the user closes the window. Advanced CDP/storage/stealth overrides remain optional. Neither a lead nor a login alone is evidence. Native GET capture is not an automatic search-quality judgment.
   New search receipts retain only rendered links in the captured viewport and require stable
   pre/post-capture observations, with at most one recapture. An empty rendered result is
   `empty-observation`, not success or an invented challenge; inspect it and use another public
   source. This does not retroactively give historical receipts a visibility guarantee.
-  Direct entry and new navigation captures use isolated GET/HEAD-only contexts with no interactive
-  probes, service workers or downloads. Design roots must expose actual same-gallery items and stay
-  public lists after redirects, never login walls or domain documentation. Roots do not assert taste,
+  Navigation captures use isolated contexts; an explicitly configured authenticated browser session
+  or challenge interaction may obtain access. Captured destination observations, not session state,
+  establish evidence. Do not persist credentials or cookie contents in receipts. Design roots must
+  expose actual same-gallery items after redirects. Roots do not assert taste,
   official authority or asset rights. Their hosts/images remain subject to lane separation, and raw
   discovery paths/declared or redirected hosts cannot enter source-free application projections.
   Search/entry/navigation outputs live under `.omd/discovery/`, outside retained `.omd/refs/`.

@@ -127,7 +127,8 @@ the current route, explicit request, locale context and Framer-owned acquisition
 not depend on the optional domain-analysis stage. Existing domain queries supplement it only while
 they describe the current request. The user supplies the task, not a required reference list.
 
-For two or more independent planned queries or already-known public-list URLs, use
+For planned queries use the host web search tool and register unsigned leads with `ref leads add`.
+For two or more already-known public-list URLs, use
 `omd schema reference-discovery-batch` and `omd ref discover-batch --input <json> --json`.
 The command runs up to four isolated visits concurrently in one browser and returns an ordered
 result per item. Each successful item retains the same signed search/navigation evidence as its
@@ -170,8 +171,9 @@ Mobbin, Page Flows, UI Bowl and relevant Pinterest entries) for apps/product UI,
 Siteinspire and Pinterest) for website/marketing direction. The discovery plan supplies surface-aware
 leads, not fixed winners or guarantees of free catalogue/API access. Verify each entry's current free
 access, open it beyond the thumbnail, and follow its original where available. If access is blocked,
-record the limit and try another public source; never purchase, start trials, install an MCP, or
-bypass access controls. A screenshot-only reference can establish visual anatomy through the native
+let acquisition handle challenges; for login gates or unsolved challenges the harness asks once,
+then OMD sets up the logged-in profile on consent. If still blocked, record the limit and try another
+source; never purchase or start trials. A screenshot-only reference can establish visual anatomy through the native
 image import path, not live behavior or measured app DOM. Free viewing is not an asset reuse license.
 
 Discovery always saves two separate ledgers:
@@ -250,9 +252,12 @@ active research owner. Unknown files and valid references remain untouched.
 last as their consistency receipt. `research-check` and downstream gates require all three current
 records. New research uses v7. Historical v5 remains readable with its search-only requirements;
 historical v6 remains parseable, but current publication rechecks any direct roots with signed v4
-evidence after the current route; migrate older roots through a fresh native visit. Each lane can use `searches` from `omd ref search --input <json>` with
+evidence after the current route; migrate older roots through a fresh native visit. Historical lanes may contain signed `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
-links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
+links, a 1280×900 screenshot and HTTP/error outcome. New acquisition uses configured logged-in
+sessions and handles challenges in the acquisition layer. For login-gated galleries or unsolved
+challenges, the harness asks once; on consent OMD sets up its own logged-in browser profile. Do not
+ask users to set env vars (advanced overrides only).
 Current signed search v3 records bind each retained visible result label to its observed link and
 exclude browser-observed header, navigation, footer, and consent chrome from actionable links.
 Older signed v2 records remain readable as history but require recapture for current research.
@@ -297,7 +302,9 @@ task-contextual primary-navigation links; its observed links
 also seed descendants. Intermediate edges in direct v6/v7 chains require strict navigation-v4 captures. Hidden all-DOM links
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item
-links; login walls, blocked pages, selected items and arbitrary service pages are refused.
+links; challenges are handled by the acquisition layer. For login-gated galleries or unsolved
+challenges, the harness asks once; on consent OMD sets up its own logged-in browser profile.
+Unresolved login walls, blocked pages, selected items and arbitrary service pages are refused.
 New signed entry-v4 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
 Historical entry-v1/v2/v3 records remain readable, but only entry-v4 content-link evidence can satisfy
 current explicit-market provenance.

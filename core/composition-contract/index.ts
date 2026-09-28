@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { refIdentity } from '../ref/identity.ts';
+import { projection } from '../design-language/index.ts';
+import { readPersistedRoute } from '../route/index.ts';
 import { loadRefs } from '../ref/store.ts';
 import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { parseReferenceHandoffReceipt } from '../ref/reference-handoff.ts';
@@ -25,7 +27,7 @@ export const CURRENT_COMPOSITION_SECTIONS = [
 // validator (task evidence owns `## UX task coverage`). The composition contract only
 // recognizes the heading so it can be authored as normal LF Markdown; it never restates
 // or revalidates that section's internal schema.
-export const AUXILIARY_SECTIONS = ['UX task coverage', 'Production revision binding'] as const;
+export const AUXILIARY_SECTIONS = ['UX task coverage', 'Production revision binding', 'Design language targets'] as const;
 
 export interface CompositionContractFinding {
   id: 'COMPOSITION-MISSING' | 'COMPOSITION-SECTION' | 'COMPOSITION-HASH' | 'COMPOSITION-STALE' | 'COMPOSITION-SCOUT' | 'COMPOSITION-SYNTHESIS';
@@ -112,7 +114,7 @@ function validateFingerprint(
   const values = new Map<string, string>();
   for (const line of lines) {
     if (line.trim() === '') continue;
-    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256): (.+)$/.exec(line);
+    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256|Design language SHA-256): (.+)$/.exec(line);
     if (!match) { findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'Input fingerprint contains an unknown or malformed line' }); continue; }
     const key = match[1]!;
     if (values.has(key)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${key} must appear exactly once` });
@@ -140,6 +142,10 @@ function validateFingerprint(
     else if (actual === undefined) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} is missing; composition cannot be current` });
     else if (value !== actual) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} changed after composition was written` });
   }
+  if (inputs.designLanguage !== undefined) {
+    const value = values.get('Design language SHA-256');
+    if (value !== inputs.designLanguage) findings.push({ id: 'COMPOSITION-STALE', path: '.omd/composition.md#Input fingerprint', message: 'DESIGN_LANGUAGE_BINDING_MISSING: current translation fingerprint is missing or stale' });
+  } else if (values.has('Design language SHA-256')) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'unexpected design language fingerprint' });
   const scout = values.get('Scout SHA-256');
   if (inputs.scout !== undefined) {
     if (!scout || !/^[0-9a-f]{64}$/.test(scout)) findings.push({ id: 'COMPOSITION-SCOUT', path: '.omd/composition.md#Input fingerprint', message: 'Scout SHA-256 must be a 64-hex hash while .omd/scout.md exists' });
@@ -258,6 +264,7 @@ function sha256(path: string): string { return createHash('sha256').update(readF
 export interface CompositionContractInputs {
   contract?: string; frame?: string; copyDeck?: string; typeProof?: string; scout?: string;
   artDirectionRecord?: string; motionResolutionProjection?: string; settledSelection?: string; composerHandoff?: string;
+  designLanguage?: string; languageTargets?: readonly { id: string; route: string; selector: string; metric: string; range: readonly [number, number] }[];
   /** Exact normalized Source ref identities for user-origin refs, not host labels. */
   userRefLabels?: string[];
 }
@@ -276,6 +283,14 @@ function validateCompositionContractSourceFor(
     for (const message of validateColourRoles(colourRoleLines)) findings.push(sectionFinding('Colour roles', message));
   }
   findings.push(...validateFingerprint(parsed.sections.get('Input fingerprint') ?? [], inputs, artDirection));
+  const targetLines = parsed.sections.get('Design language targets')?.filter(line => line.trim()) ?? [];
+  if (inputs.languageTargets?.length) {
+    for (const target of inputs.languageTargets) {
+      const expected = `- ${target.id} | ${target.route} | ${target.selector} | ${target.metric} | ${target.range[0]}..${target.range[1]}`;
+      if (!targetLines.includes(expected)) findings.push(sectionFinding('Design language targets', `DESIGN_LANGUAGE_BINDING_MISSING: target row missing: ${target.id}`));
+    }
+    if (targetLines.length !== inputs.languageTargets.length) findings.push(sectionFinding('Design language targets', 'DESIGN_LANGUAGE_BINDING_MISSING: unexpected or duplicate target row'));
+  } else if (targetLines.length) findings.push(sectionFinding('Design language targets', 'unexpected design language targets'));
   const synthesisLines = parsed.sections.get(SYNTHESIS_SECTION);
   const synthesis = synthesisLines?.join('\n').trim() ?? '';
   const result = synthesis ? validateReferenceSynthesis(synthesisLines!) : { findings: [], sourceRefs: [] };
@@ -331,6 +346,17 @@ function validateCompositionContractWith(
   const frame = readHash('frame.md'); const copyDeck = readHash('copy-deck.md'); const typeProof = readHash('type-proof.md'); const scout = readHash('scout.md');
   const userRefLabels = loadRefs(root).filter((ref) => ref.origin === 'user').map((ref) => refIdentity(ref.source, ref.component)).sort();
   const derived: Omit<CompositionContractInputs, 'contract' | 'frame' | 'copyDeck' | 'typeProof' | 'scout' | 'userRefLabels'> = {};
+  if (invocation !== undefined && existsSync(join(omd, 'route.json'))) {
+    try {
+      const route = readPersistedRoute(root, invocation);
+      const language = projection(root, route);
+      if (language?.status === 'needs-clarification') stale('design-language/intake.json', 'DESIGN_LANGUAGE_AMBIGUOUS');
+      if (language?.status === 'resolved') {
+        derived.designLanguage = language.sha256;
+        derived.languageTargets = language.targets;
+      }
+    } catch (error) { stale('design-language/intake.json', error instanceof Error ? error.message : String(error)); }
+  }
   let artDirectionRequirement: ArtDirectionFingerprintRequirement = 'selected';
   if (existsSync(join(omd, 'route.json'))) {
     if (invocation === undefined) stale('route.json', 'adaptive route authority is required to validate composition');

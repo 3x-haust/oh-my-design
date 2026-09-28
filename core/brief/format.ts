@@ -55,6 +55,11 @@ export function formatBrief(brief: Brief): string {
         : [`reference binding: ${brief.localeDesign.referenceBinding.path} @ ${brief.localeDesign.referenceBinding.sha256.slice(0, 12)}`]),
     ]);
   }
+  if (brief.designLanguage !== undefined && brief.designLanguage !== null) section('language', [
+    `${brief.designLanguage.status} @ ${brief.designLanguage.sha256}`,
+    ...(brief.designLanguage.copyTone ? ['copy-tone: Writer and CLEAN copy review required; no Hand visual targets'] : []),
+    ...brief.designLanguage.targets.map(t => `${t.id}: ${t.role} ${t.route} ${t.selector} ${t.state}/${t.viewport} ${t.metric} ${t.range[0]}..${t.range[1]} ${t.unit}`),
+  ]);
   if (brief.reality !== null) {
     section('reality', [
       brief.reality.mode,

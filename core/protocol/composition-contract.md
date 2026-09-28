@@ -2,7 +2,7 @@
 
 `.omd/composition.md` is the durable bridge between research and isolated structural
 sketches. `omd-composer` owns it. The artifact records composition decisions; it does not
-copy a reference page or prescribe one visual answer.
+copy a reference page or prescribe one visual answer. When a current resolved design-language translation exists, include its `Design language SHA-256` input fingerprint and a `## Design language targets` row for every scoped target (`- id | route | selector | metric | min..max`). These are source-free destinations, not new copy or a universal style preset; see `protocol/design-language.md`.
 
 The composer receives a sanitized frame/concept, clean copy deck, sanitized approved type
 contract, and the scout's distilled transferable principles/invariants with source trust.

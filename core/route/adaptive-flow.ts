@@ -1,7 +1,7 @@
 import { routeModelCapabilityProbe } from '../runtime/model-capability-profile.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { checkUxPolicy, type RecommendedMethodDecision } from '../ux/policy.ts';
-import { parseAdaptiveRouteInput } from './adaptive-flow-boundary.ts';
+import { diagnoseAdaptiveStrategyFields, parseAdaptiveRouteInput } from './adaptive-flow-boundary.ts';
 import {
   ADAPTIVE_ROLE_IDS,
   ADAPTIVE_ROUTE_RECORD_SCHEMA,
@@ -23,6 +23,7 @@ import { routeTaskOutcome } from './task-outcome-routing.ts';
 import { adaptiveSourceContract, adaptiveSourceContractSha256 } from './adaptive-source-contract.ts';
 import { ADAPTIVE_STAGE_OWNERS, validateAdaptiveStageOrder } from './adaptive-stage-graph.ts';
 import { validateAdaptiveExecutionWaves } from './adaptive-execution-waves.ts';
+import { parseAdaptiveExecutionWaves } from './adaptive-execution-wave-boundary.ts';
 import { adaptiveBehaviorContract } from './adaptive-behavior-contract.ts';
 import { adaptiveMotionContract } from './adaptive-motion-ambition.ts';
 import { validateAdaptiveAiAssetSelection } from './adaptive-ai-assets.ts';
@@ -300,6 +301,21 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
   };
   let input: ValidatedAdaptiveRouteInput | undefined;
   check('input', () => { input = validated(value, localeDesign); });
+  if (input === undefined && typeof value === 'object' && value !== null && 'strategyDecision' in value) {
+    const raw = value.strategyDecision;
+    diagnostics.push(...diagnoseAdaptiveStrategyFields(raw));
+    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
+      const strategy = raw as Record<string, unknown>;
+      const lists = [strategy.roles, strategy.stages, strategy.methods];
+      if (lists.every(list => Array.isArray(list) && list.every(item => typeof item === 'string'))
+        && !diagnostics.some(d => d.path === 'strategyDecision.executionWaves')) {
+        check('strategyDecision.executionWaves', () => validateAdaptiveExecutionWaves({
+          roles: strategy.roles as string[], stages: strategy.stages as string[], methods: strategy.methods as string[],
+          executionWaves: parseAdaptiveExecutionWaves(strategy.executionWaves),
+        }, 'deliveryMode' in value && value.deliveryMode === 'design-only' ? 'design-only' : undefined));
+      }
+    }
+  }
   if (input !== undefined) {
     const currentInput = input;
     checkAdaptiveInput(currentInput, check);
@@ -311,7 +327,7 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
         methods: [...strategy.methods, 'parallel-reference-acquisition'] }, currentInput.deliveryMode));
     }
   }
-  return diagnostics.filter((entry, index) => diagnostics.findIndex(other => other.message === entry.message) === index);
+  return diagnostics.filter((entry, index) => diagnostics.findIndex(other => other.path === entry.path && other.code === entry.code && other.message === entry.message) === index);
 }
 
 export function routeAdaptiveFlow(

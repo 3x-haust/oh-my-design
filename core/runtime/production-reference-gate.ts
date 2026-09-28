@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { projection, requireCopyToneReview } from '../design-language/index.ts';
 import { lstatSync } from 'node:fs';
 import { buildBrief } from '../brief/index.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
@@ -36,6 +37,12 @@ export function checkProductionReadiness(
     if (route.deliveryMode === 'design-only' || !route.strategy.stages.includes('production')) {
       blockers.push('production is not selected; finish the design handoff without application writes');
     }
+    attempt('design language', () => {
+      const language = projection(root, route);
+      if (language?.status === 'needs-clarification') throw new Error('DESIGN_LANGUAGE_AMBIGUOUS: resolve the picture-backed question');
+      if (language?.status === 'resolved' && !language.targets.length && !language.copyTone) throw new Error('DESIGN_LANGUAGE_UNGROUNDED');
+      requireCopyToneReview(root, route);
+    });
     const targets = target === undefined ? [] : typeof target === 'string' ? [target] : target;
     const outside = pathsOutsideScope(route, targets);
     for (const path of outside) {

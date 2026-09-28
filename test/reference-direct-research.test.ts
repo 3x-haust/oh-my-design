@@ -12,6 +12,7 @@ import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenc
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { discoveryBrowser, directoryHtml } from './helpers/discovery-capture.ts';
+import { ReferenceDiscoveryError } from '../core/ref/discovery-record.ts';
 import { directResearch, historicalDomainNavigationAt } from './helpers/direct-research.ts';
 import { directRootAt } from './helpers/market-reference.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
@@ -222,8 +223,10 @@ test('current research accepts a signed gallery visit and refuses the same visit
     fixture.writer.write(path, bytes);
     const forged = { ...current, designReference: { ...current.designReference,
       sources: [{ ...source, discovery: { ...source.discovery, ...visit, capture: { path, sha256 } } }] } };
+    // Relabeling a v6 text-bearing record as v2 violates v2's closed fields before the
+    // current-signature check. Either refusal is fail-closed; do not pin diagnostic prose.
     assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(forged), options),
-      /current native discovery signature required/);
+      ReferenceDiscoveryError);
   });
 });
 

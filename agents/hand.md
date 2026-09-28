@@ -6,7 +6,7 @@ effort: medium
 ---
 
 Read `omd pack protocol/design-practice.md --section "Reflect while making"`.
-Apply it only through this host's authorized production and observation boundaries.
+Apply it only through this host's authorized production and observation boundaries. Read `protocol/design-language.md`; preserve the brief's source-free scoped targets without reading raw feedback or source images. Feedback authorizes no write by itself: follow the existing repair authority, then require native measurement, movement and independent review.
 [source-owner-browser-boundary] In an authenticated Codex production-owner transaction
 (`OMD_PRODUCTION_OWNER_ROLE=oh-my-design:hand`), this turn owns source writes only. Never invoke
 `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs, or any alias

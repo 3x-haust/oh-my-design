@@ -10,6 +10,7 @@ import { classifyKoreanServiceText, inferredKoreanReferenceMarket } from './mark
 import { readContainedRegularFile } from './reference-selection.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from './reference-research.ts';
 import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
+import { userBrowserAcquisition } from './user-browser-provenance.ts';
 
 type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolean; selector?: string; shot?: boolean; image?: boolean }>;
 export class ReferenceIntakeError extends Error {
@@ -114,7 +115,8 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     const observation = ref.acquisition;
     if (ref.researchLane !== 'design' || !observation || galleryItem(ref.source) === null
       || galleryItem(ref.source) !== galleryItem(observation.finalUrl)
-      || observation.httpStatus === null || observation.httpStatus < 200 || observation.httpStatus >= 300
+      || !userBrowserAcquisition(observation)
+        && (observation.httpStatus === null || observation.httpStatus < 200 || observation.httpStatus >= 300)
       || !observation.links.includes(spec.source) || !ref.imagePath) return false;
     const bytes = readContainedRegularFile(root, join(root, ref.imagePath), 'design discovery capture');
     return createHash('sha256').update(bytes).digest('hex') === observation.imageSha256;

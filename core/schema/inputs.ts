@@ -4,6 +4,7 @@
 // validated by a CLI gate. Without a printable skeleton the agent reads `core/**` to recover the
 // key list, which costs a stage retry when it guesses wrong. `omd schema <name>` prints these.
 
+import { closestNames } from './suggestions.ts';
 import { DEPTH_INPUT_KEYS, DEPTH_INPUT_SCHEMA, DEPTH_SCOPES } from '../deliberation/depth.ts';
 import { DESIGN_JUDGMENT_INPUT } from './design-judgment.ts';
 import { CANDIDATE_SELECTION_INPUT } from './candidate-selection.ts';
@@ -852,9 +853,9 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     'domainReference and designReference are both required and cannot substitute for one another',
     'v8 domainReference.sources cites signed text/link observations for features, request-grounded similarities and differences, and adoption/avoidance decisions. Three independent final service families are required; domain PNGs, ref add, invariants and visual measurements are not functional evidence. Historical v5-v7 stay readable but new publication requires v8.',
     'current v7 designReference.sources contains at least two visual-direction sources from independent original service families and distinct inspected gallery items. Their retained PNG bytes must differ, and both visual directions must participate in the current board. Repeated pages, crops, aliases, or capture names from one product count once.',
-    'v7 supports actual search or direct-public discovery, independently per lane. queries and searches remain required arrays: every declared query needs an exact execution receipt, even with direct roots. Both arrays may be empty only with nonempty valid discoveryRoots. Historical v5/v6 remain readable unchanged; never relabel old receipts.',
-    'For search, run omd ref search --input <json> with {lane: domain|design, query, url, queryParam}; the HTTPS URL must carry that exact query. Put returned receipt(s) in searches. Every non-user source/entry must occur in actual observed links and have a separate native visit capture. Blocked attempts may remain alongside a successful public alternative. Never author search receipts by hand.',
-    'For direct discovery, run ref navigate <public-list-url> --lane domain --entry public-directory --json or --lane design --entry free-gallery --json. Put the returned method, entry, url, evidence and capture plus your reason in discoveryRoots. Only the native entry publisher can create this receipt; old navigation captures cannot be promoted. Design roots must be supported freely visible gallery lists with actual item links, not selected items, login walls or arbitrary services. Discovery roots prove visited lists and links, not quality, official authority or a retained reference.',
+    'v8 accepts optional unsigned lead receipts per lane alongside legacy signed searches. queries and searches remain required arrays; leads alone cannot prove destination observation or market qualification. Historical versions remain readable unchanged.',
+    'Use the host web search tool and register its actual URLs with ref leads add --input <json>; leads are unsigned and never evidence. Visit each candidate with ref navigate to obtain signed destination observations. Existing signed search receipts remain readable in searches; never author search receipts by hand.',
+    'For direct discovery, run ref navigate <public-list-url> --lane domain --entry public-directory --json or --lane design --entry free-gallery --json. Put the returned method, entry, url, evidence and capture plus your reason in discoveryRoots. Only the native entry publisher can create this receipt; old navigation captures cannot be promoted. Design roots must expose actual gallery item links, not selected items or arbitrary services; configured authenticated sessions and challenge handling are permitted. Discovery roots prove visited lists and links, not quality, official authority or a retained reference.',
     'search execution accepts Google/Bing/DuckDuckGo q endpoints and design-only Pinterest /search/pins/?q=, Dribbble /search/<query-slug> with queryParam=path, and Siteinspire /search?query=. Use the executable designSourcePolicy.nativeSearchInputs from ref discover-plan and adapt the query and URL together. Arbitrary service query fields are not search evidence.',
     'when ref discover-plan v2 returns marketReferencePolicy.mode=target-market-first, v7 marketCoverage is required. Execute its exact domainSearchInputs and market-and-domain-qualified design inputs before unqualified global searches. Each lane classifies every source id exactly once as localSources=[{sourceId,evidenceSha256,scope,basis,provenanceReceiptSha256}] or global fallback. The digest must bind the retained source image. basis=market-search-result requires the exact signed market-search receipt whose visible result text for that link names the explicit market and relevant service/product scope. basis=market-direct-result requires the exact signed direct-public root receipt whose visible label for that retained link names the explicit market and relevant scope. URL tokens, localized queries, country-code hostnames, page-wide headings, and freeform reasons are not source-specific market proof. Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current. Every fallback provides provenance=[{sourceId,provenanceReceiptSha256}] binding each chosen global source to a current signed visible link, and its gap records the exact marketRegion, availability|access|coverage kind, exact attemptedQueries, and exact attemptedRoots used by that lane. Every chosen retained capture must be current.',
     'each lane records actual discovery, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design source and sources[i].discovery evidence/capture receipts stay in .omd/refs/design/, and .omd/discovery/<lane>/ receipts belong only in searches, discoveryRoots or navigation, never retained gallery discovery',
@@ -862,11 +863,11 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     'neither the same evidence path nor identical bytes under a renamed path can satisfy both lanes',
     'domain and design sources/discovery entries must use independent service hosts (also checked after redirects). A new crop, path, query or filename of the same service is not a separate lane.',
     'design sources declare visualRole=visual-direction|component-support and visualAssessment={composition,typography,density,imagery,transfer,avoid}. Inspect actual pixels; none of these fields is an automatic beauty score. Each board candidate must use a visual-direction source; support-only documentation is insufficient.',
-    'non-user discovery must be a concrete supported gallery item: Pinterest pin, Dribbble shot, Behance gallery, Siteinspire/Land-book website, Godly website, UI Bowl public item, Mobbin screen, or Page Flows screen. These are free-access leads, not guaranteed free catalogues. Paid MCP is not needed. If every available source is blocked, report incomplete research; do not relabel domain pages.',
+    'non-user discovery must be a concrete supported gallery item: Pinterest pin, Dribbble shot, Behance gallery, Siteinspire/Land-book website, Godly website, UI Bowl public item, Mobbin screen, or Page Flows screen. These are leads, not guaranteed accessible catalogues. Paid MCP is not needed. If every available source is blocked, report incomplete research; do not relabel domain pages.',
     'every design source needs discovery: a non-homepage gallery/pin entry URL, kind (app-gallery, web-gallery, visual-bookmark, or explicitly user-provided), access free, qualityReason, evidence and capture receipts. Gallery pages are provenance rather than retained visual evidence. Follow an observed original when present; otherwise use ref import-image for the exact useful image/crop with screenshot-only limits, never the surrounding gallery chrome or an unrelated component.',
     'domain observations are signed JSON returned by ref navigate --lane domain. Each feature citation binds observationSha256, field observedText|taskText|linkLabels, exact whitespace-collapsed quote, and linkUrl for linkLabels only. Design capture still binds native PNG pixels; links do not prove execution.',
     'use Mobbin, Page Flows, UI Bowl and relevant visual bookmarks for apps/product UI; use website galleries for marketing/web direction. Inspect the entry, then retain its observed original or exact useful image/crop. Screenshots cannot prove live behavior.',
-    'never pay, start trials, install an MCP, or bypass login to gather references; on restricted access record the gap in scout.md and try another public source. Free viewing is not a reuse license',
+    'Configured logged-in browser sessions and bounded challenge handling may acquire reference pages; never persist session secrets in receipts. If access remains blocked, record the gap and try another source. Viewing is not a reuse license.',
     'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
     'every visual board piece binds a validated retained design source identity and PNG (path and hash); each candidate needs visual-direction evidence. An extra legacy/domain piece cannot ride alongside a qualified gallery piece.',
     'Each lane may include navigation: [{url, evidence: {path, sha256}, capture: {path, sha256}}] for intermediate native page captures. Retained entries must be reachable from observed search or direct-entry links. Direct v6/v7 chains require new strict navigation-v2 captures, never hidden all-DOM links from retained components or old navigation. The direct root itself is not retained-source coverage. Do not invent edges or relabel image-only evidence as navigation.',
@@ -880,7 +881,8 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     marketCoverage: null,
     domainReference: {
       queries: ['<actual similar-service or domain task query>'],
-      searches: [{ path: `.omd/discovery/domain/search-${'7'.repeat(64)}.json`, sha256: '7'.repeat(64) }],
+      searches: [],
+      leads: [{ path: `.omd/discovery/domain/leads/${'7'.repeat(64)}.json`, sha256: '7'.repeat(64) }],
       sources: ['example.com', 'example.org', 'example.net'].map((host, index) => ({
         id: `domain-service-${index + 1}`, url: `https://${host}/service`,
         observations: [{ url: `https://${host}/service`, capture: {
@@ -898,7 +900,8 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     },
     designReference: {
       queries: ['<actual visual-direction or component-craft query>'],
-      searches: [{ path: `.omd/discovery/design/search-${'8'.repeat(64)}.json`, sha256: '8'.repeat(64) }],
+      searches: [],
+      leads: [{ path: `.omd/discovery/design/leads/${'8'.repeat(64)}.json`, sha256: '8'.repeat(64) }],
       discoveryRoots: [],
       sources: [{
         id: 'design-direction-a',
@@ -1277,14 +1280,39 @@ const DESIGN_HANDOFF: InputSkeleton = {
 };
 
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
+  ...(['intake', 'feedback'] as const).map(kind => ({
+    name: kind === 'intake' ? 'design-language-input' : 'design-feedback-input',
+    path: `.omd/.cache/design-language-${kind}.json`,
+    command: `omd ${kind === 'intake' ? 'language' : 'feedback'} translate --input .omd/.cache/design-language-${kind}.json${kind === 'feedback' ? ' --page <local-entry-path-for-visual-feedback>' : ''} --json`,
+    keys: ['schema', 'kind', 'text', 'request', 'sourceContractSha256', 'readings', 'chosenId', 'decision'],
+    constraints: ['Preserve exact current route request/source hash; text is the exact user phrase, not a summary.',
+      'Use one to three scoped readings with registered metric/unit, stable destination selector, route, state, viewport, interval, intended direction and positive minimum delta.',
+      'Lexicon origins bind entryId, readingId, revision and sha256; model-proposed origins use the same measurable targets. English keywords name actual mechanisms, not generic adjectives.',
+      'If materially distinct readings remain, chosenId=null and provide one Korean question with two or three admitted, retained design-reference thumbnails bound to native acquisition image digests. No arbitrary local PNGs.',
+      'Visual feedback requires --page to capture the current native baseline. A copy-tone reading (warm/copy-tone or role: copy-tone) instead reopens Writer: no --page, changed copy deck and CLEAN current copy review are required before feedback check or production.'],
+    skeleton: { schema: 'design-language-input-v1', kind, text: '<exact user phrase>', request: '<complete original route request>', sourceContractSha256: '0'.repeat(64),
+      readings: [{ id: 'spacing', labelKo: '묶음 간격 늘리기', origin: { kind: 'model-proposed' },
+        targets: [{ id: 'form-gap', metric: 'group-gap', role: 'form', route: '/', selector: 'form', viewport: 'desktop', state: 'initial', range: [16, 24], unit: 'px', direction: 'increase', minDelta: 4 }],
+        referenceKeywordsEn: ['grouped settings rows'], counterSignals: ['rows touching'], mustNotMean: ['delete required fields'] }],
+      chosenId: 'spacing', decision: '<observed task-specific reason>' },
+  })),
   DESIGN_JUDGMENT_INPUT,
   CANDIDATE_SELECTION_INPUT,
+  {
+    name: 'reference-search-leads', path: '.omd/.cache/reference-search-leads.json',
+    command: 'omd ref leads add --input .omd/.cache/reference-search-leads.json --json',
+    keys: ['schema', 'lane', 'query', 'urls', 'provider', 'tool', 'observedAt'],
+    constraints: ['Host-reported URLs are unsigned leads, not evidence. The CLI binds them to the current route; only OMD-observed destination pages become evidence.',
+      'Use the actual submitted query, host-reported provider/tool and timestamp; empty urls records a genuine empty result. Never invent returned URLs.'],
+    skeleton: { schema: 'reference-search-leads-v1', lane: 'domain', query: '<actual submitted query>', urls: [],
+      provider: '<host-reported provider>', tool: 'web_search', observedAt: '<ISO timestamp from host result>' },
+  },
   {
     name: 'reference-search', path: '.omd/.cache/reference-search.json', command: 'omd ref search --input .omd/.cache/reference-search.json --json',
     keys: ['lane', 'query', 'url', 'queryParam'],
     constraints: ['Choose domain or design explicitly. Replace the example query and URL together; the supported query field must contain that exact query once.',
-      'Use Google/Bing/DuckDuckGo, or design-only nativeSearchInputs from ref discover-plan for Pinterest, Dribbble and Siteinspire. Dribbble uses queryParam=path and a lowercase hyphenated query path; Siteinspire uses queryParam=query. No paid API or invented item URLs.',
-      'Search and intermediate navigation evidence lives in .omd/discovery/<lane>/, never the retained reference inventory. Failed searches are gaps, not references. Gallery success requires HTTP 200 and observed same-provider item links, not a login wall.',
+      'Legacy signed search receipts remain readable. For new discovery, use host web search with reference-search-leads and register actual returned URLs; never invent item URLs.',
+      'Search and intermediate navigation evidence lives in .omd/discovery/<lane>/, never the retained reference inventory. Failed searches are gaps, not references. Gallery success requires an observed destination and same-provider item links; configured logged-in sessions may provide access.',
       'Use ref navigate <url> --lane domain|design for observed intermediate pages. Add its returned object to navigation; it is not a board reference. Capture retained design gallery items/originals separately with ref add.'],
     skeleton: { lane: 'design', query: 'dashboard interface design', url: 'https://www.google.com/search?q=dashboard%20interface%20design', queryParam: 'q' },
   },
@@ -1293,16 +1321,15 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
     command: 'omd ref discover-batch --input .omd/.cache/reference-discovery-batch.json --json',
     keys: ['kind', 'input', 'source', 'lane', 'entry'],
     constraints: [
-      'Replace every example with 1–16 independent current-task operations. A search item contains kind and the exact reference-search input; a navigate item contains kind, source, lane and optional entry.',
+      'Replace every example with 1–16 independent current-task navigation operations; collect search leads with ref leads add rather than browser search items.',
       'Group only independent queries or already-known public URLs. Follow-up item URLs must first appear in an observed parent result; never guess a gallery item or use a search result as a retained reference.',
       'For target-market-first plans, run required market-qualified domain/design searches in market-only batches and wait for their outcomes before any separate unqualified-global batch. Input order inside one concurrent batch does not establish search order.',
       'The command uses one browser with up to four concurrent isolated contexts. Inspect every ordered outcome: partial failures remain gaps and their successful neighbors remain usable signed evidence.',
       'For replan-discovery, author .omd/.cache/reference-recovery-batch.json and execute with --recovery. Every item must be a new query/provider or destination relative to current signed attempts; repeated requests, encoding changes and relabeled entries are refused before browser work. Use attempts/exclusions to change strategy, not to fabricate availability or weaken reference admission.',
     ],
     skeleton: [
-      { kind: 'search', input: { lane: 'domain', query: '<task-specific local-service query>',
-        url: 'https://www.google.com/search?q=%3Ctask-specific+local-service+query%3E', queryParam: 'q' } },
-      { kind: 'navigate', source: 'https://www.example.com/', lane: 'design' },
+      { kind: 'navigate', source: 'https://www.example.com/', lane: 'domain' },
+      { kind: 'navigate', source: 'https://www.example.com/gallery', lane: 'design' },
     ],
   },
   {
@@ -1388,7 +1415,8 @@ export function inputSkeleton(name: string): InputSkeleton {
   if (found === undefined) {
     const protocol = ({ 'copy-deck': 'protocol/copy-deck.md', 'type-proof': 'theory/typography.md', composition: 'protocol/composition-contract.md' } as Record<string, string>)[name];
     if (protocol) throw new Error(`${name} is an authored Markdown document, not JSON. Run omd pack ${protocol} and omd brief ${name === 'copy-deck' ? 'copy' : name} --json for its format, owner, and checks.`);
-    throw new Error(`unknown schema ${name}; known: ${INPUT_SKELETONS.map((entry) => entry.name).join(', ')}`);
+    const suggestions = closestNames(name, INPUT_SKELETONS.map(entry => entry.name));
+    throw new Error(`unknown schema ${name}${name === 'scout' ? '; scout is Markdown-owned work: run omd brief scout or omd schema reference-research' : suggestions.length ? `; did you mean: ${suggestions.join(', ')}?` : '; run omd schema list'}`);
   }
   return found;
 }

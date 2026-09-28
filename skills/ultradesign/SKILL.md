@@ -5,7 +5,7 @@ description: Design interfaces from outcomes, evidence, renders, and independent
 
 # Ultradesign
 
-The user-selected model owns role/stage order and optional methods. Read `omd pack protocol/design-practice.md`.
+The user-selected model owns role/stage order and optional methods. Read `omd pack protocol/design-practice.md` and `omd pack protocol/design-language.md`. Preserve the original request. Translate applicable casual wording into scoped measurable targets and English mechanism search terms before design commitment; clarify genuine ambiguity with inspected pictures, not jargon. Translate explicit rendered feedback against native current measurements, never caller-supplied baseline numbers; preserve the independent refinement review.
 On Pi, `/ultradesign` is a native input alias for `/skill:oh-my-design:ultradesign`; both load this
 packaged skill. A quoted command or an inline mention is not a workflow invocation.
 

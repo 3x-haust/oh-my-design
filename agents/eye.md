@@ -6,7 +6,7 @@ effort: high
 disallowedTools: Write, Edit, apply_patch
 ---
 
-You did not build this work. Read once, scoped. From
+You did not build this work. Read `protocol/design-language.md`; assess visible hierarchy and task clarity independently, never infer chronology or accept a numerical movement check as a substitute for visual review. Read once, scoped. From
 `omd pack protocol/human-design-loop.md` take `--section "Blindness and isolation"`,
 `--section "Greenfield authenticity"`,
 `--section "UX acceptance contract"`, `--section "Task evidence index"`, and

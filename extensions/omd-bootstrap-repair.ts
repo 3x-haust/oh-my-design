@@ -34,13 +34,13 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
     if (!classificationAllowsInputRepair(bootstrap.classificationFailure)) summary += `\nClassification also failed: ${bootstrap.classificationFailure}`;
   }
   if (interrupted()) return;
-  const decision = repairLoop.next(cwd, 'route-input', bootstrap.inputPath, summary, revision);
+  const decision = repairLoop.next(cwd, 'route-input', bootstrap.inputPath, summary, revision, []);
   const retry = repairable && decision.retry && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
   if (retry) {
     const nextArgs = inputValid ? bootstrap.validationArgs.map((arg, index) => index === 1 ? 'classify' : arg) : bootstrap.validationArgs;
     const action = inputValid
       ? 'The current input already passed validation. Publish that same input with the same locale context, then run stage resume and continue the originally authorized workflow.'
-      : `Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)}, then validate it. Continue while the input bytes or structured diagnostics make progress; do not stop because of a fixed retry count.`;
+      : `Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)}, then validate it. Fix the reported fields; three consecutive completed no-progress repairs stop automatic continuation.`;
     pi.sendMessage!({ customType: inputValid ? 'omd-route-classify' : 'omd-route-repair', display: true,
       content: `OMD route-input continuation pass ${decision.pass}. Start this turn with one concise user-visible progress note naming the current input and next command. ${action} Preserve the original user request, facts, delivery mode, risk, scope and required stages. Do not invent evidence, authority or an optional skip to bypass a check. Stop only for repeated no-progress, a missing user fact/authority, or user pause. ${bootstrap.classificationAttempted
         ? 'Classification was already attempted in this task: after validation passes, retry that authorized classification with the same input/context, then stage resume and continue only the original user-authorized workflow.'
@@ -67,6 +67,6 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
     : '';
   return { message: { ...message, content: [
     ...(message.content ?? []).filter(part => part.type !== 'text'),
-    { type: 'text', text: `${status}${progress ? `\n${progress}` : ''}\n\n${summary}` },
+    { type: 'text', text: `${decision.stalled ? 'OMD_REPAIR_STALLED: Three consecutive repairs made no material progress.\n' : ''}${status}${progress ? `\n${progress}` : ''}\n\n${summary}` },
   ] } };
 }

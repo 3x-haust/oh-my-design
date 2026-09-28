@@ -54,7 +54,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
-    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: discoveryWork?.workSha256 ?? null, validatedStages: outputs
+    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: discoveryWork?.workSha256 ?? null,
+      materialProgressIdentities: discoveryWork?.materialProgressIdentities ?? [], validatedStages: outputs
       .filter(s => ['domain', 'frame', 'reference-board', 'copy', 'composition'].includes(s.stage)
         && s.problems.length === 0 && !(s.stage === 'domain' && planningBlocksProduction)
         && s.entry.blockers.length === 0)

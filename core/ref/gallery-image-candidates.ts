@@ -1,3 +1,4 @@
+import { browserCallback } from './browser-evaluation.ts';
 import type { Page } from 'playwright';
 
 export type GalleryImageCandidate = Readonly<{
@@ -15,7 +16,7 @@ export async function collectGalleryImageCandidates(
 ): Promise<readonly GalleryImageCandidate[]> {
   const boundedLimit = Math.max(0, Math.min(8, Math.floor(limit)));
   if (boundedLimit === 0) return [];
-  return page.evaluate((candidateLimit) => {
+  return page.evaluate(browserCallback((candidateLimit) => {
     const unique = (selector: string): boolean => {
       try { return document.querySelectorAll(selector).length === 1; }
       catch { return false; }
@@ -63,5 +64,5 @@ export async function collectGalleryImageCandidates(
       .filter((item, index, all) => all.findIndex(candidate => candidate.selector === item.selector) === index)
       .slice(0, candidateLimit)
       .map(({ order: _order, ...candidate }) => candidate);
-  }, boundedLimit);
+  }), boundedLimit);
 }

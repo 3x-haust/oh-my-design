@@ -1,3 +1,4 @@
+import { browserCallback } from '../ref/browser-evaluation.ts';
 // Measures whether a page's content survives with JavaScript disabled.
 //
 // This is a verbatim criterion from the Awwwards Developer Award guidelines' accessibility
@@ -96,7 +97,7 @@ export async function observeNoJsContent(
         let y = 0;
         let limit = viewport.height;
         for (let guard = 0; guard < 60; guard += 1) {
-          await page.evaluate((top) => window.scrollTo(0, top as number), y);
+          await page.evaluate(browserCallback((top) => window.scrollTo(0, top as number)), y);
           await page.waitForTimeout(90);
           const sweep = await page.evaluate(SWEEP) as Sweep;
           textLength = Math.max(textLength, sweep.textLength);

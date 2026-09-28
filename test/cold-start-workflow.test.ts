@@ -145,7 +145,10 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   const published = readFileSync(join(cwd, '.omd/frame.md'), 'utf8');
   delete frame.taskCoverageMatrix;
   await h.author('.omd/.cache/frame-input.json', frame);
-  await assert.rejects(h.command(['frame', 'set', '--input', '.omd/.cache/frame-input.json']), /omd schema frame/);
+  const invalidFrame = run(cwd, ['frame', 'set', '--input', '.omd/.cache/frame-input.json', '--json']);
+  assert.equal(invalidFrame.status, 1);
+  assert.deepEqual(JSON.parse(invalidFrame.stdout).diagnostics.map((d: { path: string; code: string }) => ({ path: d.path, code: d.code })),
+    [{ path: 'taskCoverageMatrix', code: 'FRAME_INPUT_INVALID' }]);
   assert.equal(readFileSync(join(cwd, '.omd/frame.md'), 'utf8'), published);
   for (const stage of ['scout', 'copy', 'type-proof']) await h.deliver(stage);
   await h.enter('scout');

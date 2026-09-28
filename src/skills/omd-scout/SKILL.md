@@ -59,8 +59,9 @@ it contains useful, non-duplicate evidence for every applicable category:
 
 ### Collecting a visual direction
 
-When a selected reference board is missing, first batch independent plan-derived searches and
-known public lists with `omd ref discover-batch --input <json> --json`; inspect every outcome.
+When a selected reference board is missing, use the host web search tool for independent plan-derived queries,
+register unsigned URLs with `omd ref leads add --input <leads.json> --json`, and inspect destinations with OMD.
+A lead alone is never evidence. Batch known public-list visits with `omd ref discover-batch --input <json> --json`; inspect every outcome.
 For target-market-first work, complete market-only batches in both lanes before starting a
 separate unqualified-global batch. Never mix those searches in one concurrent batch: the
 market-first check uses actual observation timestamps, not the input list order.
@@ -96,8 +97,10 @@ product interfaces start with free public Pinterest pins, Dribbble shots, Behanc
 entries; for website/marketing direction start with website galleries such as Siteinspire and
 Pinterest. These are replaceable discovery channels, not mandatory winners or guarantees of free
 API/catalogue access. Verify the specific entry is freely viewable now. If login, a paywall, or
-blocking prevents inspection, record it in scout.md and try another public gallery/original source;
-never purchase, start trials, install an MCP, or bypass access controls just for research.
+blocking persists after the acquisition layer handles challenges, follow the harness's one-time
+ask-then-setup flow for login-gated galleries or unsolved challenges. After user consent OMD sets up
+its own logged-in browser profile; do not ask users to set env vars. If acquisition still fails,
+record it in scout.md and try another gallery/original source; never purchase or start trials.
 
 Choose actual search or direct-public browsing from the plan. `designSourcePolicy.searchQueries`
 include Pinterest pins and a surface-appropriate gallery. Record the actual method, results and
@@ -127,7 +130,7 @@ unqualified search order; repair the evidence instead of removing the policy.
 When a direct root is also the retained service URL, inspect its signed non-link task text and actual task link.
 A related/footer link or whole-page mention is not proof that the service performs the task; recapture older roots
 whose signed entry lacks the task-text field. A restriction for another audience is not a denial of the service.
-For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
+Use the plan's `designSourcePolicy.nativeSearchInputs` as host search queries; register URLs with `ref leads add`.
 They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine only unscoped
 task/pattern queries and URLs together; keep explicit-market native inputs exact. Then open an item actually returned in observed links; never
 guess pin/shot IDs. Login walls, challenges and empty results remain failures, not design references.
@@ -245,10 +248,9 @@ those produces a product survey instead of a direction.
 ### Exploring a domain reference
 
 Execute discovery, do not merely write query strings. Choose a native public-directory entry as
-described above, or use `omd ref search --input <json>` with
-`{lane: "domain"|"design", query, url, queryParam}`: the public HTTPS search URL must submit that
-exact query in the named parameter. Inspect the saved screenshot and actual links, then visit and
-capture retained sources/entries with the existing native reference commands. Use public Google/Bing
+described above, or submit the plan's exact query through the host web search tool and register
+`{schema:"reference-search-leads-v1",lane,query,urls,provider,tool,observedAt}` with
+`omd ref leads add --input <leads.json> --json`. Visit destinations through OMD before citing them. Use public Google/Bing
 `/search` or DuckDuckGo root/HTML/lite URLs with `queryParam: "q"`; combine task/pattern terms with
 `site:pinterest.com/pin/` or another relevant public gallery, not a made-up service query parameter.
 Put each returned

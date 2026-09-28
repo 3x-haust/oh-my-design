@@ -20,7 +20,7 @@ function selectedDependencies(stage: AdaptiveStageId, selected: ReadonlySet<stri
 }
 
 /** Validates explicit concurrency groups against selected roles and the artifact DAG. */
-export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
+export function validateAdaptiveExecutionWaves(strategy: Pick<AdaptiveStrategyDecision, 'roles' | 'stages' | 'methods' | 'executionWaves'>, deliveryMode?: 'design-only'): void {
   const waveByRole = new Map<string, number>();
   for (const [waveIndex, wave] of strategy.executionWaves.entries()) {
     if (wave.roles.length === 0) return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', `strategyDecision.executionWaves[${waveIndex}].roles must contain a selected role`);

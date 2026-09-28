@@ -7,6 +7,7 @@ import { inferredKoreanReferenceMarket } from './market-reference.ts';
 import { readDomainObservation } from './domain-observation.ts';
 import { readSearchExecution, searchObserved } from './search-execution.ts';
 import { resultReaches } from './search-result.ts';
+import { readSearchLeads } from './search-leads.ts';
 import type { FunctionalCitation, FunctionalSource, ReferenceResearch, ValidationOptions } from './reference-research-types.ts';
 
 const fail = (code: string): never => { throw new Error(code); };
@@ -31,7 +32,11 @@ export function validateFunctionalResearch(root: string, research: ReferenceRese
         const search = readSearchExecution(root, receipt, 'domain');
         return searchObserved(search) && search.results?.some(item => resultReaches(item, [source.url]));
       });
-      if (!reachable) fail('REFERENCE_DOMAIN_OBSERVATION_REQUIRED: service navigation must be reached from signed search results');
+      const leadReachable = (research.domainReference.leads ?? []).some(receipt => {
+        const lead = readSearchLeads(root, receipt, 'domain', research.sourceContractSha256);
+        return lead.urls.includes(source.url) && observations.some(item => item.url === source.url);
+      });
+      if (!reachable && !leadReachable) fail('REFERENCE_LEAD_OBSERVATION_REQUIRED: service navigation needs a signed destination observation');
     }
     if (market?.marketRegion === 'KR' && localIds.has(source.id) && marketObservation.language !== 'korean')
       fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
@@ -85,6 +90,10 @@ export function validateFunctionalResearch(root: string, research: ReferenceRese
           if (market.marketRegion === 'KR' && inferredKoreanReferenceMarket(result.text) !== 'KR'
             && !/복지|혜택|지원|신청|서비스/u.test(result.text))
             fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
+        } else if (local.basis === 'market-observed-page') {
+          if (local.provenanceReceiptSha256 !== marketObservation.capture.sha256
+            || !/서비스|혜택|지원|복지|신청/u.test(marketObservation.taskText ?? marketObservation.observedText ?? ''))
+            fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_PROVENANCE');
         } else if (local.provenanceReceiptSha256 !== marketObservation.capture.sha256 || marketObservation.method !== 'direct-public')
           fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_PROVENANCE');
       }

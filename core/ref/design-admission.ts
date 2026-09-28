@@ -8,6 +8,7 @@ import { trustedReferenceImage } from './board-security.ts';
 import { loadRefs, refRecordPath } from './store.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
 import { observedDomainServiceUrls } from './observed-domain-services.ts';
+import { userBrowserAcquisition } from './user-browser-provenance.ts';
 
 export type DesignReferenceAdmission = Readonly<{
   eligible: boolean;
@@ -84,7 +85,8 @@ function nativeCapture(root: string, reference: Reference): DesignReferenceAdmis
     if (!['page', 'component', 'image'].includes(reference.kind) || !Number.isFinite(Date.parse(reference.capturedAt))
       || !acquisition || acquisition.requestedUrl !== reference.source || typeof acquisition.finalUrl !== 'string'
       || !Array.isArray(acquisition.links) || acquisition.links.some(link => typeof link !== 'string')
-      || (!userFile && (typeof acquisition.httpStatus !== 'number' || acquisition.httpStatus < 200 || acquisition.httpStatus >= 300))) {
+      || (!userFile && !userBrowserAcquisition(acquisition)
+        && (typeof acquisition.httpStatus !== 'number' || acquisition.httpStatus < 200 || acquisition.httpStatus >= 300))) {
       return rejected('capture', 'A successful native capture bound to the actual source and image is required.');
     }
     if (digest(readFileSync(trustedReferenceImage(root, reference.imagePath))) !== acquisition.imageSha256) return rejected('capture', 'The retained image differs from the image bound by its native acquisition.');

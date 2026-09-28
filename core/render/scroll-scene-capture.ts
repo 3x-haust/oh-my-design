@@ -1,3 +1,4 @@
+import { browserCallback } from '../ref/browser-evaluation.ts';
 // Increment 1b of the staged showpiece scroll-motion evidence protocol.
 //
 // The contract (`scroll-scene-evidence.ts`, increment 1a) declares WHAT a verifiable scroll scene
@@ -38,12 +39,12 @@ export type ScrollSceneRequest = {
 
 /** Resolve the browser to a fixed scroll offset and let two animation frames settle. */
 async function holdScroll(page: import('playwright').Page, fraction: number): Promise<void> {
-  await page.evaluate((f) => {
+  await page.evaluate(browserCallback((f) => {
     const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
     window.scrollTo({ top: Math.round(max * f), left: 0, behavior: 'instant' as ScrollBehavior });
-  }, fraction);
+  }), fraction);
   await page.evaluate(
-    () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))),
+    browserCallback(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))),
   );
 }
 

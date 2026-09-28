@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { requireMovement } from '../design-language/check.ts';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -125,6 +126,7 @@ export function checkCompletionPublicationPrerequisites(
   manifest: unknown,
   invocation: ProjectRunInvocation,
 ): CompletionPublicationResult {
+  requireMovement(root, invocation);
   const graph = graphReceipts(manifest);
   const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
     ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route

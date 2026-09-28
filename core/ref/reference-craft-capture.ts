@@ -1,3 +1,4 @@
+import { browserCallback } from './browser-evaluation.ts';
 // Produces a `reference-craft-v1` record from real-browser OBSERVATION, so a craft signature is
 // measured, never hand-asserted. It mirrors the scroll-scene capture's proven primitives
 // (`computeEnergy` over viewport screenshots, `waitForDocumentFonts`, a fresh reduced-motion page)
@@ -41,12 +42,12 @@ const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms)
 
 /** Two animation frames so a scroll or reveal settles before a capture. */
 async function settleFrames(page: import('playwright').Page): Promise<void> {
-  await page.evaluate(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+  await page.evaluate(browserCallback(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())))));
 }
 
 /** True when the scoped subtree (or the document) drives a CSS scroll/view timeline. */
 async function usesScrollTimeline(page: import('playwright').Page, selector: string | null): Promise<boolean> {
-  return page.evaluate((sel) => {
+  return page.evaluate(browserCallback((sel) => {
     const root: ParentNode = sel ? (document.querySelector(sel) ?? document) : document;
     const scope = sel && document.querySelector(sel) ? [document.querySelector(sel)!, ...Array.from(root.querySelectorAll('*'))] : Array.from(document.querySelectorAll('*'));
     for (const el of scope) {
@@ -54,22 +55,22 @@ async function usesScrollTimeline(page: import('playwright').Page, selector: str
       if (timeline && timeline !== 'auto' && timeline !== 'none') return true;
     }
     return false;
-  }, selector);
+  }), selector);
 }
 
 async function scrollIntoView(page: import('playwright').Page, selector: string | null): Promise<void> {
-  await page.evaluate((sel) => {
+  await page.evaluate(browserCallback((sel) => {
     const el = sel ? document.querySelector(sel) : null;
     if (el) el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
     else {
       const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
       window.scrollTo({ top: Math.round(max * 0.5), left: 0, behavior: 'instant' as ScrollBehavior });
     }
-  }, selector);
+  }), selector);
 }
 
 async function partHasContent(page: import('playwright').Page, selector: string | null): Promise<boolean> {
-  return page.evaluate((sel) => {
+  return page.evaluate(browserCallback((sel) => {
     const el = (sel ? document.querySelector(sel) : document.body) as HTMLElement | null;
     if (!el) return false;
     const rect = el.getBoundingClientRect();
@@ -77,7 +78,7 @@ async function partHasContent(page: import('playwright').Page, selector: string 
     const hasText = (el.textContent ?? '').trim().length > 0;
     const hasMedia = el.querySelector('img, svg, canvas, video, picture') !== null;
     return hasBox && (hasText || hasMedia);
-  }, selector);
+  }), selector);
 }
 
 /** Visual properties a scroll-scrubbed animation drives; compared across two scroll positions. */
@@ -95,7 +96,7 @@ const SCRUB_PROPERTIES = ['opacity', 'transform', 'filter', 'backgroundColor', '
 async function isScrubbed(page: import('playwright').Page, selector: string | null): Promise<boolean> {
   if (!selector) return false;
   const sample = async (fraction: number): Promise<string[] | null> =>
-    page.evaluate(([sel, f, props]) => {
+    page.evaluate(browserCallback(([sel, f, props]) => {
       const el = document.querySelector(sel as string);
       if (!el) return null;
       const rect = el.getBoundingClientRect();
@@ -106,7 +107,7 @@ async function isScrubbed(page: import('playwright').Page, selector: string | nu
           resolve((props as readonly string[]).map((p) => style[p as keyof CSSStyleDeclaration] as string));
         }));
       });
-    }, [selector, fraction, SCRUB_PROPERTIES] as const);
+    }), [selector, fraction, SCRUB_PROPERTIES] as const);
 
   const entering = await sample(0.9);
   const settled = await sample(0.35);
@@ -137,7 +138,7 @@ export async function captureReferenceCraft(target: string, opts: ReferenceCraft
     await waitForDocumentFonts(page);
 
     // 1. Load-window motion: does the part animate at rest, at the top of the page, over time?
-    await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior }));
+    await page.evaluate(browserCallback(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior })));
     await settleFrames(page);
     const loadA = await page.screenshot({ fullPage: false });
     await wait(interval);

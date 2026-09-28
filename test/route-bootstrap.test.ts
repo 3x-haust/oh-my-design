@@ -205,7 +205,7 @@ test('bootstrap retries stop on repeated unchanged input and reread current inpu
   await h.end(); assert.equal(h.sent.length, 4);
 });
 
-test('bootstrap keeps repairing beyond two passes while the authored input changes', async t => {
+test('bootstrap stops after three unvalidated repairs despite changing authored bytes', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-progress-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const h = harness(cwd, async () => ({ stdout: failureReport(), stderr: '', code: 1, killed: false }));
@@ -216,7 +216,7 @@ test('bootstrap keeps repairing beyond two passes while the authored input chang
     assert.equal((await h.run(['route', 'validate', '--input', inputPath, '--json'])).details.code, 1);
     await h.end(); await h.emit('input', { source: 'extension' });
   }
-  assert.equal(h.sent.length, 5);
+  assert.equal(h.sent.length, 3);
   assert.ok(h.sent.every(([message]) => message.customType === 'omd-route-repair'));
 });
 

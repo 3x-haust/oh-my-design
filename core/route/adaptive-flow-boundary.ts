@@ -133,6 +133,35 @@ function skip(value: unknown): AdaptiveSkip {
   return Object.freeze({ id: id(item.get('id')), reason: text(item.get('reason'), true) });
 }
 
+/** Inspect independent strategy fields without constructing a substitute publishable route. */
+export function diagnoseAdaptiveStrategyFields(value: unknown): readonly { path: string; code: string; message: string }[] {
+  const findings: { path: string; code: string; message: string }[] = [];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return findings;
+  const strategy = value as Record<string, unknown>;
+  const checks: readonly [string, () => unknown][] = [
+    ['skips', () => array(strategy.skips).forEach((entry, index) => {
+      try { skip(entry); } catch (error) { record(`skips[${index}]`, error); }
+    })],
+    ['roles', () => ids(strategy.roles, false, true)],
+    ['stages', () => ids(strategy.stages, false, true)],
+    ['methods', () => ids(strategy.methods, false, true)],
+    ['executionWaves', () => parseAdaptiveExecutionWaves(strategy.executionWaves)],
+    ['attributionCategories', () => ids(strategy.attributionCategories, false, true)],
+    ['aiAssets', () => parseAdaptiveAiAssets(strategy.aiAssets)],
+    ['rationale', () => text(strategy.rationale)],
+  ];
+  function record(path: string, error: unknown): void {
+    if (!(error instanceof Error)) throw error;
+    const code = 'code' in error && typeof error.code === 'string' ? error.code : error.message.split(':')[0]!;
+    if (!/^[A-Z][A-Z0-9_]+$/.test(code)) throw error;
+    findings.push({ path: `strategyDecision.${path}`, code, message: error.message });
+  }
+  for (const [path, check] of checks) {
+    try { check(); } catch (error) { record(path, error); }
+  }
+  return findings;
+}
+
 export function parseAdaptiveStrategyDecision(value: unknown): AdaptiveStrategyDecision {
   const item = fields(value, STRATEGY_KEYS);
   if (item.get('schema') !== ADAPTIVE_STRATEGY_DECISION_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');

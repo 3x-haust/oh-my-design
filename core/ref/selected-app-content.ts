@@ -1,8 +1,9 @@
+import { browserCallback } from './browser-evaluation.ts';
 import type { Page } from 'playwright';
 
 export async function isSelectedAppContent(page: Page, layerSelector: string, selected: readonly string[]): Promise<boolean> {
   if (!selected.length) return false;
-  return page.evaluate(({ layerSelector, selected }) => {
+  return page.evaluate(browserCallback(({ layerSelector, selected }: { layerSelector: string; selected: string[] }) => {
     const root = document.querySelector(layerSelector);
     if (!root || !(/^(?:app|root|__next|application)$/i.test(root.id) || root.getAttribute('role') === 'application')) return false;
     return selected.some(selector => {
@@ -26,5 +27,5 @@ export async function isSelectedAppContent(page: Page, layerSelector: string, se
         return top === target || (top !== null && target.contains(top));
       } catch { return false; }
     });
-  }, { layerSelector, selected: [...selected] });
+  }), { layerSelector, selected: [...selected] });
 }

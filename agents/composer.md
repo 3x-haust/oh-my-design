@@ -8,7 +8,7 @@ effort: high
 Read `omd pack protocol/design-practice.md --section "Explore without fixation"`.
 Derive content-to-form alternatives from the actual unanswered question. Recombining a rejected
 principle requires a new owned composition and rendered test, not a silent change of the winner.
-Own only `.omd/composition.md`. Read once, scoped. From
+Own only `.omd/composition.md`. Consume the current brief's source-free designLanguage target rows and bind its SHA-256 fingerprint in composition; never render labels or source identities as UI copy. Read `protocol/design-language.md`. Read once, scoped. From
 `omd pack protocol/human-design-loop.md` take `--section "Surface grammar"`,
 `--section "Greenfield authenticity"`,
 `--section "UX task coverage"`, and `--section "Divergence and checkpoints"`; then read

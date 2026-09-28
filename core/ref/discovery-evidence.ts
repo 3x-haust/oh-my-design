@@ -15,6 +15,7 @@ export type DiscoveryCapture = Readonly<{ observation: DiscoveryObservation; sha
 export type DiscoveryAttempt = Readonly<{ lane: Lane; url: string; reason: string; receipt: Receipt }>;
 export type LaneEvidence = Readonly<{ searches: readonly SearchExecution[]; entries: readonly DiscoveryCapture[];
   visits: readonly DiscoveryCapture[]; unavailable: readonly ReferenceDiscoveryAttempt[];
+  attemptReceipts: readonly Readonly<{ attempt: ReferenceDiscoveryAttempt; receipt: Receipt }>[];
   failures: readonly DiscoveryAttempt[]; digests: readonly string[]; ignored: number }>;
 function records(root: string, directory: string, pattern: RegExp): readonly Receipt[] {
   const absolute = join(root, directory);
@@ -87,6 +88,7 @@ function laneEvidence(root: string, lane: Lane, after: number): LaneEvidence {
   const attempts = attemptRows.map(row => row.attempt);
   return { searches, entries: [...entries, ...observations.filter(item => item.observation.method === 'direct-public')],
     visits: [...visits, ...observations.filter(item => item.observation.method === 'navigation')], unavailable: attempts,
+    attemptReceipts: attemptRows,
     failures: [...searchRows.filter(row => !searchObserved(row.search)).map(row => ({ lane,
       url: row.search.requestedUrl, reason: row.search.error ?? row.search.status, receipt: row.receipt })),
     ...attemptRows.map(row => ({ lane, url: row.attempt.source, reason: row.attempt.reason, receipt: row.receipt }))],

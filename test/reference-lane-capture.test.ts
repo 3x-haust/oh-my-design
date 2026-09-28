@@ -10,6 +10,7 @@ import { capturePageForRef, withBrowser, galleryLoginOccludes } from '../core/re
 import { loadRefs, refImagePath, researchLane, saveRef, addPrinciples } from '../core/ref/store.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { addRefsBatch } from '../core/ref/batch.ts';
+import type { BrowserConnector } from '../core/ref/browser-config.ts';
 import { commitCapturedReference } from '../core/ref/capture-commit.ts';
 
 test('final URL refusal leaves the reference output tree unchanged', async t => {
@@ -21,6 +22,23 @@ test('final URL refusal leaves the reference output tree unchanged', async t => 
   await assert.rejects(withBrowser(browser => capturePageForRef(browser, source, { width: 640, height: 480 }, {
     shotOut, adapter: writer, validateFinalUrl: () => { throw new Error('final URL rejected'); },
   })));
+  assert.equal(existsSync(join(root, '.omd/refs')), false);
+});
+
+test('design add-batch selects the configured reference browser without owning a connected user browser', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-browser-profile-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const events: string[] = [];
+  const browser = { newPage: async () => { throw new Error('fixture-stop'); }, close: async () => { events.push('disconnect'); } };
+  const connector = { connectOverCDP: async (url: string) => { events.push(`connect:${url}`); return browser; },
+    launch: async () => { throw new Error('ordinary Chromium must not launch'); } } as unknown as BrowserConnector;
+  const result = await addRefsBatch(root, [{ source: fileURLToPath(new URL('fixtures/considered.html', import.meta.url)),
+    as: 'selected', lane: 'design', fromUser: true, energy: false }], {
+    rulesRoot: fileURLToPath(new URL('../core/rules/builtin', import.meta.url)), concurrency: 1,
+    browserConfig: { mode: 'cdp', cdpUrl: 'http://127.0.0.1:9222' }, browserConnector: connector,
+  }, createTestProjectWriteAdapter(root));
+  assert.deepEqual(events, ['connect:http://127.0.0.1:9222', 'disconnect']);
+  assert.match(result.outcomes[0]?.error ?? '', /fixture-stop/);
   assert.equal(existsSync(join(root, '.omd/refs')), false);
 });
 

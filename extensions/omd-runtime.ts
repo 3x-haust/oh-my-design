@@ -114,7 +114,8 @@ export function monitorOmdProgress(
 }
 
 export const omdCliBudgetMs = (args: readonly string[]): number =>
-  args[0] === 'ref' && ['advance', 'navigate', 'add', 'add-batch', 'discover-batch', 'search'].includes(args[1] ?? '')
+  args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '') ? 660_000
+    : args[0] === 'ref' && ['advance', 'navigate', 'add', 'add-batch', 'discover-batch', 'search', 'leads'].includes(args[1] ?? '')
     ? 300_000 : 600_000;
 
 export class OmdTimeoutError extends Error {
@@ -160,7 +161,10 @@ type ExecOptions = Readonly<{
   signal?: AbortSignal;
 }>;
 
-export type PortablePiContext = PiHostContext & Readonly<{ signal?: AbortSignal }>;
+export type PortablePiContext = PiHostContext & Readonly<{ signal?: AbortSignal; browserConsentHome?: string; ui?: {
+  select?(title: string, options: string[]): Promise<string | undefined>;
+  notify?(message: string, level?: 'info' | 'warning' | 'error'): void;
+} }>;
 
 export type PortablePiEvent = {
   toolCallId?: string; isError?: boolean;
@@ -221,11 +225,21 @@ function boundedOutput(result: ExecResult, args: readonly string[]): string {
 export function guardFailure(error: unknown): { summary: string; repairable: boolean } {
   const raw = error instanceof Error ? error.message : String(error);
   const payload = raw.replace(/^OMD_CLI_FAILED \([^)]*\):\s*/, '');
-  let parsed: { blockers?: unknown } | undefined;
+  let parsed: { blockers?: unknown; diagnostics?: unknown } | undefined;
   try {
-    parsed = JSON.parse(payload) as { blockers?: unknown };
+    parsed = JSON.parse(payload) as { blockers?: unknown; diagnostics?: unknown };
   } catch (parseError) {
     if (!(parseError instanceof SyntaxError)) throw parseError;
+  }
+  if (parsed !== undefined && Array.isArray(parsed.diagnostics) && parsed.diagnostics.length) {
+    const diagnostics = parsed.diagnostics.flatMap(item => {
+      if (!item || typeof item !== 'object') return [];
+      const path = Reflect.get(item, 'path'); const code = Reflect.get(item, 'code'); const message = Reflect.get(item, 'message');
+      return typeof path === 'string' && typeof code === 'string' && typeof message === 'string'
+        ? [{ path, code, message }] : [];
+    });
+    if (diagnostics.length) return { summary: diagnostics.slice(0, 24).map(item => `- ${item.path}: ${item.code}: ${item.message}`).join('\n'),
+      repairable: !diagnostics.some(item => /AUTHORITY|ROUTE_UNCLASSIFIED|SCOPE_FORBIDDEN/.test(item.code)) };
   }
   if (parsed !== undefined && Array.isArray(parsed.blockers) && parsed.blockers.length
     && parsed.blockers.every(blocker => typeof blocker === 'string')) {

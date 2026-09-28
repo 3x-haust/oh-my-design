@@ -1,3 +1,4 @@
+import { browserCallback } from './browser-evaluation.ts';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Browser, Page } from 'playwright';
@@ -59,7 +60,7 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   const control = page.locator(selector);
   await control.waitFor({ state: 'visible', timeout: 3000 });
   if (await control.count() !== 1) return fail('ambiguous click target');
-  const info = await control.evaluate(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') }));
+  const info = await control.evaluate(browserCallback(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
   // Read-only public navigation only. No submit/login/payment/delete actions, even if a site uses GET.
   if (/log\s*(?:in|out)|sign\s*(?:in|out|up)|purchase|pay\b|checkout|delete|remove|unsubscribe|submit|apply\s+now|로그인|로그아웃|가입|결제|구매|삭제|탈퇴|제출|신청하기/i.test(`${info.label} ${info.href ?? ''}`)) return fail('sensitive action is excluded; record an authentication/payment/destructive-action gap');
   const link = info.tag === 'A' && info.href !== null;

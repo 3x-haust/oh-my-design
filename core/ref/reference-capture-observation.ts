@@ -1,3 +1,4 @@
+import { browserCallback } from './browser-evaluation.ts';
 import type { Page } from 'playwright';
 import type { DocumentObserver } from './document-observation.ts';
 import { inspectRenderedState } from './search-observation.ts';
@@ -56,7 +57,7 @@ export async function captureDomainObservation(page: Page, documents: DocumentOb
   };
   let observed = await read();
   if (observed !== null && classifyKoreanServiceText(observed.visibleText) === 'undetermined') {
-    await page.evaluate(() => new Promise<void>(resolve => {
+    await page.evaluate(browserCallback(() => new Promise<void>(resolve => {
       const done = () => { observer.disconnect(); clearTimeout(timer); resolve(); };
       const observer = new MutationObserver(() => {
         const letters = document.body?.innerText.match(/\p{L}/gu)?.length ?? 0;
@@ -64,7 +65,7 @@ export async function captureDomainObservation(page: Page, documents: DocumentOb
       });
       const timer = setTimeout(done, 2000);
       observer.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
-    }));
+    })));
     observed = await read();
   }
   if (observed === null) throw new DiscoveryObservationError();

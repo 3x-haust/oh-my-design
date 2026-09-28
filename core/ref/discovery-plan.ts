@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { projection } from '../design-language/index.ts';
 import { join } from 'node:path';
 import { readFrame } from '../frame/index.ts';
 import { validateDomainBrief, type DomainReferenceQueries } from '../domain/domain-brief.ts';
@@ -103,6 +104,8 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const plan = discovering ? acquisition(root) : null;
   const domainResearch = discovering ? currentDomainResearch(root, route.request) : { queries: { component: [], craft: [], mood: [] }, domain: null, audience: null };
   const queries = domainResearch.queries;
+  const translated = projection(root, route);
+  const mechanisms = translated?.keywords ?? [];
   const expressiveNeed = route.sourceContract.designAxes.expressiveDesignNeed;
   const surface = readFrame(root)?.uxSurface ?? null;
   const marketing = surface === 'marketing' || route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
@@ -120,6 +123,8 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       '청년노트 복지 혜택 찾기', '청년정책신문 정책맵'] : [];
   const baseDesignQuery = [...queries.component, ...queries.mood][0] ?? (marketing ? 'typography' : 'app interface');
   const designQueries = marketRegion === null ? [] : marketDesignQueries(marketRegion, surfaceLocale, domain, baseDesignQuery, marketing);
+  const translatedDesignQueries = marketRegion === null ? mechanisms.map(keyword => `${baseDesignQuery} ${keyword}`)
+    : marketDesignQueries(marketRegion, surfaceLocale, domain, baseDesignQuery, marketing, mechanisms);
   const designQuery = designQueries[0] ?? baseDesignQuery;
   const domainSearchInputs: DomainSearchInput[] = [];
   for (const query of domainQueries) {
@@ -176,7 +181,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     lanes.push({
       id: 'design-reference',
       purpose: 'Find visual direction across many sites: layout rhythm, density, type, colour, material, and component craft.',
-      querySeeds: [...designQueries, ...querySeeds('mood', [...queries.mood, ...queries.component])],
+      querySeeds: [...new Set([...designQueries, ...translatedDesignQueries, ...mechanisms, ...querySeeds('mood', [...queries.mood, ...queries.component])])],
       evidence: [...(marketLabel === null ? [] : [`visual direction from products or design sources serving ${marketLabel}`]), 'actual product screens or exact UI images, never gallery wrapper pages', 'several candidates before narrowing', 'measured layout and type parts'],
     });
   }
@@ -221,12 +226,12 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       domainOutput: '.omd/refs/domain/research.json',
       designOutput: '.omd/refs/design/research.json',
       candidates: Object.freeze(galleryCandidates),
-      searchQueries: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries).flatMap(query => [
+      searchQueries: Object.freeze(!discovering ? [] : [...new Set([...(designQueries.length === 0 ? [designQuery] : designQueries), ...translatedDesignQueries])].flatMap(query => [
         `site:pinterest.com/pin/ ${query}`,
         `${marketing ? 'site:siteinspire.com/websites/' : 'site:mobbin.com/explore/screens/'} ${query}`,
         ...(!marketing ? [`site:pageflows.com/screens/ ${query}`, `site:dribbble.com/shots/ ${query}`, `site:behance.net/gallery/ ${query}`] : []),
       ])),
-      nativeSearchInputs: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries)
+      nativeSearchInputs: Object.freeze(!discovering ? [] : [...new Set([...(designQueries.length === 0 ? [designQuery] : designQueries), ...translatedDesignQueries])]
         .flatMap(query => gallerySearchInputs(query, marketing ? 'marketing' : 'product'))),
       nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
       domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,

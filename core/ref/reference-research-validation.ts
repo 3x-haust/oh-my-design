@@ -14,6 +14,8 @@ import { requireDesignImageAdmission } from './design-image-admission.ts';
 import { refIdentity } from './identity.ts';
 import { validateFunctionalResearch } from './reference-research-functional.ts';
 import { readDomainObservation } from './domain-observation.ts';
+import { readSearchLeads } from './search-leads.ts';
+import { userBrowserAcquisition } from './user-browser-provenance.ts';
 import type { ResearchSource } from './reference-research-types.ts';
 import { assertCurrentMarketCapture, validateMarketReferenceCoverage } from './market-reference-coverage.ts';
 import { referenceCaptureTimestamp } from './reference-capture-time.ts';
@@ -61,7 +63,8 @@ function verifyCapture(root: string, item: { url: string; evidence: ResearchEvid
   if (captured.schemaVersion !== 'image-fragment-v1') {
     const acquisition = record(captured.acquisition, 'REFERENCE_RESEARCH_ACQUISITION_REQUIRED');
     if (acquisition.requestedUrl !== item.url || typeof acquisition.finalUrl !== 'string'
-      || typeof acquisition.httpStatus !== 'number' || acquisition.httpStatus < 200 || acquisition.httpStatus >= 300
+      || !userBrowserAcquisition(acquisition) && (typeof acquisition.httpStatus !== 'number'
+        || acquisition.httpStatus < 200 || acquisition.httpStatus >= 300)
       || !Array.isArray(acquisition.links)) fail('REFERENCE_RESEARCH_ACQUISITION_INVALID');
     if (acquisition.imageSha256 !== item.evidence.sha256) fail('REFERENCE_RESEARCH_CAPTURE_IMAGE_MISMATCH');
   }
@@ -88,6 +91,10 @@ function currentNavigation(root: string, item: { url: string; evidence: Research
 
 export function validateReferenceResearch(root: string, research: ReferenceResearch, options: ValidationOptions): void {
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
+  if (research.schema === 'reference-research-v8') for (const lane of ['domain', 'design'] as const) {
+    for (const receipt of research[lane === 'domain' ? 'domainReference' : 'designReference'].leads ?? [])
+      readSearchLeads(root, receipt, lane, research.sourceContractSha256);
+  }
   validateMarketReferenceCoverage(root, research, options.expectedRequest);
   validateFunctionalResearch(root, research, options);
   const legacyDomainSources = research.schema === 'reference-research-v8' ? []
@@ -203,6 +210,20 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     const sourceUrls = lane === 'domain' ? entry.sources.map(item => item.url)
       : research.designReference.sources.filter(item => item.discovery?.kind !== 'user-provided').map(item => requiredDiscovery(item).url);
     const allowUnmatched = !['reference-research-v7', 'reference-research-v8'].includes(research.schema) || marketCoverage?.marketRegion == null;
+    if (research.schema === 'reference-research-v8' && entry.leads?.length && !entry.searches.length && !directRoots[lane].length) {
+      const leadUrls = new Set(entry.leads.flatMap(receipt => readSearchLeads(root, receipt, lane, research.sourceContractSha256).urls));
+      const visits = lane === 'design' ? [
+        ...(research.designReference.navigation ?? []).map(hop => currentNavigation(root, hop)),
+        ...research.designReference.sources.flatMap(source => source.discovery?.capture.path.startsWith('.omd/discovery/design/navigation/')
+          ? [currentNavigation(root, { url: source.discovery.url, evidence: source.discovery.evidence, capture: source.discovery.capture })] : []),
+      ] : research.domainReference.sources.flatMap(source =>
+        'observations' in source ? source.observations.map(receipt => readDomainObservation(root, receipt)) : []);
+      const roots = visits.filter(visit => leadUrls.has(visit.url));
+      if (sourceUrls.some(url => !roots.some(root => root.url === url || root.links.includes(url))
+        && !visits.some(visit => visit.url === url && roots.some(root => root.links.includes(visit.url)))))
+        fail('REFERENCE_LEAD_OBSERVATION_REQUIRED');
+      continue;
+    }
     if (lane === 'domain' && research.schema === 'reference-research-v8') continue;
     if (directRoots[lane].length) validateDiscoveryCoverage(root, { lane, queries: entry.queries, searches: entry.searches, sourceUrls, navigation: navigation[lane], directRoots: directRoots[lane], allowUnmatched });
     else validateSearchCoverage(root, lane, entry.queries, entry.searches, sourceUrls, navigation[lane], allowUnmatched);

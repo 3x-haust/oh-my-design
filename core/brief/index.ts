@@ -13,6 +13,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { STAGES, resolveRunState, type StageId } from '../stage/contract.ts';
 import { formatBrief } from './format.ts';
+import { chosenCopyTone, projection, readTranslation, requireCopyToneReview, type Target } from '../design-language/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { detectAppShell, renderTargetHint, type AppShell } from '../stack/shell.ts';
 import { readPersistedRoute, type RouteRecord } from '../route/index.ts';
@@ -121,6 +122,7 @@ export type Brief = {
     passMeans: 'current-entry-inputs-only';
   }>;
   readonly referenceApplication?: ReferenceApplicationProjection | null;
+  readonly designLanguage?: Readonly<{ sha256: string; targets: readonly Target[]; copyTone: boolean; status: string }> | null;
   readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
   readonly runtimeDesignSystem?: ReturnType<typeof runtimeInventoryStatus> | null;
   readonly stage: BriefStage;
@@ -413,6 +415,14 @@ export function buildBrief(
     })();
 
   const blockers: string[] = [];
+  const language = route === null ? null : projection(root, route);
+  const feedbackTranslation = route === null ? null : readTranslation(root, 'feedback', route);
+  const feedbackCopyTone = feedbackTranslation !== null && chosenCopyTone(feedbackTranslation.translation);
+  if (language?.status === 'needs-clarification' && ['art-direction', 'composition', 'production'].includes(stage)) blockers.push('DESIGN_LANGUAGE_AMBIGUOUS: resolve the current picture-backed meaning question before design commitment');
+  if (stage === 'production' && route !== null) {
+    try { requireCopyToneReview(root, route); }
+    catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
+  }
   const inventoryStatus = designInventoryStatus(root);
   const existingDesignSystem = inventoryStatus.status === 'missing' ? null : inventoryStatus;
   const runtimeStatus = runtimeInventoryStatus(root);
@@ -623,10 +633,12 @@ export function buildBrief(
       passMeans: 'current-entry-inputs-only',
     },
     referenceApplication,
+    designLanguage: language === null ? null : { sha256: language.sha256, targets: language.targets, copyTone: language.copyTone, status: language.status },
     existingDesignSystem,
     ...(runtimeDesignSystem === null ? {} : { runtimeDesignSystem }),
     owner: native?.owner ?? definition?.owner ?? OWNER[stage] ?? 'coordinator',
-    owns: native?.owns ?? (designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact]),
+    owns: [...(native?.owns ?? (designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact])),
+      ...(stage === 'copy' && (language?.copyTone || feedbackCopyTone) ? ['Reopen Writer copy for the current translated tone, then obtain a fresh CLEAN copy review; Hand never rewrites this text.'] : [])],
     ...(native === undefined ? {} : { procedure: native.procedure }),
     route: route === null ? null : {
       name: route.route,

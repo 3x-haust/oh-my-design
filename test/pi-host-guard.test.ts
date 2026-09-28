@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import omdExtension, { type PortablePiApi, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
 import { classifyPiWrite, isMutatingOmdCommand, isPreproductionReadCommand } from '../extensions/omd-guard.ts';
+import { RepairLoop } from '../extensions/omd-repair-progress.ts';
 
 function harness(exec?: PortablePiApi['exec'], sendMessage?: PortablePiApi['sendMessage']) {
   const hooks = new Map<string, PortablePiHook>();
@@ -92,7 +93,7 @@ test('current successful gates allow in-scope writes and preserve final message;
   assert.equal(h.calls.length, count);
 });
 
-test('repairable terminal failures stop on repeated no-progress but successful repair activity keeps the loop alive', async () => {
+test('repairable terminal failures stall after three consecutive passes without material evidence, despite source edits', async () => {
   const sent: Array<Parameters<NonNullable<PortablePiApi['sendMessage']>>> = [];
   const h = harness(async (_command, args) => args[2] === 'production'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
@@ -107,20 +108,37 @@ test('repairable terminal failures stop on repeated no-progress but successful r
     await h.emit('before_agent_start', { prompt: 'Follow-up repair' });
     const held = await h.emit('message_end', { message: final }) as { message: typeof final };
     if (round === 0) assert.match((held.message.content[0]?.text ?? '').split('\n\n')[0] ?? '', /guard completion/);
+    if (round >= 3) assert.match(held.message.content[0]?.text ?? '', /OMD_REPAIR_STALLED/);
     await h.emit('input', { source: 'extension' });
   }
-  assert.equal(sent.length, 5, 'successful in-scope repair work must permit more than two rechecks');
+  assert.equal(sent.length, 3, 'source edits alone do not establish material progress beyond the three-pass allowance');
   assert.deepEqual(sent[0]![1], { triggerTurn: true, deliverAs: 'followUp' });
   assert.equal(sent[0]![0].customType, 'omd-gate-repair');
 
-  for (let round = 0; round < 4; round++) await h.emit('message_end', { message: final });
-  assert.equal(sent.length, 7, 'two recovery turns are allowed after work stops changing, then the cycle is held');
+  for (let round = 0; round < 4; round++) {
+    const held = await h.emit('message_end', { message: final }) as { message: typeof final };
+    assert.match(held.message.content[0]?.text ?? '', /OMD_REPAIR_STALLED/);
+  }
+  assert.equal(sent.length, 3);
   await h.emit('input', { source: 'interactive' });
   await h.emit('tool_call', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' } });
   writeFileSync(join(h.cwd, 'src/main.jsx'), 'new request bytes');
   await h.emit('tool_result', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' }, isError: false });
   await h.emit('message_end', { message: final });
-  assert.equal(sent.length, 8);
+  assert.equal(sent.length, 4, 'a new interactive request starts a fresh bounded repair decision');
+});
+
+test('new material identities, not source byte churn, keep repairs running past three passes', () => {
+  const loop = new RepairLoop();
+  for (let pass = 0; pass < 6; pass++) {
+    const decision = loop.next('/fixture', 'stage', 'selected-run', 'same blocker', 0, [`validated-stage-${pass}`]);
+    assert.equal(decision.retry, true);
+    assert.equal(decision.stalled, false);
+  }
+  for (let pass = 0; pass < 3; pass++) {
+    const decision = loop.next('/fixture', 'stage', 'selected-run', 'same blocker', 0, ['validated-stage-5']);
+    if (pass === 2) assert.deepEqual(decision, { retry: false, pass: 8, stalled: true });
+  }
 });
 
 test('identical writes and successful publisher help do not manufacture repair progress', async () => {
@@ -145,7 +163,7 @@ test('identical writes and successful publisher help do not manufacture repair p
   assert.equal(sent.length, 3, 'successful no-op activity must not reset the no-progress allowance');
 });
 
-test('genuine writes without a tool call id still count as repair progress', async () => {
+test('id-less source writes do not count as material repair progress', async () => {
   const sent: unknown[] = [];
   const h = harness(async (_command, args) => args[2] === 'production'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
@@ -156,9 +174,10 @@ test('genuine writes without a tool call id still count as repair progress', asy
     await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: `round ${round}` } });
     writeFileSync(join(h.cwd, 'src/main.jsx'), `round ${round}`);
     await h.emit('tool_result', { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false });
-    await h.emit('message_end', { message: final });
+    const held = await h.emit('message_end', { message: final }) as { message: typeof final };
+    if (round >= 3) assert.match(held.message.content[0]?.text ?? '', /OMD_REPAIR_STALLED/);
   }
-  assert.equal(sent.length, 5);
+  assert.equal(sent.length, 3);
 });
 
 test('overlapping id-less writes to one file retain each pending fingerprint', async () => {

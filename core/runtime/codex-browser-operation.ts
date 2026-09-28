@@ -15,6 +15,7 @@ const SCOUT_OPERATIONS = [
   ['ref', 'add-batch'],
   ['craft-capture'],
   ['ref', 'search'],
+  ['ref', 'leads', 'search'],
   ['ref', 'navigate'],
 ] as const;
 

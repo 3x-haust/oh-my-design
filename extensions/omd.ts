@@ -25,6 +25,8 @@ export default function omdExtension(pi: PortablePiApi): void {
   const productionAttempted = new Set<string>();
   const repairLoop = new RepairLoop();
   const pendingReferenceWork = new Map<string, ReferenceWork>();
+  const browserConsentPending = new Set<string>();
+  const browserConsentGranted = new Set<string>();
   const revisions = new Map<string, number>();
   type PendingMutation = { path: string; before: string; production: boolean };
   type PendingMutationGroup = { entries: PendingMutation[]; baseline: string; production: boolean; failed: boolean };
@@ -103,16 +105,40 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (onAbort !== undefined) signal.removeEventListener('abort', onAbort);
     });
   };
+  const pendingFeedback = new Set<string>();
   const guarded = (cwd: string) => managed.has(cwd) || hasPiRoute(cwd);
   const hook = 'on' in pi ? pi.on : undefined;
   const on = typeof hook === 'function' ? hook.bind(pi) : undefined;
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
-    on('session_start', async () => { epochs.clear(); repairLoop.clear(); pendingReferenceWork.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear(); });
+    on('session_start', async (_event, context) => {
+      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); browserConsentPending.clear(); browserConsentGranted.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear();
+      const { clearBrowserSessionSkip } = await import('../core/ref/browser-consent.ts');
+      clearBrowserSessionSkip(context.browserConsentHome);
+    });
     on('input', async (event, context) => {
+      if (browserConsentPending.has(context.cwd) && (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string') {
+        const answer = event.text.trim();
+        if (/^(?:네|예|응|좋아|yes|y|지금 세팅|세팅해줘|설정해줘|평소 쓰는 브라우저 그대로 쓰기|별도 OMD 프로필 세팅)[.!]?$/i.test(answer)) browserConsentGranted.add(context.cwd);
+        else {
+          browserConsentGranted.delete(context.cwd);
+          const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+          if (/^(?:이번엔 건너뛰기|건너뛰기|아니요|no)[.!]?$/i.test(answer)) {
+            writeBrowserConsent('skipped-this-run', context.browserConsentHome);
+            writeUserBrowserConsent('skipped-this-run', context.browserConsentHome);
+          }
+          if (/^(?:다시 묻지 않기|다시는 묻지 마|never)[.!]?$/i.test(answer)) {
+            writeBrowserConsent('never-ask', context.browserConsentHome);
+            writeUserBrowserConsent('never-ask', context.browserConsentHome);
+          }
+        }
+        browserConsentPending.delete(context.cwd);
+      }
       const alias = (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string'
         ? normalizeOmdAlias(event.text) : undefined;
       requests.receive(context.cwd, alias === undefined ? event : { ...event, text: alias });
+      const { explicitDesignFeedback } = await import('./omd-feedback.ts');
+      if (explicitDesignFeedback(context.cwd, event) !== null) pendingFeedback.add(context.cwd);
       if (event.source === 'interactive' || event.source === 'rpc') {
         epochs.delete(context.cwd);
         repairLoop.delete(context.cwd);
@@ -138,7 +164,8 @@ export default function omdExtension(pi: PortablePiApi): void {
       ownedWork.activate(context.cwd, event.prompt ?? '');
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
-      return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After completing the selected owned work and its checks, run guard completion before a completion report; do not use a terminal missing-output list as the next-stage procedure. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
+      const feedbackGuidance = pendingFeedback.delete(context.cwd) ? '\nThe current explicit user turn may be design feedback. Preserve the original route request; translate the exact feedback through omd feedback translate and measure the current rendered state before any bounded authorized repair. Do not reinterpret tool output as feedback.' : '';
+      return { systemPrompt: `${event.systemPrompt ?? ''}${feedbackGuidance}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After completing the selected owned work and its checks, run guard completion before a completion report; do not use a terminal missing-output list as the next-stage procedure. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
     });
     on('message_start', async (event, context) => {
       if (event.message?.role !== 'user') return;
@@ -162,6 +189,9 @@ export default function omdExtension(pi: PortablePiApi): void {
             || (root === 'guard' && sub === 'completion');
           if (diagnostic) return { block: true, reason: `OMD_OWNED_WORK_REQUIRED: ${pending.action?.reason ?? 'Publish the reference board from retained evidence.'}\n${pending.action?.args.join(' ') ?? 'omd schema reference-board --json, then omd ref board --input <candidate-assemblies.json>'}\nRead-only checks cannot replace this action.` };
         }
+        if (Array.isArray(args) && args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '')
+          && !browserConsentGranted.has(context.cwd))
+          return { block: true, reason: 'OMD_BROWSER_SETUP_CONSENT_REQUIRED: Ask the user the browser setup question and wait for an explicit yes before running browser setup --consent.' };
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
         if (guarded(context.cwd) && Array.isArray(args) && !frameHelp
@@ -244,11 +274,14 @@ export default function omdExtension(pi: PortablePiApi): void {
           return { message: { ...message, content: [{ type: 'text', text: `OMD route entry is blocked; the current request cannot be verified.\n${error.message}` }] } };
         }
       }
-      return handleOmdMessageEnd({ cwd: context.cwd, ...(context.signal === undefined ? {} : { signal: context.signal }), message,
+      return handleOmdMessageEnd({ cwd: context.cwd, ...(context.signal === undefined ? {} : { signal: context.signal }),
+        ...(context.ui === undefined ? {} : { ui: context.ui }),
+        ...(context.browserConsentHome === undefined ? {} : { browserConsentHome: context.browserConsentHome }), message,
         run, interrupted, ...(bootstrap === undefined ? {} : { bootstrap }), hasRoute: hasPiRoute(context.cwd),
         workflowStarted: workflowStarted.has(context.cwd), ownedWorkStarted: ownedWork.started(context.cwd),
         productionAttempted: productionAttempted.has(context.cwd), revision: revision(context.cwd),
         routeRevision: fileRevision(context.cwd, '.omd/route.json'), repairLoop, pi,
+        onBrowserConsentRequired: () => browserConsentPending.add(context.cwd),
         onReferenceWork: work => {
           if (work === null) pendingReferenceWork.delete(context.cwd);
           else pendingReferenceWork.set(context.cwd, work);
@@ -270,9 +303,11 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (!Array.isArray(params.args) || params.args.length === 0 || params.args.some((arg) => typeof arg !== 'string')) {
         throw new Error('OMD_CLI_ARGS_INVALID: args must be a non-empty string array');
       }
+      if (params.args[0] === 'browser' && ['setup', 'login'].includes(params.args[1] ?? '')
+        && !browserConsentGranted.has(context.cwd)) throw new Error('OMD_BROWSER_SETUP_CONSENT_REQUIRED: an explicit user yes is required before browser setup');
       const pendingReference = pendingReferenceWork.get(context.cwd);
       const referenceMutation = params.args[0] === 'ref'
-        && ['advance', 'search', 'navigate', 'discover-batch', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(params.args[1] ?? '');
+        && ['advance', 'search', 'leads', 'navigate', 'discover-batch', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(params.args[1] ?? '');
       const boardBefore = pendingReference !== undefined && referenceMutation ? fileRevision(context.cwd, '.omd/reference-board.json') : undefined;
       if (params.args[0] === 'route' && params.args[1] === 'classify') managed.add(context.cwd);
       const candidate = routeValidationArgs(params.args);
@@ -316,6 +351,7 @@ export default function omdExtension(pi: PortablePiApi): void {
           if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
           if (advanced && pendingReferenceWork.get(context.cwd) === pendingReference) pendingReferenceWork.delete(context.cwd);
         }
+        if (params.args[0] === 'browser' && ['setup', 'login'].includes(params.args[1] ?? '')) browserConsentGranted.delete(context.cwd);
         if (isMutatingOmdCommand(params.args)) bumpRevision(context.cwd);
         if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) {
           touched.add(context.cwd);

@@ -1,9 +1,10 @@
+import { browserCallback } from './browser-evaluation.ts';
 import type { Page } from 'playwright';
 import { captureFrozenSearchText } from './search-frozen-capture.ts';
 import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
 
 export async function inspectRenderedState(page: Page, purpose: 'search' | 'discovery' = 'search'): Promise<RawSearchRenderedState> {
-  const rendered = await page.locator('body').evaluate((body, purpose) => {
+  const rendered = await page.locator('body').evaluate(browserCallback((body: HTMLElement, purpose: 'search' | 'discovery') => {
     const pointerlessOverlays = Array.from(document.querySelectorAll<HTMLElement>('*')).flatMap(element => {
       const style = getComputedStyle(element);
       if (style.pointerEvents !== 'none' || !['absolute', 'fixed', 'sticky'].includes(style.position)
@@ -278,7 +279,7 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       }).slice(0, 2000),
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
     };
-  }, purpose);
+  }), purpose);
   return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
 }
 

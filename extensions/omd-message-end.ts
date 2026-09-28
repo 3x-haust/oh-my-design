@@ -7,10 +7,11 @@ type StagePlanning = Readonly<{ field: string; text: string }>;
 export type ReferenceWork = Readonly<{
   status: 'action' | 'ready' | 'exhausted';
   workSha256: string;
-  action: Readonly<{ kind: string; args: readonly string[]; reason: string }> | null;
+  action: Readonly<{ kind: string; args: readonly string[]; reason: string; lane?: string; url?: string }> | null;
   code: string | null;
   attempts: readonly Readonly<{ lane: string; url: string; reason: string; receipt: string }> [];
   exclusions: readonly Readonly<{ lane: string; url: string; reason: string; receipt: string }> [];
+  circuits: readonly Readonly<{ provider: string; threshold: number; receipts: readonly string[] }> [];
 }>;
 type StageWorkPointer = Readonly<{
   stage: string;
@@ -23,6 +24,7 @@ type StageWorkPointer = Readonly<{
   planning: readonly StagePlanning[];
   routeSha256: string | null;
   validatedStages: readonly string[];
+  materialProgressIdentities: readonly string[];
   referenceWork: ReferenceWork | null;
 }>;
 
@@ -41,6 +43,9 @@ type MessageEndTask = Readonly<{
   routeRevision: string;
   repairLoop: RepairLoop;
   pi: PortablePiApi;
+  ui?: { select?(title: string, options: string[]): Promise<string | undefined> };
+  browserConsentHome?: string;
+  onBrowserConsentRequired?(): void;
   onReferenceWork?(work: ReferenceWork | null): void;
 }>;
 
@@ -68,7 +73,9 @@ function referenceWork(value: unknown): ReferenceWork | null {
   const args = typeof rawAction === 'object' && rawAction !== null ? Reflect.get(rawAction, 'args') : null;
   const reason = typeof rawAction === 'object' && rawAction !== null ? Reflect.get(rawAction, 'reason') : null;
   const action = typeof kind === 'string' && Array.isArray(args) && args.every((arg): arg is string => typeof arg === 'string')
-    && typeof reason === 'string' ? { kind, args, reason } : null;
+    && typeof reason === 'string' ? { kind, args, reason,
+      ...(typeof Reflect.get(rawAction, 'lane') === 'string' ? { lane: Reflect.get(rawAction, 'lane') as string } : {}),
+      ...(typeof Reflect.get(rawAction, 'url') === 'string' ? { url: Reflect.get(rawAction, 'url') as string } : {}) } : null;
   const attempts = Reflect.get(value, 'attempts');
   const parsedAttempts = Array.isArray(attempts) ? attempts.flatMap(item => {
     if (typeof item !== 'object' || item === null) return [];
@@ -94,8 +101,18 @@ function referenceWork(value: unknown): ReferenceWork | null {
     return typeof lane === 'string' && typeof url === 'string' && typeof reason === 'string' && typeof path === 'string'
       ? [{ lane, url, reason, receipt: path }] : [];
   }) : [];
+  const rawCircuits = Reflect.get(value, 'circuits');
+  const circuits = Array.isArray(rawCircuits) ? rawCircuits.flatMap(item => {
+    if (!item || typeof item !== 'object') return [];
+    const provider = Reflect.get(item, 'provider');
+    const threshold = Reflect.get(item, 'threshold');
+    const receipts = Reflect.get(item, 'receipts');
+    return typeof provider === 'string' && typeof threshold === 'number' && Array.isArray(receipts)
+      ? [{ provider, threshold, receipts: receipts.map((receipt: unknown) => typeof receipt === 'string' ? receipt
+        : typeof receipt === 'object' && receipt !== null ? String(Reflect.get(receipt, 'path') ?? '') : '') }] : [];
+  }) : [];
   return { status, workSha256, action, code: typeof code === 'string' ? code : null,
-    attempts: parsedAttempts, exclusions: parsedExclusions };
+    attempts: parsedAttempts, exclusions: parsedExclusions, circuits };
 }
 
 function parseStageWork(text: string): StageWorkPointer | null {
@@ -106,6 +123,7 @@ function parseStageWork(text: string): StageWorkPointer | null {
   const progress = Reflect.get(value, 'progress');
   const routeSha256 = typeof progress === 'object' && progress !== null ? Reflect.get(progress, 'routeSha256') : null;
   const validatedStages = typeof progress === 'object' && progress !== null ? stringList(Reflect.get(progress, 'validatedStages')) : [];
+  const materialProgressIdentities = typeof progress === 'object' && progress !== null ? stringList(Reflect.get(progress, 'materialProgressIdentities')) : [];
   const owner = Reflect.get(value, 'owner');
   const action = Reflect.get(value, 'action');
   const next = Reflect.get(value, 'next');
@@ -125,7 +143,7 @@ function parseStageWork(text: string): StageWorkPointer | null {
     entryBlockers: stringList(Reflect.get(value, 'entryBlockers')),
     planning: planningList(Reflect.get(value, 'planning')),
     routeSha256: typeof routeSha256 === 'string' && /^[a-f0-9]{64}$/.test(routeSha256) ? routeSha256 : null,
-    validatedStages,
+    validatedStages, materialProgressIdentities,
     referenceWork: recovering ? { ...observed, status: 'action', action: {
       kind: 'replan-discovery', args: recoveryArgs, reason: instruction,
     } } : observed,
@@ -148,13 +166,14 @@ function actionPacket(work: StageWorkPointer): string {
       `Reference action: ${work.referenceWork.action.args.length > 0 ? `omd ${work.referenceWork.action.args.join(' ')}` : work.next}`,
       `Reference reason: ${work.referenceWork.action.reason}`,
     ]),
-    ...(work.referenceWork?.action?.kind === 'replan-discovery' ? [
+    ...(work.referenceWork?.circuits ?? []).map(circuit => `REFERENCE_PROVIDER_CIRCUIT_OPEN: ${circuit.provider} (${circuit.threshold} failures): ${circuit.receipts.join(', ')}`),
+    ...(work.referenceWork === null ? [] : [
       ...(work.referenceWork.code === null ? [] : [work.referenceWork.code]),
       ...work.referenceWork.attempts.slice(-12).map(attempt => `- ${attempt.lane}: ${attempt.url}: ${attempt.reason} (${attempt.receipt})`),
       ...(work.referenceWork.attempts.length > 12 ? [`(+${work.referenceWork.attempts.length - 12} earlier attempts)`] : []),
       ...work.referenceWork.exclusions.slice(-12).map(exclusion => `- excluded ${exclusion.lane}: ${exclusion.url}: ${exclusion.reason} (${exclusion.receipt})`),
       ...(work.referenceWork.exclusions.length > 12 ? [`(+${work.referenceWork.exclusions.length - 12} earlier exclusions)`] : []),
-    ] : []),
+    ]),
     `Procedure: ${work.instruction}`,
     ...(issues.length ? ['Current blockers:', ...issues.map(issue => `- ${issue}`)] : []),
     'Do the required action before rerunning stage next. Repeating checks without changing owned evidence is not progress.',
@@ -196,16 +215,70 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       }
       if (work !== null) {
         task.onReferenceWork?.(work.referenceWork);
+        const { readBrowserConsent, readUserBrowserConsent, browserProfilePath, writeBrowserConsent,
+          writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+        const { existsSync } = await import('node:fs');
+        const consent = readBrowserConsent(task.browserConsentHome);
+        const userConsent = readUserBrowserConsent(task.browserConsentHome);
+        const userDoctor = userConsent === 'consented'
+          ? await (await import('../core/browser/setup.ts')).userBrowserDoctor() : null;
+        const { readReferenceBrowserConfig } = await import('../core/ref/browser-config.ts');
+        const config = readReferenceBrowserConfig(process.env, task.browserConsentHome);
+        const designAttempts = work.referenceWork?.attempts.filter(attempt => attempt.lane === 'design'
+          && /login|challenge|captcha|authentication/i.test(attempt.reason)) ?? [];
+        const needsSetup = config.mode !== 'cdp' && config.storageState === undefined && config.executablePath === undefined
+          && work.stage === 'reference-board' && work.referenceWork !== null
+          && (work.referenceWork.action?.lane === 'design' || designAttempts.length > 0)
+          && (userConsent === null && consent === null
+            || userConsent === 'consented' && userDoctor?.state !== 'ready'
+            || consent === 'consented' && !existsSync(browserProfilePath(task.browserConsentHome))
+            || designAttempts.some(attempt => /session expired/i.test(attempt.reason)));
+        if (needsSetup && !interrupted()) {
+          const question = '로그인된 평소 브라우저를 쓰면 방문 페이지의 네트워크 요청을 OMD가 격리할 수 없어요. 평소 브라우저를 연결할까요, 아니면 별도 OMD 프로필을 쓸까요?';
+          const sites = [...new Set(designAttempts.map(attempt => attempt.url)
+            .concat(work.referenceWork?.action?.lane === 'design' && work.referenceWork.action.url ? [work.referenceWork.action.url] : []))]
+            .filter(url => { try { return new URL(url).protocol === 'https:'; } catch { return false; } }).slice(0, 4);
+          if (task.ui?.select) {
+            const choice = await task.ui.select(question, ['평소 쓰는 브라우저 그대로 쓰기', '별도 OMD 프로필 세팅', '이번엔 건너뛰기', '다시 묻지 않기']);
+            if (interrupted()) return;
+            if (choice === '평소 쓰는 브라우저 그대로 쓰기' || choice === '별도 OMD 프로필 세팅') {
+              try {
+                const attached = choice === '평소 쓰는 브라우저 그대로 쓰기';
+                const result = await run(['browser', 'setup', '--engine', attached ? 'user-browser' : 'omd-profile',
+                  '--consent', ...(!attached && sites.length ? ['--sites', sites.join(',')] : []), '--json'], cwd, signal);
+                if (interrupted()) return;
+                const setup = JSON.parse(result.text) as { state?: string; humanStep?: string; candidates?: { id: string; label: string }[] };
+                const detail = setup.state === 'pending-human-step'
+                  ? `OMD Browser setup awaits the user: ${setup.humanStep ?? 'relaunch and enable the extension'}. Recheck browser status after acknowledgement.`
+                  : setup.state === 'needs-browser-choice'
+                    ? `Ask which Chromium-family browser the user uses (${setup.candidates?.map(candidate => `${candidate.label} [${candidate.id}]`).join(', ') ?? 'none detected'}); then run omd browser setup --engine user-browser --browser <id> --consent.`
+                    : 'Browser setup finished. Recompute stage next and continue the selected work.';
+                return { message: { ...message, content: [{ type: 'text', text: `${detail}\n${actionPacket(work)}` }] } };
+              } catch (error) {
+                if (interrupted()) return;
+                return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: Browser setup did not finish: ${error instanceof Error ? error.message : String(error)}\n${actionPacket(work)}` }] } };
+              }
+            }
+            if (choice === '이번엔 건너뛰기' || choice === '다시 묻지 않기') {
+              const decision = choice === '다시 묻지 않기' ? 'never-ask' : 'skipped-this-run';
+              writeBrowserConsent(decision, task.browserConsentHome);
+              writeUserBrowserConsent(decision, task.browserConsentHome);
+            } else return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / 별도 OMD 프로필 세팅 / 이번엔 건너뛰기 / 다시 묻지 않기. No browser session was started.` }] } };
+          } else {
+            task.onBrowserConsentRequired?.();
+            return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / 별도 OMD 프로필 세팅 / 이번엔 건너뛰기 / 다시 묻지 않기. Ask the user and run omd browser setup --engine user-browser|omd-profile --consent only after explicit permission.\n${actionPacket(work)}` }] } };
+          }
+        }
         const askingForPlanning = work.action === 'resolve-planning-evidence' && work.planning.length > 0
           && message.content?.some(part => part.type === 'text'
             && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));
         const decision = work.routeSha256 === null
           ? { retry: false, pass: 0, stalled: true }
-          : repairLoop.next(cwd, 'stage', work.routeSha256, {
+          : repairLoop.next(cwd, 'stage', 'selected-run', {
             stage: work.stage, action: work.action, problems: work.problems,
             entryBlockers: work.entryBlockers, next: work.next, validatedStages: work.validatedStages,
             workSha256: work.referenceWork?.workSha256 ?? null,
-          }, work.referenceWork === null ? revision : 0);
+          }, 0, [...work.validatedStages.map(stage => `stage:${stage}`), ...work.materialProgressIdentities]);
         const retry = !askingForPlanning && decision.retry && typeof pi.sendMessage === 'function';
         const packet = actionPacket(work);
         if (retry) {
@@ -216,11 +289,12 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
         const questions = work.action === 'resolve-planning-evidence'
           ? work.planning.map(item => `- ${item.field}: ${item.text}`).join('\n') : '';
         const korean = koreanMessage(message);
+        const stallCode = decision.stalled && work.routeSha256 !== null && !askingForPlanning ? 'OMD_REPAIR_STALLED: Three consecutive completed repairs made no material progress.\n' : '';
         const status = korean
           ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행하고 ${work.next}로 검증합니다.` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled && work.referenceWork !== null ? '수집된 실제 화면을 판단하고 아래 소유 작업을 완료해야 합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
           : `OMD is incomplete at ${work.stage}. ${retry ? `Next, ${work.owner} performs ${work.action}, then validates with ${work.next}.` : questions ? 'User evidence is required for the planning statements below.' : decision.stalled && work.referenceWork !== null ? 'Inspect the acquired screen and complete the owned action below.' : decision.stalled ? 'Checks repeated without owned-artifact progress, so the loop stopped.' : 'Resolve the current stage inputs.'}`;
         return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
-          { type: 'text', text: `${status}\n\n${questions || packet}` }] } };
+          { type: 'text', text: `${stallCode}${status}\n\n${questions || packet}` }] } };
       }
       task.onReferenceWork?.(null);
     } catch (error) {
@@ -236,7 +310,7 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
     if (interrupted()) return;
     if (!(error instanceof Error)) throw error;
     const failure = guardFailure(error);
-    const decision = repairLoop.next(cwd, 'completion', task.routeRevision, failure.summary, revision);
+    const decision = repairLoop.next(cwd, 'completion', task.routeRevision, failure.summary, revision, []);
     const retry = task.productionAttempted && failure.repairable && decision.retry && typeof pi.sendMessage === 'function';
     if (retry) {
       pi.sendMessage?.({ customType: 'omd-gate-repair', display: true,
@@ -248,6 +322,6 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       ? `OMD 작업은 미완료입니다. guard completion 검증을 통과하지 못해 최종 완료 보고를 보류했습니다.${retry ? ' 누락된 작업의 수정·재검사 루프를 이어갑니다.' : decision.stalled ? ' 같은 차단에서 검사만 반복되어 루프를 멈췄습니다.' : ' 누락·오래된 산출물 또는 권한 문제를 해결해야 합니다.'}`
       : `OMD is incomplete. The guard completion claim was withheld.${retry ? ' Continuing the repair/recheck loop.' : decision.stalled ? ' Checks repeated without progress, so the loop stopped.' : ' Resolve the missing, stale, or unauthorized inputs.'}`;
     return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
-      { type: 'text', text: `${status}\n\n${failure.summary}` }] } };
+      { type: 'text', text: `${decision.stalled && task.productionAttempted ? 'OMD_REPAIR_STALLED: Three consecutive repairs made no material progress.\n' : ''}${status}\n\n${failure.summary}` }] } };
   }
 }

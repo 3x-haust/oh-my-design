@@ -6,8 +6,10 @@ effort: high
 ---
 
 Discovery execution is a deliverable. In research v7 choose actual search or direct-public
-browsing per lane. For search run `omd ref search --input <json>` with lane, query, public HTTPS
-url and queryParam; keep the actual receipt in searches. For direct browsing run
+browsing per lane. Use the host web search tool for the plan-derived query, then register its
+returned URLs with `omd ref leads add --input <leads.json> --json`. Leads are unsigned and
+never evidence; only OMD's signed destination observation can support research. Historical
+signed `ref search` receipts remain readable. For direct browsing run
 `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` or
 `--lane design --entry free-gallery --json`; put its returned object plus an authored reason
 in discoveryRoots. Empty queries/searches require valid direct roots. Every declared query still
@@ -24,10 +26,8 @@ up to four isolated visits run concurrently in one browser. Inspect every ordere
 successful receipts remain evidence even when another item fails. Do not batch a follow-up
 URL before its parent capture actually exposes that link. A batch outcome is discovery,
 never a retained domain or design board reference.
-With target-market-first policy, put all required market-qualified domain/design searches in
-market-only batches and wait for their outcomes before starting any unqualified global search
-batch. Never mix market-qualified and global searches in one concurrent batch: research-check
-verifies the signed observation times, not the manifest order.
+With target-market-first policy, acquire local-market destination observations before global
+destinations; host search timestamps cannot prove observation order.
 Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
 The v3 benchmark checker reports artifact-only evidence strength, not verified live actions. Historical v2 records remain readable under their original admission.
 Preserve that limitation in the synthesis; do not claim every flow/control was tested.
@@ -107,17 +107,19 @@ UI Bowl and Pinterest;
 websites/marketing use website galleries such as Siteinspire and Pinterest. Follow discover-plan's
 designSourcePolicy, verify current free access per entry, and record a task-specific quality reason
 (viewport, hierarchy, typography, density) rather than trusting the gallery's reputation. On login,
-payment, or blocking, record the limit and try another public source. Never purchase, start a trial,
-install an MCP, or bypass restrictions. Free viewing does not grant asset reuse rights.
+payment, or blocking, let the acquisition layer handle challenges. For login-gated galleries or
+unsolved challenges, follow the harness's one-time ask-then-setup flow: after user consent OMD sets up
+its own logged-in browser profile; do not ask users to set env vars. If acquisition still fails,
+record the limit and try another source. Never purchase or start a trial. Free viewing does not grant asset reuse rights.
 Use designSourcePolicy.searchQueries (including Pinterest pins) through the real search transport,
-nativeSearchInputs with ref search, or nativeEntryInputs with ref navigate --entry free-gallery.
+register host search results with ref leads add, or use nativeEntryInputs with ref navigate --entry free-gallery.
 Direct public-list browsing is a first-class alternative, not an invented successful search.
 Record the actual method, result and capability gaps. Search inputs are free gallery query
 transports for Pinterest plus Dribbble on product routes or Siteinspire on marketing routes,
 not preset reference winners.
 Open an item actually returned in observed links; never guess numeric shot/pin IDs. If a provider
 returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
-public gallery. No credential/payment/CAPTCHA workaround. Refine unscoped query terms to the actual
+public gallery after challenge handling and any user-consented OMD browser setup fail. Refine unscoped query terms to the actual
 task and update the URL with them; keep explicit-market native search inputs exact. Direct roots must expose actual same-gallery item links;
 follow only observed links via strict native navigation, then visit the concrete gallery item
 with `omd ref navigate <item-url> --lane design --json`. The list and gallery wrapper are not

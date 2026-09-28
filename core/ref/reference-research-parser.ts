@@ -173,19 +173,30 @@ function discoveryRoots(value: unknown, design: boolean): readonly ResearchDisco
   return Object.freeze(roots);
 }
 
-function lane(value: unknown, options: Readonly<{ keys: readonly string[]; code: string; design: boolean; direct: boolean }>): ResearchLane & Record<string, unknown> {
+function leadReceipts(value: unknown, lane: 'domain' | 'design'): readonly ResearchEvidence[] {
+  if (!Array.isArray(value) || value.length > 100 || Object.keys(value).length !== value.length) fail('REFERENCE_SEARCH_LEADS_INVALID');
+  return value.map(item => {
+    const row = record(item, 'REFERENCE_SEARCH_LEADS_INVALID');
+    exactKeys(row, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_SEARCH_LEADS_INVALID');
+    const sha256 = digest(row.sha256, 'REFERENCE_SEARCH_LEADS_INVALID');
+    if (row.path !== `.omd/discovery/${lane}/leads/${sha256}.json`) fail('REFERENCE_SEARCH_LEADS_INVALID');
+    return { path: row.path, sha256 };
+  });
+}
+function lane(value: unknown, options: Readonly<{ keys: readonly string[]; code: string; design: boolean; direct: boolean; current?: boolean }>): ResearchLane & Record<string, unknown> {
   const { keys, code, design, direct } = options;
   const input = record(value, code);
-  exactKeys(input, [...keys, ...(Object.hasOwn(input, 'navigation') ? ['navigation'] : []),
+  exactKeys(input, [...keys, ...(options.current && Object.hasOwn(input, 'leads') ? ['leads'] : []), ...(Object.hasOwn(input, 'navigation') ? ['navigation'] : []),
     ...(direct && Object.hasOwn(input, 'discoveryRoots') ? ['discoveryRoots'] : [])], `${code}_KEYS`);
   const roots = Object.hasOwn(input, 'discoveryRoots') ? discoveryRoots(input.discoveryRoots, design) : undefined;
   if (!Array.isArray(input.sources) || input.sources.length === 0) fail(`${code}_SOURCE_COVERAGE`);
   const sources = input.sources.map((value, index) => source(value, design, index));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
-  if (!Array.isArray(input.searches) || (!input.searches.length && !roots?.length) || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
+  if (!Array.isArray(input.searches) || (!input.searches.length && !roots?.length && !Object.hasOwn(input, 'leads')) || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
   const navigation = input.navigation;
   if (navigation !== undefined && (!Array.isArray(navigation) || navigation.length > 100 || Object.keys(navigation).length !== navigation.length)) fail('REFERENCE_RESEARCH_NAVIGATION_INVALID');
-  return { ...input, queries: texts(input.queries, `${code}_QUERY`, Boolean(roots?.length)), searches: input.searches.map(item => evidence(item, true)), sources,
+  return { ...input, queries: texts(input.queries, `${code}_QUERY`, Boolean(roots?.length) || Object.hasOwn(input, 'leads')), searches: input.searches.map(item => evidence(item, true)),
+    ...(options.current && Object.hasOwn(input, 'leads') ? { leads: leadReceipts(input.leads, design ? 'design' : 'domain') } : {}), sources,
     ...(roots === undefined ? {} : { discoveryRoots: roots }),
     ...(navigation === undefined ? {} : { navigation: (navigation as unknown[]).map(value => {
       const hop = record(value, 'REFERENCE_RESEARCH_NAVIGATION_INVALID');
@@ -249,16 +260,17 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const direct = input.schema !== 'reference-research-v5';
   const domain = current ? (() => {
     const row = record(input.domainReference, 'REFERENCE_RESEARCH_DOMAIN');
-    exactKeys(row, REFERENCE_RESEARCH_DOMAIN_KEYS, 'REFERENCE_RESEARCH_DOMAIN_KEYS');
+    exactKeys(row, [...REFERENCE_RESEARCH_DOMAIN_KEYS, ...(Object.hasOwn(row, 'leads') ? ['leads'] : [])], 'REFERENCE_RESEARCH_DOMAIN_KEYS');
     const parsed: Omit<ResearchLane, 'sources'> & { sources: readonly FunctionalSource[]; benchmarkSha256: string | null } = {
       sources: Array.isArray(row.sources) ? row.sources.map((item, index) => functionalSource(item, index)) : fail('REFERENCE_DOMAIN_FEATURE_EVIDENCE_REQUIRED'),
       queries: texts(row.queries, 'REFERENCE_RESEARCH_DOMAIN_QUERY', true),
       searches: Array.isArray(row.searches) ? row.searches.map(item => evidence(item, true)) : fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED'),
+      ...(Object.hasOwn(row, 'leads') ? { leads: leadReceipts(row.leads, 'domain') } : {}),
       benchmarkSha256: row.benchmarkSha256 === null ? null : digest(row.benchmarkSha256, 'REFERENCE_RESEARCH_BENCHMARK_SHA'),
     };
     return parsed;
   })() : lane(input.domainReference, { keys: REFERENCE_RESEARCH_DOMAIN_KEYS, code: 'REFERENCE_RESEARCH_DOMAIN', design: false, direct });
-  const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct });
+  const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct, current });
   if (direct && domain.sources.length < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_COVERAGE: new research requires at least three independently inspected comparable services');
   if (direct && new Set(domain.sources.map(entry => referenceServiceFamily(entry.url))).size < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY: use at least three independent service families; pages or subdomains under one operator such as GOV.UK count once');
   const visualDirections = design.sources.filter(entry => entry.visualRole === 'visual-direction');
@@ -283,11 +295,11 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   if (designEvidence.some(item => domainPaths.has(item.path) || domainHashes.has(item.sha256))) fail('REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED');
   const coverage = marketSchema ? parseMarketReferenceCoverage(input.marketCoverage,
     current ? domain.sources.map(item => ({ id: item.id, url: item.url, evidence: { sha256: (item as FunctionalSource).marketObservationSha256 } }))
-      : domain.sources as ResearchSource[], design.sources) : null;
+      : domain.sources as ResearchSource[], design.sources, current) : null;
   return Object.freeze({
     schema: input.schema as ReferenceResearch['schema'], sourceContractSha256,
     ...(marketSchema ? { marketCoverage: coverage } : {}),
-    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), ...(domain.discoveryRoots === undefined ? {} : { discoveryRoots: domain.discoveryRoots }), benchmarkSha256 }),
-    designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), ...(design.discoveryRoots === undefined ? {} : { discoveryRoots: design.discoveryRoots }), boardSha256 }),
+    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, ...(domain.leads === undefined ? {} : { leads: domain.leads }), sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), ...(domain.discoveryRoots === undefined ? {} : { discoveryRoots: domain.discoveryRoots }), benchmarkSha256 }),
+    designReference: Object.freeze({ queries: design.queries, searches: design.searches, ...(design.leads === undefined ? {} : { leads: design.leads }), sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), ...(design.discoveryRoots === undefined ? {} : { discoveryRoots: design.discoveryRoots }), boardSha256 }),
   });
 }

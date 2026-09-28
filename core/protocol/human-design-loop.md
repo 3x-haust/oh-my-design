@@ -6,6 +6,8 @@ profile, decision-linked browser context, and validated-learning context. The us
 owns role, stage, and optional-method order within their actual dependencies; this protocol does not
 supply a universal sequence.
 
+`protocol/design-language.md` defines coordinator-owned translation of casual requests into scoped measurable targets and reference-search mechanisms. A picture-backed question clarifies meaning only; it is not routine candidate approval. Current translation is a prerequisite to affected design commitment, and a current feedback translation requires measured movement before refinement closure.
+
 `protocol/design-practice.md` defines how the selected work practices the motto "AI that designs
 like a human": uncertainty-led tests, evidence-aware framing, independent alternatives, reflection,
 critique, and scoped learning. It is a source-free method contract, not an additional stage gate.

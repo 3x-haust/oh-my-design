@@ -71,7 +71,7 @@ export type MoodConvergence = Readonly<{
  * surface grammar; the out-of-category lane crosses its core objects into another domain, which is
  * what makes the same problem look different without becoming arbitrary.
  */
-export function moodQueries(brief: DomainBrief, lane: MoodQueryLane, round = 1): readonly MoodQuery[] {
+export function moodQueries(brief: DomainBrief, lane: MoodQueryLane, round = 1, translatedKeywords: readonly string[] = []): readonly MoodQuery[] {
   if (round < 1 || round > MOOD_ROUND_CAP) {
     throw new Error(`mood query round must be within 1..${MOOD_ROUND_CAP}`);
   }
@@ -80,6 +80,9 @@ export function moodQueries(brief: DomainBrief, lane: MoodQueryLane, round = 1):
   const queries: MoodQuery[] = [];
 
   if (lane === 'in-category') {
+    for (const keyword of translatedKeywords.slice(0, 1)) {
+      queries.push(Object.freeze({ lane, query: `${brief.domain} ${keyword}` }));
+    }
     for (const query of brief.referenceQueries.mood) {
       queries.push(Object.freeze({ lane, query }));
     }
