@@ -1,11 +1,14 @@
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_BRIEF_REFERENCES, briefMarkdownPath, briefPath, buildBrief, formatBrief, readBrief, writeBrief } from '../core/brief/index.ts';
+import { MAX_BRIEF_REFERENCES, buildBrief, formatBrief } from '../core/brief/index.ts';
+import { scanProject } from '../core/layout/scan.ts';
+import { classifyArtifact } from '../core/layout/index.ts';
 import { publishContentGrain } from '../core/content-grain/files.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
@@ -378,40 +381,41 @@ test('every command a brief names as a judge is a real CLI command', () => {
   }
 });
 
-test('a brief is persisted per stage, so the run keeps what each owner was handed', () => {
-  const dir = project();
-  const invocation = createTestProjectRunInvocation(dir);
-  const brief = buildBrief(dir, 'composition', join(dir, 'core'), invocation);
-  const written = writeBrief(dir, brief, createTestProjectWriteAdapter(dir, invocation));
-
-  // The adapter reports the absolute canonical path it wrote; `dir` may be a symlinked path
-  // (`/tmp` resolves to `/private/tmp` on macOS), so compare against the resolved root.
-  assert.equal(written.json, join(realpathSync(dir), briefPath('composition')));
-  assert.equal(written.markdown, join(realpathSync(dir), briefMarkdownPath('composition')));
-  assert.ok(existsSync(written.json));
-  assert.ok(existsSync(written.markdown));
-
-  const readBack = readBrief(dir, 'composition');
-  assert.deepEqual(readBack, brief, 'the persisted brief round-trips exactly');
-  assert.match(readFileSync(written.markdown, 'utf8'), /stage\s+composition/);
+test('current provenance families are classified instead of being offered for cleanup', () => {
+  for (const path of ['final-review/executions/sha256-test.json', 'route-source.json', 'workflow-plan.json', 'learning/rules-index.json']) {
+    assert.equal(classifyArtifact(path)?.cls, 'state', path);
+  }
 });
 
-test('each stage keeps its own brief, and a re-entry overwrites rather than accumulates', () => {
+test('declared probe plans stay in the design record while probe output is disposable', () => {
   const dir = project();
-  const invocation = createTestProjectRunInvocation(dir);
-  const adapter = createTestProjectWriteAdapter(dir, invocation);
-  writeBrief(dir, buildBrief(dir, 'domain', join(dir, 'core'), invocation), adapter);
-  writeBrief(dir, buildBrief(dir, 'composition', join(dir, 'core'), invocation), adapter);
-  assert.deepEqual(readdirSync(join(dir, '.omd', 'briefs')).sort(), [
-    'composition.json', 'composition.md', 'domain.json', 'domain.md',
-  ]);
-
-  // A second write describes the CURRENT inputs; a stale copy would be worse than none.
-  writeBrief(dir, buildBrief(dir, 'domain', join(dir, 'core'), invocation), adapter);
-  assert.equal(readdirSync(join(dir, '.omd', 'briefs')).length, 4);
+  mkdirSync(join(dir, '.omd', 'probes'));
+  mkdirSync(join(dir, '.omd', '.cache', 'probes'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'probes', 'primary.json'), '{}');
+  writeFileSync(join(dir, '.omd', '.cache', 'probes', 'primary.json'), '{}');
+  const scan = scanProject(dir);
+  assert.equal(scan.byClass.human.files, 1);
+  assert.deepEqual(scan.cleanable.map(entry => entry.path), ['.cache/probes/primary.json']);
 });
 
-test('a stage that has never run reads as absent rather than as an empty brief', () => {
+test('legacy persisted briefs are retired scratch, not design records', () => {
   const dir = project();
-  assert.equal(readBrief(dir, 'copy'), null);
+  mkdirSync(join(dir, '.omd', 'briefs'));
+  writeFileSync(join(dir, '.omd', 'briefs', 'domain.json'), '{}');
+  writeFileSync(join(dir, '.omd', 'briefs', 'domain.md'), '# duplicate');
+  const scan = scanProject(dir);
+  assert.deepEqual(scan.retired.map(entry => entry.path).sort(), ['briefs/domain.json', 'briefs/domain.md']);
+  assert.equal(scan.unclassified.length, 0);
+});
+
+test('stage briefs stay inspectable without persisting duplicate JSON or markdown', () => {
+  const dir = project();
+  const cli = join(root, 'bin', 'omd.mjs');
+  for (const args of [['brief', 'composition', '--json'], ['brief', 'domain'], ['brief', 'composition', '--json']]) {
+    const result = spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    if (args.includes('--json')) assert.equal(JSON.parse(result.stdout).stage, 'composition');
+    else assert.match(result.stdout, /domain/);
+    assert.equal(existsSync(join(dir, '.omd', 'briefs')), false);
+  }
 });
