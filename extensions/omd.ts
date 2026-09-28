@@ -15,6 +15,7 @@ import { PiRequestBindings } from './omd-request-binding.ts';
 import { normalizeOmdAlias } from './omd-request-prompt.ts';
 import { PiNativeRuns } from './omd-native-run.ts';
 import { RouteEntryContinuation, ROUTE_ENTRY_INPUT, ROUTE_ENTRY_VALIDATION } from './omd-bootstrap-entry.ts';
+import { parseUserQuestion, questionText, browserAnswer, type UserQuestion } from './omd-user-question.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -25,8 +26,12 @@ export default function omdExtension(pi: PortablePiApi): void {
   const productionAttempted = new Set<string>();
   const repairLoop = new RepairLoop();
   const pendingReferenceWork = new Map<string, ReferenceWork>();
-  const browserConsentPending = new Set<string>();
-  const browserConsentGranted = new Set<string>();
+  const pendingQuestions = new Map<string, UserQuestion>();
+  const browserConsentGranted = new Map<string, { digest: string; engine: string }>();
+  const rememberQuestion = (cwd: string, question: UserQuestion) => {
+    if (pendingQuestions.get(cwd)?.digest !== question.digest) browserConsentGranted.delete(cwd);
+    pendingQuestions.set(cwd, question);
+  };
   const revisions = new Map<string, number>();
   type PendingMutation = { path: string; before: string; production: boolean };
   type PendingMutationGroup = { entries: PendingMutation[]; baseline: string; production: boolean; failed: boolean };
@@ -112,27 +117,22 @@ export default function omdExtension(pi: PortablePiApi): void {
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
     on('session_start', async (_event, context) => {
-      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); browserConsentPending.clear(); browserConsentGranted.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear();
+      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); pendingQuestions.clear(); browserConsentGranted.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear();
       const { clearBrowserSessionSkip } = await import('../core/ref/browser-consent.ts');
       clearBrowserSessionSkip(context.browserConsentHome);
     });
     on('input', async (event, context) => {
-      if (browserConsentPending.has(context.cwd) && (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string') {
-        const answer = event.text.trim();
-        if (/^(?:네|예|응|좋아|yes|y|지금 세팅|세팅해줘|설정해줘|평소 쓰는 브라우저 그대로 쓰기|OMD 전용 로그인 브라우저|별도 OMD 프로필 세팅)[.!]?$/i.test(answer)) browserConsentGranted.add(context.cwd);
-        else {
-          browserConsentGranted.delete(context.cwd);
+      const pendingQuestion = pendingQuestions.get(context.cwd);
+      if (pendingQuestion && (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string') {
+        const answer = browserAnswer(pendingQuestion, event.text);
+        if (answer === 'user-browser' || answer === 'omd-profile') browserConsentGranted.set(context.cwd, { digest: pendingQuestion.digest, engine: answer });
+        else if (answer === 'skipped-this-run' || answer === 'never-ask') {
           const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
-          if (/^(?:이번엔 건너뛰기|건너뛰기|아니요|no)[.!]?$/i.test(answer)) {
-            writeBrowserConsent('skipped-this-run', context.browserConsentHome);
-            writeUserBrowserConsent('skipped-this-run', context.browserConsentHome);
-          }
-          if (/^(?:다시 묻지 않기|다시는 묻지 마|never)[.!]?$/i.test(answer)) {
-            writeBrowserConsent('never-ask', context.browserConsentHome);
-            writeUserBrowserConsent('never-ask', context.browserConsentHome);
-          }
+          writeBrowserConsent(answer, context.browserConsentHome);
+          writeUserBrowserConsent(answer, context.browserConsentHome);
+          browserConsentGranted.delete(context.cwd);
+          pendingQuestions.delete(context.cwd);
         }
-        browserConsentPending.delete(context.cwd);
       }
       const alias = (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string'
         ? normalizeOmdAlias(event.text) : undefined;
@@ -190,8 +190,9 @@ export default function omdExtension(pi: PortablePiApi): void {
           if (diagnostic) return { block: true, reason: `OMD_OWNED_WORK_REQUIRED: ${pending.action?.reason ?? 'Publish the reference board from retained evidence.'}\n${pending.action?.args.join(' ') ?? 'omd schema reference-board --json, then omd ref board --input <candidate-assemblies.json>'}\nRead-only checks cannot replace this action.` };
         }
         if (Array.isArray(args) && args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '')
-          && !browserConsentGranted.has(context.cwd))
-          return { block: true, reason: 'OMD_BROWSER_SETUP_CONSENT_REQUIRED: Ask the user the browser setup question and wait for an explicit yes before running browser setup --consent.' };
+          && (!browserConsentGranted.has(context.cwd) || browserConsentGranted.get(context.cwd)?.digest !== pendingQuestions.get(context.cwd)?.digest
+            || !args.includes('--consent') || args[args.indexOf('--engine') + 1] !== browserConsentGranted.get(context.cwd)?.engine))
+          return { block: true, reason: 'OMD_BROWSER_SETUP_CONSENT_REQUIRED: Setup is blocked without an answer to the current browser choice. Do NOT ask another yes/no question; report this block and the original options to the user.' };
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
         if (guarded(context.cwd) && Array.isArray(args) && !frameHelp
@@ -240,6 +241,13 @@ export default function omdExtension(pi: PortablePiApi): void {
     });
     on('tool_result', async (event, context) => {
       if (context.signal?.aborted) return;
+      if (event.toolName === OMD_TOOL_NAME && event.isError === false) {
+        const parts = event.content ?? event.message?.content ?? [];
+        for (const part of parts) {
+          const question = typeof part.text === 'string' ? parseUserQuestion(part.text) : null;
+          if (question) rememberQuestion(context.cwd, question);
+        }
+      }
       ownedWork.nativeFinished(context.cwd, event);
       const key = mutationKey(event.toolName, event.toolCallId, event.input?.path);
       const group = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
@@ -256,7 +264,7 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('message_end', async (event, context) => {
       const message = event.message;
       const entryAuthorized = !hasPiRoute(context.cwd) && requests.classificationGranted(context.cwd) && ownedWork.token(context.cwd) !== undefined;
-      if ((!touched.has(context.cwd) && !entryAuthorized) || message?.role !== 'assistant' || message.stopReason !== 'stop'
+      if ((!touched.has(context.cwd) && !entryAuthorized && !pendingQuestions.has(context.cwd)) || message?.role !== 'assistant' || message.stopReason !== 'stop'
         || message.content?.some(part => part.type === 'toolCall')) return;
       pendingMutations.delete(context.cwd);
       if (context.signal?.aborted) return;
@@ -274,6 +282,38 @@ export default function omdExtension(pi: PortablePiApi): void {
           return { message: { ...message, content: [{ type: 'text', text: `OMD route entry is blocked; the current request cannot be verified.\n${error.message}` }] } };
         }
       }
+      const pendingQuestion = pendingQuestions.get(context.cwd);
+      if (pendingQuestion) {
+        const grant = browserConsentGranted.get(context.cwd);
+        if (grant?.digest === pendingQuestion.digest) return { message };
+        if (pendingQuestion.kind === 'browser-consent' && context.ui?.select) {
+          const choice = await context.ui.select(pendingQuestion.question, [...pendingQuestion.options]);
+          if (interrupted()) return;
+          if (choice !== undefined) {
+            const answer = browserAnswer(pendingQuestion, choice);
+            if (answer === 'user-browser' || answer === 'omd-profile') {
+              browserConsentGranted.set(context.cwd, { digest: pendingQuestion.digest, engine: answer });
+              try {
+                const setup = await run(['browser', 'setup', '--engine', answer, '--consent', '--json'], context.cwd, context.signal);
+                browserConsentGranted.delete(context.cwd);
+                pendingQuestions.delete(context.cwd);
+                return { message: { ...message, content: [...(message.content ?? []), { type: 'text', text: `Browser setup result: ${setup.text}` }] } };
+              } catch (error) {
+                return { message: { ...message, content: [...(message.content ?? []), { type: 'text', text: `Browser setup failed: ${error instanceof Error ? error.message : String(error)}. Do NOT ask for consent again; the choice remains authorized for a retry.` }] } };
+              }
+            }
+            if (answer === 'skipped-this-run' || answer === 'never-ask') {
+              const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+              writeBrowserConsent(answer, context.browserConsentHome); writeUserBrowserConsent(answer, context.browserConsentHome);
+              pendingQuestions.delete(context.cwd);
+              return { message };
+            }
+          }
+        }
+        const text = questionText(pendingQuestion);
+        const existing = message.content?.filter(part => part.type === 'text').map(part => part.text ?? '').join('\n') ?? '';
+        return { message: { ...message, content: existing.includes(text) ? message.content : [...(message.content ?? []), { type: 'text', text }] } };
+      }
       return handleOmdMessageEnd({ cwd: context.cwd, ...(context.signal === undefined ? {} : { signal: context.signal }),
         ...(context.ui === undefined ? {} : { ui: context.ui }),
         ...(context.browserConsentHome === undefined ? {} : { browserConsentHome: context.browserConsentHome }), message,
@@ -281,7 +321,16 @@ export default function omdExtension(pi: PortablePiApi): void {
         workflowStarted: workflowStarted.has(context.cwd), ownedWorkStarted: ownedWork.started(context.cwd),
         productionAttempted: productionAttempted.has(context.cwd), revision: revision(context.cwd),
         routeRevision: fileRevision(context.cwd, '.omd/route.json'), repairLoop, pi,
-        onBrowserConsentRequired: () => browserConsentPending.add(context.cwd),
+        onBrowserConsentRequired: text => {
+          const question = parseUserQuestion(JSON.stringify({ action: { kind: 'browser-consent', question: text,
+            options: ['평소 쓰는 브라우저 그대로 쓰기', 'OMD 전용 로그인 브라우저', '이번엔 건너뛰기', '다시 묻지 않기'] } }));
+          if (question) rememberQuestion(context.cwd, question);
+        },
+        onUserQuestion: question => rememberQuestion(context.cwd, question),
+        onBrowserAnswer: (answer, digest) => {
+          if (answer === null) { browserConsentGranted.delete(context.cwd); pendingQuestions.delete(context.cwd); }
+          else browserConsentGranted.set(context.cwd, { digest, engine: answer });
+        },
         onReferenceWork: work => {
           if (work === null) pendingReferenceWork.delete(context.cwd);
           else pendingReferenceWork.set(context.cwd, work);
@@ -304,7 +353,9 @@ export default function omdExtension(pi: PortablePiApi): void {
         throw new Error('OMD_CLI_ARGS_INVALID: args must be a non-empty string array');
       }
       if (params.args[0] === 'browser' && ['setup', 'login'].includes(params.args[1] ?? '')
-        && !browserConsentGranted.has(context.cwd)) throw new Error('OMD_BROWSER_SETUP_CONSENT_REQUIRED: an explicit user yes is required before browser setup');
+        && (!browserConsentGranted.has(context.cwd) || browserConsentGranted.get(context.cwd)?.digest !== pendingQuestions.get(context.cwd)?.digest
+          || !params.args.includes('--consent') || params.args[params.args.indexOf('--engine') + 1] !== browserConsentGranted.get(context.cwd)?.engine))
+        throw new Error('OMD_BROWSER_SETUP_CONSENT_REQUIRED: No matching answer to the current question. Do NOT ask another yes/no question; report the block and original options.');
       const pendingReference = pendingReferenceWork.get(context.cwd);
       const referenceMutation = params.args[0] === 'ref'
         && ['advance', 'search', 'leads', 'navigate', 'discover-batch', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(params.args[1] ?? '');
@@ -351,7 +402,9 @@ export default function omdExtension(pi: PortablePiApi): void {
           if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
           if (advanced && pendingReferenceWork.get(context.cwd) === pendingReference) pendingReferenceWork.delete(context.cwd);
         }
-        if (params.args[0] === 'browser' && ['setup', 'login'].includes(params.args[1] ?? '')) browserConsentGranted.delete(context.cwd);
+        if (params.args[0] === 'browser' && ['setup', 'login'].includes(params.args[1] ?? '')) {
+          browserConsentGranted.delete(context.cwd); pendingQuestions.delete(context.cwd);
+        }
         if (isMutatingOmdCommand(params.args)) bumpRevision(context.cwd);
         if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) {
           touched.add(context.cwd);

@@ -1,4 +1,5 @@
 import { resumeRouteInput } from './omd-bootstrap-repair.ts';
+import { parseUserQuestion, questionText, browserAnswer, type UserQuestion } from './omd-user-question.ts';
 import type { RepairLoop } from './omd-repair-progress.ts';
 import type { RouteBootstrap } from './omd-route-bootstrap.ts';
 import { guardFailure, type OmdRunResult, type PortablePiApi, type PortablePiEvent } from './omd-runtime.ts';
@@ -45,7 +46,9 @@ type MessageEndTask = Readonly<{
   pi: PortablePiApi;
   ui?: { select?(title: string, options: string[]): Promise<string | undefined> };
   browserConsentHome?: string;
-  onBrowserConsentRequired?(): void;
+  onBrowserConsentRequired?(question: string): void;
+  onUserQuestion?(question: UserQuestion): void;
+  onBrowserAnswer?(answer: 'user-browser' | 'omd-profile' | null, digest: string): void;
   onReferenceWork?(work: ReferenceWork | null): void;
 }>;
 
@@ -193,6 +196,36 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       const result = await run(['stage', 'next', '--json'], cwd, signal);
       if (interrupted()) return;
       let work = parseStageWork(result.text);
+      const stageQuestion = parseUserQuestion(result.text);
+      if (stageQuestion) {
+        task.onUserQuestion?.(stageQuestion);
+        if (stageQuestion.kind === 'browser-consent' && task.ui?.select) {
+          const selected = await task.ui.select(stageQuestion.question, [...stageQuestion.options]);
+          if (interrupted()) return;
+          const answer = selected === undefined ? null : browserAnswer(stageQuestion, selected);
+          if (answer === 'user-browser' || answer === 'omd-profile') {
+            task.onBrowserAnswer?.(answer, stageQuestion.digest);
+            try {
+              const setup = await run(['browser', 'setup', '--engine', answer, '--consent', '--json'], cwd, signal);
+              if (interrupted()) return;
+              task.onBrowserAnswer?.(null, stageQuestion.digest);
+              return { message: { ...message, content: [...(message.content ?? []), { type: 'text', text: `Browser setup result: ${setup.text}` }] } };
+            } catch (error) {
+              if (interrupted()) return;
+              return { message: { ...message, content: [...(message.content ?? []), { type: 'text', text: `Browser setup failed: ${error instanceof Error ? error.message : String(error)}. Do NOT ask for consent again; retry the authorized engine or report the failure.` }] } };
+            }
+          }
+          if (answer === 'skipped-this-run' || answer === 'never-ask') {
+            const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+            writeBrowserConsent(answer, task.browserConsentHome); writeUserBrowserConsent(answer, task.browserConsentHome);
+            task.onBrowserAnswer?.(null, stageQuestion.digest);
+            return { message };
+          }
+        }
+        const text = questionText(stageQuestion);
+        const existing = message.content?.filter(part => part.type === 'text').map(part => part.text ?? '').join('\n') ?? '';
+        return { message: { ...message, content: existing.includes(text) ? message.content : [...(message.content ?? []), { type: 'text', text }] } };
+      }
       const nativeReferenceAction = work?.stage === 'reference-board' && work.referenceWork?.status === 'action'
         && ['search', 'direct-entry', 'follow-link'].includes(work.referenceWork.action?.kind ?? '');
       if (nativeReferenceAction && work !== null) {
@@ -265,7 +298,7 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
               writeUserBrowserConsent(decision, task.browserConsentHome);
             } else return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. No browser session was started.` }] } };
           } else {
-            task.onBrowserConsentRequired?.();
+            task.onBrowserConsentRequired?.(question);
             return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. Ask the user and run omd browser setup --engine user-browser|omd-profile --consent only after explicit permission.\n${actionPacket(work)}` }] } };
           }
         }

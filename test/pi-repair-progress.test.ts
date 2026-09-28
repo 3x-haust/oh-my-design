@@ -17,6 +17,7 @@ function harness(t: { after(fn: () => void): void }) {
   let duringDiagnosis: (() => Promise<unknown>) | undefined;
   let referenceMutation: ((args: readonly string[]) => number) | undefined;
   let diagnosisFails = false;
+  let setupFails = false;
   let consentSelection: (() => Promise<string | undefined>) | undefined;
   const work = { schema: 'stage-next-v1', stage: 'copy', owner: 'omd-writer', action: 'repair-output',
     next: 'omd brief copy --check --json',
@@ -34,7 +35,7 @@ function harness(t: { after(fn: () => void): void }) {
         await duringDiagnosis?.();
         if (diagnosisFails) return { stdout: '', stderr: 'stage diagnosis unavailable', code: 1, killed: false };
       }
-      const code = args[1] === 'ref' ? referenceMutation?.(args) ?? 0 : 0;
+      const code = args[1] === 'ref' ? referenceMutation?.(args) ?? 0 : args[1] === 'browser' && setupFails ? 1 : 0;
       return { stdout: args[1] === 'stage' ? JSON.stringify(work) : '{}', stderr: '', code, killed: false };
     },
   });
@@ -50,11 +51,22 @@ function harness(t: { after(fn: () => void): void }) {
     await tool.execute('route', { args: ['route', 'classify', '--input', '.omd/.cache/route.json'] }, undefined, undefined, { cwd });
     await tool.execute('brief', { args: ['brief', 'domain', '--check'] }, undefined, undefined, { cwd });
   }
-  return { cwd, work, sent, calls, emit, start, run: (args: string[]) => {
+  async function ask(question = '레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요?') {
+    await emit('tool_result', { toolName: 'omd_cli', input: { args: ['ref', 'work-next', '--json'] }, isError: false,
+      content: [{ type: 'text', text: JSON.stringify({ status: 'action', workSha256: 'c'.repeat(64), action: {
+        kind: 'browser-consent', question, answers: {
+          '평소 쓰는 브라우저 그대로 쓰기': 'omd browser setup --engine user-browser --consent',
+          'OMD 전용 로그인 브라우저': 'omd browser setup --engine omd-profile --consent',
+          '이번엔 건너뛰기': 'omd browser skip --decision skipped-this-run --json',
+          '다시 묻지 않기': 'omd browser skip --decision never-ask --json',
+        } } }) }] });
+  }
+  return { cwd, work, sent, calls, emit, start, ask, run: (args: string[]) => {
     assert.ok(tool); return tool.execute(args.join('-'), { args }, undefined, undefined, { cwd });
   }, end: () => emit('message_end', { message: final }),
     interruptDuringDiagnosis: () => { duringDiagnosis = () => emit('input', { source: 'interactive' }); },
     failDiagnosis: () => { diagnosisFails = true; },
+    failSetup: (fails: boolean) => { setupFails = fails; },
     setConsentSelection: (select: () => Promise<string | undefined>) => { consentSelection = select; },
     onReferenceMutation: (callback: (args: readonly string[]) => number) => { referenceMutation = callback; } };
 }
@@ -89,7 +101,8 @@ test('an outstanding reference action refuses repeated diagnostics without publi
 
 test('native select requests explicit consent before scheduling a headed browser setup', async t => {
   const h = harness(t); await h.start();
-  h.setConsentSelection(async () => '별도 OMD 프로필 세팅');
+  h.setConsentSelection(async () => 'OMD 전용 로그인 브라우저');
+  await h.ask();
   Object.assign(h.work, { stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference',
     referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
       action: { kind: 'follow-link', lane: 'design', url: 'https://mobbin.com/', args: ['ref', 'advance', '--json'], reason: 'Visit observed item.' } } });
@@ -98,17 +111,97 @@ test('native select requests explicit consent before scheduling a headed browser
   assert.equal(h.sent.length, 0, 'the browser is launched only after the native user selection');
 });
 
-test('fallback consent packet accepts only a later explicit interactive yes', async t => {
-  const h = harness(t); await h.start();
+test('fallback consent packet accepts only a later explicit interactive choice', async t => {
+  const h = harness(t); await h.start(); await h.ask();
   Object.assign(h.work, { stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference',
     referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
       action: { kind: 'collect-leads', lane: 'design', args: [], reason: 'Find design leads.' } } });
   const result = await h.end() as { message: { content: Array<{ text: string }> } };
-  assert.match(result.message.content[0]!.text, /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
-  await assert.rejects(h.run(['browser', 'setup', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
-  await h.emit('input', { source: 'interactive', text: '네' });
-  await h.run(['browser', 'setup', '--consent']);
+  assert.match(result.message.content.at(-1)!.text, /레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요/);
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
+  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
   assert.equal(h.calls.filter(args => args[1] === 'browser').length, 1);
+});
+
+test('a pending browser question survives stage repair without counting a stall', async t => {
+  const h = harness(t); await h.start();
+  const question = '브라우저를 선택해 주세요?';
+  await h.emit('tool_result', { toolName: 'omd_cli', input: { args: ['ref', 'work-next', '--json'] },
+    isError: false, message: { role: 'toolResult', content: [{ type: 'text', text: JSON.stringify({ status: 'action',
+      workSha256: 'c'.repeat(64), action: { kind: 'browser-consent', question, answers: {
+        '평소 쓰는 브라우저 그대로 쓰기': 'omd browser setup --engine user-browser --consent',
+        'OMD 전용 로그인 브라우저': 'omd browser setup --engine omd-profile --consent',
+        '이번엔 건너뛰기': 'omd browser skip --decision skipped-this-run --json',
+        '다시 묻지 않기': 'omd browser skip --decision never-ask --json' } } }) }] } });
+  const result = await h.end() as { message: { content: Array<{ text: string }> } };
+  assert.match(result.message.content.at(-1)!.text, /브라우저를 선택해 주세요\?/);
+  assert.match(result.message.content.at(-1)!.text, /다시 묻지 않기/);
+  assert.equal(h.sent.length, 0);
+  await h.end(); await h.end(); await h.end();
+  assert.equal(h.sent.length, 0);
+  await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
+  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+});
+
+test('stage-next explicit user decisions preserve the agent text and do not consume repair passes', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, { action: { kind: 'design-language-ambiguity', awaitsUser: true,
+    question: '어느 디자인 방향인가요?', options: ['가벼운 방향', '절제된 방향'] } });
+  const result = await h.end() as { message: { content: Array<{ text: string }> } };
+  assert.equal(result.message.content[0]?.text, final.content[0]?.text);
+  assert.match(result.message.content.at(-1)!.text, /어느 디자인 방향인가요\?\n1\. 가벼운 방향\n2\. 절제된 방향/);
+  await h.end(); await h.end(); await h.end();
+  assert.equal(h.sent.length, 0);
+});
+
+test('native select on a stage-next consent action records the engine before setup', async t => {
+  const h = harness(t); await h.start();
+  h.setConsentSelection(async () => '평소 쓰는 브라우저 그대로 쓰기');
+  Object.assign(h.work, { referenceWork: { status: 'action', workSha256: 'd'.repeat(64), action: {
+    kind: 'browser-consent', args: [], reason: '브라우저를 선택해 주세요', question: '브라우저를 선택해 주세요',
+    answers: { '평소 쓰는 브라우저 그대로 쓰기': 'setup', 'OMD 전용 로그인 브라우저': 'setup',
+      '이번엔 건너뛰기': 'skip', '다시 묻지 않기': 'never' } } } });
+  await h.end();
+  assert.ok(h.calls.some(args => args[1] === 'browser' && args[2] === 'setup' && args.includes('user-browser')));
+  assert.equal(h.sent.length, 0);
+});
+
+test('transcript answers bind the current choice and a failed setup preserves consent', async t => {
+  for (const answer of ['평소 쓰는 브라우저', '1']) {
+    const h = harness(t); await h.start(); await h.ask(); await h.end();
+    await h.emit('input', { source: 'interactive', text: answer });
+    h.failSetup(true);
+    await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']));
+    h.failSetup(false);
+    await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
+    await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  }
+});
+
+test('transcript affirmatives select the recommended everyday browser; unrelated input does not', async t => {
+  for (const answer of ['ㅇㅇ', 'ㅇㅋ', '네', '응', 'yes', '좋아', '해', '세팅해', '세팅하라고', '세팅 하라고', '설정해']) {
+    const h = harness(t); await h.start(); await h.ask(); await h.end();
+    await h.emit('input', { source: 'interactive', text: answer });
+    await assert.rejects(h.run(['browser', 'setup', '--engine', 'omd-profile', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+    await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
+  }
+  const h = harness(t); await h.start(); await h.ask(); await h.end();
+  await h.emit('input', { source: 'interactive', text: 'unrelated' });
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.emit('input', { source: 'interactive', text: '2' });
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.run(['browser', 'setup', '--engine', 'omd-profile', '--consent']);
+});
+
+test('a changed question digest invalidates previous authorization', async t => {
+  const h = harness(t); await h.start(); await h.ask(); await h.end();
+  await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
+  await h.ask('새로운 브라우저 질문?');
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.emit('input', { source: 'interactive', text: '4' });
+  assert.equal(readBrowserConsent(h.cwd), 'never-ask');
 });
 
 test('Pi refuses browser setup without a pending explicit user yes', async t => {
@@ -121,6 +214,7 @@ test('native never-ask decision persists and suppresses further browser prompts'
   const h = harness(t); await h.start();
   let selections = 0;
   h.setConsentSelection(async () => { selections++; return '다시 묻지 않기'; });
+  await h.ask();
   Object.assign(h.work, { stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference',
     referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
       action: { kind: 'collect-leads', lane: 'design', args: [], reason: 'Find design leads.' } } });

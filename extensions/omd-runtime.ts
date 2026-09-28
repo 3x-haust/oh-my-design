@@ -169,6 +169,7 @@ export type PortablePiContext = PiHostContext & Readonly<{ signal?: AbortSignal;
 export type PortablePiEvent = {
   toolCallId?: string; isError?: boolean;
   prompt?: string; systemPrompt?: string; toolName?: string; input?: Record<string, unknown>; source?: string; text?: string; images?: readonly unknown[];
+  content?: Array<{ type: string; text?: string }>;
   message?: { role: string; content?: Array<{ type: string; text?: string; [key: string]: unknown }>; stopReason?: string; [key: string]: unknown };
 };
 export type PortablePiHook = (event: PortablePiEvent, context: PortablePiContext) => Promise<unknown>;
