@@ -4982,7 +4982,7 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
  * the commands that will judge it. None of that changes when the model changes.
  */
 async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
-  const { buildBrief, formatBrief, writeBrief, EXTRA_BRIEF_STAGES } = await import('../core/brief/index.ts');
+  const { buildBrief, formatBrief, EXTRA_BRIEF_STAGES } = await import('../core/brief/index.ts');
   const { STAGES } = await import('../core/stage/contract.ts');
   if (stage === undefined || opts._.length > 0) {
     throw new Error(`usage: omd brief <stage> [--check | --role <role> [--mode <mode>] [--input <sketch-brief.json>]] [--json]  (stages: ${[...STAGES.map((s) => s.id), ...EXTRA_BRIEF_STAGES].join(', ')})`);
@@ -5012,9 +5012,6 @@ async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
     join(root, 'core'),
     invocation,
   );
-  // Persist what the stage was handed. A brief that exists only for the length of one command
-  // leaves no record of what an owner actually received, which is the question asked later.
-  if (!opts.check || brief.blockers.length === 0) writeBrief(process.cwd(), brief, projectWriter(invocation));
   if (opts.json) process.stdout.write(JSON.stringify(brief));
   else process.stdout.write(formatBrief(brief));
   process.exit(opts.check && brief.blockers.length > 0 ? 1 : 0);

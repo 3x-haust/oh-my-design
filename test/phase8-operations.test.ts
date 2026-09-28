@@ -57,8 +57,9 @@ test('legacy evidence check remains a deprecated alias for migration verify-fina
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('benchmark harness has a descriptive primary bin and preserves the legacy alias', () => {
-  const pkg = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as { bin: Record<string, string> };
-  assert.equal(pkg.bin['omd-benchmark-harness'], './bin/omd-harness-v2.mjs');
-  assert.equal(pkg.bin['omd-harness-v2'], './bin/omd-harness-v2.mjs');
+test('benchmark harness remains an npm script, not a public bin', () => {
+  const pkg = JSON.parse(readFileSync(join(repository, 'package.json'), 'utf8')) as { bin: Record<string, string>; scripts: Record<string, string> };
+  assert.equal(pkg.bin['omd-benchmark-harness'], undefined);
+  assert.equal(pkg.bin['omd-harness-v2'], undefined);
+  assert.equal(pkg.scripts['benchmark:harness-v2'], 'node bin/omd-harness-v2.mjs');
 });
