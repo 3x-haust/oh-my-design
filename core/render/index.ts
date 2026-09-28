@@ -268,11 +268,16 @@ export async function withBrowser<T>(
   let browser: Browser;
   try {
     if (config?.mode === 'profile') {
-      persistent = await (connector.launchPersistentContext ?? chromium.launchPersistentContext.bind(chromium))(
-        config.profilePath!, { headless: true, serviceWorkers: 'block', acceptDownloads: false,
+      persistent = await (connector.launchPersistentContext?.bind(connector) ?? chromium.launchPersistentContext.bind(chromium))(
+        config.profilePath!, { headless: true, viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
           proxy: { server: proxy!.server } });
       const context = persistent;
-      browser = { newContext: async () => context, close: async () => context.close() } as unknown as Browser;
+      browser = { newContext: async () => context,
+        newPage: async (options?: { viewport?: { width: number; height: number } }) => {
+          const page = await context.newPage();
+          if (options?.viewport) await page.setViewportSize(options.viewport);
+          return page;
+        }, close: async () => context.close() } as unknown as Browser;
     } else browser = cdp ? await connector.connectOverCDP(config!.cdpUrl!) : await connector.launch({
       headless: true, timeout: 30000, ...(config?.mode === 'stealth' ? { executablePath: config.executablePath } : {}),
     });

@@ -3,7 +3,8 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { chromium } from 'playwright';
 import test from 'node:test';
 import { addRefsBatch, type RefSpec } from '../core/ref/batch.ts';
 import { observeCapturePreparation, parseCapturePreparation, type CapturePreparation } from '../core/ref/capture-preparation.ts';
@@ -50,7 +51,10 @@ async function fixture(run: (url: string, requests: string[]) => Promise<void>):
 }
 function runCli(root: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [CLI, ...args], { cwd: root });
+    let browserInstall = chromium.executablePath();
+    while (!basename(browserInstall).startsWith('chromium-')) browserInstall = dirname(browserInstall);
+    const child = spawn(process.execPath, [CLI, ...args], { cwd: root,
+      env: { ...process.env, HOME: root, PLAYWRIGHT_BROWSERS_PATH: dirname(browserInstall) } });
     let stdout = ''; let stderr = '';
     child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
     child.on('error', reject); child.on('close', code => resolve({ code, stdout, stderr }));

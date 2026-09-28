@@ -106,6 +106,9 @@ export function currentNativePiIdentity(input: NativePiRunInput): Omit<NativePiR
   return { projectRoot, buildSha256: build.buildSha256,
     loadedSkillSha256: build.sourceSkillSha256, briefSha256: request.requestSha256, runtimeSha256: nativePiRuntimeSha256(input.runtimeRoot) };
 }
+export function isNativePiHostPackage(name: unknown): boolean {
+  return name === '@earendil-works/pi-coding-agent' || name === '@mariozechner/pi-coding-agent' || name === '@code-yeongyu/senpi';
+}
 export function observedNativePiHost(input: NativePiRunInput): NativePiHost {
   const cli = process.argv[1];
   if (!cli) throw new NativePiAuthorityError('Pi entrypoint is missing');
@@ -113,7 +116,7 @@ export function observedNativePiHost(input: NativePiRunInput): NativePiHost {
   let packageRoot = dirname(cliPath);
   while (!existsSync(join(packageRoot, 'package.json')) && dirname(packageRoot) !== packageRoot) packageRoot = dirname(packageRoot);
   const manifest = nativePiObject(JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')));
-  if (manifest.name !== '@earendil-works/pi-coding-agent' && manifest.name !== '@mariozechner/pi-coding-agent') throw new NativePiAuthorityError('run may only be established by a native Pi host');
+  if (!isNativePiHostPackage(manifest.name)) throw new NativePiAuthorityError('run may only be established by a native Pi host');
   return parseNativePiHost({ nodePath: realpathSync(process.execPath), nodeSha256: nativePiDigest(readFileSync(process.execPath)),
     cliPath, cliSha256: nativePiDigest(readFileSync(cliPath)), provider: input.provider, model: input.model,
     thinkingLevel: input.thinkingLevel, parentSessionId: input.parentSessionId });

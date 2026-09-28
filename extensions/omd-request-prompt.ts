@@ -20,7 +20,8 @@ export function extractOmdWorkflowRequest(prompt: string): string | null | undef
   const direct = /^(?:\/skill:|\$)omd-ultradesign\s([\s\S]*)$/i.exec(request);
   if (direct !== null) return direct[1] ?? '';
   const header = `<skill name="omd-ultradesign" location="${SKILL_PATH}">`;
-  if (!request.startsWith(`${header}\n`)) return undefined;
+  const instructionHeader = `<skill-instruction name="omd-ultradesign" location="${SKILL_PATH}">`;
+  if (!request.startsWith(`${header}\n`) && !request.startsWith('The user explicitly invoked the "omd-ultradesign" skill.')) return undefined;
   try {
     const source = readFileSync(SKILL_PATH, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
     const delimiter = source.startsWith('---') ? source.indexOf('\n---', 3) : -1;
@@ -28,8 +29,12 @@ export function extractOmdWorkflowRequest(prompt: string): string | null | undef
     const expansion = `${header}\nReferences are relative to ${dirname(SKILL_PATH)}.\n\n${body}\n</skill>`;
     if (request.trimEnd() === expansion) return null;
     const prefix = `${expansion}\n\n`;
-    if (!request.startsWith(prefix)) return undefined;
-    return request.slice(prefix.length);
+    if (request.startsWith(prefix)) return request.slice(prefix.length);
+    const instruction = `The user explicitly invoked the "omd-ultradesign" skill. Follow the instructions in <skill-instruction> as binding for this request, while respecting higher-priority instructions.\n\n${instructionHeader}\nReferences are relative to ${dirname(SKILL_PATH)}.\n\n${body}\n</skill-instruction>`;
+    if (request === instruction) return null;
+    const requestPrefix = `${instruction}\n\n<user-request>\n`;
+    if (!request.startsWith(requestPrefix) || !request.endsWith('\n</user-request>')) return undefined;
+    return request.slice(requestPrefix.length, -'\n</user-request>'.length);
   } catch (error) {
     if (error instanceof Error) return undefined;
     throw error;

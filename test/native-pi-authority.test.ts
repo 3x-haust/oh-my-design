@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { authorizeDerivedPayload, hasHostBoundLocalProjectWriteAuthority, requireHostPayloadAuthorization, validateActivationContext } from '../core/runtime/activation.ts';
 import { requireProjectWriteInvocation } from '../core/runtime/invocation.ts';
 import { authorizeNativePiPayload, createNativePiInvocation, createTestNativePiInvocation, getNativePiRun, stageNativePiCommand, type NativePiHost } from '../core/runtime/native-pi-run.ts';
-import { nativePiDirectory, parseNativePiRun, publishNativePiRun } from '../core/runtime/native-pi-run-record.ts';
+import { isNativePiHostPackage, nativePiDirectory, parseNativePiRun, publishNativePiRun } from '../core/runtime/native-pi-run-record.ts';
 import { mintSelfSignedReceipt } from '../core/runtime/self-signed-activation.ts';
 
 const digest = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
@@ -21,6 +21,14 @@ function fixture(t: { after(fn: () => void): void }): string {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return root;
 }
+
+test('the installed Senpi Pi fork is a native host without trusting arbitrary package names', () => {
+  assert.equal(isNativePiHostPackage('@code-yeongyu/senpi'), true);
+  assert.equal(isNativePiHostPackage('@earendil-works/pi-coding-agent'), true);
+  assert.equal(isNativePiHostPackage('@mariozechner/pi-coding-agent'), true);
+  assert.equal(isNativePiHostPackage('@untrusted/pi-coding-agent'), false);
+  assert.equal(isNativePiHostPackage(undefined), false);
+});
 
 test('Pi is a native host shape but parsed Pi JSON carries no project authority', () => {
   const current = { buildSha256: 'a'.repeat(64), loadedSkillSha256: 'b'.repeat(64), briefSha256: 'c'.repeat(64) };

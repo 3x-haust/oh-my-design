@@ -39,7 +39,7 @@ export class PiRequestBindings {
     const pending = this.pending.get(cwd);
     // Pi's documented /skill expansion trims its argument; preserve the earlier real input bytes.
     const index = pending?.findIndex(candidate => candidate.text === prompt || (typeof mechanicalRequest === 'string'
-      && (candidate.request === mechanicalRequest || candidate.request?.trim() === mechanicalRequest)));
+      && (candidate.request === mechanicalRequest || candidate.request?.trim() === mechanicalRequest.trim())));
     if (pending === undefined || index === undefined || index < 0) return;
     const candidate = pending[index];
     if (candidate === undefined) return;

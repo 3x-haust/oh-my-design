@@ -8,6 +8,7 @@ import test from 'node:test';
 import omdExtension, { type PortablePiEvent, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { expandedSkillOnly } from './helpers/pi-stage-continuity.ts';
+import { PiRequestBindings } from '../extensions/omd-request-binding.ts';
 
 const inputPath = '.omd/.cache/route-input.json';
 const original = `\n# 사용자 기획서\n${'조건과 화면을 빠짐없이 구현한다.\n'.repeat(1000)}리액트로 구현해줘.\n  `;
@@ -60,6 +61,20 @@ function persisted(cwd: string) {
   const pointer = JSON.parse(readFileSync(join(cwd, '.omd/route.json'), 'utf8'));
   return JSON.parse(readFileSync(join(cwd, '.omd', pointer.record), 'utf8'));
 }
+
+test('live Pi skill-instruction transport binds the complete original request for route entry', t => {
+  const cwd = project(t), bindings = new PiRequestBindings();
+  const request = original.trim();
+  const skill = expandedSkillOnly().replace('<skill name=', '<skill-instruction name=').replace('</skill>', '</skill-instruction>');
+  const expanded = `The user explicitly invoked the "omd-ultradesign" skill. Follow the instructions in <skill-instruction> as binding for this request, while respecting higher-priority instructions.\n\n${skill}\n\n<user-request>\n${request}\n</user-request>`;
+  bindings.receive(cwd, { source: 'rpc', text: `/skill:omd-ultradesign\n${original}` });
+  bindings.activate(cwd, expanded);
+  assert.equal(bindings.classificationGranted(cwd), true);
+  assert.equal(bindings.current(cwd)?.request, original);
+  assert.equal(existsSync(join(cwd, '.omd/request-source.json')), true);
+  assert.equal(bindings.pin(cwd, ['route', 'validate', '--input', inputPath, '--json'])?.request, original);
+  bindings.clear();
+});
 
 test('Pi validation and publication preserve the full actual request when the authored input is a summary', async t => {
   const cwd = project(t), pi = host(cwd);

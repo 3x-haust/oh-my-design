@@ -79,6 +79,19 @@ test('consented headless acquisition opens persistent profile with a protected p
   assert.equal(closed, true);
 });
 
+test('the real Playwright launcher retains its context when using a consented profile', async t => {
+  const home = discoveryFixture(t); const profile = browserProfilePath(home);
+  await withBrowser(async browser => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    assert.deepEqual(page.viewportSize(), { width: 1280, height: 900 });
+    assert.equal(await page.evaluate(() => document.title), '');
+    const alternate = await browser.newPage({ viewport: { width: 960, height: 720 } });
+    assert.deepEqual(alternate.viewportSize(), { width: 960, height: 720 });
+    await alternate.close();
+  }, undefined, { reference: true, config: { mode: 'profile', profilePath: profile } });
+});
+
 test('headed profile launcher observes exact close event without timing waits', async t => {
   const home = discoveryFixture(t); const events = new EventEmitter();
   const context = Object.assign(events, {
