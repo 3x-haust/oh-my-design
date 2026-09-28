@@ -16,6 +16,7 @@ type Options = {
   reporters: string[];
   changed?: string;
   coverage: boolean;
+  list: boolean;
 };
 
 function fail(message: string): never {
@@ -30,7 +31,7 @@ function parseTierList(value: string): Tier[] {
 }
 
 function parseArguments(argv: string[]): Options {
-  const options: Options = { tiers: [...TIER_ORDER], reporters: [], coverage: false };
+  const options: Options = { tiers: [...TIER_ORDER], reporters: [], coverage: false, list: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
     const value = argv[index + 1];
@@ -57,8 +58,10 @@ function parseArguments(argv: string[]): Options {
       if (options.changed === value) index += 1;
     } else if (argument === '--coverage') {
       options.coverage = true;
+    } else if (argument === '--list') {
+      options.list = true;
     } else if (argument === '--help' || argument === '-h') {
-      console.log('Usage: node scripts/test/run.ts [--tier unit,integration,browser,native,packaging] [--shard i/n] [--concurrency n] [--reporter spec] [--reporter junit:path] [--changed [base]] [--coverage]');
+      console.log('Usage: node scripts/test/run.ts [--tier unit,integration,browser,native,packaging] [--shard i/n] [--concurrency n] [--reporter spec] [--reporter junit:path] [--changed [base]] [--coverage] [--list]');
       process.exit(0);
     } else {
       fail(`unknown argument '${argument}'`);
@@ -141,21 +144,29 @@ function resolveImport(importer: string, specifier: string): string | undefined 
 
 function affectedTests(files: readonly string[], base: string): string[] {
   const changed = gitChanged(base);
+  // Runner/build configuration affects the entire suite, not just its direct importers.
+  if ([...changed].some((file) => file === 'package.json' || file === 'package-lock.json' || file === 'tsconfig.json' || file === 'test/test-manifest.json' || file.startsWith('scripts/test/') || file.startsWith('adapters/build.ts'))) return [...files];
   const memo = new Map<string, boolean>();
+  const visited = new Set<string>();
   function reachesChanged(file: string, visiting = new Set<string>()): boolean {
     const cached = memo.get(file);
     if (cached !== undefined) return cached;
+    visited.add(file);
     if (changed.has(file)) return true;
     if (visiting.has(file) || !existsSync(join(ROOT, file))) return false;
     const nextVisiting = new Set(visiting).add(file);
-    const affected = importsFor(file).some((specifier) => {
+    const affected = importsFor(file).map((specifier) => {
       const dependency = resolveImport(file, specifier);
       return dependency !== undefined && reachesChanged(dependency, nextVisiting);
-    });
+    }).some(Boolean);
     memo.set(file, affected);
     return affected;
   }
-  return files.filter((file) => reachesChanged(file));
+  const affected = files.filter((file) => reachesChanged(file));
+  // Static assets, scripts invoked through a CLI, and generated inputs are not import edges.
+  // A changed executable source file with no traced importer needs the full suite.
+  if ([...changed].some((file) => /\.(?:ts|mjs|js|yaml|json)$/.test(file) && !file.startsWith('.omo/') && !visited.has(file))) return [...files];
+  return affected;
 }
 
 function shard(files: readonly string[], request: { index: number; total: number }, timings: Timings): string[] {
@@ -174,8 +185,9 @@ function shard(files: readonly string[], request: { index: number; total: number
 
 function defaultConcurrency(tier: Tier): number {
   if (tier === 'native') return 1;
-  if (tier === 'browser') return 2;
-  return process.platform === 'darwin' ? 2 : Math.max(2, Math.min(4, cpus().length));
+  // Browser workers launch multiple Chromium processes; leave room for those children.
+  if (tier === 'browser') return Math.min(4, Math.max(2, Math.floor(cpus().length / 2)));
+  return Math.min(4, Math.max(2, cpus().length - 2));
 }
 
 function reporterArguments(reporters: readonly string[]): string[] {
@@ -272,10 +284,14 @@ const manifestPath = process.env.OMD_TEST_MANIFEST ?? join(ROOT, 'test/test-mani
 const timingsPath = process.env.OMD_TEST_TIMINGS ?? join(ROOT, 'test/.timings.json');
 const manifest = loadJson<Manifest>(manifestPath);
 const timings = existsSync(timingsPath) ? loadJson<Timings>(timingsPath) : {};
-if (options.tiers.includes('packaging') || distIsStale()) runBuild();
+if (!options.list && (options.tiers.includes('packaging') || distIsStale())) runBuild();
 let selected = options.tiers.flatMap((tier) => manifest.tiers[tier]);
 if (options.changed !== undefined) selected = affectedTests(selected, options.changed);
 if (options.shard !== undefined) selected = shard(selected, options.shard, timings);
+if (options.list) {
+  console.log(selected.join('\n'));
+  process.exit(0);
+}
 const selectedSet = new Set(selected);
 const filesByTier = new Map<Tier, readonly string[]>(options.tiers.map((tier) => [
   tier,

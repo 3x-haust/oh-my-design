@@ -292,6 +292,7 @@
       "test/task-flow-benchmark.test.ts",
       "test/task-outcome-execution-requirements.test.ts",
       "test/test-manifest.test.ts",
+      "test/test-runner-selection.test.ts",
       "test/trusted-repair-lifecycle.test.ts",
       "test/usage.test.ts",
       "test/ux-policy.test.ts",
