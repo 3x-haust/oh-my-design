@@ -7,6 +7,7 @@ import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { publishReferenceDiscoveryExclusion } from '../core/ref/discovery-exclusion.ts';
 import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
+import { forgetBrowserConsent, writeBrowserConsent, writeUserBrowserConsent } from '../core/ref/browser-consent.ts';
 import { publishSearchLeads } from '../core/ref/search-leads.ts';
 import { readStrictDiscoveryNavigation } from '../core/ref/discovery-record.ts';
 import { testPng } from './helpers/search-execution.ts';
@@ -90,6 +91,22 @@ function visitedItem(root: string, url: string, lane: 'domain' | 'design' = 'des
   assert.equal(readStrictDiscoveryNavigation(root, receipt).url, url);
 }
 
+test('work-next asks for browser consent before the first domain search, then honors a recorded skip', t => {
+  const root = fixture(t);
+  forgetBrowserConsent(root);
+  const route = routeAdaptiveFlow(routeInput());
+  const pending = referenceDiscoveryWork(root, route);
+  assert.equal(pending.action?.kind, 'browser-consent');
+  assert.match(pending.action.question ?? '', /평소 쓰는 브라우저 그대로 쓰기 \/ OMD 전용 로그인 브라우저 \/ 이번엔 건너뛰기 \/ 다시 묻지 않기/u);
+  assert.equal(pending.action.answers?.['이번엔 건너뛰기'], 'omd browser skip --decision skipped-this-run --json');
+  writeBrowserConsent('skipped-this-run', root);
+  writeUserBrowserConsent('skipped-this-run', root);
+  const next = referenceDiscoveryWork(root, route);
+  assert.equal(next.action?.kind, 'collect-leads');
+  assert.match(next.action.input?.url ?? '', /^https:\/\/www\.google\.com\/search\?q=/u);
+  assert.match(next.next, /ref leads search/u);
+});
+
 test('unsigned host lead becomes a follow-link only; signed destination observation then counts as material progress', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
@@ -119,7 +136,7 @@ test('work-next names the first exact Korean search action when no board evidenc
   assert.equal(work.action?.kind, 'collect-leads');
   assert.equal(work.action?.lane, 'domain');
   assert.equal(work.action?.input?.query, '복지로');
-  assert.deepEqual(work.action?.args, ['ref', 'advance', '--json']);
+  assert.deepEqual(work.action?.args, ['ref', 'leads', 'search', '--input', '.omd/.cache/reference-lead-query.json', '--json']);
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
 });
 
@@ -422,7 +439,7 @@ test('unscoped route still begins a plan-derived public domain search', t => {
   assert.equal(work.status, 'action');
   assert.equal(work.action?.kind, 'collect-leads');
   assert.equal(work.action?.lane, 'domain');
-  assert.match(work.action?.input?.url ?? '', /^https:\/\/html\.duckduckgo\.com\/html\/\?q=/u);
+  assert.match(work.action?.input?.url ?? '', /^https:\/\/www\.google\.com\/search\?q=/u);
 });
 
 test('first-party pages merely mislabeled design never mark the board ready', t => {

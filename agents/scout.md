@@ -6,8 +6,10 @@ effort: high
 ---
 
 Discovery execution is a deliverable. In research v7 choose actual search or direct-public
-browsing per lane. Use the host web search tool for the plan-derived query, then register its
-returned URLs with `omd ref leads add --input <leads.json> --json`. Leads are unsigned and
+browsing per lane. Follow `ref work-next`: ask its browser-consent question before any search.
+Search Google in the consented everyday browser, then the OMD login browser; otherwise use an
+available host web search tool, `ref leads search` (DuckDuckGo HTML), and Bing last. Register
+actual host URLs with `omd ref leads add --input <leads.json> --json`. Leads are unsigned and
 never evidence; only OMD's signed destination observation can support research. Historical
 signed `ref search` receipts remain readable. For direct browsing run
 `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` or
@@ -69,7 +71,7 @@ A gallery selector matching multiple images is ambiguous, not empty: inspect can
 and choose one exact image. A signed timeout is an unavailable attempt; recompute work-next. For Korean welfare tasks, run the plan's service-specific
 searches (복지로, 정부24 혜택알리미, 서울복지포털, 웰로) and follow their *current observed* links; do not
 substitute remembered `gov.kr` paths or switch to GOV.UK/USA.gov/Canada.ca after one blocked
-Korean site. Daum is a supported free public search transport when Bing has no rendered results.
+Korean site. Historical Daum receipts remain readable, but Daum and Naver are not default recovery paths.
 If a named service is inaccessible, search another Korean-language comparable operator before
 documenting a genuine local coverage gap. Domain references must be comparable services actually serving the named task and audience
 in that market. Design references must be independent, quality-inspected local visual-direction

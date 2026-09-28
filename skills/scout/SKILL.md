@@ -59,7 +59,7 @@ it contains useful, non-duplicate evidence for every applicable category:
 
 ### Collecting a visual direction
 
-When a selected reference board is missing, use the host web search tool for independent plan-derived queries,
+When a selected reference board is missing, follow `ref work-next`: ask its browser-consent question before searching. Search Google in the consented everyday browser, then the OMD login browser; otherwise use an available host web search tool, `ref leads search` (DuckDuckGo HTML), and Bing last. For independent plan-derived queries,
 register unsigned URLs with `omd ref leads add --input <leads.json> --json`, and inspect destinations with OMD.
 A lead alone is never evidence. Batch known public-list visits with `omd ref discover-batch --input <json> --json`; inspect every outcome.
 For target-market-first work, complete market-only batches in both lanes before starting a
@@ -248,7 +248,7 @@ those produces a product survey instead of a direction.
 ### Exploring a domain reference
 
 Execute discovery, do not merely write query strings. Choose a native public-directory entry as
-described above, or submit the plan's exact query through the host web search tool and register
+described above, or follow the Google-first `ref work-next` action; when a host web search tool is available register
 `{schema:"reference-search-leads-v1",lane,query,urls,provider,tool,observedAt}` with
 `omd ref leads add --input <leads.json> --json`. Visit destinations through OMD before citing them. Use public Google/Bing
 `/search` or DuckDuckGo root/HTML/lite URLs with `queryParam: "q"`; combine task/pattern terms with

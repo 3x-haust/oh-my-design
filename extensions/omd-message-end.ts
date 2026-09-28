@@ -7,7 +7,7 @@ type StagePlanning = Readonly<{ field: string; text: string }>;
 export type ReferenceWork = Readonly<{
   status: 'action' | 'ready' | 'exhausted';
   workSha256: string;
-  action: Readonly<{ kind: string; args: readonly string[]; reason: string; lane?: string; url?: string }> | null;
+  action: Readonly<{ kind: string; args: readonly string[]; reason: string; lane?: string; url?: string; question?: string }> | null;
   code: string | null;
   attempts: readonly Readonly<{ lane: string; url: string; reason: string; receipt: string }> [];
   exclusions: readonly Readonly<{ lane: string; url: string; reason: string; receipt: string }> [];
@@ -228,20 +228,20 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
           && /login|challenge|captcha|authentication/i.test(attempt.reason)) ?? [];
         const needsSetup = config.mode !== 'cdp' && config.storageState === undefined && config.executablePath === undefined
           && work.stage === 'reference-board' && work.referenceWork !== null
-          && (work.referenceWork.action?.lane === 'design' || designAttempts.length > 0)
+          && (work.referenceWork.action?.kind === 'browser-consent' || designAttempts.length > 0)
           && (userConsent === null && consent === null
             || userConsent === 'consented' && userDoctor?.state !== 'ready'
             || consent === 'consented' && !existsSync(browserProfilePath(task.browserConsentHome))
             || designAttempts.some(attempt => /session expired/i.test(attempt.reason)));
         if (needsSetup && !interrupted()) {
-          const question = '로그인된 평소 브라우저를 쓰면 방문 페이지의 네트워크 요청을 OMD가 격리할 수 없어요. 평소 브라우저를 연결할까요, 아니면 별도 OMD 프로필을 쓸까요?';
+          const question = work.referenceWork?.action?.question ?? '레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요. 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기 중 무엇을 원하시나요?';
           const sites = [...new Set(designAttempts.map(attempt => attempt.url)
             .concat(work.referenceWork?.action?.lane === 'design' && work.referenceWork.action.url ? [work.referenceWork.action.url] : []))]
             .filter(url => { try { return new URL(url).protocol === 'https:'; } catch { return false; } }).slice(0, 4);
           if (task.ui?.select) {
-            const choice = await task.ui.select(question, ['평소 쓰는 브라우저 그대로 쓰기', '별도 OMD 프로필 세팅', '이번엔 건너뛰기', '다시 묻지 않기']);
+            const choice = await task.ui.select(question, ['평소 쓰는 브라우저 그대로 쓰기', 'OMD 전용 로그인 브라우저', '이번엔 건너뛰기', '다시 묻지 않기']);
             if (interrupted()) return;
-            if (choice === '평소 쓰는 브라우저 그대로 쓰기' || choice === '별도 OMD 프로필 세팅') {
+            if (choice === '평소 쓰는 브라우저 그대로 쓰기' || choice === 'OMD 전용 로그인 브라우저') {
               try {
                 const attached = choice === '평소 쓰는 브라우저 그대로 쓰기';
                 const result = await run(['browser', 'setup', '--engine', attached ? 'user-browser' : 'omd-profile',
@@ -263,10 +263,10 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
               const decision = choice === '다시 묻지 않기' ? 'never-ask' : 'skipped-this-run';
               writeBrowserConsent(decision, task.browserConsentHome);
               writeUserBrowserConsent(decision, task.browserConsentHome);
-            } else return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / 별도 OMD 프로필 세팅 / 이번엔 건너뛰기 / 다시 묻지 않기. No browser session was started.` }] } };
+            } else return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. No browser session was started.` }] } };
           } else {
             task.onBrowserConsentRequired?.();
-            return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / 별도 OMD 프로필 세팅 / 이번엔 건너뛰기 / 다시 묻지 않기. Ask the user and run omd browser setup --engine user-browser|omd-profile --consent only after explicit permission.\n${actionPacket(work)}` }] } };
+            return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. Ask the user and run omd browser setup --engine user-browser|omd-profile --consent only after explicit permission.\n${actionPacket(work)}` }] } };
           }
         }
         const askingForPlanning = work.action === 'resolve-planning-evidence' && work.planning.length > 0

@@ -2635,7 +2635,9 @@ async function cmdRefSearch(opts: Opts): Promise<never> {
     receipt = publishSearchLaunchTimeout(input, writer);
   }
   const execution = readSearchExecution(process.cwd(), receipt, input.lane);
-  process.stdout.write(`${JSON.stringify({ receipt, execution }, null, opts.json ? undefined : 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ receipt, execution, ...(searchObserved(execution) ? {} : {
+    recovery: 'Run omd ref work-next --json: Google in a consented browser first, then available host search, omd ref leads search (DuckDuckGo HTML), and Bing last.'
+  }) }, null, opts.json ? undefined : 2)}\n`);
   // A failed attempt is durable evidence of a gap, never an automatically successful search.
   process.exit(searchObserved(execution) ? 0 : 1);
 }
@@ -4402,7 +4404,7 @@ async function cmdAttest(mode: string | undefined, opts: Opts): Promise<never> {
 }
 
 async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> {
-  if (opts._.length || Object.keys(opts).some(key => !['_', 'json', 'sites', 'consent', 'engine', 'browser'].includes(key)))
+  if (opts._.length || Object.keys(opts).some(key => !['_', 'json', 'sites', 'consent', 'engine', 'browser', 'decision'].includes(key)))
     throw new Error('usage: omd browser setup|login --engine user-browser|omd-profile --consent [--browser <id>] [--sites <https-url[,https-url]>] [--json] | status|forget [--json]');
   const { browserProfilePath, forgetBrowserConsent, readBrowserConsent, writeBrowserConsent,
     readUserBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
@@ -4422,6 +4424,14 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
         cdp: Boolean(process.env.OMD_BROWSER_CDP_URL), storageState: Boolean(process.env.OMD_BROWSER_STORAGE_STATE),
         stealth: Boolean(process.env.OMD_STEALTH_BROWSER_PATH) } };
     console.log(opts.json ? JSON.stringify(record) : `browser: ${record.mode}; user-browser: ${doctor.state}${doctor.browser ? ` (${doctor.browser.label})` : ''}; consent: ${record.userBrowserConsent ?? 'not asked'}; profile: ${record.profilePresent ? 'present' : 'absent'}`);
+    process.exit(0);
+  }
+  if (mode === 'skip') {
+    if (opts.decision !== 'skipped-this-run' && opts.decision !== 'never-ask' || opts.consent || opts.engine || opts.sites || opts.browser)
+      throw new Error('usage: omd browser skip --decision skipped-this-run|never-ask [--json]');
+    writeBrowserConsent(opts.decision);
+    writeUserBrowserConsent(opts.decision);
+    console.log(JSON.stringify({ schema: 'omd-browser-consent-v1', decision: opts.decision }));
     process.exit(0);
   }
   if (mode === 'forget') {

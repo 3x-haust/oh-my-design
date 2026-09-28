@@ -1,4 +1,7 @@
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { browserProfilePath } from './browser-consent.ts';
+import { readBrowserConsent, readUserBrowserConsent } from './browser-consent.ts';
 import type { RouteRecord } from '../route/index.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { canonicalJson, sha256 } from './board-artifacts.ts';
@@ -21,11 +24,14 @@ type Lane = 'domain' | 'design';
 type SearchInput = ReferenceDiscoveryPlan['marketReferencePolicy']['domainSearchInputs'][number]
   | ReferenceDiscoveryPlan['designSourcePolicy']['nativeSearchInputs'][number];
 export type ReferenceDiscoveryAction = Readonly<{
-  kind: 'search' | 'collect-leads' | 'direct-entry' | 'follow-link' | 'retain-reference' | 'publish-board' | 'replan-discovery';
+  kind: 'browser-consent' | 'search' | 'collect-leads' | 'direct-entry' | 'follow-link' | 'retain-reference' | 'publish-board' | 'replan-discovery';
   lane: Lane | null;
   args: readonly string[];
   reason: string;
   input?: SearchInput;
+  engine?: 'user-browser' | 'omd-profile' | 'bing';
+  question?: string;
+  answers?: Readonly<Record<string, string>>;
   url?: string;
   entry?: 'free-gallery' | 'public-directory';
   selector?: string;
@@ -53,6 +59,23 @@ function nativeAction(kind: 'search' | 'collect-leads' | 'direct-entry' | 'follo
     entry?: 'free-gallery' | 'public-directory' }>): ReferenceDiscoveryAction {
   return { kind, lane, args: ['ref', 'advance', '--json'], reason, ...details };
 }
+export const BROWSER_CONSENT_QUESTION = '레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요. 로그인된 평소 브라우저에서는 방문 페이지의 네트워크 요청을 OMD가 격리할 수 없어요. 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기 중 무엇을 원하시나요?';
+function searchAction(lane: Lane, input: SearchInput, evidence: LaneEvidence): ReferenceDiscoveryAction {
+  const failed = evidence.searches.filter(item => item.query === input.query && !searchObserved(item));
+  const google = new URL('https://www.google.com/search'); google.searchParams.set('q', input.query);
+  const googleInput = { lane, query: input.query, url: google.href, queryParam: 'q' as const };
+  if (readUserBrowserConsent() === 'consented' && !failed.some(item => item.provider === 'www.google.com' && item.error?.startsWith('user-browser:')))
+    return { kind: 'search', lane, engine: 'user-browser', args: ['ref', 'advance', '--json'], input: googleInput,
+      reason: 'Search Google in the consented everyday browser; an observed challenge requires human handoff.' };
+  if (readBrowserConsent() === 'consented' && existsSync(browserProfilePath())
+    && !failed.some(item => item.provider === 'www.google.com' && !item.error?.startsWith('user-browser:')))
+    return { kind: 'search', lane, engine: 'omd-profile', args: ['ref', 'advance', '--json'], input: googleInput,
+      reason: 'Search Google in the consented OMD login browser; hand off any challenge to the user.' };
+  if (process.env.OMD_HOST_WEB_SEARCH_AVAILABLE === '1') return { kind: 'collect-leads', lane, args: [], input: googleInput,
+    reason: 'Use the available host web search tool and register actual URLs with omd ref leads add; leads are not destination evidence.' };
+  return { kind: 'collect-leads', lane, args: ['ref', 'leads', 'search', '--input', '.omd/.cache/reference-lead-query.json', '--json'], input: googleInput,
+    reason: 'No host web search is available. Write {lane,query} from this input to .omd/.cache/reference-lead-query.json and run omd ref leads search --input .omd/.cache/reference-lead-query.json --json (DuckDuckGo HTML); if unavailable, try Bing last.' };
+}
 function publicCandidate(value: string): boolean {
   try { return publicDiscoveryUrl(value) === value; }
   catch (error) { if (error instanceof Error) return false; throw error; }
@@ -78,19 +101,22 @@ function domainSearchResults(search: SearchExecution, allowUnmatched: boolean): 
     return score(right) - score(left);
   });
 }
+function queryAlreadySearched(searches: LaneEvidence['searches'], query: string): boolean {
+  const browserConsent = readUserBrowserConsent() === 'consented' || readBrowserConsent() === 'consented';
+  return searches.some(search => search.query === query && (searchObserved(search) || !browserConsent));
+}
 function pendingMarketSearch(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: LaneEvidence, leadQueries: ReadonlySet<string>): SearchInput | undefined {
   if (plan.marketReferencePolicy.marketRegion === null || (evidence.searches.length === 0 && evidence.entries.length > 0)) return undefined;
   const inputs = lane === 'domain' ? plan.marketReferencePolicy.domainSearchInputs
     : plan.designSourcePolicy.nativeSearchInputs;
-  return inputs.find(input => !leadQueries.has(input.query) && !evidence.searches.some(search => search.query === input.query));
+  return inputs.find(input => !leadQueries.has(input.query) && !queryAlreadySearched(evidence.searches, input.query));
 }
 function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: LaneEvidence,
   retainedFamilies: ReadonlySet<string>, excludedUrls: ReadonlySet<string>,
   requiredSearch: SearchInput | undefined, leadUrls: readonly string[], leadQueries: ReadonlySet<string>,
   openProviders: ReadonlySet<string>): ReferenceDiscoveryAction | null {
   if (requiredSearch !== undefined && retainedFamilies.size >= (lane === 'domain' ? 3 : 2)) {
-    return nativeAction('collect-leads', lane, 'Submit this exact target-market query through the host web search tool, then register its URLs as unsigned leads.',
-      { input: requiredSearch });
+    return searchAction(lane, requiredSearch, evidence);
   }
   const failedUrls = new Set(evidence.unavailable.map(item => item.source));
   const excludedFamilies = new Map<string, Set<string>>();
@@ -151,12 +177,11 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
     ? plan.marketReferencePolicy.domainSearchInputs
     : ((plan.lanes.find(item => item.id === 'domain-reference')?.querySeeds.length ?? 0) > 0
       ? plan.lanes.find(item => item.id === 'domain-reference')!.querySeeds : [plan.task]).slice(0, 4).map(query => {
-      const url = new URL('https://html.duckduckgo.com/html/'); url.searchParams.set('q', query);
+      const url = new URL('https://www.google.com/search'); url.searchParams.set('q', query);
       return { lane: 'domain' as const, query, url: url.href, queryParam: 'q' as const };
     })) : plan.designSourcePolicy.nativeSearchInputs;
-  const nextSearch = inputs.find(input => !leadQueries.has(input.query) && !evidence.searches.some(item => item.query === input.query));
-  if (nextSearch !== undefined) return nativeAction('collect-leads', lane,
-    'Search with the host web search tool and register the resulting URLs as unsigned leads; only a later OMD destination observation is evidence.', { input: nextSearch });
+  const nextSearch = inputs.find(input => !leadQueries.has(input.query) && !queryAlreadySearched(evidence.searches, input.query));
+  if (nextSearch !== undefined) return searchAction(lane, nextSearch, evidence);
   const entryInputs = lane === 'design' ? plan.designSourcePolicy.nativeEntryInputs
     : plan.marketReferencePolicy.domainEntryInputs;
   const nextEntry = entryInputs.find(item =>
@@ -223,19 +248,27 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
     const evidence = lane === 'domain' ? domain : design;
     const input = expandedDiscoveryInputs(plan, lane).find(input =>
       !(lane === 'domain' ? domainQueries : designQueries).has(input.query)
-      && !evidence.searches.some(search => search.query === input.query));
+      && !queryAlreadySearched(evidence.searches, input.query));
     if (input !== undefined) {
-      action = nativeAction('collect-leads', lane,
-        'Search this new task or UI-pattern query using the host tool and register unsigned leads; inspect actual destinations.', { input });
+      action = searchAction(lane, input, evidence);
       break;
     }
+  }
+  if (action !== null && progressHasNoAcquisition(domain, design) && readBrowserConsent() === null && readUserBrowserConsent() === null
+    && !process.env.OMD_BROWSER_CDP_URL && !process.env.OMD_BROWSER_STORAGE_STATE && !process.env.OMD_STEALTH_BROWSER_PATH) {
+    action = { kind: 'browser-consent', lane: null, args: [], reason: BROWSER_CONSENT_QUESTION,
+      question: BROWSER_CONSENT_QUESTION, answers: {
+        '평소 쓰는 브라우저 그대로 쓰기': 'omd browser setup --engine user-browser --consent',
+        'OMD 전용 로그인 브라우저': 'omd browser setup --engine omd-profile --consent',
+        '이번엔 건너뛰기': 'omd browser skip --decision skipped-this-run --json',
+        '다시 묻지 않기': 'omd browser skip --decision never-ask --json' } };
   }
   const status = pending.length === 0 ? 'ready' : 'action';
   action ??= status === 'ready' ? { kind: 'publish-board', lane: null, args: [],
     reason: 'Interpret retained domain flows and design UI parts, then publish the candidate assembly with omd ref board.' }
     : { kind: 'replan-discovery', lane: pending[0] ?? null,
       args: ['ref', 'discover-batch', '--input', '.omd/.cache/reference-recovery-batch.json', '--recovery', '--json'],
-      reason: `The initial leads are depleted, not all public evidence. Scout must use host web search with novel task/component queries for ${pending.join(' and ')}, register URLs as unsigned leads, then observe destinations with OMD. Challenges are handled by the acquisition layer; configured logged-in sessions are used. Move to another provider when its circuit opens. Do not invent links/evidence or publish an empty board.` };
+      reason: `The initial leads are depleted, not all public evidence. Scout must use Google in a consented browser, then an available host web search tool, DuckDuckGo HTML leads, and Bing last with novel task/component queries for ${pending.join(' and ')}; observe destinations with OMD. Challenges are handled by the acquisition layer; configured logged-in sessions are used. Move to another provider when its circuit opens. Do not invent links/evidence or publish an empty board.` };
   const materialProgressIdentities = [...new Set([
     ...admittedDomain.filter(item => (item.observation.taskText?.trim().length ?? 0) >= 20
       && item.observation.links.length > 0).map(item => `domain:${item.observation.finalUrl}`),
@@ -249,7 +282,8 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
     ignored: domain.ignored + design.ignored };
   const attempts = [...domain.failures, ...design.failures];
   const next = status === 'ready' ? 'omd ref board --input <candidate-assemblies.json>'
-    : action.kind === 'collect-leads' ? `Use the host web search tool for ${JSON.stringify(action.input?.query)}, then omd ref leads add --input <leads.json> --json`
+    : action.kind === 'browser-consent' ? action.question!
+    : action.kind === 'collect-leads' ? `${action.reason} Query: ${JSON.stringify(action.input?.query)}`
       : action.args.length ? `omd ${action.args.join(' ')}`
       : `Inspect the captured DOM${action.selector ? ` and confirm image candidate ${JSON.stringify(action.selector)}` : ' for a real selector'}, then omd ref add ${action.url ?? '<observed-source>'} --as <component-name> --lane design --selector ${action.selector ? JSON.stringify(action.selector) : '<observed-ui-selector>'} --shot OR omd ref exclude ${action.url ?? '<observed-source>'} --lane design --reason <specific-quality-judgment>`;
   const instruction = status === 'ready' ? 'Read omd schema reference-board once, author the board from useful retained evidence, then publish it with the named CLI publisher.'
@@ -263,4 +297,8 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
       retained: [...admittedDomain.map(item => ['domain', item.observation.finalUrl, item.sha256]),
         ...admittedDesign.map(ref => ['design', ref.source, ref.component])] })),
     progress };
+}
+function progressHasNoAcquisition(domain: LaneEvidence, design: LaneEvidence): boolean {
+  return [domain, design].every(lane => lane.searches.length === 0 && lane.entries.length === 0
+    && lane.visits.length === 0 && lane.unavailable.length === 0);
 }

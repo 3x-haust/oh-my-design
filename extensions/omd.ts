@@ -119,7 +119,7 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('input', async (event, context) => {
       if (browserConsentPending.has(context.cwd) && (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string') {
         const answer = event.text.trim();
-        if (/^(?:네|예|응|좋아|yes|y|지금 세팅|세팅해줘|설정해줘|평소 쓰는 브라우저 그대로 쓰기|별도 OMD 프로필 세팅)[.!]?$/i.test(answer)) browserConsentGranted.add(context.cwd);
+        if (/^(?:네|예|응|좋아|yes|y|지금 세팅|세팅해줘|설정해줘|평소 쓰는 브라우저 그대로 쓰기|OMD 전용 로그인 브라우저|별도 OMD 프로필 세팅)[.!]?$/i.test(answer)) browserConsentGranted.add(context.cwd);
         else {
           browserConsentGranted.delete(context.cwd);
           const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');

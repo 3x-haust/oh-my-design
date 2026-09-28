@@ -5,6 +5,7 @@ import { constants, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readd
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { loadUserBrowserDriver } from '../core/browser/driver.ts';
 import test from 'node:test';
 import {
   createOmdRuntimeSnapshot,
@@ -48,7 +49,7 @@ test('first OMD command survives checkout removal after Pi activation', t => {
   const targetRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-target-'));
   t.after(() => rmSync(pluginRoot, { recursive: true, force: true }));
   t.after(() => rmSync(targetRoot, { recursive: true, force: true }));
-  for (const path of ['package.json', 'bin', 'core', 'adapters', 'extensions', 'src', 'scripts', 'dist', 'skills', 'agents', '.mcp.json', '.claude-plugin', '.codex-plugin', '.agents', 'README.md', 'README.ko.md', 'LICENSE']) {
+  for (const path of ['package.json', 'bin', 'core', 'adapters', 'vendor', 'extensions', 'src', 'scripts', 'dist', 'skills', 'agents', '.mcp.json', '.claude-plugin', '.codex-plugin', '.agents', 'README.md', 'README.ko.md', 'LICENSE']) {
     const source = join(repositoryRoot, path);
     if (existsSync(source)) cpSync(source, join(pluginRoot, path), { recursive: true, mode: constants.COPYFILE_FICLONE });
   }
@@ -81,6 +82,13 @@ test('first OMD command survives checkout removal after Pi activation', t => {
   const result = JSON.parse(probe.stdout) as { sourceGone?: unknown; text?: unknown };
   assert.equal(result.sourceGone, true);
   assert.match(String(result.text), /reference-research-v8/);
+});
+
+test('Pi runtime snapshot loads the integrity-checked vendored browser driver', async t => {
+  const snapshot = createOmdRuntimeSnapshot({ sourceRoot: repositoryRoot, dependencyRoot: null });
+  t.after(() => snapshot.dispose());
+  const driver = await loadUserBrowserDriver(join(snapshot.root, 'vendor/omd-browser'));
+  assert.equal(typeof driver.userBrowserBridgeDoctor, 'function');
 });
 
 test('Pi runtime keeps an immutable source snapshot after the plugin checkout changes', t => {

@@ -20,6 +20,7 @@ const RUNTIME_PATHS = [
   'bin',
   'core',
   'adapters',
+  'vendor',
   'extensions',
   'src',
   'scripts',

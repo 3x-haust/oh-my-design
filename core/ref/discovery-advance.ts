@@ -4,6 +4,10 @@ import { referenceDiscoveryWork, type ReferenceDiscoveryWork } from './discovery
 import { publishFailedAttempt, readReferenceDiscoveryAttempt, ReferenceNavigationError } from './navigation-capture.ts';
 import { createReferenceAcquisitionSession } from './acquisition-session.ts';
 import { withAcquisitionDeadline, NAVIGATION_BUDGET_MS, AcquisitionTimeoutError } from './acquisition-deadline.ts';
+import { executeReferenceSearch, executeUserBrowserSearch, readSearchExecution } from './search-execution.ts';
+import { readReferenceBrowserConfig } from './browser-config.ts';
+import { withBrowser } from '../render/index.ts';
+import { handoffBrowserChallenge } from './browser-profile.ts';
 
 export type ReferenceDiscoveryAdvance = Readonly<{
   schema: 'reference-discovery-advance-v1';
@@ -24,8 +28,27 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
   let outcome: ReferenceDiscoveryAdvance['outcome'];
   const session = createReferenceAcquisitionSession(writer);
   try { switch (action.kind) {
-    case 'search':
-      throw new Error('REFERENCE_SEARCH_UNAVAILABLE: use host search leads');
+    case 'search': {
+      if (!action.input) throw new Error('REFERENCE_DISCOVERY_ADVANCE: missing search input');
+      if (action.engine === 'user-browser') receipt = await executeUserBrowserSearch(action.input, writer);
+      else {
+        const config = readReferenceBrowserConfig();
+        receipt = await withBrowser(browser => executeReferenceSearch(browser, action.input!, writer), undefined,
+          { reference: true, config });
+        const first = readSearchExecution(root, receipt, action.lane);
+        if (first.status === 'blocked' && action.engine === 'omd-profile') {
+          const cleared = await handoffBrowserChallenge({ url: action.input.url, cleared: async page => {
+            const body = await page.locator('body').innerText();
+            return !/captcha|unusual traffic|verify you are human/i.test(body);
+          } });
+          if (cleared) receipt = await withBrowser(browser => executeReferenceSearch(browser, action.input!, writer), undefined,
+            { reference: true, config });
+        }
+      }
+      readSearchExecution(root, receipt, action.lane);
+      outcome = readSearchExecution(root, receipt, action.lane).status === 'page-observed' ? 'observed' : 'unavailable';
+      break;
+    }
     case 'direct-entry':
     case 'follow-link': {
       if (action.url === undefined) throw new Error('REFERENCE_DISCOVERY_ADVANCE: missing observed public URL');
@@ -47,7 +70,9 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
       break;
     }
     case 'collect-leads':
-      throw new Error('REFERENCE_DISCOVERY_ADVANCE: host web search must register unsigned leads with ref leads add');
+      throw new Error('REFERENCE_DISCOVERY_ADVANCE: follow the collect-leads action (host search if available, otherwise omd ref leads search via DuckDuckGo HTML)');
+    case 'browser-consent':
+      throw new Error('REFERENCE_DISCOVERY_ADVANCE: ask the browser-consent question before acquisition');
     case 'retain-reference':
     case 'publish-board':
     case 'replan-discovery':

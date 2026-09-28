@@ -6,15 +6,46 @@ import { dirname, join } from 'node:path';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { fetchSearchLeads, parseSearchLeadsInput, publishSearchLeads, readSearchLeads } from '../core/ref/search-leads.ts';
 import { providerCircuitSummaries } from '../core/ref/provider-circuit.ts';
-import { extractDuckDuckGoLeadUrls, parseLeadQuery } from '../core/ref/search-leads-fetch.ts';
+import { extractDuckDuckGoLeadUrls, extractBingLeadUrls, parseLeadQuery } from '../core/ref/search-leads-fetch.ts';
 import { readCurrentReferenceDiscoveryEvidence, type LaneEvidence } from '../core/ref/discovery-evidence.ts';
 import { publishFailedAttempt } from '../core/ref/navigation-capture.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { parseMarketReferenceCoverage } from '../core/ref/market-reference-coverage-contract.ts';
+import { executeUserBrowserSearch, readSearchExecution } from '../core/ref/search-execution.ts';
+import { testPng } from './helpers/search-execution.ts';
+import type { UserBrowserDriver } from '../core/browser/contracts.ts';
 
 const route = 'a'.repeat(64);
 const input = { schema: 'reference-search-leads-v1', lane: 'domain', query: 'Korean benefits',
   urls: ['https://example.com/benefits'], provider: 'host-reported', tool: 'web_search', observedAt: new Date().toISOString() } as const;
+
+test('rendered Google organic results in the user browser produce a signed, integrity-checked search receipt', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-google-search-'));
+  const query = 'benefits'; const url = `https://www.google.com/search?q=${query}`;
+  const png = testPng(); let stopped = 0; let navigated = 0;
+  const driver = { userBrowserBridgeDoctor: async () => ({ ready: true, cli: { installed: true }, daemon: { running: true },
+    identification: { needsChoice: false, candidates: [], defaultBrowser: null }, primary: null, browsers: [] }),
+    userBrowserBridgeOnboard: async () => ({ ready: true }), connectUserBrowserSession: async () => ({
+    resize: async () => {}, navigate: async () => { navigated++; },
+    evaluate: async (expression: string) => ({ ok: true, value: expression.includes('location.href')
+      ? url : { body: 'Search results', results: [{ url: 'https://example.com/benefits', text: 'Benefits finder service' }] } }),
+    screenshot: async () => ({ buffer: png, width: 1280, height: 900, format: 'png' }),
+    requestHelp: async () => ({ outcome: 'cancelled' as const }), stop: async () => { stopped++; },
+  }) } as UserBrowserDriver;
+  try {
+    const receipt = await executeUserBrowserSearch({ lane: 'domain', query, url, queryParam: 'q' },
+      createTestProjectWriteAdapter(root), { driver, lookup: async () => [{ address: '142.250.1.1', family: 4 }] });
+    const observed = readSearchExecution(root, receipt, 'domain');
+    assert.equal(observed.schema, 'reference-search-execution-v4');
+    assert.equal(observed.httpStatus, null);
+    assert.equal(observed.status, 'page-observed');
+    assert.deepEqual(observed.results, [{ url: 'https://example.com/benefits', text: 'Benefits finder service' }]);
+    assert.equal(navigated, 1); assert.equal(stopped, 1);
+    const bytes = readFileSync(join(root, receipt.path), 'utf8');
+    writeFileSync(join(root, receipt.path), bytes.replace('Benefits finder service', 'Invented service result'));
+    assert.throws(() => readSearchExecution(root, receipt, 'domain'), /REFERENCE_SEARCH/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test('caller-reported leads are route-bound, unsigned, and never destination evidence', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-leads-'));
@@ -43,6 +74,7 @@ test('HTTP fallback extracts only result anchors and public redirect destination
   assert.deepEqual(extractDuckDuckGoLeadUrls(`<a class="header" href="https://bad.example/">header</a>
     <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fservice&amp;rut=1">service</a>
     <a class="result__a" href="https://127.0.0.1/private">private</a>`), ['https://example.com/service']);
+  assert.deepEqual(extractBingLeadUrls('<li class="b_algo"><h2><a href="https://example.com/service">service</a></h2></li><li class="b_algo"><h2><a href="https://127.0.0.1/private">private</a></h2></li>'), ['https://example.com/service']);
   assert.deepEqual(parseLeadQuery({ lane: 'domain', query: ' service ' }), { lane: 'domain', query: 'service' });
   assert.throws(() => parseLeadQuery({ lane: 'domain', query: 'service', url: 'https://localhost' }), /REFERENCE_SEARCH_UNAVAILABLE/);
 });

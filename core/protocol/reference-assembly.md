@@ -127,7 +127,7 @@ the current route, explicit request, locale context and Framer-owned acquisition
 not depend on the optional domain-analysis stage. Existing domain queries supplement it only while
 they describe the current request. The user supplies the task, not a required reference list.
 
-For planned queries use the host web search tool and register unsigned leads with `ref leads add`.
+Before the first search or acquisition, follow the `ref work-next` browser-consent action and ask its Korean question once. Never run browser setup without explicit consent. Search Google in the consented everyday browser first, then the consented OMD login browser; hand challenges to the user. If neither is available, use an available host web search tool and register unsigned leads with `ref leads add`; otherwise use `ref leads search` (DuckDuckGo HTML), then Bing last. Search results are leads until OMD observes each destination.
 For two or more already-known public-list URLs, use
 `omd schema reference-discovery-batch` and `omd ref discover-batch --input <json> --json`.
 The command runs up to four isolated visits concurrently in one browser and returns an ordered
@@ -140,8 +140,7 @@ before launching a separate unqualified-global batch. Do not mix them in one con
 research validation compares signed execution times, so manifest order cannot prove market-first.
 
 Initial lead exhaustion is an acquisition-planning problem, not a terminal external blocker.
-`ref work-next` tries the other unfinished lane, then unused task-derived searches on alternative
-public providers. Its `replan-discovery` action requires Scout to inspect attempts and exclusions,
+`ref work-next` tries the other unfinished lane, then unused task-derived searches in the Google-first order above. Its `replan-discovery` action requires Scout to inspect attempts and exclusions,
 write `.omd/.cache/reference-recovery-batch.json` using `schema reference-discovery-batch`, and run
 `ref discover-batch --input .omd/.cache/reference-recovery-batch.json --recovery --json`.
 The recovery command refuses previously attempted requests before browser work. For empty results,
@@ -312,8 +311,7 @@ Do not hand-author roots, promote old captures, infer official authority from a 
 this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
 reference separately. Source/redirect hosts and image bytes must remain independent across lanes.
 
-The executor accepts Google/Bing `/search`, DuckDuckGo root/HTML/lite `q` endpoints, and Daum
-`/search?w=tot&q=` for free Korean web search,
+The executor accepts Google/Bing `/search` and DuckDuckGo root/HTML/lite `q` endpoints (historical Daum receipts remain readable),
 plus design-only Pinterest `/search/pins/?q=`, Dribbble `/search/<query-slug>` (`queryParam: path`),
 and Siteinspire `/search?query=` (`queryParam: query`). `ref discover-plan` supplies ready-to-run
 `designSourcePolicy.nativeSearchInputs`; adapt unscoped short task/pattern terms and their matching
