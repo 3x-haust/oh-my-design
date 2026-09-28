@@ -208,6 +208,8 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
             try {
               const setup = await run(['browser', 'setup', '--engine', answer, '--consent', '--json'], cwd, signal);
               if (interrupted()) return;
+              const { writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
+              writeBrowserInterpretation({ questionDigest: stageQuestion.digest, userText: selected!, agentInterpretation: answer }, task.browserConsentHome);
               task.onBrowserAnswer?.(null, stageQuestion.digest);
               return { message: { ...message, content: [...(message.content ?? []), { type: 'text', text: `Browser setup result: ${setup.text}` }] } };
             } catch (error) {
@@ -216,8 +218,9 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
             }
           }
           if (answer === 'skipped-this-run' || answer === 'never-ask') {
-            const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+            const { writeBrowserConsent, writeUserBrowserConsent, writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
             writeBrowserConsent(answer, task.browserConsentHome); writeUserBrowserConsent(answer, task.browserConsentHome);
+            writeBrowserInterpretation({ questionDigest: stageQuestion.digest, userText: selected!, agentInterpretation: answer }, task.browserConsentHome);
             task.onBrowserAnswer?.(null, stageQuestion.digest);
             return { message };
           }
@@ -249,7 +252,7 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       if (work !== null) {
         task.onReferenceWork?.(work.referenceWork);
         const { readBrowserConsent, readUserBrowserConsent, browserProfilePath, writeBrowserConsent,
-          writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+          writeUserBrowserConsent, writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
         const { existsSync } = await import('node:fs');
         const consent = readBrowserConsent(task.browserConsentHome);
         const userConsent = readUserBrowserConsent(task.browserConsentHome);
@@ -280,6 +283,10 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
                 const result = await run(['browser', 'setup', '--engine', attached ? 'user-browser' : 'omd-profile',
                   '--consent', ...(!attached && sites.length ? ['--sites', sites.join(',')] : []), '--json'], cwd, signal);
                 if (interrupted()) return;
+                const questionRecord = parseUserQuestion(JSON.stringify({ action: { kind: 'browser-consent', question,
+                  options: ['평소 쓰는 브라우저 그대로 쓰기', 'OMD 전용 로그인 브라우저', '이번엔 건너뛰기', '다시 묻지 않기'] } }))!;
+                writeBrowserInterpretation({ questionDigest: questionRecord.digest, userText: choice,
+                  agentInterpretation: attached ? 'user-browser' : 'omd-profile' }, task.browserConsentHome);
                 const setup = JSON.parse(result.text) as { state?: string; humanStep?: string; candidates?: { id: string; label: string }[] };
                 const detail = setup.state === 'pending-human-step'
                   ? `OMD Browser setup awaits the user: ${setup.humanStep ?? 'relaunch and enable the extension'}. Recheck browser status after acknowledgement.`
@@ -296,10 +303,13 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
               const decision = choice === '다시 묻지 않기' ? 'never-ask' : 'skipped-this-run';
               writeBrowserConsent(decision, task.browserConsentHome);
               writeUserBrowserConsent(decision, task.browserConsentHome);
+              const questionRecord = parseUserQuestion(JSON.stringify({ action: { kind: 'browser-consent', question,
+                options: ['평소 쓰는 브라우저 그대로 쓰기', 'OMD 전용 로그인 브라우저', '이번엔 건너뛰기', '다시 묻지 않기'] } }))!;
+              writeBrowserInterpretation({ questionDigest: questionRecord.digest, userText: choice, agentInterpretation: decision }, task.browserConsentHome);
             } else return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. No browser session was started.` }] } };
           } else {
             task.onBrowserConsentRequired?.(question);
-            return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. Ask the user and run omd browser setup --engine user-browser|omd-profile --consent only after explicit permission.\n${actionPacket(work)}` }] } };
+            return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. Ask the user; interpret their answer and run omd browser setup --engine user-browser|omd-profile --consent --user-answer "<exact user text>" or omd browser skip --decision skipped-this-run|never-ask --user-answer "<exact user text>". Do not infer consent from keywords.\n${actionPacket(work)}` }] } };
           }
         }
         const askingForPlanning = work.action === 'resolve-planning-evidence' && work.planning.length > 0

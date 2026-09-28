@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import omdExtension, { type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
-import { readBrowserConsent, writeBrowserConsent } from '../core/ref/browser-consent.ts';
+import { readBrowserConsent, readBrowserInterpretation, writeBrowserConsent, writeUserBrowserConsent } from '../core/ref/browser-consent.ts';
 
 const final = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: '작업을 완료했습니다.' }] };
 function harness(t: { after(fn: () => void): void }) {
@@ -36,6 +36,15 @@ function harness(t: { after(fn: () => void): void }) {
         if (diagnosisFails) return { stdout: '', stderr: 'stage diagnosis unavailable', code: 1, killed: false };
       }
       const code = args[1] === 'ref' ? referenceMutation?.(args) ?? 0 : args[1] === 'browser' && setupFails ? 1 : 0;
+      if (args[1] === 'browser' && args[2] === 'skip' && code === 0) {
+        const decision = args[args.indexOf('--decision') + 1] as 'skipped-this-run' | 'never-ask';
+        writeBrowserConsent(decision, cwd); writeUserBrowserConsent(decision, cwd);
+      }
+      if (args[1] === 'browser' && args[2] === 'setup' && code === 0) {
+        const engine = args[args.indexOf('--engine') + 1];
+        if (engine === 'user-browser') writeUserBrowserConsent('consented', cwd);
+        else writeBrowserConsent('consented', cwd);
+      }
       return { stdout: args[1] === 'stage' ? JSON.stringify(work) : '{}', stderr: '', code, killed: false };
     },
   });
@@ -120,7 +129,8 @@ test('fallback consent packet accepts only a later explicit interactive choice',
   assert.match(result.message.content.at(-1)!.text, /레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요/);
   await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
   await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
-  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
+  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']);
+  assert.equal(readBrowserInterpretation(h.cwd)?.userText, '평소 쓰는 브라우저');
   assert.equal(h.calls.filter(args => args[1] === 'browser').length, 1);
 });
 
@@ -141,8 +151,8 @@ test('a pending browser question survives stage repair without counting a stall'
   await h.end(); await h.end(); await h.end();
   assert.equal(h.sent.length, 0);
   await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
-  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
-  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']);
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
 });
 
 test('stage-next explicit user decisions preserve the agent text and do not consume repair passes', async t => {
@@ -168,39 +178,43 @@ test('native select on a stage-next consent action records the engine before set
   assert.equal(h.sent.length, 0);
 });
 
-test('transcript answers bind the current choice and a failed setup preserves consent', async t => {
-  for (const answer of ['평소 쓰는 브라우저', '1']) {
+test('agent interpretation binds the exact later turn and a failed setup preserves it', async t => {
+  for (const answer of ['평소 쓰는 브라우저', 'ㅇㅇ', '세팅 하라고']) {
     const h = harness(t); await h.start(); await h.ask(); await h.end();
     await h.emit('input', { source: 'interactive', text: answer });
+    const args = ['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', answer];
     h.failSetup(true);
-    await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']));
+    await assert.rejects(h.run(args));
     h.failSetup(false);
-    await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
-    await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+    await h.run(args);
+    assert.deepEqual(readBrowserInterpretation(h.cwd), { questionDigest: readBrowserInterpretation(h.cwd)?.questionDigest,
+      userText: answer, agentInterpretation: 'user-browser' });
+    await assert.rejects(h.run(args), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
   }
 });
 
-test('transcript affirmatives select the recommended everyday browser; unrelated input does not', async t => {
-  for (const answer of ['ㅇㅇ', 'ㅇㅋ', '네', '응', 'yes', '좋아', '해', '세팅해', '세팅하라고', '세팅 하라고', '설정해']) {
-    const h = harness(t); await h.start(); await h.ask(); await h.end();
-    await h.emit('input', { source: 'interactive', text: answer });
-    await assert.rejects(h.run(['browser', 'setup', '--engine', 'omd-profile', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
-    await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']);
-  }
-  const h = harness(t); await h.start(); await h.ask(); await h.end();
-  await h.emit('input', { source: 'interactive', text: 'unrelated' });
-  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
-  await h.emit('input', { source: 'interactive', text: '2' });
-  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
-  await h.run(['browser', 'setup', '--engine', 'omd-profile', '--consent']);
+test('fabricated, unseen and pre-question text cannot authorize setup or skip', async t => {
+  const h = harness(t); await h.start();
+  await h.emit('input', { source: 'interactive', text: 'ㅇㅇ' });
+  await h.ask();
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', 'ㅇㅇ']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.end();
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', 'ㅇㅇ']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.emit('input', { source: 'rpc', text: 'unrelated' });
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', 'fabricated']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await assert.rejects(h.run(['browser', 'skip', '--decision', 'never-ask', '--user-answer', 'fabricated']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.run(['browser', 'skip', '--decision', 'never-ask', '--user-answer', 'unrelated']);
+  assert.equal(readBrowserInterpretation(h.cwd)?.agentInterpretation, 'never-ask');
 });
 
 test('a changed question digest invalidates previous authorization', async t => {
   const h = harness(t); await h.start(); await h.ask(); await h.end();
   await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
   await h.ask('새로운 브라우저 질문?');
-  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.end();
   await h.emit('input', { source: 'interactive', text: '4' });
+  await h.run(['browser', 'skip', '--decision', 'never-ask', '--user-answer', '4']);
   assert.equal(readBrowserConsent(h.cwd), 'never-ask');
 });
 

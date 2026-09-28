@@ -85,6 +85,7 @@ interface Opts {
   json?: boolean;
   sites?: string;
   consent?: boolean;
+  userAnswer?: string;
   engine?: string;
   browser?: string;
   ir?: string;
@@ -266,6 +267,7 @@ const ALIASES: Record<string, keyof Opts> = {
   'ai-asset-id': 'aiAssetId',
   'entry-surface': 'entrySurface',
   'owner-receipt': 'ownerReceipt',
+  'user-answer': 'userAnswer',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -4404,10 +4406,12 @@ async function cmdAttest(mode: string | undefined, opts: Opts): Promise<never> {
 }
 
 async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> {
-  if (opts._.length || Object.keys(opts).some(key => !['_', 'json', 'sites', 'consent', 'engine', 'browser', 'decision'].includes(key)))
+  if (opts._.length || Object.keys(opts).some(key => !['_', 'json', 'sites', 'consent', 'engine', 'browser', 'decision', 'userAnswer'].includes(key)))
     throw new Error('usage: omd browser setup|login --engine user-browser|omd-profile --consent [--browser <id>] [--sites <https-url[,https-url]>] [--json] | status|forget [--json]');
+  if (opts.userAnswer !== undefined && (typeof opts.userAnswer !== 'string' || !opts.userAnswer.trim()))
+    throw new Error('OMD_BROWSER_SETUP_CONSENT_REQUIRED: --user-answer must be the exact nonempty user turn');
   const { browserProfilePath, forgetBrowserConsent, readBrowserConsent, writeBrowserConsent,
-    readUserBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+    readUserBrowserConsent, writeUserBrowserConsent, readBrowserAnswerReceipt, clearBrowserAnswerReceipt } = await import('../core/ref/browser-consent.ts');
   const { userBrowserDoctor, installUserBrowserBridge } = await import('../core/browser/setup.ts');
   if (opts.engine !== undefined && opts.engine !== 'user-browser' && opts.engine !== 'omd-profile')
     throw new Error('OMD_BROWSER_ENGINE_INVALID: use user-browser or omd-profile');
@@ -4416,7 +4420,7 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
   if (opts.browser !== undefined && opts.engine !== 'user-browser') throw new Error('OMD_BROWSER_CHOICE_INVALID: --browser requires --engine user-browser');
   const { readReferenceBrowserConfig } = await import('../core/ref/browser-config.ts');
   if (mode === 'status') {
-    if (opts.sites !== undefined || opts.consent || opts.engine !== undefined) throw new Error('usage: omd browser status [--browser <id>] [--json]');
+    if (opts.sites !== undefined || opts.consent || opts.engine !== undefined || opts.userAnswer !== undefined) throw new Error('usage: omd browser status [--browser <id>] [--json]');
     const doctor = await userBrowserDoctor(opts.browser);
     const record = { schema: 'omd-browser-status-v2', consent: readBrowserConsent(), userBrowserConsent: readUserBrowserConsent(),
       userBrowser: doctor, profilePresent: existsSync(browserProfilePath()),
@@ -4426,16 +4430,20 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
     console.log(opts.json ? JSON.stringify(record) : `browser: ${record.mode}; user-browser: ${doctor.state}${doctor.browser ? ` (${doctor.browser.label})` : ''}; consent: ${record.userBrowserConsent ?? 'not asked'}; profile: ${record.profilePresent ? 'present' : 'absent'}`);
     process.exit(0);
   }
+  if (['setup', 'login', 'skip'].includes(mode ?? '') && opts.userAnswer !== undefined
+    && readBrowserAnswerReceipt()?.userText !== opts.userAnswer)
+    throw new Error('OMD_BROWSER_SETUP_CONSENT_REQUIRED: --user-answer is not a later interactive or rpc answer to the current question');
   if (mode === 'skip') {
     if (opts.decision !== 'skipped-this-run' && opts.decision !== 'never-ask' || opts.consent || opts.engine || opts.sites || opts.browser)
       throw new Error('usage: omd browser skip --decision skipped-this-run|never-ask [--json]');
     writeBrowserConsent(opts.decision);
     writeUserBrowserConsent(opts.decision);
+    if (opts.userAnswer !== undefined) clearBrowserAnswerReceipt();
     console.log(JSON.stringify({ schema: 'omd-browser-consent-v1', decision: opts.decision }));
     process.exit(0);
   }
   if (mode === 'forget') {
-    if (opts.sites !== undefined || opts.consent || opts.engine !== undefined || opts.browser !== undefined) throw new Error('usage: omd browser forget [--json]');
+    if (opts.sites !== undefined || opts.consent || opts.engine !== undefined || opts.browser !== undefined || opts.userAnswer !== undefined) throw new Error('usage: omd browser forget [--json]');
     forgetBrowserConsent();
     rmSync(browserProfilePath(), { recursive: true, force: true });
     console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-status-v1', consent: null, profilePresent: false }) : 'browser consent and dedicated profile removed');
@@ -4446,7 +4454,10 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
   if (opts.engine === 'user-browser') {
     if (mode === 'setup') {
       const result = await installUserBrowserBridge(opts.browser);
-      if (result.state === 'ready' || result.state === 'pending-human-step') writeUserBrowserConsent('consented');
+      if (result.state === 'ready' || result.state === 'pending-human-step') {
+        writeUserBrowserConsent('consented');
+        if (opts.userAnswer !== undefined) clearBrowserAnswerReceipt();
+      }
       console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-setup-v2', engine: 'user-browser', ...result })
         : `browser setup: ${result.state}${result.humanStep ? `; ${result.humanStep}` : ''}`);
       process.exit(result.state === 'failed' ? 1 : 0);
@@ -4472,12 +4483,16 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
       }
     });
     writeUserBrowserConsent('consented');
+    if (opts.userAnswer !== undefined) clearBrowserAnswerReceipt();
     console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-setup-v2', engine: 'user-browser', state: 'ready' }) : 'browser login completed');
     process.exit(0);
   }
   const { launchBrowserProfileLogin } = await import('../core/ref/browser-profile.ts');
   const outcome = await launchBrowserProfileLogin({ sites: urls });
-  if (outcome === 'closed') writeBrowserConsent('consented');
+  if (outcome === 'closed') {
+    writeBrowserConsent('consented');
+    if (opts.userAnswer !== undefined) clearBrowserAnswerReceipt();
+  }
   console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-setup-v1', outcome, consent: readBrowserConsent() }) : `browser setup: ${outcome}`);
   process.exit(outcome === 'closed' ? 0 : 1);
 }

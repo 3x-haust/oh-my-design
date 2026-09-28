@@ -24,29 +24,14 @@ export function parseUserQuestion(text: string): UserQuestion | null {
 }
 
 export function questionText(question: UserQuestion): string {
-  return `${question.question}\n${question.options.map((option, index) => `${index + 1}. ${option}`).join('\n')}`;
+  const choices = `${question.question}\n${question.options.map((option, index) => `${index + 1}. ${option}`).join('\n')}`;
+  return question.kind === 'browser-consent'
+    ? `${choices}\nFor a free-text reply, interpret the user's meaning yourself. Run omd browser setup --engine user-browser|omd-profile --consent --user-answer "<exact user text>", or omd browser skip --decision skipped-this-run|never-ask --user-answer "<exact user text>". Only an interactive or rpc answer received after this question is eligible.`
+    : choices;
 }
 
-export function browserAnswer(question: UserQuestion, text: string): 'user-browser' | 'omd-profile' | 'skipped-this-run' | 'never-ask' | null {
-  if (question.kind !== 'browser-consent') return null;
-  const value = text.trim().replace(/[.!。]+$/, '').trim().toLowerCase();
-  const numbered = /^[1-4]$/.test(value) ? Number(value) - 1 : -1;
-  const choice = numbered >= 0 ? question.options[numbered] : question.options.find(option => option.toLowerCase() === value)
-    ?? (/^(?:평소 쓰는 브라우저|평소 브라우저|내 브라우저|user-browser)$/.test(value) ? browserOptions[0]
-      : /^(?:omd 전용|omd 브라우저|별도 omd 프로필 세팅)$/.test(value) ? browserOptions[1]
-        : /^(?:건너뛰기|나중에|아니|아니요|no)$/.test(value) ? browserOptions[2]
-          : /^(?:다시 묻지 마|다시는 묻지 마|never)$/.test(value) ? browserOptions[3] : undefined);
-  if (choice !== undefined && question.options.includes(choice)) {
-    if (choice === browserOptions[0]) return 'user-browser';
-    if (choice === browserOptions[1]) return 'omd-profile';
-    if (choice === browserOptions[2]) return 'skipped-this-run';
-    if (choice === browserOptions[3]) return 'never-ask';
-  }
-  if (/^(?:네|예|응|ㅇㅇ|ㅇㅋ|yes|y|좋아|해|해줘|세팅해|세팅하라고|설정해|지금세팅|세팅해줘|설정해줘|설정하라고)$/.test(value.replace(/\s+/g, ''))) {
-    const engines = question.options.filter(option => option === browserOptions[0] || option === browserOptions[1]);
-    if (engines.length === 1) return engines[0] === browserOptions[0] ? 'user-browser' : 'omd-profile';
-    // A plain yes selects the first, recommended engine: the everyday browser.
-    if (engines.some(option => option === browserOptions[0]) || (engines.length === 0 && question.options.length <= 2)) return 'user-browser';
-  }
-  return null;
+export function browserAnswer(question: UserQuestion, selected: string): 'user-browser' | 'omd-profile' | 'skipped-this-run' | 'never-ask' | null {
+  if (question.kind !== 'browser-consent' || !question.options.includes(selected)) return null;
+  const index = browserOptions.indexOf(selected);
+  return (['user-browser', 'omd-profile', 'skipped-this-run', 'never-ask'] as const)[index] ?? null;
 }

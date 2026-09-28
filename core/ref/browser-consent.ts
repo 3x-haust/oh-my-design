@@ -3,6 +3,55 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 export type BrowserConsent = 'consented' | 'skipped-this-run' | 'never-ask';
+export type BrowserInterpretation = Readonly<{ questionDigest: string; userText: string; agentInterpretation: 'user-browser' | 'omd-profile' | 'skipped-this-run' | 'never-ask' }>;
+export type BrowserAnswerReceipt = Pick<BrowserInterpretation, 'questionDigest' | 'userText'>;
+function answerReceipt(home: string): BrowserAnswerReceipt | undefined {
+  try { return (JSON.parse(readFileSync(browserConsentPath(home), 'utf8')) as { answerReceipt?: BrowserAnswerReceipt }).answerReceipt; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
+}
+export function readBrowserAnswerReceipt(home = homedir()): BrowserAnswerReceipt | undefined {
+  readBrowserConsent(home);
+  return answerReceipt(home);
+}
+export function writeBrowserAnswerReceipt(value: BrowserAnswerReceipt, home = homedir()): void {
+  if (!/^[a-f0-9]{64}$/.test(value.questionDigest) || !value.userText.trim()) throw new Error('invalid browser answer receipt');
+  const profile = readBrowserConsent(home), userBrowser = readUserBrowserConsent(home);
+  const path = browserConsentPath(home);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const temporary = `${path}.${process.pid}.tmp`;
+  try { writeFileSync(temporary, JSON.stringify({ schema: 2, profile, userBrowser, answerReceipt: value,
+    ...(interpretation(home) ? { interpretation: interpretation(home) } : {}) }) + '\n', { mode: 0o600, flag: 'wx' }); renameSync(temporary, path); }
+  finally { rmSync(temporary, { force: true }); }
+}
+export function clearBrowserAnswerReceipt(home = homedir()): void {
+  if (!answerReceipt(home)) return;
+  const profile = readBrowserConsent(home), userBrowser = readUserBrowserConsent(home);
+  const path = browserConsentPath(home);
+  const temporary = `${path}.${process.pid}.tmp`;
+  try { writeFileSync(temporary, JSON.stringify({ schema: 2, profile, userBrowser,
+    ...(interpretation(home) ? { interpretation: interpretation(home) } : {}) }) + '\n', { mode: 0o600, flag: 'wx' }); renameSync(temporary, path); }
+  finally { rmSync(temporary, { force: true }); }
+}
+function interpretation(home: string): BrowserInterpretation | undefined {
+  try { return (JSON.parse(readFileSync(browserConsentPath(home), 'utf8')) as { interpretation?: BrowserInterpretation }).interpretation; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined; throw error; }
+}
+export function readBrowserInterpretation(home = homedir()): BrowserInterpretation | undefined {
+  readBrowserConsent(home);
+  return interpretation(home);
+}
+export function writeBrowserInterpretation(value: BrowserInterpretation, home = homedir()): void {
+  if (!/^[a-f0-9]{64}$/.test(value.questionDigest) || !value.userText.trim()
+    || !['user-browser', 'omd-profile', 'skipped-this-run', 'never-ask'].includes(value.agentInterpretation))
+    throw new Error('invalid browser interpretation');
+  const profile = readBrowserConsent(home), userBrowser = readUserBrowserConsent(home);
+  const path = browserConsentPath(home);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const temporary = `${path}.${process.pid}.tmp`;
+  try { writeFileSync(temporary, JSON.stringify({ schema: 2, profile, userBrowser, interpretation: value }) + '\n',
+    { mode: 0o600, flag: 'wx' }); renameSync(temporary, path); }
+  finally { rmSync(temporary, { force: true }); }
+}
 export const browserProfilePath = (home = homedir()): string => join(home, '.omd', 'browser-profile');
 export const browserConsentPath = (home = homedir()): string => join(home, '.omd', 'browser-consent.json');
 
@@ -13,12 +62,26 @@ export function readBrowserConsent(home = homedir()): BrowserConsent | null {
   const value: unknown = JSON.parse(contents);
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid browser consent record');
   if ((value as { schema?: unknown }).schema === 2) {
-    if (Object.keys(value).length !== 3 || ['schema', 'profile', 'userBrowser'].some(key => !Object.hasOwn(value, key)))
+    if (Object.keys(value).some(key => !['schema', 'profile', 'userBrowser', 'interpretation', 'answerReceipt'].includes(key))
+      || ['schema', 'profile', 'userBrowser'].some(key => !Object.hasOwn(value, key)))
       throw new Error('invalid browser consent record');
     const row = value as { profile?: unknown; userBrowser?: unknown };
     if (!['consented', 'skipped-this-run', 'never-ask', null].includes(row.profile as null)
       || !['consented', 'skipped-this-run', 'never-ask', null].includes(row.userBrowser as null))
       throw new Error('invalid browser consent record');
+    if (Object.hasOwn(value, 'answerReceipt')) {
+      const receipt = (value as { answerReceipt: BrowserAnswerReceipt }).answerReceipt;
+      if (!receipt || typeof receipt !== 'object' || Object.keys(receipt).length !== 2
+        || typeof receipt.questionDigest !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.questionDigest)
+        || typeof receipt.userText !== 'string' || !receipt.userText.trim()) throw new Error('invalid browser consent record');
+    }
+    if (Object.hasOwn(value, 'interpretation')) {
+      const evidence = (value as { interpretation: BrowserInterpretation }).interpretation;
+      if (!evidence || typeof evidence !== 'object' || Object.keys(evidence).length !== 3
+        || !/^[a-f0-9]{64}$/.test(evidence.questionDigest) || typeof evidence.userText !== 'string' || !evidence.userText.trim()
+        || !['user-browser', 'omd-profile', 'skipped-this-run', 'never-ask'].includes(evidence.agentInterpretation))
+        throw new Error('invalid browser consent record');
+    }
     return row.profile as BrowserConsent | null;
   }
   if (Object.keys(value).length !== 1 || !Object.hasOwn(value, 'decision')) throw new Error('invalid browser consent record');
@@ -33,7 +96,8 @@ export function writeBrowserConsent(decision: BrowserConsent, home = homedir()):
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.tmp`;
   const userBrowser = readUserBrowserConsent(home);
-  try { writeFileSync(temporary, JSON.stringify({ schema: 2, profile: decision, userBrowser }) + '\n',
+  try { writeFileSync(temporary, JSON.stringify({ schema: 2, profile: decision, userBrowser, ...(interpretation(home) ? { interpretation: interpretation(home) } : {}),
+    ...(answerReceipt(home) ? { answerReceipt: answerReceipt(home) } : {}) }) + '\n',
     { mode: 0o600, flag: 'wx' }); renameSync(temporary, path); }
   finally { rmSync(temporary, { force: true }); }
 }
@@ -51,7 +115,8 @@ export function writeUserBrowserConsent(decision: BrowserConsent, home = homedir
   const path = browserConsentPath(home);
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.tmp`;
-  try { writeFileSync(temporary, JSON.stringify({ schema: 2, profile, userBrowser: decision }) + '\n',
+  try { writeFileSync(temporary, JSON.stringify({ schema: 2, profile, userBrowser: decision, ...(interpretation(home) ? { interpretation: interpretation(home) } : {}),
+    ...(answerReceipt(home) ? { answerReceipt: answerReceipt(home) } : {}) }) + '\n',
     { mode: 0o600, flag: 'wx' }); renameSync(temporary, path); }
   finally { rmSync(temporary, { force: true }); }
 }

@@ -16,6 +16,7 @@ import { normalizeOmdAlias } from './omd-request-prompt.ts';
 import { PiNativeRuns } from './omd-native-run.ts';
 import { RouteEntryContinuation, ROUTE_ENTRY_INPUT, ROUTE_ENTRY_VALIDATION } from './omd-bootstrap-entry.ts';
 import { parseUserQuestion, questionText, browserAnswer, type UserQuestion } from './omd-user-question.ts';
+import { clearBrowserAnswerReceipt, writeBrowserAnswerReceipt } from '../core/ref/browser-consent.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -28,9 +29,28 @@ export default function omdExtension(pi: PortablePiApi): void {
   const pendingReferenceWork = new Map<string, ReferenceWork>();
   const pendingQuestions = new Map<string, UserQuestion>();
   const browserConsentGranted = new Map<string, { digest: string; engine: string }>();
+  const consentHomes = new Map<string, string>();
+  const shownQuestions = new Map<string, string>();
+  const observedAnswers = new Map<string, { digest: string; text: string }>();
   const rememberQuestion = (cwd: string, question: UserQuestion) => {
-    if (pendingQuestions.get(cwd)?.digest !== question.digest) browserConsentGranted.delete(cwd);
+    if (pendingQuestions.get(cwd)?.digest !== question.digest) {
+      browserConsentGranted.delete(cwd); shownQuestions.delete(cwd); observedAnswers.delete(cwd);
+      if (consentHomes.has(cwd)) clearBrowserAnswerReceipt(consentHomes.get(cwd));
+    }
     pendingQuestions.set(cwd, question);
+  };
+  const consentAnswer = (cwd: string, args: readonly string[]) => {
+    if (args[0] !== 'browser' || !['setup', 'login', 'skip'].includes(args[1] ?? '')) return null;
+    const question = pendingQuestions.get(cwd);
+    const observed = observedAnswers.get(cwd);
+    const index = args.indexOf('--user-answer');
+    const answer = index < 0 ? undefined : args[index + 1];
+    const interpretation = args[1] === 'skip' ? args[args.indexOf('--decision') + 1] : args[args.indexOf('--engine') + 1];
+    if (!question || question.kind !== 'browser-consent' || !observed || observed.digest !== question.digest
+      || shownQuestions.get(cwd) !== question.digest || answer === undefined || !answer.trim()
+      || answer !== observed.text || interpretation === undefined
+      || !(args[1] === 'skip' ? ['skipped-this-run', 'never-ask'] : ['user-browser', 'omd-profile']).includes(interpretation)) return null;
+    return { questionDigest: question.digest, userText: answer, agentInterpretation: interpretation as 'user-browser' | 'omd-profile' | 'skipped-this-run' | 'never-ask' };
   };
   const revisions = new Map<string, number>();
   type PendingMutation = { path: string; before: string; production: boolean };
@@ -117,22 +137,18 @@ export default function omdExtension(pi: PortablePiApi): void {
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
     on('session_start', async (_event, context) => {
-      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); pendingQuestions.clear(); browserConsentGranted.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear();
+      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); pendingQuestions.clear(); browserConsentGranted.clear(); shownQuestions.clear(); observedAnswers.clear(); consentHomes.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear();
       const { clearBrowserSessionSkip } = await import('../core/ref/browser-consent.ts');
       clearBrowserSessionSkip(context.browserConsentHome);
     });
     on('input', async (event, context) => {
+      if (context.browserConsentHome) consentHomes.set(context.cwd, context.browserConsentHome);
       const pendingQuestion = pendingQuestions.get(context.cwd);
-      if (pendingQuestion && (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string') {
-        const answer = browserAnswer(pendingQuestion, event.text);
-        if (answer === 'user-browser' || answer === 'omd-profile') browserConsentGranted.set(context.cwd, { digest: pendingQuestion.digest, engine: answer });
-        else if (answer === 'skipped-this-run' || answer === 'never-ask') {
-          const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
-          writeBrowserConsent(answer, context.browserConsentHome);
-          writeUserBrowserConsent(answer, context.browserConsentHome);
-          browserConsentGranted.delete(context.cwd);
-          pendingQuestions.delete(context.cwd);
-        }
+      if (pendingQuestion?.kind === 'browser-consent' && shownQuestions.get(context.cwd) === pendingQuestion.digest
+        && (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string') {
+        observedAnswers.set(context.cwd, { digest: pendingQuestion.digest, text: event.text });
+        if (event.text.trim()) writeBrowserAnswerReceipt({ questionDigest: pendingQuestion.digest, userText: event.text }, context.browserConsentHome);
+        else clearBrowserAnswerReceipt(context.browserConsentHome);
       }
       const alias = (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string'
         ? normalizeOmdAlias(event.text) : undefined;
@@ -189,9 +205,10 @@ export default function omdExtension(pi: PortablePiApi): void {
             || (root === 'guard' && sub === 'completion');
           if (diagnostic) return { block: true, reason: `OMD_OWNED_WORK_REQUIRED: ${pending.action?.reason ?? 'Publish the reference board from retained evidence.'}\n${pending.action?.args.join(' ') ?? 'omd schema reference-board --json, then omd ref board --input <candidate-assemblies.json>'}\nRead-only checks cannot replace this action.` };
         }
-        if (Array.isArray(args) && args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '')
-          && (!browserConsentGranted.has(context.cwd) || browserConsentGranted.get(context.cwd)?.digest !== pendingQuestions.get(context.cwd)?.digest
-            || !args.includes('--consent') || args[args.indexOf('--engine') + 1] !== browserConsentGranted.get(context.cwd)?.engine))
+        if (Array.isArray(args) && args[0] === 'browser' && ['setup', 'login', 'skip'].includes(args[1] ?? '')
+          && !(consentAnswer(context.cwd, args)
+            || args[1] !== 'skip' && browserConsentGranted.get(context.cwd)?.digest === pendingQuestions.get(context.cwd)?.digest
+              && args.includes('--consent') && args[args.indexOf('--engine') + 1] === browserConsentGranted.get(context.cwd)?.engine))
           return { block: true, reason: 'OMD_BROWSER_SETUP_CONSENT_REQUIRED: Setup is blocked without an answer to the current browser choice. Do NOT ask another yes/no question; report this block and the original options to the user.' };
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
@@ -262,6 +279,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
     });
     on('message_end', async (event, context) => {
+      if (context.browserConsentHome) consentHomes.set(context.cwd, context.browserConsentHome);
       const message = event.message;
       const entryAuthorized = !hasPiRoute(context.cwd) && requests.classificationGranted(context.cwd) && ownedWork.token(context.cwd) !== undefined;
       if ((!touched.has(context.cwd) && !entryAuthorized && !pendingQuestions.has(context.cwd)) || message?.role !== 'assistant' || message.stopReason !== 'stop'
@@ -286,6 +304,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (pendingQuestion) {
         const grant = browserConsentGranted.get(context.cwd);
         if (grant?.digest === pendingQuestion.digest) return { message };
+        if (pendingQuestion.kind === 'browser-consent') shownQuestions.set(context.cwd, pendingQuestion.digest);
         if (pendingQuestion.kind === 'browser-consent' && context.ui?.select) {
           const choice = await context.ui.select(pendingQuestion.question, [...pendingQuestion.options]);
           if (interrupted()) return;
@@ -295,6 +314,8 @@ export default function omdExtension(pi: PortablePiApi): void {
               browserConsentGranted.set(context.cwd, { digest: pendingQuestion.digest, engine: answer });
               try {
                 const setup = await run(['browser', 'setup', '--engine', answer, '--consent', '--json'], context.cwd, context.signal);
+                const { writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
+                writeBrowserInterpretation({ questionDigest: pendingQuestion.digest, userText: choice, agentInterpretation: answer }, context.browserConsentHome);
                 browserConsentGranted.delete(context.cwd);
                 pendingQuestions.delete(context.cwd);
                 return { message: { ...message, content: [...(message.content ?? []), { type: 'text', text: `Browser setup result: ${setup.text}` }] } };
@@ -303,8 +324,9 @@ export default function omdExtension(pi: PortablePiApi): void {
               }
             }
             if (answer === 'skipped-this-run' || answer === 'never-ask') {
-              const { writeBrowserConsent, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+              const { writeBrowserConsent, writeUserBrowserConsent, writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
               writeBrowserConsent(answer, context.browserConsentHome); writeUserBrowserConsent(answer, context.browserConsentHome);
+              writeBrowserInterpretation({ questionDigest: pendingQuestion.digest, userText: choice, agentInterpretation: answer }, context.browserConsentHome);
               pendingQuestions.delete(context.cwd);
               return { message };
             }
@@ -352,9 +374,11 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (!Array.isArray(params.args) || params.args.length === 0 || params.args.some((arg) => typeof arg !== 'string')) {
         throw new Error('OMD_CLI_ARGS_INVALID: args must be a non-empty string array');
       }
-      if (params.args[0] === 'browser' && ['setup', 'login'].includes(params.args[1] ?? '')
-        && (!browserConsentGranted.has(context.cwd) || browserConsentGranted.get(context.cwd)?.digest !== pendingQuestions.get(context.cwd)?.digest
-          || !params.args.includes('--consent') || params.args[params.args.indexOf('--engine') + 1] !== browserConsentGranted.get(context.cwd)?.engine))
+      const browserEvidence = consentAnswer(context.cwd, params.args);
+      if (params.args[0] === 'browser' && ['setup', 'login', 'skip'].includes(params.args[1] ?? '')
+        && !(browserEvidence && (params.args[1] === 'skip' || params.args.includes('--consent'))
+          || params.args[1] !== 'skip' && browserConsentGranted.get(context.cwd)?.digest === pendingQuestions.get(context.cwd)?.digest
+            && params.args.includes('--consent') && params.args[params.args.indexOf('--engine') + 1] === browserConsentGranted.get(context.cwd)?.engine))
         throw new Error('OMD_BROWSER_SETUP_CONSENT_REQUIRED: No matching answer to the current question. Do NOT ask another yes/no question; report the block and original options.');
       const pendingReference = pendingReferenceWork.get(context.cwd);
       const referenceMutation = params.args[0] === 'ref'
@@ -401,6 +425,11 @@ export default function omdExtension(pi: PortablePiApi): void {
           }
           if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
           if (advanced && pendingReferenceWork.get(context.cwd) === pendingReference) pendingReferenceWork.delete(context.cwd);
+        }
+        if (browserEvidence) {
+          const { writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
+          writeBrowserInterpretation(browserEvidence, consentHomes.get(context.cwd) ?? context.browserConsentHome);
+          observedAnswers.delete(context.cwd); pendingQuestions.delete(context.cwd); shownQuestions.delete(context.cwd);
         }
         if (params.args[0] === 'browser' && ['setup', 'login'].includes(params.args[1] ?? '')) {
           browserConsentGranted.delete(context.cwd); pendingQuestions.delete(context.cwd);
