@@ -4,6 +4,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { canonicalJson, sha256 } from './board-artifacts.ts';
 import { inspectDesignReferenceAdmission } from './design-admission.ts';
 import { publicDiscoveryUrl } from './discovery-record.ts';
+import { readDomainObservation } from './domain-observation.ts';
 import { currentReferenceEvidenceAfter, readCurrentReferenceDiscoveryEvidence, type DiscoveryAttempt, type LaneEvidence } from './discovery-evidence.ts';
 import { readReferenceDiscoveryExclusions, type ReferenceDiscoveryExclusionRecord } from './discovery-exclusion.ts';
 import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
@@ -24,6 +25,7 @@ export type ReferenceDiscoveryAction = Readonly<{
   input?: SearchInput;
   url?: string;
   entry?: 'free-gallery' | 'public-directory';
+  selector?: string;
 }>;
 export type ReferenceDiscoveryWork = Readonly<{
   schema: 'reference-discovery-work-v1';
@@ -64,8 +66,7 @@ function domainSearchResults(search: SearchExecution, allowUnmatched: boolean): 
     return host !== search.provider && !host.endsWith(`.${search.provider}`)
       && !/^(?:search\.daum\.net|logins\.daum\.net|www\.google\.com|www\.bing\.com|duckduckgo\.com|map\.kakao\.com)$/u.test(host);
   }).sort((left, right) => {
-    const score = (url: string) => Number(new URL(url).hostname.endsWith('.kr')) * 2
-      + Number(/[가-힣]/u.test(labels.get(url) ?? ''));
+    const score = (url: string) => Number(/[가-힣]/u.test(labels.get(url) ?? ''));
     return score(right) - score(left);
   });
 }
@@ -122,6 +123,10 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   const inspectedDescendant = inspectedVisits.find(item => descendants.has(item.observation.url));
   const inspected = inspectedDescendant ?? inspectedVisits[0];
   const freshDescendant = descendantTargets.find(url => targets.includes(url) && !visited.has(url) && !failedUrls.has(url));
+  if (lane === 'design' && inspected?.observation.imageCandidates?.length && designDiscoveryProvider(inspected.observation.url) !== null)
+    return { kind: 'retain-reference', lane, args: [], url: inspected.observation.url,
+      selector: inspected.observation.imageCandidates[0]!.selector,
+      reason: 'Inspect the signed gallery image candidates and choose one useful UI image before following an original; the suggestion is not an automatic visual choice.' };
   if (freshDescendant !== undefined && inspectedDescendant === undefined) {
     return nativeAction('follow-link', lane, 'Inspect the original observed from a captured reference item before retaining its wrapper.',
       { url: freshDescendant });
@@ -130,8 +135,9 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   if (freshTarget !== undefined && (inspected === undefined || evidence.visits.length < 2)) {
     return nativeAction('follow-link', lane, 'Inspect an observed concrete source before retaining it.', { url: freshTarget });
   }
-  if (inspected !== undefined) return { kind: 'retain-reference', lane, args: [], url: inspected.observation.url,
-    reason: 'Review the captured source and retain a useful scoped UI or task state with omd ref add. If unusable, run omd ref exclude <observed-url> --lane <lane> --reason <specific-quality-judgment>; navigation alone is not a reference.' };
+  if (inspected !== undefined && lane === 'design') return { kind: 'retain-reference', lane, args: [], url: inspected.observation.url,
+    ...(inspected.observation.imageCandidates?.[0] ? { selector: inspected.observation.imageCandidates[0].selector } : {}),
+    reason: 'Inspect the image candidates and choose one exact CSS selector based on the actual UI; the suggested selector is not an automatic visual judgment. If unsuitable, exclude the inspected item.' };
   const inputs = lane === 'domain' ? plan.marketReferencePolicy.domainSearchInputs.length > 0
     ? plan.marketReferencePolicy.domainSearchInputs
     : ((plan.lanes.find(item => item.id === 'domain-reference')?.querySeeds.length ?? 0) > 0
@@ -175,11 +181,15 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
     } catch (error) { if (error instanceof Error) return false; throw error; }
   });
   const korean = plan.marketReferencePolicy.marketRegion === 'KR';
-  const admittedDomain = refs.filter(ref => ref.researchLane === 'domain'
-    && (!korean || ref.visibleKoreanText === true));
+  const admittedDomain = [...domain.visits, ...domain.entries].filter(item => {
+    try {
+      const observation = readDomainObservation(root, { url: item.observation.url, capture: item.receipt });
+      return !korean || observation.language === 'korean';
+    } catch { return false; }
+  });
   const admittedDesign = refs.filter(ref => ref.researchLane === 'design'
     && inspectDesignReferenceAdmission(root, ref, { references: refs }).eligible);
-  const domainFamilies = new Set(admittedDomain.map(ref => referenceServiceFamily(ref.source)));
+  const domainFamilies = new Set(admittedDomain.map(item => referenceServiceFamily(item.observation.finalUrl)));
   const designFamilies = new Set(admittedDesign.map(ref => referenceServiceFamily(ref.source)));
   const domainSearch = pendingMarketSearch('domain', plan, domain);
   const designSearch = pendingMarketSearch('design', plan, design);
@@ -217,7 +227,7 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
   const attempts = [...domain.failures, ...design.failures];
   const next = status === 'ready' ? 'omd ref board --input <candidate-assemblies.json>'
     : action.args.length ? `omd ${action.args.join(' ')}`
-      : `Inspect the captured DOM for a real selector, then omd ref add ${action.url ?? '<observed-source>'} --as <component-name> --lane ${action.lane ?? 'design'} --selector <observed-ui-selector> --shot OR omd ref exclude ${action.url ?? '<observed-source>'} --lane ${action.lane ?? 'design'} --reason <specific-quality-judgment>`;
+      : `Inspect the captured DOM${action.selector ? ` and confirm image candidate ${JSON.stringify(action.selector)}` : ' for a real selector'}, then omd ref add ${action.url ?? '<observed-source>'} --as <component-name> --lane design --selector ${action.selector ? JSON.stringify(action.selector) : '<observed-ui-selector>'} --shot OR omd ref exclude ${action.url ?? '<observed-source>'} --lane design --reason <specific-quality-judgment>`;
   const instruction = status === 'ready' ? 'Read omd schema reference-board once, author the board from useful retained evidence, then publish it with the named CLI publisher.'
     : action.reason;
   return { schema: 'reference-discovery-work-v1', status, action, next, instruction,
@@ -226,6 +236,7 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
     workSha256: sha256(canonicalJson({ sourceContractSha256: route.sourceContractSha256, status, action,
       evidence: [...domain.digests, ...design.digests],
       exclusions: exclusions.map(item => item.receipt.sha256),
-      retained: [...admittedDomain, ...admittedDesign].map(ref => [ref.researchLane, ref.source, ref.component]) })),
+      retained: [...admittedDomain.map(item => ['domain', item.observation.finalUrl, item.sha256]),
+        ...admittedDesign.map(ref => ['design', ref.source, ref.component])] })),
     progress };
 }

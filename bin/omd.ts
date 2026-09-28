@@ -1060,8 +1060,13 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const absShot = opts.noShot
     ? undefined
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
-  const { raw, shotBytes, shotError, capturePreparation, acquisition, visibleText, energyCurve } = await withBrowser(async browser => {
+  const { withAcquisitionDeadline, REF_ADD_BUDGET_MS } = await import('../core/ref/acquisition-deadline.ts');
+  const { raw, shotBytes, shotError, capturePreparation, acquisition, visibleText, energyCurve } = await withAcquisitionDeadline(
+    { budgetMs: REF_ADD_BUDGET_MS, phase: 'ref add' }, scope => withBrowser(async browser => {
+    scope.own(browser);
+    scope.assertLive();
     const captured = await capturePageForRef(browser, target, captureViewport, {
+      deadline: scope,
       selector: opts.selector ?? null,
       requireImageElement: galleryImage,
       validateFinalUrl: (url, visibleText) => validateFinalUrl(0, url, visibleText),
@@ -1071,8 +1076,9 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     });
     const energyCurve = opts.noEnergy || galleryImage || captured.acquisition.noticeDismissals?.length
       ? null : await captureEnergy(target, { viewport: captureViewport, browser });
+    scope.assertLive();
     return { ...captured, energyCurve };
-  });
+  }));
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
 
@@ -2491,6 +2497,8 @@ async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never>
   const research = mode === 'set'
     ? parseReferenceResearch(inputJson(opts.input!, command))
     : readPublishedReferenceResearch(process.cwd());
+  if (mode === 'set' && research.schema !== 'reference-research-v8')
+    throw new Error('REFERENCE_RESEARCH_UPGRADE_REQUIRED: publish functional domain observations and feature evidence as reference-research-v8');
   const validation = {
     expectedSourceContractSha256: route.sourceContractSha256,
     benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
@@ -2585,7 +2593,15 @@ async function cmdRefSearch(opts: Opts): Promise<never> {
   const { withBrowser } = await import('../core/render/index.ts');
   const input = parseSearchInput(inputJson(opts.input, command));
   const writer = projectWriterFromActivation(opts, command);
-  const receipt = await withBrowser(browser => executeReferenceSearch(browser, input, writer));
+  const { withAcquisitionDeadline, SEARCH_BUDGET_MS, AcquisitionTimeoutError } = await import('../core/ref/acquisition-deadline.ts');
+  const { publishSearchLaunchTimeout } = await import('../core/ref/search-launch-timeout.ts');
+  let receipt;
+  try { receipt = await withAcquisitionDeadline({ budgetMs: SEARCH_BUDGET_MS, phase: 'ref search' },
+    scope => withBrowser(browser => { scope.own(browser); return executeReferenceSearch(browser, input, writer); })); }
+  catch (error) {
+    if (!(error instanceof AcquisitionTimeoutError)) throw error;
+    receipt = publishSearchLaunchTimeout(input, writer);
+  }
   const execution = readSearchExecution(process.cwd(), receipt, input.lane);
   process.stdout.write(`${JSON.stringify({ receipt, execution }, null, opts.json ? undefined : 2)}\n`);
   // A failed attempt is durable evidence of a gap, never an automatically successful search.
@@ -2601,10 +2617,29 @@ async function cmdRefNavigate(opts: Opts): Promise<never> {
   if (Object.hasOwn(opts, 'entry') && (typeof opts.entry !== 'string' || !['public-directory', 'free-gallery'].includes(opts.entry))) {
     throw new Error('REFERENCE_DISCOVERY_ENTRY_KIND: --entry requires public-directory or free-gallery');
   }
-  const { captureReferenceNavigation } = await import('../core/ref/navigation-capture.ts');
+  const { captureReferenceNavigation, publishFailedAttempt } = await import('../core/ref/navigation-capture.ts');
+  const { withAcquisitionDeadline, NAVIGATION_BUDGET_MS, AcquisitionTimeoutError } = await import('../core/ref/acquisition-deadline.ts');
   const { withBrowser } = await import('../core/render/index.ts');
   const writer = projectWriterFromActivation(opts, 'omd ref navigate');
-  const receipt = await withBrowser(browser => captureReferenceNavigation(browser, source, opts.lane, writer, opts.entry));
+  let receipt;
+  try { receipt = await withAcquisitionDeadline({ budgetMs: NAVIGATION_BUDGET_MS, phase: 'ref navigate' },
+    scope => withBrowser(browser => { scope.own(browser); return captureReferenceNavigation(browser, source, opts.lane, writer, opts.entry, scope); })); }
+  catch (error) {
+    if (error instanceof AcquisitionTimeoutError) {
+      const { discoveryLane, directDiscoveryEntry, publicDiscoveryUrl } = await import('../core/ref/discovery-record.ts');
+      const lane = discoveryLane(opts.lane);
+      const attempt = publishFailedAttempt(writer, publicDiscoveryUrl(source), lane,
+        opts.entry === undefined ? undefined : directDiscoveryEntry(opts.entry, lane), null, error);
+      if (opts.json) { process.stdout.write(`${JSON.stringify({ attempt, error: error.message })}\n`); process.exit(1); }
+      throw error;
+    }
+    const { ReferenceNavigationError } = await import('../core/ref/navigation-capture.ts');
+    if (opts.json && error instanceof ReferenceNavigationError && error.attempt) {
+      process.stdout.write(`${JSON.stringify({ attempt: error.attempt, error: error.message })}\n`);
+      process.exit(1);
+    }
+    throw error;
+  }
   console.log(JSON.stringify(receipt));
   process.exit(0);
 }
@@ -2619,7 +2654,9 @@ async function cmdRefDiscoveryBatch(opts: Opts): Promise<never> {
     requireNovelRecoveryBatch(process.cwd(), items);
   }
   const writer = projectWriterFromActivation(opts, 'omd ref discover-batch');
-  const result = await withBrowser(browser => runDiscoveryBatch(browser, process.cwd(), items, writer));
+  const { withAcquisitionDeadline, BATCH_BUDGET_MS } = await import('../core/ref/acquisition-deadline.ts');
+  const result = await withAcquisitionDeadline({ budgetMs: BATCH_BUDGET_MS, phase: 'ref discover-batch' },
+    scope => withBrowser(browser => { scope.own(browser); return runDiscoveryBatch(browser, process.cwd(), items, writer, scope); }));
   process.stdout.write(`${JSON.stringify({ ok: result.outcomes.every(outcome => outcome.ok), ...result }, null, opts.json ? undefined : 2)}\n`);
   process.exit(result.outcomes.every(outcome => outcome.ok) ? 0 : 1);
 }

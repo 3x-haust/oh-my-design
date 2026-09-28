@@ -33,6 +33,7 @@ function host(cwd: string, afterExec?: () => void) {
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {},
     registerTool: value => { tool = value; },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args, options) {
       const index = args.indexOf('--input');
       const path = args[index + 1];

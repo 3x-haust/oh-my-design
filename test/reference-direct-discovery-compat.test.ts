@@ -1,20 +1,16 @@
 import assert from 'node:assert/strict';
-import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { discoveryDigest, readCurrentDirectDiscoveryEntry, readDirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
-import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
-import { withBrowser } from '../core/render/index.ts';
-import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
-import { discoveryBrowser, discoveryFixture, directoryHtml, DOMAIN_ITEM, PUBLIC_DIRECTORY } from './helpers/discovery-capture.ts';
+import { discoveryFixture, DOMAIN_ITEM, PUBLIC_DIRECTORY } from './helpers/discovery-capture.ts';
+import { directRootAt } from './helpers/market-reference.ts';
 
 async function currentCapture(t: { after(fn: () => void): void }) {
   const root = discoveryFixture(t);
-  const receipt = await withBrowser(async browser => captureReferenceNavigation(
-    discoveryBrowser(browser, { url: PUBLIC_DIRECTORY, html: directoryHtml(DOMAIN_ITEM) }).browser,
-    PUBLIC_DIRECTORY, 'domain', createTestProjectWriteAdapter(root), 'public-directory'));
+  const { reason: _reason, ...receipt } = directRootAt(root, 'domain', PUBLIC_DIRECTORY, [DOMAIN_ITEM]);
   return { root, receipt };
 }
 
@@ -22,6 +18,7 @@ function storeRecord(root: string, receipt: Awaited<ReturnType<typeof currentCap
   const bytes = `${JSON.stringify(record, null, 2)}\n`;
   const sha256 = discoveryDigest(bytes);
   const capture = { path: `.omd/discovery/domain/entries/${sha256}.json`, sha256 };
+  mkdirSync(join(root, '.omd/discovery/domain/entries'), { recursive: true });
   writeFileSync(join(root, capture.path), bytes);
   return { ...receipt, capture };
 }

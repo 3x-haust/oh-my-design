@@ -28,6 +28,7 @@ function harness(cwd: string) {
   omdExtension({
     on: (name, hook) => { hooks.set(name, hook); }, registerCommand() {}, registerTool(t) { tool = t; },
     sendMessage: (...args) => { sent.push(args); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args, options) {
       calls.push([...args.slice(1)]);
       const result = run(options.cwd, args.slice(1));
@@ -154,11 +155,11 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   assert.equal(plan.lanes.length, 2);
   // Native captured fixtures exercise the research write path, not source writes or invented
   // public-service evidence. Full research/application validation must still refuse these alone.
-  await h.command(['ref', 'add', join(fixtureRoot, 'slop.html'), '--as', 'fixture-domain', '--lane', 'domain', '--no-energy']);
-  await assert.rejects(h.command(['ref', 'add', join(fixtureRoot, 'slop.html'), '--as', 'renamed-design', '--lane', 'design', '--no-energy']), /REFERENCE_LANE_SOURCE_OVERLAP/);
+  await assert.rejects(h.command(['ref', 'add', join(fixtureRoot, 'slop.html'), '--as', 'fixture-domain', '--lane', 'domain', '--no-energy']), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
+  assert.equal(existsSync(join(cwd, '.omd/refs/domain')), false);
   await assert.rejects(h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--no-energy']), /DESIGN_DISCOVERY_REQUIRED/);
   await h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--from-user', '--no-energy']);
-  for (const lane of ['domain', 'design']) assert.ok(readdirSync(join(cwd, '.omd/refs', lane)).some(path => path.endsWith('.png')));
+  assert.ok(readdirSync(join(cwd, '.omd/refs/design')).some(path => path.endsWith('.png')));
   await h.author('.omd/copy-deck.md', '# Not a copy deck');
   assert.match(await h.enter('type-proof'), /upstream copy/);
   await h.author('.omd/copy-deck.md', deck);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { parseReferenceResearch, validateReferenceResearch, REFERENCE_RESEARCH_SCHEMA } from '../core/ref/reference-research.ts';
+import { parseReferenceResearch, validateReferenceResearch } from '../core/ref/reference-research.ts';
 import { validateMarketReferenceCoverage } from '../core/ref/market-reference-coverage.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
@@ -24,7 +24,7 @@ test('market search and direct provenance refuse malformed scope, attempts, root
       localSearchSource('visual', fixture.source.evidence.sha256, 'product', 'e'.repeat(64)),
       localSearchSource(secondVisual.sourceId, secondVisual.source.evidence.sha256, 'product', 'e'.repeat(64)),
     ], globalFallback: null } };
-  const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: coverage };
+  const input = { ...fixture.research, schema: 'reference-research-v7', marketCoverage: coverage };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options), /MARKET_DOMAIN_SEARCH_REQUIRED/);
   const emptyGap = { ...coverage, domain: { localSources: coverage.domain.localSources.slice(0, 2),
     globalFallback: fallbackCoverage(['domain-3'], 'e'.repeat(64), fallbackGap([])) } };

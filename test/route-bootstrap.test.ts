@@ -35,6 +35,7 @@ function harness(cwd: string, exec?: PortablePiApi['exec']) {
     on: (name, hook) => { hooks.set(name, hook); },
     registerTool: value => { tool = value; }, registerCommand() {},
     sendMessage: (...args) => { sent.push(args); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(command, args, options) {
       calls.push(args.slice(1));
       if (exec) return exec(command, args, options);

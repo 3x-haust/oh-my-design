@@ -29,7 +29,7 @@ function assertOnlyFailedDirectAttempt(root: string): void {
 }
 
 for (const route of ['direct', 'search'] as const) for (const sameUrl of [false, true]) for (const finalStatus of [200, 403]) {
-  test(`${route} binds final HTTP ${finalStatus} after ${sameUrl ? 'same' : 'different'}-URL document replacement`, async t => {
+  test(`${route === 'direct' ? 'text-only domain observation does not invoke screenshot-triggered replacement' : route + ' binds final HTTP ' + finalStatus} (${sameUrl ? 'same' : 'different'} URL)`, async t => {
     const root = discoveryFixture(t);
     await withBrowser(async browser => {
       const initialUrl = route === 'search' ? searchUrl : directoryUrl;
@@ -45,15 +45,10 @@ for (const route of ['direct', 'search'] as const) for (const sameUrl of [false,
       switch (route) {
         case 'direct': {
           const capture = captureReferenceNavigation(scenario.browser, initialUrl, 'domain', writer, 'public-directory');
-          if (finalStatus === 403) {
-            await assert.rejects(capture, /successful native HTTP/);
-            assertOnlyFailedDirectAttempt(root);
-          } else {
-            const receipt = await capture;
-            const native = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
-            assert.equal(native.acquisition.httpStatus, 200);
-            assert.equal(native.acquisition.finalUrl, finalUrl);
-          }
+          const receipt = await capture;
+          const native = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
+          assert.equal(native.acquisition.httpStatus, 200);
+          assert.equal(native.acquisition.finalUrl, initialUrl);
           break;
         }
         case 'search': {
@@ -66,8 +61,8 @@ for (const route of ['direct', 'search'] as const) for (const sameUrl of [false,
         }
         default: unreachable(route);
       }
-      assert.equal(actualStatus, finalStatus);
-      assert.equal(scenario.captures.length, 2);
+      assert.equal(actualStatus, route === 'direct' ? undefined : finalStatus);
+      assert.equal(scenario.captures.length, route === 'direct' ? 0 : 2);
       assert.equal(scenario.closed(), 1);
       assert.equal(scenario.detached(), 1);
     });
@@ -140,24 +135,25 @@ for (const route of ['direct', 'search'] as const) {
           }
           default: unreachable(route);
         }
-        assert.equal(observedNoiseStatus, 403);
-        assert.equal(scenario.captures.length, 1);
+        assert.equal(observedNoiseStatus, route === 'direct' ? undefined : 403);
+        assert.equal(scenario.captures.length, route === 'direct' ? 0 : 1);
         assert.equal(scenario.detached(), 1);
       });
     });
   }
 
-  test(`${route} stops after two changing document captures without retaining a mismatched image`, async t => {
+  test(`${route === 'direct' ? 'domain records text without screenshot-triggered reloads' : 'search stops after two changing document captures'}`, async t => {
     const root = discoveryFixture(t);
     await withBrowser(async browser => {
       const url = route === 'search' ? searchUrl : directoryUrl;
       const scenario = discoveryBrowser(browser, { url, html: directoryHtml(destination), afterCapture: async page => { await page.reload({ waitUntil: 'domcontentloaded' }); } });
       const writer = createTestProjectWriteAdapter(root);
       switch (route) {
-        case 'direct':
-          await assert.rejects(captureReferenceNavigation(scenario.browser, url, 'domain', writer, 'public-directory'), /both bounded captures/);
-          assertOnlyFailedDirectAttempt(root);
+        case 'direct': {
+          const receipt = await captureReferenceNavigation(scenario.browser, url, 'domain', writer, 'public-directory');
+          assert.equal(JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8')).acquisition.httpStatus, 200);
           break;
+        }
         case 'search': {
           const receipt = await executeReferenceSearch(scenario.browser, { lane: 'domain', query: 'task', url, queryParam: 'q' }, writer);
           const record = readSearchExecution(root, receipt, 'domain');
@@ -169,7 +165,7 @@ for (const route of ['direct', 'search'] as const) {
         }
         default: unreachable(route);
       }
-      assert.equal(scenario.captures.length, 2);
+      assert.equal(scenario.captures.length, route === 'direct' ? 0 : 2);
       assert.equal(scenario.detached(), 1);
       assert.equal(scenario.closed(), 1);
     });
@@ -200,7 +196,7 @@ test('Given a closed reference page When its document observer is disposed Then 
   });
 });
 
-test('history-only URL changes retain their actual main-document HTTP binding', async t => {
+test('domain observation does not trigger a screenshot-only history change', async t => {
   const root = discoveryFixture(t);
   await withBrowser(async browser => {
     const scenario = discoveryBrowser(browser, { url: directoryUrl, html: directoryHtml(destination), afterCapture: async (page, count) => {
@@ -209,8 +205,8 @@ test('history-only URL changes retain their actual main-document HTTP binding', 
     const receipt = await captureReferenceNavigation(scenario.browser, directoryUrl, 'domain', createTestProjectWriteAdapter(root), 'public-directory');
     const native = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
     assert.equal(native.acquisition.httpStatus, 200);
-    assert.equal(native.acquisition.finalUrl, 'https://directory.example/history');
-    assert.equal(scenario.captures.length, 2);
+    assert.equal(native.acquisition.finalUrl, directoryUrl);
+    assert.equal(scenario.captures.length, 0);
     assert.equal(scenario.detached(), 1);
   });
 });

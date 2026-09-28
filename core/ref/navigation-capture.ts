@@ -5,8 +5,14 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { canonicalJson } from './board-artifacts.ts';
-import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
-import { captureDiscoveryObservation } from './reference-capture-observation.ts';
+import { designDiscoveryDirectoryProvider, designDiscoveryItemIdentity } from './design-discovery-sources.ts';
+import { captureDiscoveryObservation, captureDomainObservation } from './reference-capture-observation.ts';
+import { collectGalleryImageCandidates } from './gallery-image-candidates.ts';
+import { DOMAIN_OBSERVATION_LIMITATIONS, DOMAIN_OBSERVATION_SCHEMA,
+  type DomainObservationReceipt, type DomainObservationRecord } from './domain-observation.ts';
+import { classifyKoreanServiceText } from './market-reference.ts';
+import { withAcquisitionDeadline, NAVIGATION_BUDGET_MS, AcquisitionTimeoutError,
+  type AcquisitionDeadlineScope } from './acquisition-deadline.ts';
 import { recoverDirectDiscoveryScroll, type DiscoveryScroll } from './discovery-entry-scroll.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
@@ -41,7 +47,7 @@ function attemptReason(error: unknown): AttemptReason {
   return 'capture-failure';
 }
 
-function publishFailedAttempt(writer: ProjectWriteAdapter, source: string, researchLane: DiscoveryLane,
+export function publishFailedAttempt(writer: ProjectWriteAdapter, source: string, researchLane: DiscoveryLane,
   entry: DirectDiscoveryEntry | undefined, httpStatus: number | null, error: unknown): ReferenceDiscoveryAttemptReceipt {
   const unsigned = {
     schema: ATTEMPT_SCHEMA, source, researchLane, method: entry === undefined ? 'navigation' : 'direct-public',
@@ -94,9 +100,11 @@ export function readReferenceDiscoveryAttempt(root: string, receipt: ReferenceDi
 export class ReferenceNavigationError extends ReferenceDiscoveryError {
   override readonly name = 'ReferenceNavigationError';
   readonly attempt: ReferenceDiscoveryAttemptReceipt | undefined;
-  constructor(message: string, attempt?: ReferenceDiscoveryAttemptReceipt) {
+  readonly httpStatus: number | null;
+  constructor(message: string, attempt?: ReferenceDiscoveryAttemptReceipt, httpStatus: number | null = null) {
     super(message);
     this.attempt = attempt;
+    this.httpStatus = httpStatus;
   }
 }
 async function loginOccludes(page: Page): Promise<boolean> {
@@ -116,20 +124,47 @@ async function closeContext(context: BrowserContext): Promise<void> {
     })]);
   } finally { clearTimeout(timer); }
 }
-export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter): Promise<DiscoveryNavigationReceipt>;
-export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter, entry: DirectDiscoveryEntry): Promise<DirectDiscoveryReceipt>;
-export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter, entry: unknown): Promise<DiscoveryNavigationReceipt | DirectDiscoveryReceipt>;
-export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter, requestedEntry?: unknown): Promise<DiscoveryNavigationReceipt | DirectDiscoveryReceipt> {
+export type ReferenceNavigationReceipt = DiscoveryNavigationReceipt | DirectDiscoveryReceipt | DomainObservationReceipt;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: 'domain', writer: ProjectWriteAdapter, entry?: 'public-directory'): Promise<DomainObservationReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: 'design', writer: ProjectWriteAdapter): Promise<DiscoveryNavigationReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: 'design', writer: ProjectWriteAdapter, entry: 'free-gallery'): Promise<DirectDiscoveryReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: 'domain', writer: ProjectWriteAdapter, entry: 'public-directory'): Promise<DomainObservationReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: DiscoveryLane, writer: ProjectWriteAdapter, entry?: DirectDiscoveryEntry): Promise<ReferenceNavigationReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter, entry?: unknown): Promise<ReferenceNavigationReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter,
+  entry: unknown, parentScope?: AcquisitionDeadlineScope): Promise<ReferenceNavigationReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter,
+  requestedEntry?: unknown, parentScope?: AcquisitionDeadlineScope): Promise<ReferenceNavigationReceipt> {
+  const lane = discoveryLane(requestedLane);
+  const url = publicDiscoveryUrl(source);
+  const entry = requestedEntry === undefined ? undefined : directDiscoveryEntry(requestedEntry, lane);
+  if (entry === 'free-gallery' && designDiscoveryDirectoryProvider(url) === null)
+    throw new ReferenceNavigationError('free-gallery entry requires a supported public list URL');
+  try {
+    return await withAcquisitionDeadline({ budgetMs: NAVIGATION_BUDGET_MS, phase: 'ref navigate' },
+      scope => captureNavigationWithinDeadline(browser, url, lane, writer, entry, scope, parentScope));
+  } catch (error) {
+    if (parentScope?.signal.aborted) throw error;
+    const attempt = publishFailedAttempt(writer, url, lane, entry,
+      error instanceof ReferenceNavigationError ? error.httpStatus : null, error);
+    const message = error instanceof Error ? error.message.replace(/^REFERENCE_DISCOVERY: /, '') : 'native navigation failed';
+    throw new ReferenceNavigationError(message, attempt);
+  }
+}
+async function captureNavigationWithinDeadline(browser: Browser, source: string, requestedLane: unknown,
+  writer: ProjectWriteAdapter, requestedEntry: unknown, scope: AcquisitionDeadlineScope,
+  parentScope?: AcquisitionDeadlineScope): Promise<ReferenceNavigationReceipt> {
   const lane = discoveryLane(requestedLane);
   const url = publicDiscoveryUrl(source);
   const entry = requestedEntry === undefined ? undefined : directDiscoveryEntry(requestedEntry, lane);
   if (entry === 'free-gallery' && designDiscoveryDirectoryProvider(url) === null) throw new ReferenceNavigationError('free-gallery entry requires a supported public list URL');
-  const networkProxy = await createPublicNetworkProxy();
+  const networkProxy = scope.own(await createPublicNetworkProxy());
   let context: BrowserContext | undefined;
   let documents: DocumentObserver | undefined;
+  const pending: Array<{ path: string; bytes: string | Buffer }> = [];
   try {
-    context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
-      proxy: { server: networkProxy.server } });
+    context = scope.own(await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
+      proxy: { server: networkProxy.server } }));
     await disableUnproxiedRealtimeTransports(context);
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     context.setDefaultTimeout(10000);
@@ -140,12 +175,43 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     let finalUrl: string;
     let links: string[];
     let scroll: DiscoveryScroll | undefined;
+    let imageCandidates: Awaited<ReturnType<typeof collectGalleryImageCandidates>> = [];
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
       status = response?.status() ?? null;
       if (!response?.ok()) throw new ReferenceNavigationError('a successful native HTTP capture is required');
-      if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
       const observer = documents;
+      if (lane === 'domain') {
+        const captured = await captureDomainObservation(page, observer);
+        status = captured.httpStatus;
+        if (status < 200 || status >= 300) throw new ReferenceNavigationError('a successful native HTTP capture is required');
+        const capturedUrl = publicDiscoveryUrl(captured.url);
+        const capturedLinks = captured.links.filter(link => {
+          try { publicDiscoveryUrl(link); return true; }
+          catch (error) { if (error instanceof ReferenceDiscoveryError) return false; throw error; }
+        });
+        const blocked = searchChallengeReason(captured.body)
+          ?? detectBlockReason(await page.title(), captured.body.trim().length, status, capturedLinks.length > 0);
+        if (blocked) throw new ReferenceNavigationError(blocked);
+        if (entry !== undefined) validateDirectDiscoveryLinks(entry, { url, finalUrl: capturedUrl, links: capturedLinks });
+        const unsigned = { schema: DOMAIN_OBSERVATION_SCHEMA, source: url, researchLane: 'domain' as const,
+          method: entry === undefined ? 'navigation' as const : 'direct-public' as const,
+          entry: entry === undefined ? null : 'public-directory' as const, capturedAt: new Date().toISOString(),
+          acquisition: { requestedUrl: url, finalUrl: capturedUrl, httpStatus: status, links: capturedLinks },
+          observedText: captured.visibleText, taskText: captured.taskText, linkLabels: captured.results,
+          language: classifyKoreanServiceText(captured.visibleText), limitations: DOMAIN_OBSERVATION_LIMITATIONS } as const;
+        const record: DomainObservationRecord = { ...unsigned, signature: signNativeObservation(writer.projectRoot,
+          DOMAIN_OBSERVATION_SCHEMA, discoveryDigest(canonicalJson(unsigned))) };
+        const bytes = `${JSON.stringify(record, null, 2)}\n`;
+        const sha256 = discoveryDigest(bytes);
+        const capture = { path: `.omd/discovery/domain/observations/${sha256}.json`, sha256 };
+        scope.assertLive(); parentScope?.assertLive();
+        pending.push({ path: capture.path, bytes });
+        return { url, capture };
+      }
+      if (await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
+      const galleryCandidatesBefore = entry === undefined && designDiscoveryItemIdentity(page.url()) !== null
+        ? await collectGalleryImageCandidates(page) : [];
       const observe = async () => {
         const captured = await captureDiscoveryObservation(page, observer);
         status = captured.httpStatus;
@@ -173,10 +239,15 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
       status = observation.httpStatus;
       finalUrl = observation.url;
       links = observation.links;
+      const galleryCandidatesAfter = entry === undefined && designDiscoveryItemIdentity(page.url()) !== null
+        ? await collectGalleryImageCandidates(page) : [];
+      if (JSON.stringify(galleryCandidatesBefore) !== JSON.stringify(galleryCandidatesAfter))
+        throw new ReferenceNavigationError('gallery image candidates changed during capture');
+      imageCandidates = galleryCandidatesAfter;
     } catch (error) {
-      const attempt = publishFailedAttempt(writer, url, lane, entry, status, error);
+      if (error instanceof AcquisitionTimeoutError) throw error;
       const message = error instanceof Error ? error.message.replace(/^REFERENCE_DISCOVERY: /, '') : 'native navigation failed';
-      throw new ReferenceNavigationError(message, attempt);
+      throw new ReferenceNavigationError(message, undefined, status);
     }
     const directory = `.omd/discovery/${lane}/${entry === undefined ? 'navigation' : 'entries'}`;
     const imageSha256 = discoveryDigest(observation.bytes);
@@ -187,7 +258,7 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
       limitations: scroll === undefined ? DISCOVERY_LIMITATIONS : DISCOVERY_SCROLL_LIMITATIONS,
     } as const;
     const unsigned = entry === undefined
-      ? { schema: 'reference-navigation-capture-v4' as const, ...common }
+      ? { schema: 'reference-navigation-capture-v5' as const, ...common, imageCandidates }
       : { ...(scroll === undefined ? { schema: 'reference-discovery-entry-v4' as const }
         : { schema: 'reference-discovery-entry-v5' as const, scroll }), method: 'direct-public' as const, entry,
         ...common, observedText: observation.visibleText, taskText: observation.taskText,
@@ -197,8 +268,8 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     const bytes = `${JSON.stringify(record, null, 2)}\n`;
     const sha256 = discoveryDigest(bytes);
     const capture = { path: `${directory}/${sha256}.json`, sha256 };
-    writer.writeContentAddressed(imagePath, observation.bytes);
-    writer.writeContentAddressed(capture.path, bytes);
+    scope.assertLive(); parentScope?.assertLive();
+    pending.push({ path: imagePath, bytes: observation.bytes }, { path: capture.path, bytes });
     const receipt = { url, evidence: { path: imagePath, sha256: imageSha256 }, capture };
     return entry === undefined ? receipt : { method: 'direct-public', entry, ...receipt };
   } finally {
@@ -207,5 +278,7 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
       try { if (context !== undefined) await closeContext(context); }
       finally { await networkProxy.close(); }
     }
+    scope.assertLive(); parentScope?.assertLive();
+    for (const item of pending) writer.writeContentAddressed(item.path, item.bytes);
   }
 }

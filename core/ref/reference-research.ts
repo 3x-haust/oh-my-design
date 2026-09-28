@@ -17,14 +17,15 @@ export { validateReferenceResearch } from './reference-research-validation.ts';
 
 export function referenceResearchArtifacts(research: ReferenceResearch) {
   const envelope = { sourceContractSha256: research.sourceContractSha256 };
-  const market = research.schema === 'reference-research-v7'
+  const market = (research.schema === 'reference-research-v7' || research.schema === 'reference-research-v8')
     ? { marketRegion: research.marketCoverage?.marketRegion ?? null }
     : {};
   return {
-    [DOMAIN_REFERENCES_PATH]: { schema: research.schema === 'reference-research-v7' ? 'domain-references-v2' : 'domain-references-v1', ...envelope, ...market,
-      ...(research.schema === 'reference-research-v7' ? { marketCoverage: research.marketCoverage?.domain ?? null } : {}), ...research.domainReference },
-    [DESIGN_REFERENCES_PATH]: { schema: research.schema === 'reference-research-v7' ? 'design-references-v2' : 'design-references-v1', ...envelope, ...market,
-      ...(research.schema === 'reference-research-v7' ? { marketCoverage: research.marketCoverage?.design ?? null } : {}), ...research.designReference },
+    [DOMAIN_REFERENCES_PATH]: { schema: research.schema === 'reference-research-v8' ? 'domain-references-v3'
+      : research.schema === 'reference-research-v7' ? 'domain-references-v2' : 'domain-references-v1', ...envelope, ...market,
+      ...(['reference-research-v7', 'reference-research-v8'].includes(research.schema) ? { marketCoverage: research.marketCoverage?.domain ?? null } : {}), ...research.domainReference },
+    [DESIGN_REFERENCES_PATH]: { schema: ['reference-research-v7', 'reference-research-v8'].includes(research.schema) ? 'design-references-v2' : 'design-references-v1', ...envelope, ...market,
+      ...(['reference-research-v7', 'reference-research-v8'].includes(research.schema) ? { marketCoverage: research.marketCoverage?.design ?? null } : {}), ...research.designReference },
     [REFERENCE_RESEARCH_PATH]: research,
   };
 }

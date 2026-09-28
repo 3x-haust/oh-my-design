@@ -8,9 +8,10 @@ import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
 import { captureReferenceNavigation, readReferenceDiscoveryAttempt, ReferenceNavigationError } from '../core/ref/navigation-capture.ts';
 import { validateDiscoveryCoverage } from '../core/ref/discovery-coverage.ts';
-import { readCurrentDirectDiscoveryEntry, readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
+import { readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
   type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
+import { readDomainObservation } from '../core/ref/domain-observation.ts';
 import { assertPublicNetworkUrl, createPublicNetworkProxy, publicIpAddress } from '../core/ref/public-network.ts';
 import { loadRefs } from '../core/ref/store.ts';
 import { withBrowser } from '../core/render/index.ts';
@@ -29,9 +30,9 @@ test('new navigation binds only rendered links to its captured viewport', async 
     const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
     // Then hidden DOM anchors cannot become discovery edges.
     assert.deepEqual(record.acquisition.links, [DOMAIN_ITEM]);
-    assert.equal(record.schema, 'reference-navigation-capture-v4');
-    assert.deepEqual(readStrictDiscoveryNavigation(root, receipt), { url: PUBLIC_DIRECTORY, finalUrl: PUBLIC_DIRECTORY, links: [DOMAIN_ITEM] });
-    assert.throws(() => readDirectDiscoveryEntry(root, { method: 'direct-public', entry: 'public-directory', ...receipt }), /purpose path/);
+    assert.equal(record.schema, 'reference-domain-observation-v1');
+    assert.deepEqual(readDomainObservation(root, receipt).links, [DOMAIN_ITEM]);
+    assert.equal(existsSync(join(root, '.omd/discovery/domain/navigation')), false);
   });
 });
 
@@ -44,6 +45,8 @@ test('a validated CONNECT proxy loopback address is not mistaken for the public 
   assert.ok(result.receipt.capture.path.startsWith('.omd/discovery/design/entries/'));
 });
 
+const readCurrentDirectDiscoveryEntry = (root: string, receipt: { url: string; capture: { path: string; sha256: string } }) =>
+  readDomainObservation(root, { url: receipt.url, capture: receipt.capture });
 const entryLanes = { 'public-directory': 'domain', 'free-gallery': 'design' } as const;
 async function capture(t: { after(fn: () => void): void }, scenario: DiscoveryScenario, entry: DirectDiscoveryEntry = 'free-gallery') {
   const root = discoveryFixture(t);
@@ -60,14 +63,16 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     const target = entry === 'public-directory' ? DOMAIN_ITEM : GALLERY_ITEM;
     const value = await capture(t, { url, html: directoryHtml(target) }, entry);
     const record = JSON.parse(readFileSync(join(value.root, value.receipt.capture.path), 'utf8'));
-    assert.equal(record.schema, 'reference-discovery-entry-v4');
+    assert.equal(record.schema, entry === 'public-directory' ? 'reference-domain-observation-v1' : 'reference-discovery-entry-v4');
     assert.deepEqual(record.linkLabels, [{ url: target, text: 'Inspect entry 1' }]);
-    assert.equal(value.receipt.method, 'direct-public');
-    assert.equal(value.receipt.entry, entry);
-    assert.deepEqual(readDirectDiscoveryEntry(value.root, value.receipt), { url, finalUrl: url, links: [target] });
-    assert.match(readCurrentDirectDiscoveryEntry(value.root, value.receipt).observedText ?? '', /Public directory/);
-    assert.match(readCurrentDirectDiscoveryEntry(value.root, value.receipt).taskText ?? '', /Public directory/);
-    assert.deepEqual(readFileSync(join(value.root, value.receipt.evidence.path)), value.observed.captures[0]);
+    if (entry === 'public-directory') {
+      assert.deepEqual(readDomainObservation(value.root, { url, capture: value.receipt.capture }).links, [target]);
+      assert.equal(value.observed.captures.length, 0);
+    } else {
+      if (!('evidence' in value.receipt)) throw new Error('design entry requires image evidence');
+      assert.deepEqual(readDirectDiscoveryEntry(value.root, { ...value.receipt, method: 'direct-public', entry }), { url, finalUrl: url, links: [target] });
+      assert.deepEqual(readFileSync(join(value.root, value.receipt.evidence.path)), value.observed.captures[0]);
+    }
     assert.equal(value.observed.contextOptions.length, 1);
     const contextOptions = value.observed.contextOptions[0]!;
     assert.deepEqual({ ...contextOptions, proxy: undefined }, {

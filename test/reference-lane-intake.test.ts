@@ -33,9 +33,9 @@ test('selected discovery refuses omitted lane before service captures can silent
   assert.match(result.stderr, /REFERENCE_LANE_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   const valid = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'domain-flow', '--image', '--lane', 'domain']);
-  assert.equal(valid.status, 0, valid.stderr);
-  assert.equal(loadRefs(cwd).length, 0);
-  assert.equal(loadRefs(cwd, { includeDomain: true })[0]?.researchLane, 'domain');
+  assert.equal(valid.status, 1, valid.stderr);
+  assert.match(valid.stderr, /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 0);
 });
 
 test('selected discovery rejects a domain service explicitly relabelled design without gallery provenance', t => {
@@ -56,7 +56,7 @@ test('batch preflight rejects an incomplete lane manifest atomically before brow
   writeFileSync(path, JSON.stringify([{ source: 'https://example.com/', as: 'task', lane: 'domain' }, { source: 'https://example.org/', as: 'visual' }]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /REFERENCE_LANE_REQUIRED/);
+  assert.match(result.stderr, /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   assert.equal(JSON.parse(readFileSync(path, 'utf8'))[1].lane, undefined);
 });
@@ -75,7 +75,7 @@ test('direct batch API cannot bypass selected-route intake by omitting every lan
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
 
-test('same-manifest service overlap is refused before any batch acquisition', t => {
+test('a domain ref-add batch is refused before any browser acquisition', t => {
   const cwd = project(t);
   const path = join(cwd, '.omd/.cache/batch.json');
   writeFileSync(path, JSON.stringify([
@@ -84,19 +84,19 @@ test('same-manifest service overlap is refused before any batch acquisition', t 
   ]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /REFERENCE_LANE_SERVICE_OVERLAP/);
+  assert.match(result.stderr, /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
 
-test('independent local user-reference batch still captures into both selected lanes', t => {
+test('independent local user-reference batch still captures visual design evidence', t => {
   const cwd = project(t);
   const path = join(cwd, '.omd/.cache/batch.json');
   writeFileSync(path, JSON.stringify([
-    { source: fileURLToPath(new URL('fixtures/slop.html', import.meta.url)), as: 'task', lane: 'domain', energy: false, shot: true },
+    { source: fileURLToPath(new URL('fixtures/slop.html', import.meta.url)), as: 'task', lane: 'design', fromUser: true, energy: false, shot: true },
     { source: fileURLToPath(new URL('fixtures/considered.html', import.meta.url)), as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
   ]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(loadRefs(cwd, { includeDomain: true }).length, 2);
-  assert.equal(loadRefs(cwd).length, 1);
+  assert.equal(loadRefs(cwd).length, 2);
 });

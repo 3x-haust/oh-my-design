@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { crc32, deflateSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -495,14 +495,15 @@ test('a board cannot advance past research until separate current lanes and appl
   assert.ok(stageArtifactProblems(root, 'reference-board', invocation).length > 0);
 });
 
-test('Pi CLI publishes and checks split research without an external activation', async t => {
-  const { root, research } = fixture(t);
+test('Pi CLI refuses new legacy publication but checks a previously published research record', async t => {
+  const { root, research, writer } = fixture(t);
   const routeInput = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8'));
   writeFileSync(join(root, '.omd/route-input.json'), JSON.stringify(routeInput));
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
   let tool!: PortablePiTool;
   omdExtension({
     registerCommand() {}, registerTool(value) { tool = value; },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args, options) {
       const result = spawnSync(process.execPath, [...args], { cwd: options.cwd, encoding: 'utf8', env, timeout: 20000 });
       return { stdout: result.stdout ?? '', stderr: result.stderr ?? '', code: result.status ?? 1, killed: result.signal !== null };
@@ -514,9 +515,9 @@ test('Pi CLI publishes and checks split research without an external activation'
   research.sourceContractSha256 = route.sourceContractSha256;
   refreshSearchesAfterRoute(root, research);
   writeFileSync(join(root, '.omd/research-input.json'), JSON.stringify(research));
-  const result = JSON.parse((await run(['ref', 'research-set', '--input', '.omd/research-input.json', '--json'])).content[0]!.text);
-  assert.equal(result.domainPath, DOMAIN_REFERENCES_PATH);
-  assert.equal(result.designPath, DESIGN_REFERENCES_PATH);
+  await assert.rejects(() => run(['ref', 'research-set', '--input', '.omd/research-input.json', '--json']), /REFERENCE_RESEARCH_UPGRADE_REQUIRED/);
+  assert.equal(existsSync(join(root, DOMAIN_REFERENCES_PATH)), false);
+  publishReferenceResearch(root, research, { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false }, writer);
   assert.equal(JSON.parse((await run(['ref', 'research-check', '--json'])).content[0]!.text).domainSources, 1);
   const domainInventory = JSON.parse((await run(['ref', 'list', '--lane', 'domain', '--json'])).content[0]!.text);
   const designInventory = JSON.parse((await run(['ref', 'list', '--lane', 'design', '--json'])).content[0]!.text);

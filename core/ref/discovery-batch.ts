@@ -2,9 +2,10 @@ import type { Browser } from 'playwright';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { directDiscoveryEntry, discoveryLane, publicDiscoveryUrl, type DirectDiscoveryEntry, type DiscoveryLane,
   type DirectDiscoveryReceipt, type DiscoveryNavigationReceipt } from './discovery-record.ts';
-import { captureReferenceNavigation, ReferenceNavigationError, type ReferenceDiscoveryAttemptReceipt } from './navigation-capture.ts';
+import { captureReferenceNavigation, ReferenceNavigationError, type ReferenceDiscoveryAttemptReceipt, type ReferenceNavigationReceipt } from './navigation-capture.ts';
 import { executeReferenceSearch, parseSearchInput, readSearchExecution, searchObserved, type SearchExecution } from './search-execution.ts';
 
+import type { AcquisitionDeadlineScope } from './acquisition-deadline.ts';
 type SearchInput = ReturnType<typeof parseSearchInput>;
 export type DiscoveryBatchItem = Readonly<{ kind: 'search'; input: SearchInput }>
   | Readonly<{ kind: 'navigate'; source: string; lane: DiscoveryLane; entry?: DirectDiscoveryEntry }>;
@@ -12,7 +13,7 @@ type SearchReceipt = Awaited<ReturnType<typeof executeReferenceSearch>>;
 export type DiscoveryBatchOutcome = Readonly<{ kind: 'search'; lane: DiscoveryLane; source: string; ok: boolean;
   receipt?: SearchReceipt; status?: SearchExecution['status']; error?: string }>
   | Readonly<{ kind: 'navigate'; lane: DiscoveryLane; source: string; ok: boolean;
-    receipt?: DiscoveryNavigationReceipt | DirectDiscoveryReceipt; attempt?: ReferenceDiscoveryAttemptReceipt; error?: string }>;
+    receipt?: ReferenceNavigationReceipt; attempt?: ReferenceDiscoveryAttemptReceipt; error?: string }>;
 export type DiscoveryBatchResult = Readonly<{ concurrency: number; outcomes: readonly DiscoveryBatchOutcome[] }>;
 
 function record(value: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
@@ -52,12 +53,14 @@ export function parseDiscoveryBatchInput(value: unknown): readonly DiscoveryBatc
 
 export async function runDiscoveryBatch(
   browser: Browser, root: string, items: readonly DiscoveryBatchItem[], writer: ProjectWriteAdapter,
+  parentScope?: AcquisitionDeadlineScope,
 ): Promise<DiscoveryBatchResult> {
   const concurrency = Math.min(4, items.length);
   const outcomes: DiscoveryBatchOutcome[] = new Array(items.length);
   let next = 0;
   const worker = async (): Promise<void> => {
     for (;;) {
+      if (parentScope?.signal.aborted) return;
       const index = next++;
       if (index >= items.length) return;
       const item = items[index]!;
@@ -74,8 +77,9 @@ export async function runDiscoveryBatch(
       } else {
         try {
           const receipt = item.entry === undefined
-            ? await captureReferenceNavigation(browser, item.source, item.lane, writer)
-            : await captureReferenceNavigation(browser, item.source, item.lane, writer, item.entry);
+            ? await captureReferenceNavigation(browser, item.source, item.lane, writer, undefined, parentScope)
+            : await captureReferenceNavigation(browser, item.source, item.lane, writer, item.entry, parentScope);
+          parentScope?.assertLive();
           outcomes[index] = { kind: 'navigate', source: item.source, lane: item.lane, ok: true, receipt };
         } catch (error) {
           outcomes[index] = { kind: 'navigate', source: item.source, lane: item.lane, ok: false,

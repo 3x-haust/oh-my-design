@@ -7,6 +7,7 @@ import { designDiscoveryItemIdentity, designDiscoveryProvider, referenceServiceH
 import { trustedReferenceImage } from './board-security.ts';
 import { loadRefs, refRecordPath } from './store.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
+import { observedDomainServiceUrls } from './observed-domain-services.ts';
 
 export type DesignReferenceAdmission = Readonly<{
   eligible: boolean;
@@ -101,6 +102,7 @@ function imageDigest(root: string, path: string | undefined): string | null {
 }
 function domainConflict(root: string, reference: Reference, references: readonly Reference[]): boolean {
   const sources = [host(reference.source), host(reference.acquisition?.finalUrl ?? '')].filter(value => value !== null);
+  if (observedDomainServiceUrls(root).some(url => { const observedHost = host(url); return observedHost !== null && sources.includes(observedHost); })) return true;
   return references.some(other => other.researchLane === 'domain' && (
     other.source === reference.source
     || [host(other.source), host(other.acquisition?.finalUrl ?? '')].some(value => value !== null && sources.includes(value))

@@ -35,6 +35,10 @@ function loadExtension(exec: PortablePiApi['exec']): {
       execCallsAtLoad += 1;
       return exec(...args);
     },
+    async execOwned(...args: Parameters<PortablePiApi['exec']>) {
+      execCallsAtLoad += 1;
+      return exec(...args);
+    },
   } satisfies PortablePiApi, {
     get(target, property, receiver) {
       if (!(property in target)) throw new Error(`non-portable Pi API access: ${String(property)}`);
@@ -90,7 +94,9 @@ test('omd_cli preserves structured argv and the Pi project cwd without a shell',
   assert.match(calls[0]!.args[0]!, /bin[/\\]omd\.mjs$/);
   assert.deepEqual(calls[0]!.args.slice(1), ['check', 'a path/page.html', '--json', '$(not-a-shell)']);
   assert.equal(calls[0]!.options.cwd, '/tmp/pi project');
-  assert.equal(calls[0]!.options.signal, signal);
+  assert.ok(calls[0]!.options.signal);
+  assert.equal(calls[0]!.options.signal!.aborted, false);
+  assert.notEqual(calls[0]!.options.signal, signal, 'watchdog composes a separate abort signal');
   assert.deepEqual(result.details, { code: 0, killed: false });
   assert.equal(result.content[0]?.text, 'ok');
 });

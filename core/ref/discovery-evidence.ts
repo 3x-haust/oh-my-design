@@ -6,11 +6,12 @@ import { currentReferenceEvidenceAfter, readCurrentDirectDiscoveryEntry, readCur
   type DiscoveryObservation } from './discovery-record.ts';
 export { currentReferenceEvidenceAfter } from './discovery-record.ts';
 import { readReferenceDiscoveryAttempt, type ReferenceDiscoveryAttempt } from './navigation-capture.ts';
+import { readDomainObservation } from './domain-observation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA, searchObserved, type SearchExecution } from './search-execution.ts';
 
 type Lane = 'domain' | 'design';
 type Receipt = Readonly<{ path: string; sha256: string }>;
-export type DiscoveryCapture = Readonly<{ observation: DiscoveryObservation; sha256: string }>;
+export type DiscoveryCapture = Readonly<{ observation: DiscoveryObservation; sha256: string; receipt: Receipt }>;
 export type DiscoveryAttempt = Readonly<{ lane: Lane; url: string; reason: string; receipt: Receipt }>;
 export type LaneEvidence = Readonly<{ searches: readonly SearchExecution[]; entries: readonly DiscoveryCapture[];
   visits: readonly DiscoveryCapture[]; unavailable: readonly ReferenceDiscoveryAttempt[];
@@ -46,7 +47,7 @@ function capture(root: string, receipt: Receipt, lane: Lane,
       ? readCurrentDirectDiscoveryEntry(root, { method: 'direct-public',
         entry: lane === 'domain' ? 'public-directory' : 'free-gallery', ...common })
       : readCurrentDiscoveryNavigation(root, common);
-    return { observation, sha256: receipt.sha256 };
+    return { observation, sha256: receipt.sha256, receipt };
   } catch (error) { if (error instanceof Error) return null; throw error; }
 }
 function laneEvidence(root: string, lane: Lane, after: number): LaneEvidence {
@@ -70,6 +71,13 @@ function laneEvidence(root: string, lane: Lane, after: number): LaneEvidence {
     if (found === null) { ignored += 1; return []; }
     return [found];
   });
+  const observations = lane === 'domain' ? records(root, `${base}/observations`, /^([a-f0-9]{64})\.json$/).flatMap(receipt => {
+    try {
+      const observation = readDomainObservation(root, { url: JSON.parse(readStableProjectFile({ root: resolve(root),
+        path: resolve(root, receipt.path), label: receipt.path, fs: nodeStableProjectFileSystem() }).toString('utf8')).source, capture: receipt });
+      return [{ observation, sha256: receipt.sha256, receipt }];
+    } catch (error) { if (!(error instanceof Error)) throw error; ignored += 1; return []; }
+  }) : [];
   const attemptRows = records(root, `${base}/attempts`, /^([a-f0-9]{64})\.json$/).flatMap(receipt => {
     try {
       const attempt = readReferenceDiscoveryAttempt(root, receipt);
@@ -77,12 +85,13 @@ function laneEvidence(root: string, lane: Lane, after: number): LaneEvidence {
     } catch (error) { if (!(error instanceof Error)) throw error; ignored += 1; return []; }
   });
   const attempts = attemptRows.map(row => row.attempt);
-  return { searches, entries, visits, unavailable: attempts,
+  return { searches, entries: [...entries, ...observations.filter(item => item.observation.method === 'direct-public')],
+    visits: [...visits, ...observations.filter(item => item.observation.method === 'navigation')], unavailable: attempts,
     failures: [...searchRows.filter(row => !searchObserved(row.search)).map(row => ({ lane,
       url: row.search.requestedUrl, reason: row.search.error ?? row.search.status, receipt: row.receipt })),
     ...attemptRows.map(row => ({ lane, url: row.attempt.source, reason: row.attempt.reason, receipt: row.receipt }))],
     digests: [...searches.map(item => sha256(canonicalJson(item))), ...entries.map(item => item.sha256),
-      ...visits.map(item => item.sha256), ...attempts.map(item => sha256(canonicalJson(item)))], ignored };
+      ...visits.map(item => item.sha256), ...observations.map(item => item.sha256), ...attempts.map(item => sha256(canonicalJson(item)))], ignored };
 }
 
 export function readCurrentReferenceDiscoveryEvidence(root: string): Readonly<{ domain: LaneEvidence; design: LaneEvidence }> {

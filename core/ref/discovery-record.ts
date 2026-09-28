@@ -15,9 +15,10 @@ export type DirectDiscoveryEntry = 'public-directory' | 'free-gallery';
 export type DiscoveryEvidence = Readonly<{ path: string; sha256: string }>;
 export type DiscoveryNavigationReceipt = Readonly<{ url: string; evidence: DiscoveryEvidence; capture: DiscoveryEvidence }>;
 export type DirectDiscoveryReceipt = DiscoveryNavigationReceipt & Readonly<{ method: 'direct-public'; entry: DirectDiscoveryEntry }>;
+export type GalleryImageCandidate = Readonly<{ selector: string; width: number; height: number; naturalWidth: number; naturalHeight: number }>;
 export type DiscoveryObservation = Readonly<{
   url: string; finalUrl: string; links: readonly string[]; observedText?: string; taskText?: string; capturedAt?: string;
-  linkLabels?: readonly ObservedSearchResult[];
+  linkLabels?: readonly ObservedSearchResult[]; imageCandidates?: readonly GalleryImageCandidate[];
 }>;
 export const DISCOVERY_LIMITATIONS = 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' as const;
 export const DISCOVERY_SCROLL_LIMITATIONS = 'native-public-get; stable-rendered-viewport-links; no-authentication; bounded-same-page-scroll; no-click-or-form-probes; not-provider-attested' as const;
@@ -39,6 +40,7 @@ export type DiscoveryCaptureRecord = DiscoveryCaptureFields & (
   Readonly<{ schema: 'reference-navigation-capture-v2' }>
   | Readonly<{ schema: 'reference-navigation-capture-v3'; signature: string }>
   | Readonly<{ schema: 'reference-navigation-capture-v4'; signature: string }>
+  | Readonly<{ schema: 'reference-navigation-capture-v5'; imageCandidates: readonly GalleryImageCandidate[]; signature: string }>
   | Readonly<{ schema: 'reference-discovery-entry-v1'; method: 'direct-public'; entry: DirectDiscoveryEntry }>
   | Readonly<{ schema: 'reference-discovery-entry-v3'; method: 'direct-public'; entry: DirectDiscoveryEntry;
     observedText: string; linkLabels: readonly ObservedSearchResult[]; signature: string }>
@@ -120,10 +122,11 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   const keys = ['schema', 'source', 'researchLane', 'kind', 'capturedAt', 'imagePath', 'acquisition', 'limitations'];
   const decoded = JSON.parse(read(root, capture).toString('utf8')) as Record<string, unknown>;
   if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3', 'reference-discovery-entry-v4', 'reference-discovery-entry-v5'].includes(decoded.schema as string)
-    : !['reference-navigation-capture-v2', 'reference-navigation-capture-v3', 'reference-navigation-capture-v4'].includes(decoded.schema as string)) return fail('native capture purpose/source/lane binding differs');
+    : !['reference-navigation-capture-v2', 'reference-navigation-capture-v3', 'reference-navigation-capture-v4', 'reference-navigation-capture-v5'].includes(decoded.schema as string)) return fail('native capture purpose/source/lane binding differs');
   const scrolledDirect = direct && decoded.schema === 'reference-discovery-entry-v5';
   const currentDirect = direct && (decoded.schema === 'reference-discovery-entry-v4' || scrolledDirect);
-  const currentNavigation = !direct && decoded.schema === 'reference-navigation-capture-v4';
+  const candidateNavigation = !direct && decoded.schema === 'reference-navigation-capture-v5';
+  const currentNavigation = !direct && (decoded.schema === 'reference-navigation-capture-v4' || candidateNavigation);
   const previousDirect = direct && decoded.schema === 'reference-discovery-entry-v3';
   const previousNavigation = !direct && decoded.schema === 'reference-navigation-capture-v3';
   const signedDirect = currentDirect || previousDirect;
@@ -135,7 +138,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   const row = object(decoded, direct ? [...keys, 'method', 'entry',
     ...(signedDirect ? ['observedText', ...(currentTaskText ? ['taskText'] : []), 'linkLabels', ...(scrolledDirect ? ['scroll'] : []), 'signature'] : legacySigned
       ? [...(legacyObserved ? ['observedText'] : []), ...(legacyLabels ? ['linkLabels'] : []), 'signature'] : [])]
-    : [...keys, ...(currentNavigation || previousNavigation ? ['signature'] : [])]);
+    : [...keys, ...(candidateNavigation ? ['imageCandidates'] : []), ...(currentNavigation || previousNavigation ? ['signature'] : [])]);
   if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== (scrolledDirect ? DISCOVERY_SCROLL_LIMITATIONS : DISCOVERY_LIMITATIONS) || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
@@ -146,7 +149,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (current || previousDirect || previousNavigation || legacySigned) {
     const { signature, ...unsigned } = row;
     const schema = scrolledDirect ? 'reference-discovery-entry-v5' : currentDirect ? 'reference-discovery-entry-v4'
-      : currentNavigation ? 'reference-navigation-capture-v4'
+      : candidateNavigation ? 'reference-navigation-capture-v5' : currentNavigation ? 'reference-navigation-capture-v4'
         : previousDirect ? 'reference-discovery-entry-v3'
           : previousNavigation ? 'reference-navigation-capture-v3' : 'reference-discovery-entry-v2';
     if (typeof signature !== 'string' || !verifyNativeObservation(root, schema,
@@ -170,10 +173,27 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (entry !== undefined) validateDirectDiscoveryLinks(entry, observation);
   const png = decodePng(read(root, image));
   if (png.width !== 1280 || png.height !== 900) return fail('discovery capture viewport differs');
+  const imageCandidates = candidateNavigation ? galleryImageCandidates(row.imageCandidates) : undefined;
   if (!requireCurrent) return observation;
-  return observedText === undefined ? { ...observation, capturedAt: text(row.capturedAt) }
+  return observedText === undefined ? { ...observation, capturedAt: text(row.capturedAt),
+    ...(imageCandidates === undefined ? {} : { imageCandidates }) }
     : { ...observation, observedText, ...(taskText === undefined ? {} : { taskText }),
-      capturedAt: text(row.capturedAt), linkLabels: linkLabels ?? [] };
+      capturedAt: text(row.capturedAt), linkLabels: linkLabels ?? [],
+      ...(imageCandidates === undefined ? {} : { imageCandidates }) };
+}
+function galleryImageCandidates(value: unknown): readonly GalleryImageCandidate[] {
+  if (!Array.isArray(value) || value.length > 8 || Object.keys(value).length !== value.length) return fail('invalid gallery image candidates');
+  const candidates = value.map(item => {
+    const row = object(item, ['selector', 'width', 'height', 'naturalWidth', 'naturalHeight']);
+    const selector = text(row.selector);
+    for (const key of ['width', 'height', 'naturalWidth', 'naturalHeight'] as const) {
+      if (typeof row[key] !== 'number' || !Number.isFinite(row[key]) || row[key] < 100) return fail('invalid gallery image candidate dimensions');
+    }
+    return { selector, width: row.width as number, height: row.height as number,
+      naturalWidth: row.naturalWidth as number, naturalHeight: row.naturalHeight as number };
+  });
+  if (new Set(candidates.map(candidate => candidate.selector)).size !== candidates.length) return fail('duplicate gallery image candidate selectors');
+  return Object.freeze(candidates);
 }
 function validateDiscoveryScroll(value: unknown): void {
   const row = object(value, ['strategy', 'steps', 'initialOffset', 'finalOffset']);

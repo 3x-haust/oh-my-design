@@ -5,6 +5,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch, REFERENCE_RESEARCH_PATH } from './reference-research.ts';
 import { readResearchDiscoveryRoots } from './discovery-coverage.ts';
+import { readDomainObservation } from './domain-observation.ts';
 import { referenceServiceHost } from './design-discovery-sources.ts';
 
 export const REFERENCE_APPLICATION_SCHEMA = 'reference-application-v2' as const;
@@ -149,6 +150,13 @@ function validate(root: string, application: ReferenceApplication, options: Opti
   const lanes = [current.research.domainReference, current.research.designReference];
   const sourceUrls = lanes.flatMap(lane => [...lane.sources.map(source => source.url),
     ...readResearchDiscoveryRoots(root, lane).flatMap(observation => [observation.url, observation.finalUrl])]);
+  if (current.research.schema === 'reference-research-v8') {
+    for (const source of current.research.domainReference.sources) if ('observations' in source)
+      for (const receipt of source.observations) {
+        const observation = readDomainObservation(root, receipt);
+        sourceUrls.push(observation.url, observation.finalUrl);
+      }
+  }
   for (const url of sourceUrls) {
     if (projection.includes(referenceServiceHost(url))) return fail('keep source hostnames out of destination decision prose');
   }

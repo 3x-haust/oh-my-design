@@ -1,6 +1,6 @@
 import type { MarketReferenceCoverage } from './market-reference-coverage-contract.ts';
 
-export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v7' as const;
+export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v8' as const;
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
 export const DESIGN_REFERENCES_PATH = '.omd/refs/design/research.json';
 export const REFERENCE_RESEARCH_PATH = '.omd/reference-research.json';
@@ -9,6 +9,19 @@ export const REFERENCE_RESEARCH_KEYS = [
 ] as const;
 export const REFERENCE_RESEARCH_LANE_KEYS = ['queries', 'searches', 'sources'] as const;
 export const REFERENCE_RESEARCH_DOMAIN_KEYS = [...REFERENCE_RESEARCH_LANE_KEYS, 'benchmarkSha256'] as const;
+export const REFERENCE_RESEARCH_FUNCTIONAL_SOURCE_KEYS = ['id', 'url', 'observations', 'marketObservationSha256',
+  'features', 'similarities', 'differences', 'adopt', 'avoid', 'limitations'] as const;
+export type FunctionalCitation = Readonly<{ observationSha256: string; field: 'observedText' | 'taskText' | 'linkLabels'; quote: string; linkUrl: string | null }>;
+export type FunctionalSource = Readonly<{ id: string; url: string;
+  observations: readonly Readonly<{ url: string; capture: ResearchEvidence }>[];
+  marketObservationSha256: string;
+  features: readonly Readonly<{ id: string; observedLabel: string; finding: string; evidence: readonly FunctionalCitation[] }>[];
+  similarities: readonly Readonly<{ requestQuote: string; featureIds: readonly string[]; assessment: string }>[];
+  differences: readonly Readonly<{ requestQuote: string; featureIds: readonly string[]; assessment: string }>[];
+  adopt: readonly Readonly<{ featureIds: readonly string[]; action: string; reason: string }>[];
+  avoid: readonly Readonly<{ featureIds: readonly string[]; action: string; reason: string }>[];
+  limitations: readonly string[];
+}>;
 export const REFERENCE_RESEARCH_DESIGN_KEYS = [...REFERENCE_RESEARCH_LANE_KEYS, 'boardSha256'] as const;
 export const REFERENCE_RESEARCH_SOURCE_KEYS = [
   'id', 'url', 'observedAt', 'decision', 'finding', 'evidence', 'capture',
@@ -47,10 +60,10 @@ export type ResearchLane = Readonly<{
   discoveryRoots?: readonly ResearchDiscoveryRoot[];
 }>;
 export type ReferenceResearch = Readonly<{
-  schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v6' | 'reference-research-v5';
+  schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v7' | 'reference-research-v6' | 'reference-research-v5';
   sourceContractSha256: string;
   marketCoverage?: MarketReferenceCoverage | null;
-  domainReference: ResearchLane & Readonly<{ benchmarkSha256: string | null }>;
+  domainReference: Omit<ResearchLane, 'sources'> & Readonly<{ sources: readonly (ResearchSource | FunctionalSource)[]; benchmarkSha256: string | null }>;
   designReference: ResearchLane & Readonly<{ boardSha256: string }>;
 }>;
 export type ValidationOptions = Readonly<{

@@ -151,10 +151,9 @@ inspection and research repair remain available while production is blocked.
   Final URL checks run before PNG publication; redirected hosts and simultaneous batch captures
   cannot enter opposite lanes under different starting URLs. A gallery redirect must still be a
   qualified item, unless the reference was genuinely supplied by the user.
-  Korean-first domain work refuses foreign captures, even with `--from-user`, until published
-  local-domain research passes the full current source, market and image-byte checks. A scoped
+  Selected Korean-first domain work uses signed text-only `ref navigate --lane domain` observations, not `ref add` visual captures. Undetermined text is not foreign: settle once, then refuse with `REFERENCE_MARKET_LANGUAGE_UNDETERMINED`. Historical captures retain their original image-byte checks. A scoped
   selector does not hide the full page's visible-language balance; predominantly Korean UI or a
-  Korean host can qualify for local capture. A `.com` host is not a disqualifier. Korean-first
+  Korean host does not qualify by suffix. A `.com` host is not a disqualifier. Korean-first
   domain `--image` never substitutes for a live observed service page, including when user-supplied.
   Research reachability extends from
   search pages and separately validated native navigation captures. Each optional lane `navigation`

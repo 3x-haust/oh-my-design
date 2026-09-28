@@ -13,6 +13,7 @@ import { parseCapturePreparation, type CapturePreparation } from './capture-prep
 import { commitCapturedReference } from './capture-commit.ts';
 import { designDiscoveryProvider } from './design-discovery-sources.ts';
 import { isKoreanLanguageServiceText } from './market-reference.ts';
+import { withAcquisitionDeadline, BATCH_BUDGET_MS, REF_ADD_BUDGET_MS, AcquisitionTimeoutError } from './acquisition-deadline.ts';
 
 export interface RefSpec {
   lane?: 'domain' | 'design';
@@ -59,10 +60,12 @@ export async function addRefsBatch(
   const outcomes: BatchOutcome[] = new Array<BatchOutcome>(specs.length);
   const captureBatchId = `batch-${randomUUID()}`;
 
-  await withBrowser(async (browser) => {
+  try { await withAcquisitionDeadline({ budgetMs: BATCH_BUDGET_MS, phase: 'ref add-batch' }, batchScope => withBrowser(async (browser) => {
+    batchScope.own(browser);
     let next = 0;
     const worker = async (): Promise<void> => {
       for (;;) {
+        if (batchScope.signal.aborted) return;
         const i = next++;
         if (i >= specs.length) return;
         const spec = specs[i]!;
@@ -76,21 +79,28 @@ export async function addRefsBatch(
             ? refImagePath(adapter.projectRoot, { source: spec.source, component: spec.as, ...(lane ? { researchLane: lane } : {}) })
             : undefined;
           const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
-          const { raw, shotBytes, capturePreparation, acquisition, visibleText } = await capturePageForRef(browser, spec.source, viewport, {
-            selector: spec.selector ?? null,
-            requireImageElement: galleryImage,
-            validateFinalUrl: (url, visibleText) => validateFinalUrl(i, url, visibleText),
-            ...(preparation ? { preparation } : {}),
-            ...(shotOut ? { shotOut, adapter, deferShotWrite: true } : {}),
-          });
+          const { raw, shotBytes, capturePreparation, acquisition, visibleText, energyCurve } = await withAcquisitionDeadline(
+            { budgetMs: REF_ADD_BUDGET_MS, phase: 'ref add-batch item' }, async itemScope => {
+              const captured = await capturePageForRef(browser, spec.source, viewport, {
+                selector: spec.selector ?? null, deadline: itemScope,
+                requireImageElement: galleryImage,
+                validateFinalUrl: (url, visibleText) => validateFinalUrl(i, url, visibleText),
+                ...(preparation ? { preparation } : {}),
+                ...(shotOut ? { shotOut, adapter, deferShotWrite: true } : {}),
+              });
+              const energyCurve = spec.energy === false || galleryImage || captured.acquisition.noticeDismissals?.length
+                ? null : await captureEnergy(spec.source, { viewport, browser });
+              itemScope.assertLive(); batchScope.assertLive();
+              return { ...captured, energyCurve };
+            });
           // Motion is evidence, not decoration: a board captured without it cannot answer what a
           // reference does on scroll, and every craft query in the brief goes unanswered while the
           // record still looks complete. One extra pass per capture, skipped only on request.
-          const energyCurve = spec.energy === false || galleryImage || acquisition.noticeDismissals?.length ? null : await captureEnergy(spec.source, { viewport, browser });
           const ir = normalize(raw);
           const invariants = extractInvariants(ir);
           const slopCount = check(ir, rules, { categories: ['slop'] }).length;
           const blueprint = !galleryImage && spec.blueprint && spec.selector ? captureBlueprint(raw.nodes, spec.selector) : undefined;
+          batchScope.assertLive();
           commitCapturedReference(adapter, shotOut, shotBytes, imagePath => saveRef(cwd, {
             ...(lane ? { researchLane: lane } : {}),
             acquisition,
@@ -119,7 +129,10 @@ export async function addRefsBatch(
       }
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, specs.length) }, () => worker()));
-  });
-
+  })); } catch (error) { if (!(error instanceof AcquisitionTimeoutError)) throw error; }
+  for (let index = 0; index < specs.length; index++) {
+    outcomes[index] ??= { source: specs[index]!.source, as: specs[index]!.as, ok: false,
+      error: 'REFERENCE_ACQUISITION_TIMEOUT: batch item was not started or completed before the aggregate deadline' };
+  }
   return { concurrency, outcomes };
 }

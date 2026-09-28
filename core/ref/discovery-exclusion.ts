@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { sha256 } from './board-artifacts.ts';
+import { readDomainObservation } from './domain-observation.ts';
 import { currentReferenceEvidenceAfter, publicDiscoveryUrl, readCurrentDiscoveryNavigation,
   type DiscoveryLane } from './discovery-record.ts';
 
@@ -29,12 +30,17 @@ function object(value: unknown): value is Record<string, unknown> {
     && Object.getPrototypeOf(value) === Object.prototype;
 }
 function visitObservation(root: string, lane: DiscoveryLane, receipt: Receipt, after: number): string | null {
-  if (!new RegExp(`^\\.omd/discovery/${lane}/navigation/[a-f0-9]{64}\\.json$`, 'u').test(receipt.path)
+  if (!new RegExp(`^\\.omd/discovery/${lane}/(?:navigation|observations)/[a-f0-9]{64}\\.json$`, 'u').test(receipt.path)
     || !receipt.path.endsWith(`${receipt.sha256}.json`)) return null;
   try {
     const bytes = read(root, receipt.path);
     if (sha256(bytes) !== receipt.sha256) return null;
     const raw: unknown = JSON.parse(bytes.toString('utf8'));
+    if (lane === 'domain' && receipt.path.includes('/observations/')) {
+      if (!object(raw) || typeof raw.source !== 'string') return null;
+      const observation = readDomainObservation(root, { url: raw.source, capture: receipt });
+      return observation.method === 'navigation' && Date.parse(observation.capturedAt ?? '') >= after ? observation.url : null;
+    }
     if (!object(raw) || typeof raw.source !== 'string' || typeof raw.imagePath !== 'string'
       || !object(raw.acquisition) || typeof raw.acquisition.imageSha256 !== 'string') return null;
     const observation = readCurrentDiscoveryNavigation(root, { url: raw.source,
@@ -44,10 +50,12 @@ function visitObservation(root: string, lane: DiscoveryLane, receipt: Receipt, a
   } catch (error) { if (error instanceof Error) return null; throw error; }
 }
 function observedVisit(root: string, lane: DiscoveryLane, source: string, after: number): Receipt | null {
-  const directory = `.omd/discovery/${lane}/navigation`;
-  for (const name of entries(root, directory)) {
-    const receipt = { path: `${directory}/${name}`, sha256: name.slice(0, -5) };
-    if (visitObservation(root, lane, receipt, after) === source) return receipt;
+  for (const purpose of lane === 'domain' ? ['observations', 'navigation'] : ['navigation']) {
+    const directory = `.omd/discovery/${lane}/${purpose}`;
+    for (const name of entries(root, directory)) {
+      const receipt = { path: `${directory}/${name}`, sha256: name.slice(0, -5) };
+      if (visitObservation(root, lane, receipt, after) === source) return receipt;
+    }
   }
   return null;
 }

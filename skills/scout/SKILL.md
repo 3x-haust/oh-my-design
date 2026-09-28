@@ -77,7 +77,12 @@ On a directly visited service, prefer observed links within the task content. A 
 link is usable only when the captured main task text supports that same function; generic global
 menus and footer links do not qualify a service root.
 When the pointer names `retain-reference`, inspect the actual visited page or UI image, capture a
-useful scoped source with `ref add`, and recompute. If the inspected item is unsuitable, record a
+useful scoped design image with `ref add`, and recompute. Domain research instead cites signed
+`ref navigate --lane domain` text/link observations for each feature, compares functionality
+against the actual request, and explains what to adopt/avoid; it does not collect domain PNGs,
+invariants, or energy. Undetermined text is not foreign: native capture settles once before a
+retryable gap. Multiple gallery images call for one exact candidate CSS selector, not exclusion.
+A signed timeout means unavailable evidence: recompute work-next instead of repeating the URL. If the inspected item is unsuitable, record a
 specific quality or relevance reason with `omd ref exclude <observed-item-url> --lane design|domain
 --reason "<observed reason>"`; this decision is bound to the current native visit and permits a
 different lead. An exclusion is not evidence that a provider is unavailable. When it names `publish-board`, use

@@ -8,6 +8,8 @@ import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
 import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
+import { AcquisitionTimeoutError, type AcquisitionDeadlineScope } from '../ref/acquisition-deadline.ts';
+import { collectGalleryImageCandidates } from '../ref/gallery-image-candidates.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
 import { clearReferenceNotices, suspendReferenceScriptsForShot, type NoticeDismissal } from '../ref/notice-overlay.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
@@ -274,10 +276,20 @@ export async function waitForDocumentFonts(
 type Browser = import('playwright').Browser;
 
 /** Launch one chromium, run fn, close it. Batch capture reuses a single browser across many pages. */
-export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Promise<T> {
+export async function withBrowser<T>(
+  fn: (browser: Browser) => Promise<T>,
+  owner?: Pick<AcquisitionDeadlineScope, 'own'>,
+): Promise<T> {
   const { chromium } = await import('playwright');
   // Always headless — OMD never opens a visible browser window in any situation.
-  const browser = await chromium.launch({ headless: true, timeout: 30000 });
+  // launchServer gives this acquisition an owned process that can be killed even if
+  // the browser connection or its normal close handshake stops responding.
+  const server = owner ? await chromium.launchServer({ headless: true, timeout: 30000 }) : undefined;
+  let launched: Browser;
+  try { launched = server ? await chromium.connect(server.wsEndpoint()) : await chromium.launch({ headless: true, timeout: 30000 }); }
+  catch (error) { server?.kill(); throw error; }
+  const browser = launched;
+  owner?.own({ close: async () => { server!.kill(); await browser.close(); } });
   try {
     return await fn(browser);
   } finally {
@@ -285,7 +297,7 @@ export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Prom
     try { await Promise.race([browser.close(), new Promise<void>((_, reject) => {
       cleanupTimer = setTimeout(() => reject(new Error(`browser cleanup timed out after ${BROWSER_CLEANUP_TIMEOUT_MS}ms`)), BROWSER_CLEANUP_TIMEOUT_MS);
     })]); }
-    finally { clearTimeout(cleanupTimer); }
+    finally { clearTimeout(cleanupTimer); server?.kill(); }
   }
 }
 
@@ -710,21 +722,26 @@ export async function renderFilmstrip(
  */
 export async function captureEnergy(
   target: string,
-  opts: { viewport: Viewport; frames?: number; interval?: number; browser?: Browser },
+  opts: { viewport: Viewport; frames?: number; interval?: number; browser?: Browser; deadline?: Pick<AcquisitionDeadlineScope, 'signal' | 'assertLive'> },
 ): Promise<EnergyCurve | null> {
   const frameCount = Math.min(Math.max(opts.frames ?? 4, 2), 6);
   const interval = opts.interval ?? 300;
   try {
+    opts.deadline?.assertLive();
     const sample = (browser: Browser) => onPage(browser, target, opts.viewport, async (page) => {
       const buffers: Buffer[] = [];
       for (let i = 0; i < frameCount; i++) {
         if (i > 0) await new Promise<void>((r) => setTimeout(r, interval));
         buffers.push(await page.screenshot({ fullPage: false }));
+        opts.deadline?.assertLive();
       }
       return computeEnergy(buffers);
     }, REFERENCE_ENERGY_TIMEOUT_MS);
-    return await (opts.browser === undefined ? withBrowser(sample) : sample(opts.browser));
-  } catch {
+    const result = await (opts.browser === undefined ? withBrowser(sample) : sample(opts.browser));
+    opts.deadline?.assertLive();
+    return result;
+  } catch (error) {
+    if (error instanceof AcquisitionTimeoutError || opts.deadline?.signal.aborted) throw error;
     return null;
   }
 }
@@ -771,22 +788,28 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean },
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean; deadline?: Pick<AcquisitionDeadlineScope, 'signal' | 'assertLive'> },
 ): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; visibleText: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null; noticeDismissals?: NoticeDismissal[] } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
+    opts.deadline?.assertLive();
     if (opts.requireImageElement) {
-      if (!opts.selector || !opts.shotOut) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image and retain its screenshot');
+      const candidates = await collectGalleryImageCandidates(page);
+      const candidateText = candidates.length === 0 ? 'candidates: none currently meet the loaded, visible 100x100 image criteria'
+        : `candidates: ${candidates.map(candidate => `${candidate.selector} (${Math.round(candidate.width)}x${Math.round(candidate.height)})`).join('; ')}`;
+      if (!opts.selector || !opts.shotOut) throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image and retain its screenshot; ${candidateText}`);
       const eligible = await page.locator(opts.selector).evaluateAll(elements => {
         if (elements.length !== 1 || !(elements[0] instanceof HTMLImageElement)) return false;
         const image = elements[0];
         const box = image.getBoundingClientRect();
-        const style = getComputedStyle(image);
-        return image.complete && image.naturalWidth >= 100 && image.naturalHeight >= 100
-          && box.width >= 100 && box.height >= 100 && style.visibility === 'visible'
-          && style.display !== 'none' && Number(style.opacity) > 0;
+        if (!image.complete || image.naturalWidth < 100 || image.naturalHeight < 100 || box.width < 100 || box.height < 100) return false;
+        for (let element: Element | null = image; element; element = element.parentElement) {
+          const style = getComputedStyle(element);
+          if (style.visibility === 'hidden' || style.visibility === 'collapse' || style.display === 'none' || Number(style.opacity) <= 0) return false;
+        }
+        return true;
       });
-      if (!eligible) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify one loaded, visible UI image element, not gallery chrome');
+      if (!eligible) throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify exactly one loaded, visible UI image element, not gallery chrome; ${candidateText}`);
     }
     const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
     const selectedContentSelectors = [...(opts.selector ? [opts.selector] : []), ...allowedStateSelectors];
@@ -803,6 +826,23 @@ export async function capturePageForRef(
     let shotBytes: Buffer | undefined;
     let shotError: string | undefined;
     if (opts.shotOut && opts.selector) {
+      if (opts.requireImageElement) {
+        const eligible = await page.locator(opts.selector).evaluateAll(elements => {
+          if (elements.length !== 1 || !(elements[0] instanceof HTMLImageElement)) return false;
+          const image = elements[0];
+          const box = image.getBoundingClientRect();
+          if (!image.complete || image.naturalWidth < 100 || image.naturalHeight < 100 || box.width < 100 || box.height < 100) return false;
+          for (let element: Element | null = image; element; element = element.parentElement) {
+            const style = getComputedStyle(element);
+            if (style.visibility !== 'visible' || style.display === 'none' || Number(style.opacity) <= 0) return false;
+          }
+          return true;
+        });
+        if (!eligible) {
+          const candidates = await collectGalleryImageCandidates(page);
+          throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: selected image changed before capture; candidates: ${candidates.length ? candidates.map(candidate => `${candidate.selector} (${Math.round(candidate.width)}x${Math.round(candidate.height)})`).join('; ') : 'none currently meet the loaded, visible 100x100 image criteria'}`);
+        }
+      }
       const el = await page.$(opts.selector);
       if (!el && preparation) throw new Error('prepared reference screenshot target disappeared before capture');
       if (el) {
@@ -844,6 +884,7 @@ export async function capturePageForRef(
       raw.meta = { ...(raw.meta ?? {}), interaction: await probeInteraction(page), motion };
     }
     // Keep bytes private until all observations have passed, including after the screenshot.
+    opts.deadline?.assertLive();
     if (shotBytes && opts.shotOut && opts.adapter && !opts.deferShotWrite) {
       try {
         await writeScreenshot(async () => shotBytes!, requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.shotOut);
@@ -853,6 +894,7 @@ export async function capturePageForRef(
         shotError = error instanceof Error ? error.message : String(error);
       }
     }
+    opts.deadline?.assertLive();
     return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
       ...(noticeDismissals.length ? { noticeDismissals } : {}),

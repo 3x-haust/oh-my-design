@@ -28,9 +28,9 @@ test('a Korean brief refuses foreign-only domain captures before writing, but ac
   const guard = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain' }], invocation);
   assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
   assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true }, invocation),
-    /REFERENCE_MARKET_LOCAL_FIRST/);
+    /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
   assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true,
-    fromUser: true }, invocation), /REFERENCE_MARKET_LOCAL_FIRST/);
+    fromUser: true }, invocation), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
   const allegedUser = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain',
     fromUser: true }], invocation);
   assert.throws(() => allegedUser(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
@@ -125,24 +125,15 @@ test('redirect aliases cannot publish opposite-lane images in concurrent batches
     { source: visual, as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
   ]));
   const command = (...args: string[]) => promisify(execFile)(process.execPath, [cli, ...args], { cwd, env, timeout: 30000 });
-  let stdout = '';
-  await assert.rejects(command('ref', 'add-batch', '.omd/.cache/batch.json', '--json'), (error: unknown) => {
-    assert.ok(error instanceof Error && 'stdout' in error && typeof error.stdout === 'string');
-    stdout = error.stdout;
-    return true;
-  });
-  const outcomes = JSON.parse(stdout).outcomes as { ok: boolean; error?: string }[];
-  assert.equal(outcomes.filter(item => item.ok).length, 1, stdout);
-  assert.match(outcomes.find(item => !item.ok)?.error ?? '', /REFERENCE_LANE_SERVICE_OVERLAP/);
+  await assert.rejects(command('ref', 'add-batch', '.omd/.cache/batch.json', '--json'), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
   const refs = loadRefs(cwd, { includeDomain: true });
-  assert.equal(refs.length, 1);
+  assert.equal(refs.length, 0);
   const pngs = ['domain', 'design'].flatMap(lane => {
     const path = join(cwd, '.omd/refs', lane);
     return existsSync(path) ? readdirSync(path).filter(file => file.endsWith('.png')) : [];
   });
-  assert.equal(pngs.length, 1, 'the rejected redirect writes no PNG, not merely no JSON');
-  const refusedLane = refs[0]!.researchLane === 'domain' ? 'design' : 'domain';
-  await assert.rejects(command('ref', 'add', refusedLane === 'design' ? visual : source,
-    '--as', 'retry', '--lane', refusedLane, '--from-user', '--no-energy'), /REFERENCE_LANE_SERVICE_OVERLAP/);
-  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 1);
+  assert.equal(pngs.length, 0, 'the rejected domain batch writes no PNG or JSON');
+  await assert.rejects(command('ref', 'add', source,
+    '--as', 'retry', '--lane', 'domain', '--from-user', '--no-energy'), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 0);
 });

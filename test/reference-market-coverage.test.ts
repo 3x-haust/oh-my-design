@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   parseReferenceResearch, publishReferenceResearch, referenceResearchArtifacts,
-  validateReferenceResearch, REFERENCE_RESEARCH_SCHEMA,
+  validateReferenceResearch,
 } from '../core/ref/reference-research.ts';
 import { admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
@@ -45,7 +45,7 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
     decision: 'Task order', finding: 'Review before submission', evidence: domainFour.evidence, capture: domainFour.capture };
   const domainQueries = ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로'];
   const designQueries = ['대한민국 복지 앱 UI 디자인', '한국 복지 앱 UI 디자인', 'South Korea 복지 앱 UI 디자인'];
-  const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null,
+  const input = { ...fixture.research, schema: 'reference-research-v7', marketCoverage: null,
     domainReference: { ...fixture.research.domainReference, queries: domainQueries,
       searches: domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
         [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source])),
@@ -429,7 +429,7 @@ test('frame-less new-marketing route accepts its exact Korean welfare design que
     [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source]));
   const designSearches = marketingQueries.map(query => testSearchReceipt(fixture.root, 'design', query,
     [fixture.gallery.source, secondVisual.gallery.source]));
-  const research = parseReferenceResearch({ ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA,
+  const research = parseReferenceResearch({ ...fixture.research, schema: 'reference-research-v7',
     sourceContractSha256: route.sourceContractSha256,
     marketCoverage: { marketRegion: 'KR',
       domain: { localSources: [fixture.domain, fixture.domainTwo, fixture.domainThree].map((source, index) =>

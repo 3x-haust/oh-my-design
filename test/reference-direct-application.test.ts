@@ -3,11 +3,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { withBrowser } from '../core/render/index.ts';
-import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { directRootAt } from './helpers/market-reference.ts';
 import { publishReferenceResearch } from '../core/ref/reference-research.ts';
 import { checkReferenceApplication, publishReferenceApplication, referenceApplicationPlan } from '../core/ref/reference-application.ts';
 import { ADMISSION_SOURCE_SHA, designAdmissionFixture } from './helpers/design-admission.ts';
-import { discoveryBrowser, directoryHtml } from './helpers/discovery-capture.ts';
 import { directResearch } from './helpers/direct-research.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
@@ -31,9 +30,10 @@ test('direct-entry identity and discovery paths cannot leak through application 
     const research = await directResearch(browser, fixture);
     const url = 'https://directory.example/tasks';
     const finalUrl = 'https://redirected-directory.example/tasks';
-    const observed = discoveryBrowser(browser, { url, finalUrl, html: directoryHtml(fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source) });
-    const receipt = await captureReferenceNavigation(observed.browser, url, 'domain', fixture.writer, 'public-directory');
-    const input = { ...research, domainReference: { ...research.domainReference, discoveryRoots: [{ ...receipt, reason: 'Inspect listed tasks.' }] } };
+    // Historical v7 fixture retains its original signed PNG-based direct root.
+    const receipt = directRootAt(fixture.root, 'domain', url, [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source]);
+    const redirected = directRootAt(fixture.root, 'domain', finalUrl, [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source]);
+    const input = { ...research, domainReference: { ...research.domainReference, discoveryRoots: [receipt, redirected] } };
     publishReferenceResearch(fixture.root, input, options, fixture.writer);
     const application = applicationInput(fixture.root);
     publishReferenceApplication(fixture.root, application, options, fixture.writer);
@@ -56,8 +56,8 @@ test('a changed direct-entry PNG invalidates the dependent application', async t
     publishReferenceResearch(fixture.root, research, options, fixture.writer);
     publishReferenceApplication(fixture.root, applicationInput(fixture.root), options, fixture.writer);
     const receipt = research.domainReference.discoveryRoots[0];
-    assert.ok(receipt);
-    writeFileSync(join(fixture.root, receipt.evidence.path), Buffer.from('changed capture'));
+    assert.ok(receipt && 'evidence' in receipt && receipt.evidence && typeof receipt.evidence === 'object' && 'path' in receipt.evidence);
+    writeFileSync(join(fixture.root, String(receipt.evidence.path)), Buffer.from('changed capture'));
     assert.throws(() => checkReferenceApplication(fixture.root, options), /discovery evidence changed/);
   });
 });

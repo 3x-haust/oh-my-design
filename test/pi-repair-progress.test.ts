@@ -24,6 +24,7 @@ function harness(t: { after(fn: () => void): void }) {
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool: value => { tool = value; },
     sendMessage: message => { sent.push(message); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args) {
       calls.push([...args]);
       if (args[1] === 'route' && args[2] === 'classify') writeFileSync(join(cwd, '.omd/route.json'), '{}');
@@ -281,6 +282,7 @@ test('completion repair state cannot cross a replaced route', async t => {
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool() {},
     sendMessage: message => { sent.push(message); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args) {
       if (args[1] === 'stage') return { stdout: '{}', stderr: '', code: 0, killed: false };
       if (args[1] === 'guard' && args[2] === 'production') return { stdout: '{"ok":true}', stderr: '', code: 0, killed: false };

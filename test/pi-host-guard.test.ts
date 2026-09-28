@@ -15,6 +15,7 @@ function harness(exec?: PortablePiApi['exec'], sendMessage?: PortablePiApi['send
     ...(sendMessage === undefined ? {} : { sendMessage }),
     on: (name, hook) => { hooks.set(name, hook); },
     registerCommand: () => {}, registerTool: t => { tool = t; },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     exec: exec ?? (async (_command, args, options) => {
       calls.push({ args: args.slice(1), cwd: options.cwd });
       return { stdout: JSON.stringify({ ok: pass, blockers: pass ? [] : ['copy deck missing', 'review loop incomplete'] }), stderr: '', code: pass ? 0 : 1, killed: false };

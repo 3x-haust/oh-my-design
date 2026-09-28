@@ -116,7 +116,7 @@ test('Pi tool supports init/check/refresh without external activation', async t 
   const root = fixture(t);
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
   let tool!: PortablePiTool;
-  omdExtension({ registerCommand() {}, registerTool(value) { tool = value; }, async exec(_command, args, options) {
+  omdExtension({ registerCommand() {}, registerTool(value) { tool = value; }, execOwned(command, args, options) { return this.exec(command, args, options); }, async exec(_command, args, options) {
     const result = spawnSync(process.execPath, [...args], { cwd: options.cwd, encoding: 'utf8', env, timeout: 20000 });
     return { stdout: result.stdout ?? '', stderr: result.stderr ?? '', code: result.status ?? 1, killed: result.signal !== null };
   } });

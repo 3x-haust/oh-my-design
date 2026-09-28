@@ -122,10 +122,10 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   const inferred = expectedRequest === undefined ? null : inferredKoreanReferenceMarket(expectedRequest);
   const marketRegion = context?.marketRegion ?? inferred;
   if (marketRegion === null) {
-    if (research.schema === 'reference-research-v7' && research.marketCoverage !== null) return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_UNSCOPED');
+    if ((research.schema === 'reference-research-v7' || research.schema === 'reference-research-v8') && research.marketCoverage !== null) return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_UNSCOPED');
     return;
   }
-  if (research.schema !== 'reference-research-v7' || research.marketCoverage === null || research.marketCoverage === undefined) {
+  if (!['reference-research-v7', 'reference-research-v8'].includes(research.schema) || research.marketCoverage === null || research.marketCoverage === undefined) {
     return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_REQUIRED: publish v7 with source-specific local-market provenance for both lanes and a concrete gap for every global fallback');
   }
   if (research.marketCoverage.marketRegion !== marketRegion) return marketReject('REFERENCE_RESEARCH_MARKET_REGION_STALE');
@@ -151,8 +151,10 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ['DOMAIN', research.domainReference.discoveryRoots], ['DESIGN', research.designReference.discoveryRoots],
   ] as const) roots?.forEach(root => directRootReason(root.reason, marketTokens,
     `REFERENCE_RESEARCH_MARKET_${name}_DIRECT_ROOT_REQUIRED: explain how each direct root scopes discovery to the explicit market`));
-  const domainSearchRequired = laneNeedsMarketSearch(research.marketCoverage.domain,
-    research.domainReference.discoveryRoots ?? [], research.domainReference.searches);
+  const domainSearchRequired = research.schema === 'reference-research-v8'
+    ? research.domainReference.searches.length > 0
+    : laneNeedsMarketSearch(research.marketCoverage.domain,
+      research.domainReference.discoveryRoots ?? [], research.domainReference.searches);
   if (domainSearchRequired
     && domainQueries.some((query, index) => research.domainReference.queries[index] !== query)) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_SEARCH_REQUIRED: execute the exact target-market domain inputs before global searches');
@@ -176,8 +178,8 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ...(designSearchRequired ? validateExecutionOrder(root, research.designReference.searches, designQueries, labels, 'DESIGN') : []),
     ...validateDirectExecutions(root, research.designReference.discoveryRoots ?? [], 'DESIGN'),
   ];
-  validateLaneProvenance(root, 'DOMAIN', marketRegion, labels, research.marketCoverage.domain,
-    research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? [], domain);
+  if (research.schema !== 'reference-research-v8') validateLaneProvenance(root, 'DOMAIN', marketRegion, labels, research.marketCoverage.domain,
+    research.domainReference.sources as readonly ResearchSource[], domainExecutions, research.domainReference.discoveryRoots ?? [], domain);
   validateLaneProvenance(root, 'DESIGN', marketRegion, labels, research.marketCoverage.design,
     research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? [], domain);
 }
@@ -212,7 +214,7 @@ function validateLaneProvenance(
     const serviceHost = referenceServiceHost(source.url);
     if (marketRegion === 'KR' && lane === 'DOMAIN'
       && /(?:^|\.)(?:gov|nhs)(?:\.[a-z]{2})?$/u.test(serviceHost)
-      && serviceHost !== 'gov.kr' && !serviceHost.endsWith('.gov.kr')) {
+      && !serviceHost.endsWith('.kr')) {
       marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
     }
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];

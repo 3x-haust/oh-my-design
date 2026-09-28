@@ -1,9 +1,16 @@
 const KOREAN_WELFARE_SERVICE_QUERIES = Object.freeze(['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
 
-export function isKoreanLanguageServiceText(visibleText: string): boolean {
+export type KoreanServiceTextClassification = 'korean' | 'non-korean' | 'undetermined';
+
+export function classifyKoreanServiceText(visibleText: string): KoreanServiceTextClassification {
   const korean = visibleText.match(/[가-힣]/gu)?.length ?? 0;
   const letters = visibleText.match(/\p{L}/gu)?.length ?? 0;
-  return korean >= 8 && korean / letters >= 0.5;
+  if (letters < 8) return 'undetermined';
+  return korean >= 8 && korean / letters >= 0.5 ? 'korean' : 'non-korean';
+}
+
+export function isKoreanLanguageServiceText(visibleText: string): boolean {
+  return classifyKoreanServiceText(visibleText) === 'korean';
 }
 
 export function inferredKoreanReferenceMarket(request: string): 'KR' | null {

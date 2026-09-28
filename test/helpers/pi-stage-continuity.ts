@@ -27,6 +27,7 @@ export function harness(t: { after(fn: () => void): void }, routed = true) {
     on: (name, hook) => { hooks.set(name, hook); },
     registerCommand() {}, registerTool: value => { tool = value; },
     sendMessage: value => { sent.push(value.customType); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, argv) {
       const args = argv.slice(1); commands.push([...args]);
       const stage = args[1] ?? '';

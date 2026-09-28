@@ -5,7 +5,8 @@ import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { designDiscoveryItemIdentity, referenceServiceHost } from './design-discovery-sources.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
-import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText } from './market-reference.ts';
+import { observedDomainServiceUrls } from './observed-domain-services.ts';
+import { classifyKoreanServiceText, inferredKoreanReferenceMarket } from './market-reference.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from './reference-research.ts';
 import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
@@ -43,14 +44,16 @@ export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent
     const spec = specs[index]!;
     const lane = researchLane(spec.lane);
     if (koreanReferences && lane === 'domain' && !localDomainResearchReady()) {
-      const visibleKorean = isKoreanLanguageServiceText(visibleText ?? '');
-      if (!visibleKorean) throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: this Korean-language brief needs visibly Korean-language service evidence before foreign fallback. A .kr hostname alone is insufficient; inspect local results or use another accessible Korean source.');
+      const language = classifyKoreanServiceText(visibleText ?? '');
+      if (language === 'undetermined') throw new ReferenceIntakeError('REFERENCE_MARKET_LANGUAGE_UNDETERMINED: insufficient observed page text after the bounded settle; retry another live service page.');
+      if (language === 'non-korean') throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: this Korean-language brief needs visibly Korean-language service evidence before foreign fallback. Domain suffix is not language evidence.');
     }
     const service = host(finalUrl);
     const overlap = service !== null && (specs.some((other, otherIndex) => otherIndex !== index && other.lane !== lane
       && [host(other.source), host(observed.get(otherIndex) ?? '')].includes(service))
       || loadRefs(root, { includeDomain: true }).some(ref => ref.researchLane && ref.researchLane !== lane
-        && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service)));
+        && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service))
+      || lane === 'design' && observedDomainServiceUrls(root).some(url => host(url) === service));
     if (overlap) throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: the final captured service belongs to the other research lane');
     const requestedGalleryItem = galleryItem(spec.source);
     const finalGalleryItem = galleryItem(finalUrl);
@@ -80,6 +83,7 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     : false;
   if (selected === undefined) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
   const lane = researchLane(selected ? spec.lane : spec.lane ?? 'design');
+  if (selected && lane === 'domain') throw new ReferenceIntakeError('REFERENCE_DOMAIN_OBSERVATION_REQUIRED: functional domain research uses omd ref navigate --lane domain; ref add retains visual references only.');
   if (lane === 'design' && galleryItem(spec.source) !== null) {
     if (!spec.selector || spec.shot !== true) {
       throw new ReferenceIntakeError('DESIGN_GALLERY_DISCOVERY_ONLY: visit the gallery item with omd ref navigate --lane design, then capture its actual UI image element with ref add --selector <img> and a screenshot; never retain the wrapper page');
@@ -99,8 +103,9 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
   assertReferenceLaneSeparation(root, { source: spec.source, researchLane: lane });
   const refs = loadRefs(root, { includeDomain: true });
   const service = host(spec.source);
-  if (service !== null && refs.some(ref => ref.researchLane && ref.researchLane !== lane
-    && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service))) {
+  if (service !== null && (refs.some(ref => ref.researchLane && ref.researchLane !== lane
+    && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service))
+    || lane === 'design' && observedDomainServiceUrls(root).some(url => host(url) === service))) {
     throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: choose independent services for domain and design research');
   }
   if (lane === 'domain' || galleryItem(spec.source) !== null || spec.fromUser === true) return lane;

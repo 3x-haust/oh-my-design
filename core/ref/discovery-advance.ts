@@ -2,8 +2,10 @@ import type { RouteRecord } from '../route/index.ts';
 import { withBrowser } from '../render/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { referenceDiscoveryWork, type ReferenceDiscoveryWork } from './discovery-work.ts';
-import { captureReferenceNavigation, readReferenceDiscoveryAttempt, ReferenceNavigationError } from './navigation-capture.ts';
+import { captureReferenceNavigation, publishFailedAttempt, readReferenceDiscoveryAttempt, ReferenceNavigationError } from './navigation-capture.ts';
+import { withAcquisitionDeadline, NAVIGATION_BUDGET_MS, AcquisitionTimeoutError } from './acquisition-deadline.ts';
 import { executeReferenceSearch, readSearchExecution, searchObserved } from './search-execution.ts';
+import { publishSearchLaunchTimeout } from './search-launch-timeout.ts';
 
 export type ReferenceDiscoveryAdvance = Readonly<{
   schema: 'reference-discovery-advance-v1';
@@ -25,7 +27,13 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
   switch (action.kind) {
     case 'search': {
       if (action.input === undefined) throw new Error('REFERENCE_DISCOVERY_ADVANCE: missing plan-derived search input');
-      receipt = await withBrowser(browser => executeReferenceSearch(browser, action.input, writer));
+      try {
+        receipt = await withAcquisitionDeadline({ budgetMs: NAVIGATION_BUDGET_MS, phase: 'ref advance search' },
+          scope => withBrowser(browser => { scope.own(browser); return executeReferenceSearch(browser, action.input!, writer); }));
+      } catch (error) {
+        if (!(error instanceof AcquisitionTimeoutError)) throw error;
+        receipt = publishSearchLaunchTimeout(action.input, writer);
+      }
       outcome = searchObserved(readSearchExecution(root, receipt, action.lane)) ? 'observed' : 'unavailable';
       break;
     }
@@ -34,14 +42,18 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
       if (action.url === undefined) throw new Error('REFERENCE_DISCOVERY_ADVANCE: missing observed public URL');
       const url = action.url;
       try {
-        const native = await withBrowser(browser => captureReferenceNavigation(browser, url,
-          action.lane, writer, action.kind === 'direct-entry' ? action.entry : undefined));
+        const native = await withAcquisitionDeadline({ budgetMs: NAVIGATION_BUDGET_MS, phase: 'ref advance navigation' },
+          scope => withBrowser(browser => { scope.own(browser); return captureReferenceNavigation(browser, url,
+            action.lane, writer, action.kind === 'direct-entry' ? action.entry : undefined, scope); }));
         receipt = native.capture;
         outcome = 'observed';
       } catch (error) {
-        if (!(error instanceof ReferenceNavigationError) || error.attempt === undefined) throw error;
-        readReferenceDiscoveryAttempt(root, error.attempt);
-        receipt = error.attempt;
+        const attempt = error instanceof ReferenceNavigationError ? error.attempt
+          : error instanceof AcquisitionTimeoutError ? publishFailedAttempt(writer, url, action.lane!,
+            action.kind === 'direct-entry' ? action.entry : undefined, null, error) : undefined;
+        if (attempt === undefined) throw error;
+        readReferenceDiscoveryAttempt(root, attempt);
+        receipt = attempt;
         outcome = 'unavailable';
       }
       break;

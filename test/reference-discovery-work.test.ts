@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
@@ -9,24 +9,29 @@ import { publishReferenceDiscoveryExclusion } from '../core/ref/discovery-exclus
 import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { readStrictDiscoveryNavigation } from '../core/ref/discovery-record.ts';
 import { testPng } from './helpers/search-execution.ts';
+import { DOMAIN_OBSERVATION_LIMITATIONS, DOMAIN_OBSERVATION_SCHEMA, readDomainObservation } from '../core/ref/domain-observation.ts';
 import { directRootAt } from './helpers/market-reference.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { fixture, routeInput, unavailableEntry, unavailableSearch } from './helpers/discovery-work.ts';
-function retainDomain(root: string, hostname: string, capturedAt = new Date().toISOString()): void {
-  const directory = join(root, '.omd/refs/domain');
+function observeDomain(root: string, source: string, links: readonly string[] = [],
+  capturedAt = new Date().toISOString(), language: 'korean' | 'non-korean' = 'korean',
+  method: 'navigation' | 'direct-public' = 'direct-public'): void {
+  const directory = join(root, '.omd/discovery/domain/observations');
   mkdirSync(directory, { recursive: true });
-  const imagePath = `.omd/refs/domain/${hostname}.png`;
-  const image = testPng();
-  writeFileSync(join(root, imagePath), image);
+  const observedText = language === 'korean' ? '복지 서비스 혜택 신청 대상 안내입니다' : 'English-language service for residents';
+  const unsigned = { schema: DOMAIN_OBSERVATION_SCHEMA, source, researchLane: 'domain' as const,
+    method, entry: method === 'direct-public' ? 'public-directory' as const : null, capturedAt,
+    acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links },
+    observedText, taskText: observedText, linkLabels: links.map(url => ({ url, text: '신청 서비스 안내' })),
+    language, limitations: DOMAIN_OBSERVATION_LIMITATIONS };
+  const record = { ...unsigned, signature: signNativeObservation(root, DOMAIN_OBSERVATION_SCHEMA, sha256(canonicalJson(unsigned))) };
+  const bytes = `${JSON.stringify(record, null, 2)}\n`;
+  writeFileSync(join(directory, `${sha256(bytes)}.json`), bytes);
+}
+function retainDomain(root: string, hostname: string, capturedAt = new Date().toISOString()): void {
   const source = `https://${hostname}/`;
-  writeFileSync(join(directory, `${hostname}.json`), JSON.stringify({
-    source, component: 'home', researchLane: 'domain', kind: 'page',
-    capturedAt, imagePath, principles: ['Observe task structure'], invariants: null,
-    acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [], imageSha256: sha256(image) },
-    visibleKoreanText: true,
-  }));
-  directRootAt(root, 'domain', source, [`${source}benefits`]);
+  observeDomain(root, source, [`${source}benefits`], capturedAt);
 }
 function mislabeledDesign(root: string, hostname: string): void {
   const directory = join(root, '.omd/refs/design');
@@ -60,6 +65,7 @@ function observedSearch(root: string, input: { readonly lane: 'domain' | 'design
   writeFileSync(join(directory, `search-${sha256(bytes)}.json`), bytes);
 }
 function visitedItem(root: string, url: string, lane: 'domain' | 'design' = 'design', links: readonly string[] = []): void {
+  if (lane === 'domain') { observeDomain(root, url, links, new Date().toISOString(), 'korean', 'navigation'); return; }
   const directory = `.omd/discovery/${lane}/navigation`;
   mkdirSync(join(root, directory), { recursive: true });
   const image = testPng();
@@ -98,11 +104,15 @@ test('work-next moves to Korean design discovery once three distinct local domai
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
+  for (const name of readdirSync(join(root, '.omd/discovery/domain/observations'))) {
+    const record = JSON.parse(readFileSync(join(root, '.omd/discovery/domain/observations', name), 'utf8'));
+    assert.equal(readDomainObservation(root, { url: record.source, capture: { path: `.omd/discovery/domain/observations/${name}`, sha256: name.slice(0, -5) } }).language, 'korean');
+  }
   // When: the pointer recomputes from disk.
   const work = referenceDiscoveryWork(root, route);
   // Then: it never recycles the domain search or substitutes a government portal as design evidence.
   assert.equal(work.status, 'action');
-  assert.equal(work.action?.lane, 'design');
+  assert.equal(work.action?.lane, 'design', JSON.stringify(work.progress));
   assert.equal(work.action?.kind, 'search');
   assert.equal(work.action?.input?.lane, 'design');
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
@@ -206,11 +216,11 @@ test('domain discovery does not recurse into unrelated footer or pagination chai
   const route = routeAdaptiveFlow(routeInput());
   const rootUrl = 'https://www.bokjiro.go.kr/';
   const taskUrl = `${rootUrl}benefits`;
-  directRootAt(root, 'domain', rootUrl, [taskUrl, 'https://www.facebook.com/bokjiro']);
+  observeDomain(root, rootUrl, [taskUrl, 'https://www.facebook.com/bokjiro']);
   visitedItem(root, taskUrl, 'domain', [`${taskUrl}?page=2`]);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'retain-reference');
-  assert.equal(work.action?.url, taskUrl);
+  assert.notEqual(work.action?.kind, 'retain-reference');
+  assert.notEqual(work.action?.url, `${taskUrl}?page=2`);
 });
 
 test('a searched service homepage does not promote an unrelated footer operator as a comparable service', t => {
@@ -222,15 +232,15 @@ test('a searched service homepage does not promote an unrelated footer operator 
   observedSearch(root, input, [{ url: service, text: '복지로 맞춤형급여안내' }]);
   visitedItem(root, service, 'domain', ['https://www.ftc.go.kr/bizCommPop.do?wrkr_no=1234567890']);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'retain-reference');
-  assert.equal(work.action?.url, service);
+  assert.notEqual(work.action?.kind, 'retain-reference');
+  assert.notEqual(work.action?.url, 'https://www.ftc.go.kr/bizCommPop.do?wrkr_no=1234567890');
 });
 
 test('a signed public directory can lead to a different service family', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   const service = 'https://www.welfarehello.com/recommend-policy/';
-  directRootAt(root, 'domain', 'https://directory.example/', [service]);
+  observeDomain(root, 'https://directory.example/', [service]);
   const work = referenceDiscoveryWork(root, route);
   assert.equal(work.action?.kind, 'follow-link');
   assert.equal(work.action?.url, service);
@@ -305,11 +315,7 @@ test('an English-only dot-kr capture does not satisfy Korean local domain covera
   const route = routeAdaptiveFlow(routeInput());
   for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr']) retainDomain(root, hostname);
   const englishHost = 'english-only.example.kr';
-  retainDomain(root, englishHost);
-  const path = join(root, `.omd/refs/domain/${englishHost}.json`);
-  const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-  delete record.visibleKoreanText;
-  writeFileSync(path, JSON.stringify(record));
+  observeDomain(root, `https://${englishHost}/`, [], new Date().toISOString(), 'non-korean');
   const work = referenceDiscoveryWork(root, route);
   assert.equal(work.progress.domainFamilies, 2);
   assert.equal(work.action?.lane, 'domain');
@@ -318,6 +324,7 @@ test('an English-only dot-kr capture does not satisfy Korean local domain covera
 test('an old gallery wrapper cannot turn a fresh original into current design coverage', t => {
   const value = designAdmissionFixture(t);
   value.addSecondDesignDirection();
+  for (const host of ['alpha.com', 'beta.im', 'gamma.info']) retainDomain(value.root, host);
   const oldGallery = JSON.parse(readFileSync(value.gallery.path, 'utf8')) as Record<string, unknown>;
   oldGallery.capturedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
   writeFileSync(value.gallery.path, JSON.stringify(oldGallery));
@@ -438,6 +445,7 @@ test('exclusion refuses an unvisited item without mutating the project', t => {
 test('admitted independent design sources lead to board publication rather than schema repetition', t => {
   const fixture = designAdmissionFixture(t);
   fixture.addSecondDesignDirection();
+  for (const host of ['alpha.com', 'beta.im', 'gamma.info']) retainDomain(fixture.root, host);
   const input = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8'));
   const work = referenceDiscoveryWork(fixture.root, routeAdaptiveFlow(input));
   assert.equal(work.status, 'ready');

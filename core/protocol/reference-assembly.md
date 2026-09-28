@@ -200,7 +200,17 @@ Discovery always saves two separate ledgers:
   board, mood, typography, component, and craft evidence already defined by this protocol. Domain
   research is not visual direction merely because the comparable product looks polished.
 
-Capture into the correct lane from the beginning: `omd ref add --lane domain|design`, or `lane` on
+Capture design visuals with `omd ref add --lane design`; selected domain research uses
+signed text/link `omd ref navigate --lane domain` observations. Domain v8 feature citations bind
+visible text or exact link labels and URLs; compare each service to the requested functionality
+and author adopt/avoid decisions. Domain observations never supply screenshots or visual board
+pieces. Insufficient observed text is undetermined, never foreign, and is re-observed once within
+a bounded settle. Gallery selector ambiguity offers exact CSS image candidates; pick one image.
+Acquisition has 60-second navigation/search and 120-second retained-reference budgets; the
+300-second Pi watchdog is catastrophic containment, not a signed observation. Timeout attempts
+are unavailable evidence and require a new work pointer.
+
+Capture into the correct lane from the beginning: `omd ref add --lane design`, or `lane` on
 every batch entry. Selected discovery refuses omitted lanes before acquisition. Design discovery
 starts with an inspected free gallery/bookmark item via `omd ref navigate --lane design`, then
 retains its recorded original link via `omd ref add` or captures one actual UI image element with

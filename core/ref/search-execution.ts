@@ -13,6 +13,7 @@ import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { actionableSearchTargets, observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
 import { currentReferenceEvidenceAfter } from './discovery-record.ts';
+import { SEARCH_BUDGET_MS, withAcquisitionDeadline, type AcquisitionDeadlineScope } from './acquisition-deadline.ts';
 
 export { observedSearchTargets } from './search-result.ts';
 
@@ -129,7 +130,8 @@ function parseResults(value: unknown, links: readonly string[]): readonly Observ
  * an actual GET and its visible page; a 200 response does NOT establish a useful search or quality. */
 export async function executeReferenceSearch(browser: Browser, value: unknown, writer: ProjectWriteAdapter): Promise<Receipt> {
   const input = parseSearchInput(value);
-  const networkProxy = await createPublicNetworkProxy();
+  let timedOut = false;
+  let networkProxy: Awaited<ReturnType<typeof createPublicNetworkProxy>> | undefined;
   let context: Awaited<ReturnType<Browser['newContext']>> | undefined;
   let documents: DocumentObserver | undefined;
   let capture: Receipt | null = null;
@@ -141,12 +143,15 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
   let links: string[] = [];
   let results: ObservedSearchResult[] = [];
   try {
-    context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
-      proxy: { server: networkProxy.server } });
+    await withAcquisitionDeadline({ budgetMs: SEARCH_BUDGET_MS, phase: 'reference search' }, async (scope: AcquisitionDeadlineScope) => {
+    networkProxy = scope.own(await createPublicNetworkProxy());
+    try {
+    context = scope.own(await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
+      proxy: { server: networkProxy.server } }));
     await disableUnproxiedRealtimeTransports(context);
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     const page = await context.newPage();
-    documents = await observeDocumentResponses(page);
+    documents = scope.own(await observeDocumentResponses(page));
     await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
     const observation = await captureSearchObservation(page, documents);
@@ -171,17 +176,24 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
       }
       catch { status = 'http-error'; error = 'Redirected away from the exact search query; inspect the capture and use a public alternative'; }
     }
+    } finally {
+      try { await documents?.close(); }
+      finally {
+        try { await context?.close(); }
+        finally { await networkProxy.close(); }
+      }
+    }
+    scope.assertLive();
+    });
   } catch (caught) {
     // Do not present a partial navigation or old blank-page screenshot as search evidence.
+    timedOut = caught instanceof Error && 'code' in caught && caught.code === 'REFERENCE_ACQUISITION_TIMEOUT';
     status = 'navigation-error'; capture = null; captureBytes = null; links = []; results = []; httpStatus = null;
+    finalUrl = null;
     error = (caught instanceof Error ? caught.message : String(caught)).slice(0, 4096);
-  } finally {
-    try { await documents?.close(); }
-    finally {
-      try { await context?.close(); }
-      finally { await networkProxy.close(); }
-    }
   }
+  // A timed-out observation has no authority to publish its partial screenshot or links.
+  if (timedOut) { capture = null; captureBytes = null; links = []; results = []; finalUrl = null; httpStatus = null; }
   const unsigned = { schema: SEARCH_EXECUTION_SCHEMA, lane: input.lane, query: input.query, queryParam: input.queryParam,
     requestedUrl: input.url, finalUrl, provider: new URL(input.url).hostname, observedAt: new Date().toISOString(),
     status, httpStatus, links, results, capture, error, limitations: LIMITATIONS } as const;
@@ -189,7 +201,9 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     signature: signNativeObservation(writer.projectRoot, SEARCH_EXECUTION_SCHEMA, hash(canonicalJson(unsigned))) };
   const bytes = `${JSON.stringify(execution, null, 2)}\n`;
   const receipt = { path: `.omd/discovery/${input.lane}/search-${hash(bytes)}.json`, sha256: hash(bytes) };
-  if (capture !== null && captureBytes !== null) writer.write(capture.path, captureBytes);
+  const captured = capture as Receipt | null;
+  const image = captureBytes as Buffer | null;
+  if (captured !== null && image !== null) writer.write(captured.path, image);
   writer.write(receipt.path, bytes);
   return receipt;
 }

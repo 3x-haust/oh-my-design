@@ -6,7 +6,6 @@ import { refIdentity } from '../core/ref/identity.ts';
 import {
   parseReferenceResearch,
   validateReferenceResearch,
-  REFERENCE_RESEARCH_SCHEMA,
 } from '../core/ref/reference-research.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
@@ -79,7 +78,7 @@ function currentResearch(t: TestContext, secondChannel = 7) {
     grid: { column: 1, span: 12, order: 1 },
   });
   fixture.refreshBoard();
-  const research = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null };
+  const research = { ...fixture.research, schema: 'reference-research-v7', marketCoverage: null };
   return { ...fixture, research, secondSource: source, secondGallery: gallery };
 }
 
