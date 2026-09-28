@@ -67,13 +67,13 @@ function fail(code: UxPolicyErrorCode, detail?: string): never {
   throw new UxPolicyError(code, detail);
 }
 
-function isObject(value: unknown): value is object {
+function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function hasExactKeys(value: object, expected: readonly string[]): boolean {
+function hasExactKeys(value: object, expected: readonly string[], optional: readonly string[] = []): boolean {
   try {
-    const projected = knownFields(value, expected, [], 'uxPolicy');
+    const projected = knownFields(value, expected, optional, 'uxPolicy');
     for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
     return true;
   } catch { return false; }
@@ -84,32 +84,31 @@ function parseDecision(input: unknown, index: number): UxPolicyDecision {
     || ['id', 'kind', 'status'].some(key => {
       const descriptor = Reflect.getOwnPropertyDescriptor(input, key);
       return descriptor === undefined || !descriptor.enumerable || !('value' in descriptor);
-    }) || !('id' in input) || !('kind' in input) || !('status' in input)) return fail('MALFORMED_POLICY');
+    }) || !('id' in input) || !('kind' in input) || !('status' in input)) return fail('MALFORMED_POLICY', `uxPolicy.decisions[${index}] must be an object with enumerable id, kind, status fields`);
   if (typeof input.id !== 'string' || input.id.trim().length === 0) {
-    return fail('MALFORMED_POLICY');
+    return fail('MALFORMED_POLICY', `uxPolicy.decisions[${index}].id must be a non-empty string`);
   }
 
   switch (input.kind) {
     case 'hard_safety_rail':
       if (!hasExactKeys(input, ['id', 'kind', 'status'])) return fail('MALFORMED_POLICY');
-      if (input.status !== 'enforced') return fail('HARD_SAFETY_RAIL_REQUIRED');
+      if (input.status !== 'enforced') return fail('HARD_SAFETY_RAIL_REQUIRED', `uxPolicy.decisions[${index}].status must be "enforced"; expected { id: non-empty string, kind: "hard_safety_rail", status: "enforced" }`);
       return Object.freeze({ id: input.id, kind: input.kind, status: input.status });
 
     case 'required_outcome':
       if (!hasExactKeys(input, ['id', 'kind', 'status'])) return fail('MALFORMED_POLICY');
-      if (input.status !== 'required') return fail('REQUIRED_OUTCOME_REQUIRED');
+      if (input.status !== 'required') return fail('REQUIRED_OUTCOME_REQUIRED', `uxPolicy.decisions[${index}].status must be "required" for kind "required_outcome"`);
       return Object.freeze({ id: input.id, kind: input.kind, status: input.status });
 
     case 'recommended_method':
-      if (input.status !== 'selected' && input.status !== 'skipped') return fail('MALFORMED_POLICY');
-      if (!Object.hasOwn(input, 'reason')) return fail('RECOMMENDATION_REASON_REQUIRED');
-      if (!hasExactKeys(input, ['id', 'kind', 'status', 'reason']) || !('reason' in input)) return fail('MALFORMED_POLICY');
-      if (typeof input.reason !== 'string' || input.reason.trim().length === 0) return fail('RECOMMENDATION_REASON_REQUIRED');
-      return Object.freeze({ id: input.id, kind: input.kind, status: input.status, reason: input.reason });
+      if (input.status !== 'selected' && input.status !== 'skipped') return fail('MALFORMED_POLICY', `uxPolicy.decisions[${index}].status must be "selected" or "skipped"`);
+      if (!hasExactKeys(input, ['id', 'kind', 'status'], ['reason'])) return fail('MALFORMED_POLICY');
+      return Object.freeze({ id: input.id, kind: input.kind, status: input.status,
+        reason: typeof input.reason === 'string' ? input.reason : '' });
 
     case 'free_choice':
       if (!hasExactKeys(input, ['id', 'kind', 'status'])) return fail('MALFORMED_POLICY');
-      if (input.status !== 'selected' && input.status !== 'skipped') return fail('MALFORMED_POLICY');
+      if (input.status !== 'selected' && input.status !== 'skipped') return fail('MALFORMED_POLICY', `uxPolicy.decisions[${index}].status must be "selected" or "skipped"`);
       return Object.freeze({ id: input.id, kind: input.kind, status: input.status });
 
     default:
@@ -135,7 +134,7 @@ export function parseUxPolicy(input: unknown): UxPolicy {
       }
       throw error;
     }
-    if (ids.has(decision.id)) return fail('DUPLICATE_POLICY_ID');
+    if (ids.has(decision.id)) return fail('DUPLICATE_POLICY_ID', `uxPolicy.decisions[${index}].id must be unique`);
     ids.add(decision.id);
     decisions.push(decision);
   }
@@ -145,6 +144,33 @@ export function parseUxPolicy(input: unknown): UxPolicy {
 
 function assertNever(value: never): never {
   throw new UxPolicyError('MALFORMED_POLICY');
+}
+
+export function uxPolicyWarnings(input: unknown): readonly { path: string; code: string; message: string }[] {
+  if (!isObject(input) || !Array.isArray(input.decisions)) return [];
+  return input.decisions.flatMap((decision: unknown, index: number) => isObject(decision)
+    && decision.kind === 'recommended_method' && (typeof decision.reason !== 'string' || !decision.reason.trim())
+    ? [{ path: `uxPolicy.decisions[${index}].reason`, code: 'RECOMMENDATION_REASON_REQUIRED',
+      message: `uxPolicy.decisions[${index}].reason should be a non-empty string explaining the selected or skipped recommendation` }] : []);
+}
+
+export function diagnoseUxPolicy(input: unknown): readonly { path: string; code: string; message: string }[] {
+  if (!isObject(input) || !Array.isArray(input.decisions)) {
+    try { parseUxPolicy(input); } catch (error) {
+      if (error instanceof UxPolicyError) return [{ path: 'uxPolicy', code: error.code, message: error.message }];
+      throw error;
+    }
+    return [];
+  }
+  const diagnostics: { path: string; code: string; message: string }[] = [];
+  for (const [index, decision] of input.decisions.entries()) {
+    try { parseDecision(decision, index); } catch (error) {
+      if (!(error instanceof UxPolicyError)) throw error;
+      diagnostics.push({ path: `uxPolicy.decisions[${index}]`, code: error.code,
+        message: error.message === error.code ? `${error.code}: uxPolicy.decisions[${index}] must have a non-empty id, a valid kind, and its required status (hard_safety_rail: enforced; required_outcome: required; recommended_method/free_choice: selected|skipped)` : error.message });
+    }
+  }
+  return diagnostics;
 }
 
 export function checkUxPolicy(policy: UxPolicy): UxPolicyCheck {

@@ -240,6 +240,7 @@ interface Opts {
   selected?: boolean;
   gate?: boolean;
   publish?: boolean;
+  purpose?: string;
 }
 
 const FLAGS = new Set(['json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish', 'consent']);
@@ -3387,6 +3388,14 @@ async function cmdSchema(name: string | undefined, opts: Opts): Promise<never> {
     else for (const entry of INPUT_SKELETONS) console.log(`  ${entry.name.padEnd(22)} ${entry.path.padEnd(38)} ${entry.command}`);
     process.exit(0);
   }
+  if (name === 'ai-judgment') {
+    if (typeof opts.purpose !== 'string' || opts._.length) throw new Error('usage: omd schema ai-judgment --purpose <workflow-intent|workflow-continuation|target-market> [--json]');
+    const { judgmentStarter } = await import('./judgment-command.ts');
+    const entry = judgmentStarter(process.cwd(), opts.purpose, invocationFromActivation(opts, 'omd schema ai-judgment'));
+    if (opts.json) process.stdout.write(JSON.stringify(entry));
+    else console.log(`${entry.name} -> ${entry.path}\nvalidated by: ${entry.command}\nallowed decisions: ${entry.decisions.join(', ')}\n${JSON.stringify(entry.skeleton, null, 2)}`);
+    process.exit(0);
+  }
   const staticEntry = inputSkeleton(name);
   const entry = await contextualSchema(staticEntry, opts);
   if (opts.json) process.stdout.write(JSON.stringify(entry));
@@ -4963,7 +4972,8 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
     }
     const diagnostics = diagnoseAdaptiveRouteInput(input, localeDesign);
     const { adaptiveRouteUnknownFieldWarnings } = await import('../core/route/adaptive-flow-boundary.ts');
-    const warnings = adaptiveRouteUnknownFieldWarnings(input);
+    const { uxPolicyWarnings } = await import('../core/ux/policy.ts');
+    const warnings = [...adaptiveRouteUnknownFieldWarnings(input), ...uxPolicyWarnings(isRecord(input) ? input.uxPolicy : undefined)];
     const report = { schema: 'adaptive-route-validation-v1', ok: diagnostics.length === 0, published: false, diagnostics, warnings };
     if (diagnostics.length) {
       const next = 'Repair the named fields together, preserving user facts, risk, scope and selected work; rerun route validate with the same input and locale context. Do not run completion or guess unrelated stages. Classification is available only after validation passes.';

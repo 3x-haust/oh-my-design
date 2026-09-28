@@ -30,6 +30,11 @@ import { validateAdaptiveAiAssetSelection } from './adaptive-ai-assets.ts';
 import { requiredAttributionCategories, validateAttributionCoverage } from './adaptive-attribution.ts';
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
 import { hasLocaleMarketAuthority } from './locale-market-authority.ts';
+import { diagnoseUxPolicy } from '../ux/policy.ts';
+import { parseTaskOutcomeContract } from '../brief/task-outcome.ts';
+import { parseEvidenceClaimPublication } from '../brief/evidence-claims.ts';
+import { parseDesignAxisInput } from './design-axis-routing.ts';
+import { parseAdaptiveBrowserContext, parseAdaptiveLearningContext } from './adaptive-flow-boundary.ts';
 import { isVerifiedJudgment, type VerifiedJudgment } from '../judgment/index.ts';
 
 function validateRecommendation(strategy: AdaptiveStrategyDecision, value: RecommendedMethodDecision): void {
@@ -252,11 +257,31 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
         : (error.message.split(':')[0] ?? 'MALFORMED_ADAPTIVE_ROUTE');
       // Unexpected exceptions are bugs, not model-repairable input diagnostics.
       if (!/^[A-Z][A-Z0-9_]+$/.test(code)) throw error;
-      diagnostics.push({ path, code, message: error.message });
+      diagnostics.push({ path, code, message: error.message === code
+        ? `${code}: ${path} has an invalid required shape or enum; run omd schema route-input for its field contract`
+        : error.message });
     }
   };
   let input: ValidatedAdaptiveRouteInput | undefined;
   check('input', () => { input = validated(value, localeDesign); });
+  if (input === undefined && typeof value === 'object' && value !== null && 'uxPolicy' in value) {
+    const policyIssues = diagnoseUxPolicy(value.uxPolicy);
+    if (policyIssues.length) {
+      if (diagnostics[0]?.path === 'input' && policyIssues.some(issue => diagnostics[0]?.code === issue.code)) diagnostics.shift();
+      diagnostics.push(...policyIssues);
+    }
+  }
+  if (input === undefined && typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const rawFields = value as Record<string, unknown>;
+    const independent: readonly [string, (raw: unknown) => unknown][] = [
+      ['taskOutcome', parseTaskOutcomeContract], ['evidenceClaims', parseEvidenceClaimPublication],
+      ['referenceDiscovery', routeReferenceDiscovery], ['designAxes', parseDesignAxisInput],
+      ['browserDecisionContext', parseAdaptiveBrowserContext], ['validatedLearningContext', parseAdaptiveLearningContext],
+    ];
+    for (const [path, parse] of independent) if (Object.hasOwn(rawFields, path)) check(path, () => { parse(rawFields[path]); });
+    if (diagnostics.length > 1 && diagnostics[0]?.path === 'input'
+      && diagnostics.slice(1).some(issue => issue.code === diagnostics[0]?.code)) diagnostics.shift();
+  }
   if (input === undefined && typeof value === 'object' && value !== null && 'strategyDecision' in value) {
     const raw = value.strategyDecision;
     diagnostics.push(...diagnoseAdaptiveStrategyFields(raw));

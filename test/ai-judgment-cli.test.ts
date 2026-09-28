@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +12,32 @@ import { capturePiRequest, capturePiUserTurn, requestDigest } from '../extension
 import { createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 const sha = (text: string) => createHash('sha256').update(text).digest('hex');
 const fixture = () => JSON.parse(readFileSync(fileURLToPath(new URL('./fixtures/adaptive-flow/copy-only.json', import.meta.url)), 'utf8'));
+test('schema ai-judgment writes a current publishable starter for request and continuation', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-judgment-starter-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const input = fixture();
+  publishTestAdaptiveRoute(root, input);
+  capturePiRequest(root, input.request);
+  const cli = (...args: string[]) => JSON.parse(execFileSync(process.execPath,
+    [fileURLToPath(new URL('../bin/omd.mjs', import.meta.url)), ...args, '--json'],
+    { cwd: root, encoding: 'utf8' }));
+  const starter = cli('schema', 'ai-judgment', '--purpose', 'workflow-intent');
+  assert.equal(starter.path, '.omd/.cache/ai-judgment-workflow-intent.json');
+  assert.deepEqual(starter.decisions, ['implement', 'inspect', 'skill-only', 'other']);
+  assert.equal(starter.skeleton.quotes[0].field, 'request');
+  assert.equal(starter.skeleton.context.requestSha256, sha(input.request));
+  assert.equal(readFileSync(join(root, starter.path), 'utf8').trim(), JSON.stringify(starter.skeleton, null, 2));
+  const published = cli('ai-judgment', 'publish', '--input', starter.path);
+  assert.equal(cli('ai-judgment', 'check', '--judgment', published.receipt.path).judgment.decision, 'implement');
+  const turn = capturePiUserTurn(root, { text: 'Continue implementation', sessionId: 'session', turnId: 'turn', afterStopId: 'stop' });
+  const next = cli('schema', 'ai-judgment', '--purpose', 'workflow-continuation');
+  assert.equal(next.skeleton.context.questionDigest, null);
+  assert.equal(next.skeleton.payload.routeSha256, turn.routeSha256);
+  assert.equal(next.skeleton.quotes[0].text, turn.text);
+  const resumed = cli('ai-judgment', 'publish', '--input', next.path);
+  assert.equal(cli('ai-judgment', 'check', '--judgment', resumed.receipt.path).judgment.decision, 'resume');
+});
+
 test('CLI publishes a request-bound target-market without using route-bound context', async t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-market-judgment-cli-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));

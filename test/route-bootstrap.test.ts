@@ -156,6 +156,47 @@ test('real Pi request classifies with advisory process omissions; final evidence
   assert.equal(existsSync(join(cwd, 'src')), false);
 });
 
+test('test-038 explicit skill continues route repair without a judgment after policy validation fails', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-test038-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const h = harness(cwd);
+  const prompt = '/skill:omd-ultradesign Build a benefits product.';
+  await h.emit('input', { source: 'interactive', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  const input = fixture();
+  input.uxPolicy.decisions[1].status = 'required';
+  input.uxPolicy.decisions.push({ id: 'optional-discovery', kind: 'recommended_method', status: 'selected' });
+  await h.author(input);
+  const failed = await h.run(['route', 'validate', '--input', inputPath, '--json']);
+  assert.equal(failed.details.code, 1);
+  const report = JSON.parse(failed.content[0]!.text.replace(/^OMD_CLI_FAILED \(1\): /, ''));
+  assert.deepEqual(report.diagnostics.map((d: { code: string }) => d.code), ['HARD_SAFETY_RAIL_REQUIRED']);
+  assert.match(report.diagnostics[0].message, /uxPolicy.decisions\[1\].status.*"enforced"/);
+  assert.deepEqual(report.warnings.map((w: { code: string }) => w.code).filter((c: string) => c === 'RECOMMENDATION_REASON_REQUIRED'), ['RECOMMENDATION_REASON_REQUIRED']);
+  await h.end();
+  assert.deepEqual(h.sent.map(([message]) => message.customType), ['omd-route-repair']);
+  assert.match(h.sent[0]![0].content, /full workflow/);
+});
+
+test('route validation collects multiple malformed policy decisions in one call', () => {
+  const input = fixture();
+  input.uxPolicy.decisions[0].status = 'skipped';
+  input.uxPolicy.decisions[1].status = 'required';
+  input.uxPolicy.decisions.push({ id: 'optional', kind: 'recommended_method', status: 'selected' });
+  const diagnostics = diagnoseAdaptiveRouteInput(input);
+  assert.deepEqual(diagnostics.map(d => d.code), ['REQUIRED_OUTCOME_REQUIRED', 'HARD_SAFETY_RAIL_REQUIRED']);
+  assert.deepEqual(diagnostics.map(d => d.path), ['uxPolicy.decisions[0]', 'uxPolicy.decisions[1]']);
+});
+
+test('route validation diagnoses independent route fields despite an earlier malformed field', () => {
+  const input = fixture();
+  input.uxPolicy.decisions[1].status = 'required';
+  input.browserDecisionContext.status = 'invalid';
+  const diagnostics = diagnoseAdaptiveRouteInput(input);
+  assert.ok(diagnostics.some(d => d.code === 'HARD_SAFETY_RAIL_REQUIRED'));
+  assert.ok(diagnostics.some(d => d.path === 'browserDecisionContext'));
+});
+
 test('bootstrap retries stop on repeated unchanged input and reread current input; input-only recovery does not authorize publication', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-budget-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));

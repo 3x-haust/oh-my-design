@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { finalizeFinalEvidence } from '../core/evidence/final.ts';
 import { UxPolicyError, checkUxPolicy, parseUxPolicy } from '../core/ux/index.ts';
+import { uxPolicyWarnings, diagnoseUxPolicy } from '../core/ux/policy.ts';
 
 function assertPolicyError(run: () => unknown, code: UxPolicyError['code']): void {
   assert.throws(run, (error: unknown) => {
@@ -88,12 +89,15 @@ test('policy rejects attempts to skip hard rails or required outcomes', () => {
   }), 'REQUIRED_OUTCOME_REQUIRED');
 });
 
-test('recommended methods require a non-empty reason for either decision', () => {
+test('missing recommendation reasons are advisory for either decision', () => {
   for (const decision of [
     { id: 'reference-discovery', kind: 'recommended_method', status: 'skipped' },
     { id: 'reference-discovery', kind: 'recommended_method', status: 'selected', reason: '   ' },
   ]) {
-    assertPolicyError(() => parseUxPolicy({ schema: 'ux-policy-v1', decisions: [decision] }), 'RECOMMENDATION_REASON_REQUIRED');
+    const input = { schema: 'ux-policy-v1', decisions: [decision] };
+    assert.equal(parseUxPolicy(input).decisions.length, 1);
+    assert.deepEqual(diagnoseUxPolicy(input), []);
+    assert.equal(uxPolicyWarnings(input)[0]?.code, 'RECOMMENDATION_REASON_REQUIRED');
   }
 });
 

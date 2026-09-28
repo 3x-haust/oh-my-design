@@ -176,7 +176,7 @@ export function parseAdaptiveBrowserContext(value: unknown): AdaptiveBrowserDeci
   const item = fields(value, CONTEXT_KEYS);
   if (item.get('schema') !== ADAPTIVE_BROWSER_CONTEXT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const status = item.get('status');
-  if (status !== 'pending' && status !== 'validated') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  if (status !== 'pending' && status !== 'validated') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'browserDecisionContext.status must be "pending" or "validated"');
   const decisionIds = ids(item.get('decisionIds'), true);
   if (status === 'validated' && decisionIds.length === 0)
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
@@ -187,7 +187,7 @@ export function parseAdaptiveLearningContext(value: unknown): AdaptiveLearningCo
   const item = fields(value, LEARNING_KEYS);
   if (item.get('schema') !== ADAPTIVE_LEARNING_CONTEXT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const status = item.get('status');
-  if (status !== 'none' && status !== 'candidate' && status !== 'promoted') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  if (status !== 'none' && status !== 'candidate' && status !== 'promoted') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'validatedLearningContext.status must be "none", "candidate", or "promoted"');
   const learningIds = ids(item.get('learningIds'), status === 'none');
   if ((status === 'none' && learningIds.length !== 0) || (status !== 'none' && learningIds.length === 0))
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');

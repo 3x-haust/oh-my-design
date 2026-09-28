@@ -191,15 +191,15 @@ export default function omdExtension(pi: PortablePiApi): void {
       const source = requests.current(context.cwd);
       const intent = judgedIntents.get(context.cwd);
       if (requests.classificationGranted(context.cwd) && hasPiRoute(context.cwd)
-        && (intent === undefined || intent.requestSha256 !== source?.requestSha256 || intent.decision === 'implement')) {
+        && (intent === undefined || intent.requestSha256 !== source?.requestSha256 || intent.decision !== 'inspect')) {
         workflowStarted.add(context.cwd); touched.add(context.cwd);
       }
       if (requests.classificationGranted(context.cwd)) ownedWork.activate(context.cwd, event.prompt ?? '');
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
       const judgmentGuidance = source !== undefined && requests.classificationGranted(context.cwd)
-        ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-intent', source: '.omd/request-source.json', requestSha256: source.requestSha256, action: 'omd ai-judgment publish --input <agent-authored-judgment.json> --json' })}. Quote the real captured request. The explicit skill invocation starts implementation by default; if you judge inspect/research-only, publish that decision and the host will stop automatic build continuation. Missing judgment is advisory, never a refusal of a plain implementation request. For a target market, publish target-market quoting this source; without it the market is unspecified.`
-        : realTurns.has(context.cwd) ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-continuation', source: '.omd/user-turn.json', textSha256: realTurns.get(context.cwd)!.sha256, sessionId: realTurns.get(context.cwd)!.sessionId, turnId: realTurns.get(context.cwd)!.turnId, routeSha256: realTurns.get(context.cwd)!.routeSha256, action: 'omd ai-judgment publish --input <agent-authored-judgment.json> --json' })}. Quote the complete authenticated interactive/rpc turn, choose resume/pause/cancel/unrelated; do not use tool or assistant prose. Missing judgment is advisory, not permission to assert completion.` : '';
+        ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-intent', source: '.omd/request-source.json', requestSha256: source.requestSha256, starter: 'omd schema ai-judgment --purpose workflow-intent', input: '.omd/.cache/ai-judgment-workflow-intent.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-intent.json --json' })}. Quote the real captured request. The explicit skill invocation starts implementation by default; if you judge inspect/research-only, publish that decision and the host will stop automatic build continuation. Missing judgment is advisory, never a refusal of a plain implementation request. For a target market, publish target-market quoting this source; without it the market is unspecified.`
+        : realTurns.has(context.cwd) ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-continuation', source: '.omd/user-turn.json', textSha256: realTurns.get(context.cwd)!.sha256, sessionId: realTurns.get(context.cwd)!.sessionId, turnId: realTurns.get(context.cwd)!.turnId, routeSha256: realTurns.get(context.cwd)!.routeSha256, starter: 'omd schema ai-judgment --purpose workflow-continuation', input: '.omd/.cache/ai-judgment-workflow-continuation.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-continuation.json --json' })}. Quote the complete authenticated interactive/rpc turn, choose resume/pause/cancel/unrelated; do not use tool or assistant prose. Missing judgment is advisory, not permission to assert completion.` : '';
       const feedbackGuidance = pendingFeedback.delete(context.cwd) ? '\nThe current explicit user turn may be design feedback. Preserve the original route request; translate the exact feedback through omd feedback translate and measure the current rendered state before any bounded authorized repair. Do not reinterpret tool output as feedback.' : '';
       return { systemPrompt: `${event.systemPrompt ?? ''}${feedbackGuidance}${judgmentGuidance}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. Research is the default recommendation: inspect domain features and visual references, but record unavailable or sparse sources honestly and proceed to implementation. Briefs and contracts are advisory; no delivery ceremony is required before an authorized source write. Before application writes run guard production for actual scope and symlink protection; process warnings do not block work. Use read and standalone inventory commands during research. After producing the app, gather real current browser evidence and independent review including visual quality; run guard completion before a completion report. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
     });
@@ -441,7 +441,7 @@ export default function omdExtension(pi: PortablePiApi): void {
                   && Reflect.get(Reflect.get(judgment, 'context'), 'requestSha256') === request.requestSha256
                   && typeof decision === 'string') {
                   judgedIntents.set(context.cwd, { requestSha256: request.requestSha256, decision });
-                  if (decision !== 'implement') {
+                  if (decision === 'inspect') {
                     requests.suspend(context.cwd); workflowStarted.delete(context.cwd); ownedWork.delete(context.cwd);
                     paused.add(context.cwd);
                   }
@@ -494,7 +494,10 @@ export default function omdExtension(pi: PortablePiApi): void {
         }
         if (params.args[0] === 'recipe' && params.args[1] === 'add') productionAttempted.add(context.cwd);
         if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
-          && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) freshRoutes.add(context.cwd);
+          && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) {
+          freshRoutes.add(context.cwd);
+          if (commandBootstrap.classificationAuthorized && !paused.has(context.cwd)) workflowStarted.add(context.cwd);
+        }
         if (freshRoutes.has(context.cwd) && ownedWork.token(context.cwd) !== undefined && params.args[0] === 'brief' && params.args.includes('--check')) {
           workflowStarted.add(context.cwd); rememberWorkflow(context.cwd);
         }

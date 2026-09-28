@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { readPiRequest, readPiUserTurn, requestDigest } from '../extensions/omd-request-source.ts';
@@ -91,6 +91,28 @@ export async function cliReferenceActionBinding(root: string, invocation: Projec
   return { receipt: receiptPath(path), subjectId, fields: verified.judgment.quotes.map(quote => quote.field),
     context: { ...context, read: async file => readContainedRegularFile(root, join(root, file), 'current AI judgment'),
       verifySignature: (digest, signature) => verifyNativeObservation(root, SIGNING_KIND, digest, signature) } };
+}
+
+export function judgmentStarter(root: string, purpose: string, invocation: ProjectRunInvocation) {
+  const policy = REQUEST_POLICIES[purpose];
+  if (!policy) throw new Error(`AI_JUDGMENT_INVALID: unsupported starter purpose ${purpose}; choose ${Object.keys(REQUEST_POLICIES).join('|')}`);
+  const request = readPiRequest(root);
+  if (!request) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: current signed request required');
+  const turn = purpose === 'workflow-continuation' ? readPiUserTurn(root) : undefined;
+  if (purpose === 'workflow-continuation' && !turn) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: current authenticated user turn required');
+  const route = purpose === 'workflow-continuation' ? readPersistedRoute(root, invocation) : null;
+  const path = `.omd/.cache/ai-judgment-${purpose}.json`;
+  const skeleton = { schema: 'ai-judgment-v1', purpose, subjectId: turn?.turnId ?? 'request',
+    context: { requestSha256: request.requestSha256, sourceContractSha256: route?.sourceContractSha256 ?? null,
+      questionDigest: null, documentSha256: null }, decision: policy.decisions[0], reason: 'Explain the decision using the cited source',
+    quotes: [{ source: turn ? { kind: 'user-turn', sessionId: turn.sessionId, turnId: turn.turnId, sha256: turn.sha256 }
+      : { kind: 'route-request', requestSourceSha256: request.recordSha256, requestSha256: request.requestSha256 },
+      field: turn ? 'text' : 'request', itemId: null, text: turn?.text ?? request.request }], evidence: [],
+    payload: turn ? { routeSha256: turn.routeSha256 } : {} };
+  mkdirSync(join(root, '.omd/.cache'), { recursive: true });
+  writeFileSync(join(root, path), `${JSON.stringify(skeleton, null, 2)}\n`);
+  return { name: 'ai-judgment', purpose, path, command: `omd ai-judgment publish --input ${path} --json`,
+    decisions: policy.decisions, skeleton };
 }
 
 export async function runJudgmentCommand(root: string, invocation: ProjectRunInvocation,
