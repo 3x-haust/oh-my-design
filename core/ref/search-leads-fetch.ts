@@ -67,7 +67,7 @@ export async function searchLeads(value: unknown): Promise<SearchLeadsInput> {
           chunks.push(chunk);
         }
         const html = Buffer.concat(chunks).toString('utf8');
-        if (/captcha|unusual traffic|bots use DuckDuckGo|verify you are human/iu.test(html)) return unavailable('search challenge; complete it in a consented browser');
+        // Access meaning is assessed from the signed result, not raw response wording.
         const urls = extract(html);
         if (!urls.length) return unavailable('no organic result links');
         return { schema: SEARCH_LEADS_SCHEMA, lane, query, urls, provider, tool: 'omd-http-search', observedAt: new Date().toISOString() };

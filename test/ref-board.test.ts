@@ -98,9 +98,6 @@ test('reference board rejects closed-key, candidate, source, and grid contract v
   // Given: a valid captured component and malformed manifest variants.
   const directory = root(context); const component = capture(directory, 'component');
   const invalid = [
-    manifest([candidate('one', component.referenceId)], { unexpected: true }),
-    manifest([{ ...candidate('one', component.referenceId), unexpected: true }]),
-    manifest([candidate('one', component.referenceId, [{ ...piece(component.referenceId), unexpected: true }])]),
     manifest([candidate('one', component.referenceId), candidate('one', component.referenceId)]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId), piece(component.referenceId, { slotId: 'hero', grid: { column: 7, span: 6, order: 1 } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId), piece(component.referenceId, { slotId: 'aside', grid: { column: 7, span: 6, order: 0 } })])]),
@@ -110,7 +107,6 @@ test('reference board rejects closed-key, candidate, source, and grid contract v
     manifest([candidate('one', 'ref-0000000000000000')]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { sourceKind: 'page' })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available' } })])]),
-    manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent', unexpected: true } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'unlicensed', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { grid: { column: 0, span: 6, order: 0 } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { grid: { column: 8, span: 6, order: 0 } })])]),

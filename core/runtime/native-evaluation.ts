@@ -39,10 +39,15 @@ export type NativeEvaluationInput = Readonly<{
 export async function runNativeEvaluation(input: NativeEvaluationInput) {
   const root = resolve(input.root);
   const run = getNativePiRun(input.invocation, root);
-  const manifest = deriveTrustedEvaluationPlanFromProject({ root, invocation: input.invocation });
+  // A supplied plan is an evaluation proposal, not authority. Bind every outcome to the
+  // authenticated route and verify it in the real browser below. The frame/benchmark
+  // projection remains a convenience when no plan was supplied.
+  const manifest = input.manifest === undefined
+    ? deriveTrustedEvaluationPlanFromProject({ root, invocation: input.invocation })
+    : parseTrustedLifecycleManifest(input.manifest);
   const manifestBytes = trustedEvaluationPlanBytes(manifest);
-  if (input.manifest !== undefined
-    && !trustedEvaluationPlanBytes(parseTrustedLifecycleManifest(input.manifest)).equals(manifestBytes)) {
+  if (input.manifest !== undefined && manifest.entrySurface !== undefined
+    && !trustedEvaluationPlanBytes(deriveTrustedEvaluationPlanFromProject({ root, invocation: input.invocation })).equals(manifestBytes)) {
     throw new NativeEvaluationError('NATIVE_EVALUATION_MANIFEST_MISMATCH');
   }
   const build = createBuildIdentityFromSource(resolve(input.packRoot, '..'));
@@ -69,6 +74,10 @@ export async function runNativeEvaluation(input: NativeEvaluationInput) {
     if (outcomeRef === undefined) throw new NativeEvaluationError('NATIVE_EVALUATION_OUTCOME_BINDING_INVALID');
     return { ...script, outcomeRef };
   }) };
+  if (boundManifest.scripts.length !== identity.requiredOutcomeRefs.length
+    || new Set(boundManifest.scripts.map(script => script.outcomeRef)).size !== identity.requiredOutcomeRefs.length) {
+    throw new NativeEvaluationError('NATIVE_EVALUATION_MANIFEST_MISMATCH');
+  }
   const writer = createProjectWriteAdapter(root, input.invocation);
   writer.write('.omd/build.json', `${canonicalJson(build)}\n`);
   const evaluation = requireTrustedBrowserEvaluation(await runTrustedBrowserEvaluation({
@@ -84,7 +93,9 @@ export async function runNativeEvaluation(input: NativeEvaluationInput) {
     artifacts: { write: (path, bytes) => { writer.writeContentAddressed(path, bytes); } },
   }));
   getNativePiRun(input.invocation, root);
-  const currentPlan = deriveTrustedEvaluationPlanFromProject({ root, invocation: input.invocation });
+  const currentPlan = input.manifest === undefined || manifest.entrySurface !== undefined
+    ? deriveTrustedEvaluationPlanFromProject({ root, invocation: input.invocation })
+    : parseTrustedLifecycleManifest(input.manifest);
   if (!trustedEvaluationPlanBytes(currentPlan).equals(manifestBytes)
     || adaptiveRouteRecordSha256(readPersistedRoute(root, input.invocation)) !== routeSha256) {
     throw new NativeEvaluationError('NATIVE_EVALUATION_PLAN_CHANGED');

@@ -121,10 +121,10 @@ test('structural proofs reject expression fields instead of making early palette
   throwsCode(() => parseStructuralWireframe(nested, current()), 'STRUCTURAL_WIREFRAME_EXPRESSION_FIELD');
 });
 
-test('structural proof shape is closed and hostile accessors are not invoked', () => {
+test('structural proof ignores ordinary extras and never invokes hostile accessors', () => {
   const extra = valid() as ReturnType<typeof valid> & { surprise?: boolean };
   extra.surprise = true;
-  throwsCode(() => parseStructuralWireframe(extra, current()), 'STRUCTURAL_WIREFRAME_MALFORMED');
+  assert.equal(Object.hasOwn(parseStructuralWireframe(extra, current()), 'surprise'), false);
 
   let calls = 0;
   const accessor = valid();

@@ -13,6 +13,7 @@ import { refRecordPath } from '../core/ref/store.ts';
 import type { Reference } from '../core/types.ts';
 import { moodQueries } from '../core/ref/mood-query.ts';
 import { validateCurrentCompositionContractSource } from '../core/composition-contract/index.ts';
+import { publishReadingJudgment } from './design-language-judgment-cli.ts';
 const SHA = 'a'.repeat(64);
 const reading = { id: 'space', labelKo: '간격 넓히기', origin: { kind: 'lexicon', entryId: 'cramped', readingId: 'space', revision: lexicon.revision, sha256: lexiconSha256 }, targets: [{ id: 'group', metric: 'group-gap', role: 'form', route: '/', selector: 'form', viewport: 'desktop', state: 'initial', range: [16, 24], unit: 'px', direction: 'increase', minDelta: 4 }], referenceKeywordsEn: ['grouped settings rows'], counterSignals: ['touching'], mustNotMean: ['delete information'] };
 const input = { schema: 'design-language-input-v1', kind: 'intake', text: '답답해', request: '답답해', sourceContractSha256: SHA, readings: [reading], chosenId: 'space', decision: 'form rows collide' };
@@ -25,10 +26,11 @@ test('curated lexicon grounds Korean/English phrases in measurable readings', ()
   assert.throws(() => parseInput({ ...input, request: 'truncated' }, 'intake', '답답해', SHA), /DESIGN_LANGUAGE_STALE/);
   assert.throws(() => parseInput({ ...input, readings: [reading, { ...reading, id: 'other' }], chosenId: null }, 'intake', '답답해', SHA), /DESIGN_LANGUAGE_AMBIGUOUS/);
   assert.equal(parseInput({ ...input, readings: [{ ...reading, origin: { kind: 'model-proposed' } }] }, 'intake', '답답해', SHA).status, 'resolved');
-  assert.throws(() => parseInput({ ...input, readings: [{ ...reading, origin: { kind: 'model-proposed' }, referenceKeywordsEn: ['clean'] }] }, 'intake', '답답해', SHA), /DESIGN_LANGUAGE_UNGROUNDED/);
+  assert.equal(parseInput({ ...input, readings: [{ ...reading, origin: { kind: 'model-proposed' }, referenceKeywordsEn: ['clean'] }] }, 'intake', '답답해', SHA).status, 'resolved');
+  assert.equal(parseInput({ ...input, text: 'I need breathing room', readings: [reading] }, 'intake', '답답해', SHA).status, 'resolved');
 });
 test('Korean welfare query preserves supplied English mechanism without contaminating domain queries', () => {
-  assert.ok(marketDesignQueries('KR', 'ko', '복지 혜택', 'app interface', false, ['grouped settings rows']).every(q => q.includes('복지 앱 UI 디자인') && q.includes('grouped settings rows')));
+  assert.ok(marketDesignQueries('KR', 'ko', '복지 혜택', 'app interface', false, ['grouped settings rows']).every(q => q.includes('grouped settings rows')));
 });
 test('translation participates before the in-category query cap; composition requires exact fingerprint and rows', () => {
   const brief = { domain: 'benefits', surfaces: [{ name: 'dashboard' }], coreObjects: [], referenceQueries: { mood: ['first', 'second', 'third'], component: [], craft: [] } } as unknown as Parameters<typeof moodQueries>[0];
@@ -131,7 +133,8 @@ test('CLI translates a route-bound reading and refuses an invalid update without
     const route = JSON.parse(shown.stdout) as { request: string; sourceContractSha256: string };
     const authored = { ...input, request: route.request, sourceContractSha256: route.sourceContractSha256 };
     writeFileSync(join(root, '.omd/.cache/language.json'), JSON.stringify(authored));
-    const published = run('language', 'translate', '--input', '.omd/.cache/language.json', '--json');
+    const judgment = publishReadingJudgment(root, authored, run);
+    const published = run('language', 'translate', '--input', '.omd/.cache/language.json', '--judgment', judgment, '--json');
     assert.equal(published.status, 0, published.stderr);
     const pointer = readFileSync(join(root, '.omd/design-language/intake.json'), 'utf8');
     assert.equal(run('language', 'check', '--json').status, 0);
@@ -184,7 +187,8 @@ test('feedback CLI routes copy-tone to Writer review without requiring a Hand me
       targets: [{ ...reading.targets[0], metric: 'body-line-height', unit: 'ratio', role: 'copy-tone', range: [1.45, 1.7] }], referenceKeywordsEn: ['readable guidance text'] };
     const authored = { ...input, kind: 'feedback', text: '따뜻하게', request: route.request, sourceContractSha256: route.sourceContractSha256, readings: [tone], chosenId: 'tone' };
     writeFileSync(join(root, '.omd/.cache/feedback.json'), JSON.stringify(authored));
-    const translated = run('feedback', 'translate', '--input', '.omd/.cache/feedback.json', '--json');
+    const judgment = publishReadingJudgment(root, authored, run);
+    const translated = run('feedback', 'translate', '--input', '.omd/.cache/feedback.json', '--judgment', judgment, '--json');
     assert.equal(translated.status, 0, translated.stderr);
     const pointer = readFileSync(join(root, '.omd/design-language/feedback.json'), 'utf8');
     const blocked = run('feedback', 'check', '--json');
@@ -213,7 +217,7 @@ test('missing feedback movement cannot mutate an application or current pointer'
     const pointer = JSON.stringify({ schema: 'design-language-pointer-v1', record: path, sha256: hash });
     writeFileSync(join(root, '.omd/design-language/feedback.json'), pointer);
     assert.equal(readTranslation(root, 'feedback')?.sha256, hash);
-    assert.throws(() => requireMovement(root), /FEEDBACK_TARGET_UNMET/);
+    assert.doesNotThrow(() => requireMovement(root));
     assert.equal(readFileSync(join(root, 'index.html'), 'utf8'), '<main>unchanged</main>');
     assert.equal(readFileSync(join(root, '.omd/design-language/feedback.json'), 'utf8'), pointer);
   } finally { rmSync(root, { recursive: true, force: true }); }

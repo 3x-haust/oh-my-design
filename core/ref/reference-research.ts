@@ -1,4 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import {
   DESIGN_REFERENCES_PATH, DOMAIN_REFERENCES_PATH, REFERENCE_RESEARCH_PATH,
@@ -32,6 +34,8 @@ export function referenceResearchArtifacts(research: ReferenceResearch) {
 
 export function publishReferenceResearch(root: string, input: unknown, options: ValidationOptions, writer: ProjectWriteAdapter): void {
   const research = parseReferenceResearch(input);
+  if (research.judgments?.some(receipt => !options.verifiedJudgments?.some(verified => isDeepStrictEqual(verified, receipt))))
+    fail('AI_JUDGMENT_SOURCE_UNVERIFIED');
   validateReferenceResearch(root, research, options);
   writer.write('.omd/refs/design/README.md', designResearchSummary(research));
   for (const [path, value] of Object.entries(referenceResearchArtifacts(research))) {
@@ -49,6 +53,15 @@ export function designResearchSummary(research: ReferenceResearch): string {
       ...Object.entries(item.visualAssessment!).map(([axis, finding]) => `- ${axis}: ${escape(finding)}`), '',
     ]),
   ].join('\n');
+}
+
+export function hasPublishedTaskFlowBenchmark(root: string, sourceContractSha256: string): boolean {
+  if (!existsSync(join(root, REFERENCE_RESEARCH_PATH))) return false;
+  const research = readPublishedReferenceResearch(root);
+  if (research.sourceContractSha256 !== sourceContractSha256) return false;
+  if (research.domainReference.benchmarkSha256 === null) return false;
+  validateReferenceResearch(root, research, { expectedSourceContractSha256: sourceContractSha256, benchmarkRequired: false });
+  return true;
 }
 
 export function readPublishedReferenceResearch(root: string): ReferenceResearch {

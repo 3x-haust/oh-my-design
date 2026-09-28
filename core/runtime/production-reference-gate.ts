@@ -15,7 +15,7 @@ import { resolveRunState, requireConfirmedPlanningForProduction } from '../stage
 import type { ProjectRunInvocation } from './invocation.ts';
 
 export type ProductionReadiness = Readonly<{
-  schema: 'production-readiness-v1'; ok: boolean; blockers: readonly string[];
+  schema: 'production-readiness-v1'; ok: boolean; blockers: readonly string[]; warnings: readonly string[];
 }>;
 
 /** Pre-source checks only: final renders/seals cannot exist before initial implementation.
@@ -26,6 +26,7 @@ export function checkProductionReadiness(
   root: string, invocation: ProjectRunInvocation, packRoot: string, target?: string | readonly string[],
 ): ProductionReadiness {
   const blockers: string[] = [];
+  const warnings: string[] = [];
   const attempt = (label: string, check: () => void): void => {
     try { check(); } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
@@ -37,12 +38,6 @@ export function checkProductionReadiness(
     if (route.deliveryMode === 'design-only' || !route.strategy.stages.includes('production')) {
       blockers.push('production is not selected; finish the design handoff without application writes');
     }
-    attempt('design language', () => {
-      const language = projection(root, route);
-      if (language?.status === 'needs-clarification') throw new Error('DESIGN_LANGUAGE_AMBIGUOUS: resolve the picture-backed question');
-      if (language?.status === 'resolved' && !language.targets.length && !language.copyTone) throw new Error('DESIGN_LANGUAGE_UNGROUNDED');
-      requireCopyToneReview(root, route);
-    });
     const targets = target === undefined ? [] : typeof target === 'string' ? [target] : target;
     const outside = pathsOutsideScope(route, targets);
     for (const path of outside) {
@@ -61,6 +56,13 @@ export function checkProductionReadiness(
         }
       });
     }
+    const hardCount = blockers.length;
+    attempt('design language', () => {
+      const language = projection(root, route);
+      if (language?.status === 'needs-clarification') throw new Error('DESIGN_LANGUAGE_AMBIGUOUS: resolve the picture-backed question');
+      if (language?.status === 'resolved' && !language.targets.length && !language.copyTone) throw new Error('DESIGN_LANGUAGE_UNGROUNDED');
+      requireCopyToneReview(root, route);
+    });
     attempt('production brief', () => { blockers.push(...buildBrief(root, 'production', packRoot, invocation).blockers); });
     attempt('planning', () => {
       const missing = requireConfirmedPlanningForProduction(root);
@@ -119,6 +121,7 @@ export function checkProductionReadiness(
         }
       });
     }
+    warnings.push(...blockers.splice(hardCount));
   });
-  return { schema: 'production-readiness-v1', ok: blockers.length === 0, blockers: [...new Set(blockers)] };
+  return { schema: 'production-readiness-v1', ok: blockers.length === 0, blockers: [...new Set(blockers)], warnings: [...new Set(warnings)] };
 }

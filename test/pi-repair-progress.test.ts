@@ -53,9 +53,12 @@ function harness(t: { after(fn: () => void): void }) {
       ...(consentSelection ? { ui: { select: consentSelection } } : {}) });
   }
   async function start() {
-    await emit('before_agent_start', { prompt: 'omd-ultradesign' });
+    const prompt = '/skill:omd-ultradesign Build the requested application.';
+    await emit('input', { source: 'interactive', text: prompt });
+    await emit('before_agent_start', { prompt });
     await emit('tool_call', { toolName: 'write', input: { path: '.omd/.cache/route.json' } });
     mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
+    writeFileSync(join(cwd, '.omd/.cache/route.json'), '{}');
     assert.ok(tool);
     await tool.execute('route', { args: ['route', 'classify', '--input', '.omd/.cache/route.json'] }, undefined, undefined, { cwd });
     await tool.execute('brief', { args: ['brief', 'domain', '--check'] }, undefined, undefined, { cwd });
@@ -92,7 +95,7 @@ test('missing reference board advances a native discovery action instead of only
     'Pi must execute an owned native acquisition step before another diagnostic turn');
 });
 
-test('an outstanding reference action refuses repeated diagnostics without publishing a board', async t => {
+test('an outstanding reference action permits read-only diagnostics without publishing a board', async t => {
   const h = harness(t); await h.start();
   Object.assign(h.work, {
     stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference', next: 'omd ref advance --json',
@@ -101,10 +104,9 @@ test('an outstanding reference action refuses repeated diagnostics without publi
   });
   await h.end();
   const before = h.calls.length;
-  const refusal = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'discover-plan', '--json'] } }) as { block: boolean; reason: string };
-  assert.equal(refusal.block, true);
-  assert.match(refusal.reason, /OMD_OWNED_WORK_REQUIRED/);
-  assert.equal(h.calls.length, before, 'refused diagnostics must not execute the CLI');
+  const inspection = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'discover-plan', '--json'] } });
+  assert.equal(inspection, undefined);
+  assert.equal(h.calls.length, before, 'tool_call interception does not execute the diagnostic itself');
   assert.equal(existsSync(join(h.cwd, '.omd/reference-board.json')), false);
 });
 
@@ -266,13 +268,13 @@ test('failed or unchanged reference mutations keep the pending-work refusal', as
   h.onReferenceMutation(args => args[2] === 'navigate' ? 1 : 0);
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'navigate', 'https://example.test/', '--json'] } });
   await assert.rejects(h.run(['ref', 'navigate', 'https://example.test/', '--json']));
-  const afterFailure = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(afterFailure.block, true);
+  const afterFailure = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(afterFailure, undefined);
   h.onReferenceMutation(() => 0);
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'add', '--input', 'unrelated.json'] } });
   await h.run(['ref', 'add', '--input', 'unrelated.json']);
-  const afterUnchanged = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(afterUnchanged.block, true);
+  const afterUnchanged = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(afterUnchanged, undefined);
 });
 
 test('successful reference mutation clears pending refusal when work digest advances', async t => {
@@ -290,8 +292,8 @@ test('successful reference mutation clears pending refusal when work digest adva
     return 0;
   });
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'navigate', 'https://example.test/', '--json'] } });
-  const beforeResult = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(beforeResult.block, true, 'a planned mutation is not evidence of completed work');
+  const beforeResult = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(beforeResult, undefined, 'read-only diagnosis remains available before publication');
   await h.run(['ref', 'navigate', 'https://example.test/', '--json']);
   const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
   assert.equal(next, undefined);
@@ -326,8 +328,8 @@ test('successful reference mutation preserves its result when progress diagnosis
   const result = await h.run(['ref', 'navigate', 'https://example.test/', '--json']);
   assert.equal(result.details.code, 0);
   assert.equal(result.content[0]?.text, '{}');
-  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(next.block, true, 'unknown work state must remain pending until message-end recovery');
+  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(next, undefined, 'unknown work state does not prevent a read-only diagnostic');
 });
 
 test('failed internal stage diagnosis releases stale pending refusal for recovery', async t => {

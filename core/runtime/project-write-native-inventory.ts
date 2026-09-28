@@ -40,9 +40,15 @@ const audits: ReadonlyMap<string, WriterAudit> = new Map([
       ['writeFileSync', "writeFileSync(staging, `${canonicalRouteJson({ schema: 'pi-request-source-pointer-v1', record, sha256: recordSha256 })}\\n`, { flag: 'wx', mode: 0o600 });"],
       ['renameSync', 'renameSync(staging, join(projectRoot, POINTER));'],
       ['unlinkSync', 'if (existsSync(staging)) unlinkSync(staging);'],
+      ['writeFileSync', 'writeFileSync(join(projectRoot, TURN_DIRECTORY, `sha256-${digest}.json`), bytes, { flag: \'wx\', mode: 0o600 });'],
+      ['writeFileSync', "writeFileSync(staging, `${canonicalRouteJson({ schema: 'pi-user-turn-pointer-v1', record: `${TURN_DIRECTORY}/sha256-${digest}.json`, sha256: digest })}\\n`, { flag: 'wx', mode: 0o600 });"],
+      ['renameSync', 'renameSync(staging, join(projectRoot, TURN_POINTER));'],
+      ['unlinkSync', '} finally { if (existsSync(staging)) unlinkSync(staging); }'],
     ],
     invariants: [
       "const POINTER = '.omd/request-source.json';", "const DIRECTORY = '.omd/request-sources';",
+      "const TURN_POINTER = '.omd/user-turn.json';", "const TURN_DIRECTORY = '.omd/user-turns';",
+      'verifyNativeObservation(projectRoot, TURN_KIND, requestDigest(canonicalRouteJson(payload)), signature)',
       '!stat.isDirectory() || stat.isSymbolicLink()', "directory(projectRoot, '.omd/activation');",
       'const record = `${DIRECTORY}/sha256-${recordSha256}.json`;',
       "const staging = join(projectRoot, `.omd/.request-source-${randomBytes(8).toString('hex')}.tmp`);",
@@ -53,6 +59,12 @@ const audits: ReadonlyMap<string, WriterAudit> = new Map([
       'signNativeObservation(projectRoot, KIND, requestDigest(canonicalRouteJson(payload)))',
       'writeFileSync(join(projectRoot, record), bytes', 'writeFileSync(staging,',
       'renameSync(staging, join(projectRoot, POINTER));', '} finally {', 'unlinkSync(staging);',
+    ], [
+      'export function capturePiUserTurn(', 'const projectRoot = realpathSync(root);', 'directory(projectRoot, TURN_DIRECTORY);',
+      'const routeSha256 = requestDigest(read(projectRoot, \'.omd/route.json\'));',
+      'signNativeObservation(projectRoot, TURN_KIND, requestDigest(canonicalRouteJson(payload)))',
+      'writeFileSync(join(projectRoot, TURN_DIRECTORY,', 'writeFileSync(staging,',
+      'renameSync(staging, join(projectRoot, TURN_POINTER));', 'unlinkSync(staging);',
     ]],
   }],
   ['core/runtime/native-pi-run.ts', {

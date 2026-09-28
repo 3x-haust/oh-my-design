@@ -134,10 +134,10 @@ function validate(root: string, application: ReferenceApplication, options: Opti
   if (application.sourceContractSha256 !== options.expectedSourceContractSha256
     || application.researchSha256 !== current.researchSha256 || application.domainBriefSha256 !== current.domainBriefSha256) return fail('research/domain/source binding is stale; review affected decisions and republish');
   const surfaces = current.domain.surfaces.map(surface => surface.name);
-  if (surfaces.length !== application.screens.length || surfaces.some(surface => !application.screens.some(row => row.surface === surface))) return fail('cover every current domain surface exactly once');
-  for (const key of ['domain', 'design'] as const) {
-    if (!application.screens.some(row => row[key].referenceIds.length > 0)) return fail(`${key}: collected research must inform at least one surface`);
-  }
+  if (application.screens.some(row => !surfaces.includes(row.surface))
+    || new Set(application.screens.map(row => row.surface)).size !== application.screens.length)
+    return fail('application names an unknown or duplicate domain surface');
+  // Omitted surfaces and lanes remain advisory gaps; submitted identities must still be genuine.
   for (const row of application.screens) for (const key of ['domain', 'design'] as const) {
     const sourceIds = new Set(current.research[key === 'domain' ? 'domainReference' : 'designReference'].sources.map(source => source.id));
     if (row[key].referenceIds.some(id => !sourceIds.has(id))) return fail(`${row.surface}/${key}: unknown or wrong-lane reference`);

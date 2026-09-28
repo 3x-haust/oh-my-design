@@ -58,7 +58,7 @@ function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('DESIGN_LANGUAGE_INVALID');
   return value as Record<string, unknown>;
 }
-function validateReading(value: unknown, text: string): Reading {
+function validateReading(value: unknown): Reading {
   const reading = record(value) as unknown as Reading;
   if (typeof reading.id !== 'string' || !reading.id || typeof reading.labelKo !== 'string' || !reading.labelKo || !Array.isArray(reading.targets) || !Array.isArray(reading.referenceKeywordsEn) || !Array.isArray(reading.counterSignals) || !Array.isArray(reading.mustNotMean) || !reading.counterSignals.length || !reading.mustNotMean.length || reading.counterSignals.some(x => typeof x !== 'string' || !x.trim()) || reading.mustNotMean.some(x => typeof x !== 'string' || !x.trim())) fail('DESIGN_LANGUAGE_INVALID');
   if (reading.targets.length === 0) fail('DESIGN_LANGUAGE_UNGROUNDED');
@@ -66,14 +66,12 @@ function validateReading(value: unknown, text: string): Reading {
   for (const target of reading.targets) {
     if (!target || typeof target.id !== 'string' || !target.id || !METRICS.includes(target.metric) || target.unit !== units[target.metric] || !['desktop', 'mobile'].includes(target.viewport) || !['increase', 'decrease'].includes(target.direction) || typeof target.role !== 'string' || !target.role.trim() || typeof target.route !== 'string' || !target.route.startsWith('/') || typeof target.selector !== 'string' || !/^(?:\[data-[a-z-]+="[^"]+"\]|main|nav|header|footer|aside|form|button|input|table)$/.test(target.selector) || typeof target.state !== 'string' || !target.state || !Array.isArray(target.range) || target.range.length !== 2 || target.range.some(v => typeof v !== 'number' || !Number.isFinite(v) || v < 0) || target.range[0]! >= target.range[1]! || typeof target.minDelta !== 'number' || !Number.isFinite(target.minDelta) || target.minDelta <= 0) fail('DESIGN_LANGUAGE_INVALID');
   }
-  if (reading.referenceKeywordsEn.some(k => typeof k !== 'string' || !/^[a-z][a-z0-9 -]+$/i.test(k) || /^(clean|modern|minimal|premium|warm)$/i.test(k))
-    || /beige|cream|sepia|faux.paper|editorial.magazine|micro.label|decorative.monospace|uniform.emphasis|auto.subtitle/i.test(`${reading.labelKo} ${reading.referenceKeywordsEn.join(' ')}`)) fail('DESIGN_LANGUAGE_UNGROUNDED');
+  if (reading.referenceKeywordsEn.some(k => typeof k !== 'string' || !/^[a-z][a-z0-9 -]+$/i.test(k))) fail('DESIGN_LANGUAGE_INVALID');
   if (reading.origin.kind === 'lexicon') {
     const origin = reading.origin;
     const entry = lexicon.entries.find(e => e.id === origin.entryId);
     const seed = entry?.readings.find(r => r.id === origin.readingId);
     if (!seed || origin.revision !== lexicon.revision || origin.sha256 !== lexiconSha256
-      || !entry!.aliases.ko.concat(entry!.aliases.en).some(a => text.toLowerCase().includes(a.toLowerCase()))
       || seed.metric !== reading.targets[0]?.metric
       || reading.targets.some(t => t.metric !== seed.metric || t.unit !== seed.unit || t.range[0] < seed.range[0]! || t.range[1] > seed.range[1]!)
       || reading.referenceKeywordsEn.some(k => !seed.referenceKeywordsEn.includes(k))) fail('DESIGN_LANGUAGE_INVALID');
@@ -84,11 +82,11 @@ export function parseInput(value: unknown, kind: Input['kind'], request: string,
   validateLexicon();
   const input = record(value) as unknown as Input;
   if (input.schema !== 'design-language-input-v1' || input.kind !== kind || typeof input.text !== 'string' || !input.text.trim() || input.request !== request || input.sourceContractSha256 !== sourceContractSha256 || !hex(input.sourceContractSha256) || !Array.isArray(input.readings) || input.readings.length > 3 || typeof input.decision !== 'string' || !input.decision.trim()) fail('DESIGN_LANGUAGE_STALE');
-  const readings = input.readings.map(r => validateReading(r, input.text));
+  const readings = input.readings.map(r => validateReading(r));
   if (new Set(readings.map(r => r.id)).size !== readings.length) fail('DESIGN_LANGUAGE_INVALID');
   if (input.chosenId !== null && !readings.some(r => r.id === input.chosenId)) fail('DESIGN_LANGUAGE_INVALID');
   if (readings.length && input.chosenId === null) {
-    if (!input.question || readings.length < 2 || !/[가-힣]/u.test(input.question.textKo) || !/\?/.test(input.question.textKo) || input.question.options.length !== readings.length || new Set(input.question.options.map(o => o.readingId)).size !== readings.length || new Set(input.question.options.map(o => o.captureSha256)).size !== readings.length || input.question.answerId !== null || input.question.options.some(o => !readings.some(r => r.id === o.readingId) || !hex(o.captureSha256) || !o.thumbnailPath.startsWith('.omd/refs/'))) fail('DESIGN_LANGUAGE_AMBIGUOUS');
+    if (!input.question || readings.length < 2 || typeof input.question.textKo !== 'string' || !input.question.textKo.trim() || input.question.options.length !== readings.length || new Set(input.question.options.map(o => o.readingId)).size !== readings.length || new Set(input.question.options.map(o => o.captureSha256)).size !== readings.length || input.question.answerId !== null || input.question.options.some(o => !readings.some(r => r.id === o.readingId) || !hex(o.captureSha256) || !o.thumbnailPath.startsWith('.omd/refs/'))) fail('DESIGN_LANGUAGE_AMBIGUOUS');
   } else if (input.question !== undefined) fail('DESIGN_LANGUAGE_INVALID');
   if (input.questionDigest !== undefined && (!hex(input.questionDigest) || input.chosenId === null)) fail('DESIGN_LANGUAGE_AMBIGUOUS');
   if (!readings.length && input.chosenId !== null) fail('DESIGN_LANGUAGE_INVALID');

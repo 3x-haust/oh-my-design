@@ -306,7 +306,7 @@ test('SLOP-PINK-ELEPHANT fires on English self-negating meta-copy', () => {
     "It is not a mockup.",
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), `expected SLOP-PINK-ELEPHANT for: ${text}`);
   }
 });
@@ -322,7 +322,7 @@ test('SLOP-PINK-ELEPHANT fires on Korean self-negating meta-copy', () => {
     '목업이 아니에요.',
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), `expected SLOP-PINK-ELEPHANT for: ${text}`);
   }
 });
@@ -336,7 +336,7 @@ test('SLOP-COPY-KO fires on C-11: sentence-opening connective followed by a comm
     '즉, 핵심은 단순함입니다.',
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-COPY-KO'), `expected SLOP-COPY-KO for: ${text}`);
   }
 });
@@ -361,7 +361,7 @@ test('SLOP-COPY-KO fires on document-cadence openers 살펴보겠습니다 and �
     '이 제품에 대해 자세히 알아보겠습니다.',
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-COPY-KO'), `expected SLOP-COPY-KO for: ${text}`);
   }
 });
@@ -373,7 +373,7 @@ test('SLOP-COPY-KO fires on 둘째, and 셋째, list-enumeration patterns', () =
     '셋째，세 번째 이유는 다음과 같습니다.',  // ideographic comma variant
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-COPY-KO'), `expected SLOP-COPY-KO for: ${text}`);
   }
 });
@@ -415,7 +415,7 @@ test('SLOP-KO-REGISTER-MIX fires when 해요체 and 합니다체 alternate in on
     '나와요. 평균을 만듭니다.',
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-KO-REGISTER-MIX'), `expected SLOP-KO-REGISTER-MIX for: ${text}`);
   }
 });
@@ -550,7 +550,7 @@ test('SLOP-KO-SIGNPOST fires on 아래는 … 기록/내용/목록/정리 patter
     '아래는 주요 정리입니다.',
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `expected SLOP-KO-SIGNPOST for: ${text}`);
   }
 });
@@ -562,7 +562,7 @@ test('SLOP-KO-SIGNPOST fires on 다음은 … 입니다/이에요 patterns', () 
     '다음은 주요 특징입니다.',
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `expected SLOP-KO-SIGNPOST for: ${text}`);
   }
 });
@@ -654,14 +654,20 @@ test('SLOP-EMOJI-HEADING does not fire on a button with a plain arrow (not emoji
 
 // ── SLOP-COPY widened phrases ─────────────────────────────────────────────────
 
-test('SLOP-COPY fires on widened interchangeable stock phrases', () => {
+test('wording matches are review inputs, not linter violations', () => {
+  const input = makeTextIr('Say goodbye to manual work.');
+  assert.ok(!check(input, builtin, { categories: ['slop'] }).some(x => x.id === 'SLOP-COPY'));
+  assert.ok(check(input, builtin, { categories: ['slop'], contextualSuggestions: true }).some(x => x.id === 'SLOP-COPY'));
+});
+
+test('SLOP-COPY offers literal phrases as review inputs', () => {
   const positives = [
     'Say goodbye to manual work.',
     'Blazing fast performance for every team.',
     "It's not just software, it's a platform.",
   ];
   for (const text of positives) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-COPY'), `expected SLOP-COPY for: ${text}`);
   }
 });
@@ -681,7 +687,7 @@ test('SLOP-COPY does not fire on legitimate uses of similar words', () => {
 
 test('SLOP-PLACEHOLDER-COPY fires on exact visible placeholder nodes', () => {
   for (const text of ['Lorem ipsum dolor sit amet.', 'Your headline here', '[PLACEHOLDER]', 'TODO copy']) {
-    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-PLACEHOLDER-COPY'), `expected placeholder warning for: ${text}`);
   }
 });
@@ -726,7 +732,7 @@ test('SLOP-FAKE-STAT fires when two or more heroic stat patterns appear on the p
     makeChildNode('root', { id: 'n2', type: 'TEXT', text: '24/7 support included', box: { x: 200, y: 0, w: 200, h: 40 } }, 2),
     makeChildNode('root', { id: 'n3', type: 'TEXT', text: 'Ships in 48h', box: { x: 400, y: 0, w: 200, h: 40 } }, 3),
   ];
-  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'], contextualSuggestions: true });
   assert.ok(v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'expected SLOP-FAKE-STAT for two+ stat patterns');
 });
 
@@ -983,7 +989,7 @@ test('SLOP-BADGE-SPAM fires on small nodes whose text is solely a badge term', (
       id: 'badge1', name: 'Badge', type: 'TEXT', path: 'Screen/Badge',
       parent: null, box: { x: 0, y: 0, w: 60, h: 24 }, children: [], text,
     };
-    const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+    const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'], contextualSuggestions: true });
     assert.ok(v.some((x) => x.id === 'SLOP-BADGE-SPAM'), `expected SLOP-BADGE-SPAM for: ${text}`);
   }
 });

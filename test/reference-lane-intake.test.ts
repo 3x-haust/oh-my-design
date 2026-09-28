@@ -26,28 +26,26 @@ function project(t: { after(fn: () => void): void }, route = true) {
   return cwd;
 }
 
-test('selected discovery refuses omitted lane before service captures can silently enter design', t => {
+test('selected discovery requires a lane but permits visual domain capture without functional claims', t => {
   const cwd = project(t);
   const result = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'domain-flow', '--image']);
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stderr, /REFERENCE_LANE_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   const valid = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'domain-flow', '--image', '--lane', 'domain']);
-  assert.equal(valid.status, 1, valid.stderr);
-  assert.match(valid.stderr, /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
-  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 0);
+  assert.equal(valid.status, 0, valid.stderr);
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 1);
 });
 
-test('selected discovery rejects a domain service explicitly relabelled design without gallery provenance', t => {
+test('direct design captures do not fabricate gallery traversal provenance', t => {
   const cwd = project(t);
   const result = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'beautiful-flow', '--image', '--lane', 'design']);
-  assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /DESIGN_DISCOVERY_REQUIRED/);
-  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(loadRefs(cwd).length, 1);
   const gallery = run(cwd, ['ref', 'add', 'https://dribbble.com/shots/123-screen', '--as', 'visual-study', '--image', '--lane', 'design']);
   assert.equal(gallery.status, 1, gallery.stderr);
   assert.match(gallery.stderr, /DESIGN_GALLERY_DISCOVERY_ONLY/);
-  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
+  assert.equal(loadRefs(cwd).length, 1);
 });
 
 test('batch preflight rejects an incomplete lane manifest atomically before browser launch', t => {
@@ -56,7 +54,7 @@ test('batch preflight rejects an incomplete lane manifest atomically before brow
   writeFileSync(path, JSON.stringify([{ source: 'https://example.com/', as: 'task', lane: 'domain' }, { source: 'https://example.org/', as: 'visual' }]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
+  assert.match(result.stderr, /REFERENCE_LANE_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   assert.equal(JSON.parse(readFileSync(path, 'utf8'))[1].lane, undefined);
 });
@@ -84,7 +82,6 @@ test('a domain ref-add batch is refused before any browser acquisition', t => {
   ]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
 

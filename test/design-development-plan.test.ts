@@ -215,7 +215,7 @@ test('missing, dangling, and inapplicable evidence cannot justify an investigati
   );
 });
 
-test('persisted dependencies and every nested shape reject caller invention', () => {
+test('persisted dependencies reject invention while extra ordinary nested fields are ignored', () => {
   const { context, plan } = investigatedPlan();
   const invented = structuredClone(plan) as unknown as { investigations: Array<{ dependsOn: string[] }> };
   invented.investigations[0]?.dependsOn.push('probe:component');
@@ -232,7 +232,7 @@ test('persisted dependencies and every nested shape reject caller invention', ()
   ]) {
     const malformed = structuredClone(plan) as unknown as Record<string, unknown>;
     mutate(malformed);
-    assert.throws(() => parseAdaptiveWorkflowPlan(malformed, context), /WORKFLOW_PLAN_MALFORMED/);
+    assert.doesNotThrow(() => parseAdaptiveWorkflowPlan(malformed, context));
   }
 });
 

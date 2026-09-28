@@ -100,7 +100,7 @@ test('current composition publication schema adds machine-validated colour roles
   assert.ok(module.CURRENT_COMPOSITION_SECTIONS.includes('Colour roles'));
 });
 
-test('colour-role contract rejects duplicate, unknown, placeholder, and decorative accent roles', () => {
+test('colour-role contract rejects duplicate and unknown structural roles', () => {
   const invalid = [
     '| Role | Token/value | Intended use |',
     '| --- | --- | --- |',
@@ -115,6 +115,5 @@ test('colour-role contract rejects duplicate, unknown, placeholder, and decorati
   const message = validateColourRoles(invalid).join('\n');
   assert.match(message, /duplicate.*Dominant/i);
   assert.match(message, /unknown.*Tertiary/i);
-  assert.match(message, /placeholder.*Dominant/i);
-  assert.match(message, /primary action|critical|selected/i);
+  assert.doesNotMatch(message, /placeholder.*Dominant/i);
 });

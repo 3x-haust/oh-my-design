@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../core/runtime/stable-project-file.ts';
 import { capturePiRequest, PiRequestBindingError, readPiRequest, requestDigest, type PiRequestSource } from './omd-request-source.ts';
-import { parseOmdWorkflowPrompt } from './omd-request-prompt.ts';
+import { extractOmdWorkflowRequest, parseOmdWorkflowPrompt } from './omd-request-prompt.ts';
 import { routeValidationArgs } from './omd-route-bootstrap.ts';
 import type { PortablePiEvent } from './omd-runtime.ts';
 import { isWorkflowResumePrompt } from './omd-workflow-resume.ts';
@@ -23,24 +23,28 @@ export class PiRequestBindings {
   classificationGranted(cwd: string): boolean {
     return this.fullWorkflows.has(cwd) && this.active.has(cwd) && !this.suspended.has(cwd) && !this.failures.has(cwd);
   }
+  current(cwd: string): PiRequestSource | undefined { return this.active.get(cwd); }
+  suspend(cwd: string): void { this.suspended.add(cwd); this.fullWorkflows.delete(cwd); }
   receive(cwd: string, event: PortablePiEvent): void {
     if ((event.source !== 'interactive' && event.source !== 'rpc') || typeof event.text !== 'string') return;
-    const parsed = parseOmdWorkflowPrompt(event.text);
+    // Capture real bytes even before the agent has published its intent judgment. Capture is not authorization.
+    const mechanicalRequest = extractOmdWorkflowRequest(event.text);
     const pending = this.pending.get(cwd) ?? [];
-    pending.push({ text: event.text, ...(parsed?.kind === 'full-build' ? { request: parsed.request } : {}) });
+    pending.push({ text: event.text, ...(typeof mechanicalRequest === 'string' ? { request: mechanicalRequest } : {}) });
     this.pending.set(cwd, pending);
   }
   activate(cwd: string, prompt: string): void {
     const parsed = parseOmdWorkflowPrompt(prompt);
+    const mechanicalRequest = extractOmdWorkflowRequest(prompt);
     const pending = this.pending.get(cwd);
     // Pi's documented /skill expansion trims its argument; preserve the earlier real input bytes.
-    const index = pending?.findIndex(candidate => candidate.text === prompt || (parsed?.kind === 'full-build'
-      && (candidate.request === parsed.request || candidate.request?.trim() === parsed.request)));
+    const index = pending?.findIndex(candidate => candidate.text === prompt || (typeof mechanicalRequest === 'string'
+      && (candidate.request === mechanicalRequest || candidate.request?.trim() === mechanicalRequest)));
     if (pending === undefined || index === undefined || index < 0) return;
     const candidate = pending[index];
     if (candidate === undefined) return;
     pending.splice(index, 1);
-    if (candidate.request !== undefined && parsed?.kind === 'full-build') {
+    if (candidate.request !== undefined) {
       try { this.active.set(cwd, capturePiRequest(cwd, candidate.request)); }
       catch (error) {
         const failure = error instanceof PiRequestBindingError ? error : new PiRequestBindingError('the current user request could not be captured');
@@ -48,8 +52,10 @@ export class PiRequestBindings {
         throw failure;
       }
       this.failures.delete(cwd);
-      this.fullWorkflows.add(cwd);
-      this.suspended.delete(cwd);
+      // The explicit skill invocation is a request to enter the workflow, not a semantic
+      // verdict about its contents. A missing AI judgment must not prevent route authoring.
+      if (candidate.request.trim()) { this.fullWorkflows.add(cwd); this.suspended.delete(cwd); }
+      else { this.fullWorkflows.delete(cwd); this.suspended.add(cwd); }
     } else if (parsed?.kind === 'skill-only' || isWorkflowResumePrompt(prompt)) this.suspended.delete(cwd);
     else { this.suspended.add(cwd); this.fullWorkflows.delete(cwd); }
   }

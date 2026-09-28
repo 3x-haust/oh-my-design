@@ -132,7 +132,8 @@ test('prebuild gate blocks production until upstream owner decisions and L4 mode
   assert.equal(prebuild.ok, true);
   assert.equal(prebuild.phase, 'prebuild');
   assert.equal(prebuild.counts.observations, 0);
-  assert.equal(checkDeliberationRun(cwd, 'final').ok, false);
+  assert.equal(checkDeliberationRun(cwd, 'final').ok, true);
+  assert.ok(checkDeliberationRun(cwd, 'final').findings.length > 0);
 
   writeFileSync(join(omd, 'decision-graph.json'), JSON.stringify({
     ...upstreamGraph,

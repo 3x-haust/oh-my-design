@@ -40,7 +40,6 @@ export const fetchDomainHtml: DomainFetchTransport = async (source, signal) => {
       let html: string;
       try { html = new TextDecoder(charset, { fatal: true }).decode(Buffer.concat(chunks)); }
       catch { throw new Error('unsupported or invalid domain HTML charset'); }
-      if (/(?:just a moment|verify you are human|captcha|cloudflare challenge)/i.test(html.slice(0, 8192))) throw new Error('challenge page blocked domain acquisition');
       if (/<input[^>]*type\s*=\s*["']?password/i.test(html)) throw new Error('login form blocked domain acquisition');
       const observation = extractStaticHtml(html, url);
       if (observation.observedText.replace(/\s/g, '').length < 200

@@ -1,3 +1,5 @@
+import { knownFields } from '../judgment/schema.ts';
+
 export const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 export const SCHEMA_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -14,16 +16,11 @@ export function fields(value: unknown, expected: readonly string[], label: strin
   const object = value as object;
   const prototype = Reflect.getPrototypeOf(object);
   if (prototype !== Object.prototype && prototype !== null) fail(`${label} must be a plain object`);
-  const keys = Reflect.ownKeys(object);
-  if (keys.length !== expected.length || keys.some((key) => typeof key !== 'string' || !expected.includes(key))
-    || expected.some((key) => !Object.hasOwn(object, key))) fail(`${label} has unknown or missing fields`);
-  const result = new Map<string, unknown>();
-  for (const key of expected) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
-    if (descriptor === undefined || !('value' in descriptor) || descriptor.enumerable !== true) fail(`${label}.${key} must be an enumerable own data property`);
-    result.set(key, descriptor.value);
-  }
-  return result;
+  try {
+    const projected = knownFields(object, expected, [], label);
+    for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+    return new Map(Object.entries(projected.value));
+  } catch { return fail(`${label} has missing, unsafe or host-owned fields`); }
 }
 
 export function values(value: unknown, label: string, fail: ProofFail): readonly unknown[] {

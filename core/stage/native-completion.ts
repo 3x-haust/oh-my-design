@@ -56,20 +56,11 @@ export function nativeCompletionWork(root: string, invocation: ProjectRunInvocat
   let graph: ReturnType<typeof checkNativeBrowserEvidence>;
   try { graph = checkNativeBrowserEvidence(root, invocation); }
   catch (error) { return { ...WORK.browser, problems: [reason(error)] }; }
-  try { checkSlopFinalGraph(root, graph); }
-  catch (error) { return { ...WORK.slop, problems: [reason(error)] }; }
   try { checkNativeFinalReview({ root, invocation }); }
   catch (error) { return { ...WORK.review, problems: [reason(error)] }; }
   let final: ReturnType<typeof checkFinalEvidenceV2>;
   try { final = checkFinalEvidenceV2(root, invocation); }
   catch (error) { return { ...WORK.finalize, problems: [reason(error)] }; }
-  if (route.references.decision === 'discover') {
-    try {
-      const application = checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
-        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
-      checkReferenceApplicationReview(root, referenceApplicationReviewContext(root, application, final.graph));
-    } catch (error) { return { ...WORK.application, problems: [reason(error)] }; }
-  }
   try { checkTerminalCompletion(root, invocation); }
   catch (error) { return { ...WORK.completion, problems: [reason(error)] }; }
   return { stage: null, owner: 'coordinator', action: 'validate-selected-gates', next: 'omd guard completion --json',

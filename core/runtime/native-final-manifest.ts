@@ -102,7 +102,6 @@ export function buildNativeFinalManifest(
 ): FinalEvidenceV2ManifestVariant {
   validateCurrentProjectRun(invocation);
   const record = readPersistedRoute(root, invocation);
-  if (record.strategy.stages.includes('art-direction')) fail('selected art requires current authored-art evidence receipts');
   if (canonicalJson(json(read(root, activationPath))) !== canonicalJson(invocation.activation)) fail('activation receipt is not current');
   const route = createAdaptiveSourceSealRoute(root, invocation);
   const observed = currentNativeFinalObservations(root);
@@ -118,7 +117,8 @@ export function buildNativeFinalManifest(
       return skip === undefined ? [] : [{ id, status: 'skipped', routeSkipId, reason: skip.reason,
         routeSha256: route.record.sha256, authoritySha256: route.authority.sha256 }];
     }),
-    copy: descriptor(root, '.omd/copy-deck.md', 'copy-deck-v2'),
+    ...(route.stages.some(stage => stage.id === 'copy' && stage.status === 'selected')
+      ? { copy: descriptor(root, '.omd/copy-deck.md', 'copy-deck-v2') } : {}),
     sourceSeal: descriptor(root, '.omd/source-seal.json', seal.schemaVersion === 2 ? 'source-seal-v2' : 'source-seal-v1'),
     buildIdentity: descriptor(root, first.value.currentArtifact.path, 'omd-build-identity-v1'),
     ...currentLanes(root, invocation),

@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DomainBrief } from '../domain/domain-brief.ts';
 import { MOOD_QUERY_LANES, type MoodQueryLane } from './mood-query.ts';
+import { readReferenceJudgment, referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 
 export const MOOD_TARGET_SCHEMA = 'mood-target-v1' as const;
 
@@ -50,21 +51,6 @@ export class MoodTargetError extends Error {
 
 const fail = (reason: string): never => { throw new MoodTargetError(reason); };
 
-/** Direction words are felt qualities and material/era/register nouns, never measurements. */
-const DIRECTION_VOCABULARY = [
-  'warm', 'cool', 'neutral', 'quiet', 'loud', 'dense', 'sparse', 'airy', 'tight',
-  'printed', 'analog', 'industrial', 'editorial', 'archival', 'technical', 'clinical',
-  'matte', 'glossy', 'raw', 'refined', 'playful', 'austere', 'night', 'daylight',
-  'kinetic', 'still', 'tactile', 'flat', 'layered', 'precise', 'loose',
-  'paper', 'ink', 'metal', 'glass', 'fabric', 'signal', 'instrument',
-] as const;
-
-const STRUCTURAL_TERM = /\b(?:\d+\s*(?:px|em|rem|pt|%|vh|vw)|grid|column|breakpoint)\b/i;
-
-const termsIn = (text: string): readonly string[] => {
-  const lower = text.toLowerCase();
-  return Object.freeze(DIRECTION_VOCABULARY.filter((term) => new RegExp(`\\b${term}\\b`).test(lower)));
-};
 
 export type MoodTargetInput = Readonly<{
   brief: DomainBrief;
@@ -78,12 +64,8 @@ export type MoodTargetInput = Readonly<{
 function signalsFrom(input: MoodTargetInput): readonly MoodTargetSignal[] {
   const signals: MoodTargetSignal[] = [];
   const push = (kind: MoodTargetSignalKind, reference: string, text: string, keepWhenUnknown = false): void => {
-    const terms = termsIn(text);
-    // The subject identity is the strongest signal even when its words are outside the direction
-    // vocabulary: "a modular synthesizer with patch cables" names the thing, and dropping it would
-    // silently promote a weaker brief-text signal over it.
-    if (terms.length > 0) signals.push(Object.freeze({ kind, reference, terms }));
-    else if (keepWhenUnknown && text.trim() !== '') signals.push(Object.freeze({ kind, reference, terms: Object.freeze([text.trim()]) }));
+    if (keepWhenUnknown && text.trim())
+      signals.push(Object.freeze({ kind, reference, terms: Object.freeze([text.trim()]) }));
   };
 
   push('subject-identity', 'frame subject identity', input.subjectIdentity ?? '', true);
@@ -117,41 +99,27 @@ export function deriveMoodTarget(input: MoodTargetInput): MoodTarget {
     });
   }
 
-  const ranked = [...signals].sort((left, right) => order(left.kind) - order(right.kind));
-  const strongest = ranked[0]!;
-  const merged: string[] = [];
-  // Vocabulary terms come first: a recognized direction word is more usable than a noun phrase,
-  // and the identity's own words fill the remainder when the vocabulary found little.
-  const vocabularyTerms = ranked.filter((signal) => signal.kind !== 'subject-identity').flatMap((signal) => signal.terms);
-  const identityTerms = ranked.filter((signal) => signal.kind === 'subject-identity').flatMap((signal) => signal.terms);
-  for (const term of [...vocabularyTerms, ...identityTerms]) {
-    if (!merged.includes(term)) merged.push(term);
-  }
-  const direction = merged.slice(0, 4).join(', ');
-  if (direction === '') fail('derived direction is empty');
-
-  return Object.freeze({
-    schema: MOOD_TARGET_SCHEMA,
-    direction,
-    basis: strongest.kind === 'subject-identity' || strongest.kind === 'brief-text' ? 'user-stated' : 'adopted-default',
-    signals,
-    lanes,
-    announceAdoption: strongest.kind === 'taste-record' || strongest.kind === 'user-asset',
-  });
+  // Observed material is retained for the agent; no prose is promoted to user preference.
+  return Object.freeze({ schema: MOOD_TARGET_SCHEMA, direction: ADOPTED_DEFAULT_DIRECTION,
+    basis: 'adopted-default', signals, lanes, announceAdoption: true });
 }
 
-const order = (kind: MoodTargetSignalKind): number => {
-  switch (kind) {
-    case 'subject-identity': return 0;
-    case 'brief-text': return 1;
-    case 'taste-record': return 2;
-    case 'user-asset': return 3;
-  }
-};
+export async function deriveMoodTargetJudged(input: MoodTargetInput, binding?: ReferenceJudgmentBinding): Promise<MoodTarget> {
+  const base = deriveMoodTarget(input);
+  if (!binding) return base;
+  const { judgment } = await readReferenceJudgment(binding, 'mood-direction');
+  const direction = (judgment.payload as Record<string, unknown>).direction;
+  if (typeof direction !== 'string' || !direction.trim() || direction.length > 4096) fail('judgment direction must be bounded text');
+  if (judgment.decision === 'user-stated' && !judgment.quotes.some(quote => quote.source.kind === 'route-request'))
+    fail('user-stated direction needs a quoted current request');
+  return Object.freeze({ ...base, direction: direction as string, basis: judgment.decision === 'user-stated' ? 'user-stated' : 'adopted-default',
+    announceAdoption: judgment.decision !== 'user-stated' });
+}
 
 /** True when the brief asks for a mood round explicitly. Only an explicit ask opens the round loop. */
 export function userRequestedReferences(request: string): boolean {
-  return /\b(?:show me|show us|let me see)\b[\s\S]{0,40}\breferences?\b|\breferences?\b[\s\S]{0,40}\b(?:first|please)\b|레퍼런스\s*(?:보여|먼저)|참고\s*자료\s*보여/i.test(request);
+  void request;
+  return false; // Only a verified reference-interaction judgment may open rounds.
 }
 
 /**
@@ -170,10 +138,10 @@ export function moodTargetInteraction(target: MoodTarget, request: string): Read
   if (userRequestedReferences(request)) {
     return Object.freeze({ mode: 'interactive-rounds', reason: 'the user asked to see references, so rounds are theirs to steer' });
   }
-  if (target.announceAdoption && target.basis === 'adopted-default' && target.signals.length === 0) {
+  if (target.announceAdoption && target.basis === 'adopted-default') {
     return Object.freeze({
       mode: 'announce-with-result',
-      reason: 'the brief named no feel or colour and no taste record exists, so the run adopted a direction and states that with its result',
+      reason: 'no verified user-stated direction exists; the adopted direction is stated with the result',
     });
   }
   return Object.freeze({ mode: 'silent', reason: 'the direction is derivable from the supplied material' });
@@ -187,14 +155,18 @@ export type MoodTargetCheck = Readonly<{
 /** Confirms a target is coherent before a board is gathered against it. */
 export function checkMoodTarget(target: MoodTarget): MoodTargetCheck {
   const findings: string[] = [];
-  if (STRUCTURAL_TERM.test(target.direction)) {
-    findings.push('the direction states a measurement; a mood direction describes felt qualities, not layout values');
-  }
   if (target.direction.trim() === '') findings.push('the direction is empty');
   if (!target.announceAdoption && target.basis === 'adopted-default' && target.signals.length === 0) {
     findings.push('an adopted default with no signals must be announced with the result, not presented as the user\'s direction');
   }
   return Object.freeze({ ok: findings.length === 0, findings: Object.freeze(findings) });
+}
+
+export async function moodTargetInteractionJudged(target: MoodTarget, request: string,
+  binding?: ReferenceJudgmentBinding): Promise<ReturnType<typeof moodTargetInteraction> & { limitation: string | null }> {
+  const result = await referenceDecision('reference-interaction', binding);
+  if (result.decision === 'interactive') return { mode: 'interactive-rounds', reason: 'verified user request', limitation: null };
+  return { ...moodTargetInteraction(target, request), limitation: result.limitation };
 }
 
 /** Reads the taste records a derivation may use. Only `actor: user` rows count as user evidence. */

@@ -179,7 +179,7 @@ test('board v3 rejects undeclared axes, duplicate influence claims, unresolved s
   assert.throws(() => parseReferenceBoard(duplicate), /must not duplicate a source part and axis/);
 
   const conflict = structuredClone(board) as any; conflict.candidates[0]!.pieces[1]!.binding = { ...conflict.candidates[0]!.pieces[1]!.binding!, axis: 'structure' };
-  assert.throws(() => parseReferenceBoard(conflict), /require one shared conflict group and resolution/);
+  assert.throws(() => parseReferenceBoard(conflict), /same-axis influences/);
 
   const path = join(root, '.omd', 'reference-board.json'); writeFileSync(path, canonicalJson(board));
   writeFileSync(join(root, '.omd', 'acquisition-plan.json'), canonicalJson({ ...acquisition(), owner: 'omd-framer' }));

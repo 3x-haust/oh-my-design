@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
+import { knownFields } from '../judgment/schema.ts';
 import {
   constants as fsConstants,
   closeSync,
@@ -133,6 +134,15 @@ function object(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 function exact(value: Record<string, unknown>, keys: readonly string[], label: string): void {
+  if (label === 'manifest' || label === 'motionEvidence' || label === 'staticEvidence') {
+    if (label === 'manifest' && Object.keys(value).some(key => !keys.includes(key) && /Evidence$/u.test(key)))
+      fail('manifest has unexpected keys supplying evidence authority');
+    try {
+      const projected = knownFields(value, keys, [], label);
+      for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+    } catch { fail(`${label} has missing, unsafe or host-owned keys`); }
+    return;
+  }
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) fail(`${label} has unexpected keys`);

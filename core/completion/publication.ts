@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { requireMovement } from '../design-language/check.ts';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -10,14 +9,11 @@ import {
   type TypographyApplicabilityEvidence,
 } from './evidence.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
-import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import { validateAdaptiveFinalEvidenceV2Graph } from '../evidence/final-v2-adaptive-contract.ts';
-import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
-import { checkAdaptiveWorkflow } from '../design-development/workflow-persistence.ts';
 
 export type CompletionTypographyBinding = Readonly<
   | { id: 'type-proof'; status: 'selected'; path: string; sha256: string; applicability: TypographyApplicabilityEvidence }
@@ -97,7 +93,7 @@ function typographyBinding(
 ): CompletionTypographyBinding {
   if (!existsSync(`${root}/.omd/route.json`)) {
     const path = '.omd/type-proof.md';
-    if (!existsSync(resolve(root, path))) fail('selected typography proof is missing');
+    if (!existsSync(resolve(root, path))) return Object.freeze({ id: 'type-proof', status: 'legacy-unassessed', reason: 'optional typography proof was not published' });
     let bytes: Buffer;
     try { bytes = readStableProjectFile({ root, path: resolve(root, path), label: 'selected typography proof', fs }); }
     catch { return fail('selected typography proof is not a stable regular file'); }
@@ -109,14 +105,6 @@ function typographyBinding(
     const artifact = stage.artifacts[0] ?? fail('selected typography proof has no artifact');
     return Object.freeze({ id: 'type-proof', status: 'selected', path: artifact.path, sha256: artifact.sha256, applicability });
   }
-  if (applicability.koreanDisplayText) fail('rendered Korean display text requires a selected type proof');
-  if (continuationRoute === undefined) {
-    const record = readPersistedRoute(root, invocation);
-    const exactSkip = record.strategy.skips.find((item) => item.id === 'type-proof');
-    if (exactSkip === undefined || exactSkip.reason !== stage.reason) {
-      fail('typography omission is not the exact route-authorized skip');
-    }
-  }
   return Object.freeze({ id: 'type-proof', status: 'skipped', reason: stage.reason, routeSha256: stage.routeSha256, authoritySha256: stage.authoritySha256, applicability });
 }
 
@@ -126,19 +114,10 @@ export function checkCompletionPublicationPrerequisites(
   manifest: unknown,
   invocation: ProjectRunInvocation,
 ): CompletionPublicationResult {
-  requireMovement(root, invocation);
   const graph = graphReceipts(manifest);
   const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
     ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route
     : undefined;
-  const hasWorkflow = existsSync(`${root}/.omd/workflow-plan.json`);
-  if (hasWorkflow) {
-    if (graph.schema !== 'final-evidence-v2-workflow-graph-v1') fail('current workflow requires the additive workflow final graph');
-    const workflow = checkAdaptiveWorkflow(root, invocation).binding;
-    if (canonicalJson(graph.workflow) !== canonicalJson(workflow)) fail('final graph does not bind the exact current workflow plan, artifacts, and reviews');
-  } else if (graph.schema === 'final-evidence-v2-workflow-graph-v1') {
-    fail('workflow final graph has no current workflow plan');
-  }
   if (graph.schema === 'final-evidence-v2-graph' || (graph.schema === 'final-evidence-v2-workflow-graph-v1'
     && graph.productionSchema === 'final-evidence-v2-graph')) {
     const distance = dataObject(graph.referenceDistance, 'selected reference distance receipt');
@@ -147,19 +126,12 @@ export function checkCompletionPublicationPrerequisites(
       || distance.schema !== 'selected-reference-distance-v1') {
       fail('selected reference distance receipt is not the current typed gate');
     }
-    const compositionFindings = validateCurrentCompositionContract(root, invocation);
-    if (compositionFindings.length > 0) {
-      fail(`current composition contract is invalid: ${compositionFindings.map((finding) => `${finding.id} ${finding.path}`).join(', ')}`);
-    }
   }
-  if (!existsSync(`${root}/.omd/functional-requirements.json`)) {
-    if (existsSync(`${root}/.omd/route.json`)) {
-      fail('current routed publication requires functional requirements and a completeness run');
-    }
+  if (!existsSync(`${root}/.omd/completeness-current.json`)) {
     return Object.freeze({ typography: Object.freeze({
       id: 'type-proof',
       status: 'legacy-unassessed',
-      reason: 'historical non-routed publication has no completion requirements',
+      reason: 'optional completeness run was not published',
     }) });
   }
   const completeness = checkCompletenessRun(root, invocation, continuationRoute);

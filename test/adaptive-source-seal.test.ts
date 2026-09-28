@@ -166,12 +166,23 @@ test('adaptive source check rejects route pointer or route path swaps after seal
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('high-risk expressive medical route still requires its exact current art-direction decision', () => {
+test('routed source seal accepts no optional design documents but still tracks source currentness', () => {
   const directory = root();
   try {
-    for (const name of ['frame.md', 'scout.md', 'copy-deck.md', 'type-proof.md', 'composition.md']) writeApprovedInput(directory, name);
+    const invocation = publishTestAdaptiveRoute(directory, fixture('copy-only'), 'minimal-source-seal');
+    writeSourceSeal(directory, invocation);
+    assert.deepEqual(validateSourceSeal(directory, invocation), []);
+    writeFileSync(join(directory, 'index.html'), '<main>changed</main>');
+    assert.ok(validateSourceSeal(directory, invocation).some(finding => finding.id === 'SOURCE-SEAL-STALE'));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('high-risk route seals real source without unpublished optional art and type artifacts', () => {
+  const directory = root();
+  try {
+    writeApprovedInput(directory, 'copy-deck.md');
     const invocation = publishTestAdaptiveRoute(directory, expressiveMedical(), 'medical-expressive-source-seal');
-    assert.throws(() => writeSourceSeal(directory, invocation), /ART_DIRECTION_DECISION_REQUIRED/);
-    assert.equal(validateSourceSeal(directory, invocation)[0]?.id, 'SOURCE-SEAL-MISSING');
+    writeSourceSeal(directory, invocation);
+    assert.deepEqual(validateSourceSeal(directory, invocation), []);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

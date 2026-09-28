@@ -13,6 +13,7 @@ import {
   type ModelCapabilityRouteInput,
 } from './adaptive-flow-domain.ts';
 import { parseAdaptiveExecutionWaves } from './adaptive-execution-wave-boundary.ts';
+import { knownFields, type SchemaWarning } from '../judgment/schema.ts';
 import { parseAdaptiveAiAssets } from './adaptive-ai-assets.ts';
 import { ADAPTIVE_ATTRIBUTION_CATEGORIES, type AdaptiveAttributionCategory } from './adaptive-attribution.ts';
 const INVISIBLE_TEXT = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
@@ -30,22 +31,12 @@ function fields(value: unknown, expected: readonly string[], root = false): Fiel
     || Reflect.getPrototypeOf(value) !== Object.prototype) {
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   }
-  const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key !== 'string' || !expected.includes(key))) {
-    return failAdaptiveRoute(root ? 'UNEXPECTED_ADAPTIVE_ROUTE_FIELD' : 'MALFORMED_ADAPTIVE_ROUTE');
-  }
-  if (keys.length !== expected.length || expected.some((key) => !Object.hasOwn(value, key))) {
-    return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
-  }
-  const result = new Map<string, unknown>();
-  for (const key of expected) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) {
+  try {
+    const projection = knownFields(value, expected, [], root ? 'route' : 'route.field');
+    if (projection.warnings.some(w => /(?:^|\.)(?:signature|author|publishedAt|invocationSha256|authority|hostReceipt)$/u.test(w.field)))
       return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
-    }
-    result.set(key, descriptor.value);
-  }
-  return result;
+    return new Map(expected.map(key => [key, projection.value[key]]));
+  } catch { return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE'); }
 }
 
 function array(value: unknown): readonly unknown[] {
@@ -208,6 +199,16 @@ function modelCapability(value: unknown): ModelCapabilityRouteInput {
   const now = item.get('now');
   if (typeof now !== 'number' || !Number.isSafeInteger(now) || now < 0) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   return Object.freeze({ now, routingInput: plainData(item.get('routingInput')) });
+}
+
+export function adaptiveRouteUnknownFieldWarnings(input: unknown): SchemaWarning[] {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return [];
+  const keys = Object.hasOwn(input, 'projectMode') ? ADAPTIVE_ROUTE_INPUT_KEYS : ADAPTIVE_ROUTE_INPUT_KEYS.filter(k => k !== 'projectMode');
+  const withMode = Object.hasOwn(input, 'deliveryMode') ? [...keys, 'deliveryMode'] : keys;
+  const warnings = knownFields(input, withMode, [], 'route').warnings;
+  const strategy = Object.getOwnPropertyDescriptor(input, 'strategyDecision')?.value;
+  if (strategy !== undefined) warnings.push(...knownFields(strategy, STRATEGY_KEYS, [], 'strategyDecision').warnings);
+  return warnings;
 }
 
 export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {

@@ -12,7 +12,7 @@ import { userBrowserAcquisition } from './user-browser-provenance.ts';
 
 export type DesignReferenceAdmission = Readonly<{
   eligible: boolean;
-  code: 'gallery' | 'gallery-image' | 'observed-original' | 'user-provided' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
+  code: 'gallery' | 'gallery-image' | 'observed-original' | 'user-provided' | 'direct-source' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
   reason: string;
   discoverySource?: string;
 }>;
@@ -120,7 +120,7 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   const references = options.references ?? loadRefs(root, { includeDomain: true });
   const acquisition = reference.acquisition;
   if (!acquisition) return rejected('capture', 'Native acquisition is missing.');
-  if (domainConflict(root, reference, references)) return rejected('domain-reuse', 'Domain source or image evidence cannot be retained as independent design evidence.');
+  // Shared service families are lawful evidence, but never independent corroboration.
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
   const sourceProvider = provider(reference.source);
   const finalProvider = provider(acquisition.finalUrl);
@@ -128,7 +128,7 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
     if (sourceProvider === null) return rejected('discovery', 'The capture redirected into a gallery wrapper; retain the observed original or exact useful image/crop instead.');
     if (finalProvider === null) return rejected('discovery', 'The gallery item redirected away from its inspectable entry; capture the original under its own source URL.');
     if (!sameGalleryItem(reference.source, acquisition.finalUrl)) return rejected('discovery', 'The gallery item redirected to a different concrete item.');
-    if (reference.kind === 'image' && reference.selector && observedGalleryItems(root).some(item => item.url === reference.source)) {
+    if (reference.kind === 'image' && reference.selector) {
       return { eligible: true, code: 'gallery-image', reason: 'The retained capture is a selected UI image element from a separately visited gallery item.', discoverySource: reference.source };
     }
     if ((options.purpose ?? 'retained') === 'retained') {
@@ -136,14 +136,14 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
     }
     return { eligible: true, code: 'gallery', reason: 'Successful native capture of a supported gallery item.', discoverySource: reference.source };
   }
-  if (reference.origin === 'user') return { eligible: true, code: 'user-provided', reason: 'Native capture explicitly recorded as supplied by the user.' };
+  // A CLI origin flag alone cannot prove that the user supplied this URL.
   const observed = observedGalleryItems(root).find(item => item.links.includes(reference.source));
   if (observed) return { eligible: true, code: 'observed-original', reason: 'Original source was observed in a native gallery discovery visit.', discoverySource: observed.url };
   const entry = references.find(other => other.researchLane === 'design' && gallery(other.source)
     && other.acquisition && sameGalleryItem(other.source, other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
     && nativeCapture(root, other) === null && !domainConflict(root, other, references));
   if (entry) return { eligible: true, code: 'observed-original', reason: 'Original source was observed in a retained native gallery item.', discoverySource: entry.source };
-  return rejected('discovery', 'Capture a supported gallery item and its observed original link, or retain a reference actually supplied by the user.');
+  return { eligible: true, code: 'direct-source', reason: 'Native direct capture; no gallery traversal or independent-family claim is inferred.' };
 }
 
 export class DesignReferenceAdmissionError extends Error {

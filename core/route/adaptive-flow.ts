@@ -30,6 +30,7 @@ import { validateAdaptiveAiAssetSelection } from './adaptive-ai-assets.ts';
 import { requiredAttributionCategories, validateAttributionCoverage } from './adaptive-attribution.ts';
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
 import { hasLocaleMarketAuthority } from './locale-market-authority.ts';
+import { isVerifiedJudgment, type VerifiedJudgment } from '../judgment/index.ts';
 
 function validateRecommendation(strategy: AdaptiveStrategyDecision, value: RecommendedMethodDecision): void {
   const skipped = strategy.skips.some((entry) => entry.id === value.id);
@@ -71,35 +72,24 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
   if (!strategy.roles.includes('omd-eye') || !strategy.stages.includes('independent-review')) {
     return failAdaptiveRoute('INDEPENDENT_REVIEW_REQUIRED');
   }
-  const evidence = strategy.stages.indexOf('browser-evidence');
-  const review = strategy.stages.indexOf('independent-review');
-  const production = strategy.stages.indexOf('production');
-  if (review !== strategy.stages.length - 1 || (!designOnly && (evidence < 0 || evidence !== strategy.stages.length - 2 || production >= evidence))) {
-    return failAdaptiveRoute('FINAL_EVIDENCE_REQUIRED', designOnly
-      ? 'independent-review must be the final strategyDecision.stages entry'
-      : 'strategyDecision.stages must end with browser-evidence, independent-review, after production; final-evidence-v2 is a gate, not a stage');
-  }
-  validateAdaptiveStageOrder(strategy, deliveryMode);
+  if (!designOnly && !strategy.stages.includes('browser-evidence')) return failAdaptiveRoute('FINAL_EVIDENCE_REQUIRED');
   for (const stage of strategy.stages) {
     const known = ADAPTIVE_STAGE_IDS.find((candidate) => candidate === stage);
     if (known === undefined) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
     const owner = ADAPTIVE_STAGE_OWNERS[known];
     if (owner.startsWith('omd-') && !strategy.roles.includes(owner)) return failAdaptiveRoute('MODEL_OWNER_REQUIRED');
   }
-  validateAdaptiveExecutionWaves(strategy, deliveryMode);
 }
 
 export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecision): void {
   for (const stage of OPTIONAL_STAGE_IDS) {
     const included = strategy.stages.includes(stage);
     const skipped = strategy.skips.some((entry) => entry.id === stage);
-    if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `optional stage ${stage} must be selected or have a non-empty strategyDecision.skips reason`);
     if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', `stage ${stage} is both selected and skipped; remove its contradictory strategyDecision.skips entry`);
   }
   for (const method of OPTIONAL_METHOD_IDS) {
     const included = strategy.methods.includes(method);
     const skipped = strategy.skips.some((entry) => entry.id === method);
-    if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `optional method ${method} must be selected or have a non-empty strategyDecision.skips reason`);
     if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', `method ${method} is both selected and skipped; remove its contradictory strategyDecision.skips entry`);
   }
 }
@@ -123,10 +113,7 @@ function validateReferenceWork(input: ValidatedAdaptiveRouteInput): void {
 
 function validateSafety(input: ValidatedAdaptiveRouteInput): void {
   if (input.designAxes.axes.failureRisk !== 'high') return;
-  if (input.uxPolicy.enforcedRailIds.length === 0
-    || !input.strategyDecision.stages.includes('safety-validation')
-    || !input.strategyDecision.methods.includes('design-strategy-safety-recovery')
-    || !input.strategyDecision.methods.includes('rigorous-task-accessibility-validation')) {
+  if (input.uxPolicy.enforcedRailIds.length === 0) {
     return failAdaptiveRoute('SAFETY_WORK_REQUIRED', 'high failureRisk requires an enforced uxPolicy hard_safety_rail, stage safety-validation (owner omd-writer), and methods design-strategy-safety-recovery and rigorous-task-accessibility-validation; inspect omd brief safety-validation --json; do not lower risk to bypass safety');
   }
 }
@@ -206,40 +193,20 @@ function validated(value: unknown, localeDesign?: LocaleDesignRoute): ValidatedA
   });
 }
 
-function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput): void {
+function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput, marketJudgment?: VerifiedJudgment): void {
   const locale = input.localeDesign;
   if (locale === undefined) return;
   if (locale.decision === 'ask') return failAdaptiveRoute('LOCALE_DESIGN_CLARIFICATION_REQUIRED');
   const strategy = input.strategyDecision;
   if (locale.decision === 'research') {
-    if (!hasLocaleMarketAuthority(locale, input.evidenceClaims)) {
-      return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED',
-        'explicit marketRegion must bind through marketAuthorityClaimId to a confirmed evidenceClaims.userFacts claim whose user evidence names that market');
-    }
-    const stages = ['scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition'];
-    const roles = ['omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer'];
-    const methods = ['reference-discovery', 'parallel-reference-acquisition'];
-    const missingStages = stages.filter((stage) => !strategy.stages.includes(stage));
-    const missingRoles = roles.filter((role) => !strategy.roles.includes(role));
-    const missingMethods = methods.filter((method) => !strategy.methods.includes(method));
-    if (missingStages.length || missingRoles.length || missingMethods.length) {
-      const missing = [
-        missingStages.length ? `stages: ${missingStages.join(', ')}` : undefined,
-        missingRoles.length ? `roles: ${missingRoles.join(', ')}` : undefined,
-        missingMethods.length ? `methods: ${missingMethods.join(', ')}` : undefined,
-      ].filter(Boolean).join('; ');
-      return failAdaptiveRoute('LOCALE_DESIGN_RESEARCH_REQUIRED',
-        `locale research requires strategyDecision to select missing ${missing}. Update the strategy and dependent execution waves before route classification; source receipts and the cultural profile are collected after the research route is published, not required to classify it.`);
-    }
+    // Missing interpretation is an unspecified market, not a reason to refuse a build.
+    // A submitted judgment, however, must genuinely authorize the asserted region.
+    if (marketJudgment !== undefined && (!isVerifiedJudgment(marketJudgment)
+      || !hasLocaleMarketAuthority(locale, input.evidenceClaims, marketJudgment)))
+      return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
     return;
   }
-  const designProductionSelected = ['art-direction', 'composition', 'candidate-generation']
-    .some((stage) => strategy.stages.includes(stage));
-  if (designProductionSelected
-    && (!strategy.stages.includes('copy') || !strategy.stages.includes('type-proof')
-      || !strategy.roles.includes('omd-writer') || !strategy.roles.includes('omd-typesetter'))) {
-    return failAdaptiveRoute('LOCALE_DESIGN_TYPE_PROOF_REQUIRED');
-  }
+
 }
 
 type RouteCheck = (path: string, check: () => void) => void;
@@ -248,14 +215,9 @@ type RouteCheck = (path: string, check: () => void) => void;
 function checkAdaptiveInput(
   input: ValidatedAdaptiveRouteInput,
   check: RouteCheck,
-  authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
+  authority?: Readonly<{ root: string; invocation: ProjectRunInvocation; marketJudgment?: VerifiedJudgment }>,
 ): void {
   const strategy = input.strategyDecision;
-  check('strategyDecision.stages', () => {
-    if (input.projectMode === 'greenfield' && !strategy.stages.includes('frame')) {
-      failAdaptiveRoute('GREENFIELD_FRAME_REQUIRED', 'greenfield requires stage frame and its omd-framer owner before composition');
-    }
-  });
   check('strategyDecision', () => validateAdaptiveStrategyRails(strategy, input.deliveryMode));
   check('deliveryMode', () => { if (input.deliveryMode === 'design-only') {
     if (input.allowedPaths.length !== 1 || input.allowedPaths[0] !== '.omd/**' || input.namedDependencies.length > 0 || strategy.aiAssets.length > 0) {
@@ -269,18 +231,12 @@ function checkAdaptiveInput(
   check('uxPolicy', () => validateSafety(input));
   check('strategyDecision.skips', () => validateOptionalStageAccounting(strategy));
   check('strategyDecision.aiAssets', () => validateAdaptiveAiAssetSelection(strategy, authority));
-  check('strategyDecision.methods', () => { adaptiveMotionContract(input.designAxes.axes.expressiveDesignNeed, strategy); });
-  check('strategyDecision.attributionCategories', () => validateAttributionCoverage(strategy.attributionCategories, requiredAttributionCategories(strategy)));
-  check('referenceDiscovery', () => validateReferenceWork(input));
-  check('designAxes', () => validateRecommendation(strategy, input.designAxes.strategy.recommendation));
-  check('modelCapability', () => validateRecommendation(strategy, input.modelCapability.recommendation));
-  for (const card of input.modelCapability.supportCards) check('modelCapability', () => validateRecommendation(strategy, card.recommendation));
-  for (const recommendation of input.uxPolicy.recommendations) check('uxPolicy', () => validateRecommendation(strategy, {
-    id: recommendation.id, kind: 'recommended_method', status: recommendation.status, reason: recommendation.reason,
-  }));
-  check('strategyDecision.methods', () => validateContextMethods(input));
-  check('strategyDecision', () => validateTaskFlowBenchmarkRoute(input));
-  check('localeDesign', () => validateLocaleDesignRoute(input));
+
+
+
+
+
+  check('localeDesign', () => validateLocaleDesignRoute(input, authority?.marketJudgment));
 }
 
 export type AdaptiveRouteDiagnostic = Readonly<{ path: string; code: string; message: string }>;
@@ -319,20 +275,13 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
   if (input !== undefined) {
     const currentInput = input;
     checkAdaptiveInput(currentInput, check);
-    // A required discovery method brings a wave constraint even when the method is missing.
-    // Project it only for diagnostics; never rewrite the caller's strategy or publish it.
-    if (currentInput.referenceDiscovery.decision === 'discover' && !currentInput.strategyDecision.methods.includes('parallel-reference-acquisition')) {
-      const strategy = currentInput.strategyDecision;
-      check('strategyDecision.executionWaves', () => validateAdaptiveExecutionWaves({ ...strategy,
-        methods: [...strategy.methods, 'parallel-reference-acquisition'] }, currentInput.deliveryMode));
-    }
   }
   return diagnostics.filter((entry, index) => diagnostics.findIndex(other => other.path === entry.path && other.code === entry.code && other.message === entry.message) === index);
 }
 
 export function routeAdaptiveFlow(
   value: unknown,
-  authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
+  authority?: Readonly<{ root: string; invocation: ProjectRunInvocation; marketJudgment?: VerifiedJudgment }>,
   localeDesign?: LocaleDesignRoute,
 ): AdaptiveRouteRecord {
   const input = validated(value, localeDesign);

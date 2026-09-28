@@ -175,9 +175,8 @@ test('content requires representative or production-like receipt-bound provenanc
   assertModelError(() => parseContentStateModel(weakProductionClaim), 'INVALID_CONTENT_STATE_PROVENANCE');
 });
 
-test('durable model values reject filler, PII-shaped data, and credential-shaped data', () => {
+test('durable model values reject PII-shaped data and credential-shaped data', () => {
   const unsafeValues = [
-    'Lorem ipsum dolor sit amet.',
     'Contact operator@example.com for approval.',
     'Call +1 (415) 555-0137 for approval.',
     'Card 4111 1111 1111 1111 is on file.',

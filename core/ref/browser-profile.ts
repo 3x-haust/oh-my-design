@@ -1,7 +1,5 @@
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
 import type { BrowserContext, BrowserType, Page } from 'playwright';
-import { browserProfilePath } from './browser-consent.ts';
+import { prepareBrowserProfile } from './browser-consent.ts';
 import { publicDiscoveryUrl } from './discovery-record.ts';
 
 export type PersistentLauncher = Pick<BrowserType, 'launchPersistentContext'>;
@@ -9,8 +7,7 @@ export async function launchBrowserProfileLogin(input: Readonly<{
   sites: readonly string[]; signal?: AbortSignal; timeoutMs?: number; home?: string; launcher?: PersistentLauncher;
 }>): Promise<'closed' | 'timeout' | 'cancelled'> {
   const { chromium } = await import('playwright');
-  const path = browserProfilePath(input.home);
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const path = prepareBrowserProfile(input.home);
   const context = await (input.launcher ?? chromium).launchPersistentContext(path, { headless: false });
   try {
     for (const site of input.sites) {
@@ -45,8 +42,7 @@ export async function handoffBrowserChallenge(input: Readonly<{
   home?: string; launcher?: PersistentLauncher;
 }>): Promise<boolean> {
   const { chromium } = await import('playwright');
-  const path = browserProfilePath(input.home);
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  const path = prepareBrowserProfile(input.home);
   const context: BrowserContext = await (input.launcher ?? chromium).launchPersistentContext(path, { headless: false });
   try {
     const page = await context.newPage();

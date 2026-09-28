@@ -64,16 +64,9 @@ test('a measured or part-scoped item is refused: that evidence belongs on the re
   }
 });
 
-test('a quality stating a measurement is refused, while a felt quality stays lawful', () => {
-  for (const structural of ['16px gutters', '8px spacing', '12-column grid', 'border-radius 4px']) {
-    assert.throws(
-      () => parseMoodboard(board([item({ qualities: [structural] })])),
-      (error: unknown) => error instanceof MoodboardError && error.code === 'MOOD_STRUCTURAL_QUALITY',
-    );
-  }
-  for (const felt of ['warm paper', 'low contrast', 'dense but quiet', 'printed', 'archival']) {
-    assert.doesNotThrow(() => parseMoodboard(board([item({ qualities: [felt] })])));
-  }
+test('quality wording is retained for cited claim-kind review', () => {
+  for (const quality of ['16px gutters', '8px spacing', 'warm paper', 'archival'])
+    assert.doesNotThrow(() => parseMoodboard(board([item({ qualities: [quality] })])));
 });
 
 test('a capture outside the mood store is refused', () => {
@@ -101,7 +94,7 @@ test('shape violations fail closed', () => {
   assert.throws(() => parseMoodboard(board([item(), item({ id: 'press-b' })])), /must not repeat a capture/);
   assert.throws(() => parseMoodboard(board([item(), item({ sha256: sha(Buffer.from('other')), imagePath: moodImagePath('/r', sha(Buffer.from('other'))) })])), /must not repeat an id/);
   assert.throws(() => parseMoodboard({ ...board([item()]), schema: 'moodboard-v2' }), /schema must be/);
-  assert.throws(() => parseMoodboard({ ...board([item()]), extra: 1 }), /unknown or missing keys/);
+  assert.equal(Object.hasOwn(parseMoodboard({ ...board([item()]), extra: 1 }), 'extra'), false);
 });
 
 test('qualities re-assert the lane grade through the shared axis rule', () => {

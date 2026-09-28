@@ -7,7 +7,6 @@ import { withAcquisitionDeadline, NAVIGATION_BUDGET_MS, AcquisitionTimeoutError 
 import { executeReferenceSearch, executeUserBrowserSearch, readSearchExecution } from './search-execution.ts';
 import { readReferenceBrowserConfig } from './browser-config.ts';
 import { withBrowser } from '../render/index.ts';
-import { handoffBrowserChallenge } from './browser-profile.ts';
 
 export type ReferenceDiscoveryAdvance = Readonly<{
   schema: 'reference-discovery-advance-v1';
@@ -36,14 +35,9 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
         receipt = await withBrowser(browser => executeReferenceSearch(browser, action.input!, writer), undefined,
           { reference: true, config });
         const first = readSearchExecution(root, receipt, action.lane);
-        if (first.status === 'blocked' && action.engine === 'omd-profile') {
-          const cleared = await handoffBrowserChallenge({ url: action.input.url, cleared: async page => {
-            const body = await page.locator('body').innerText();
-            return !/captcha|unusual traffic|verify you are human/i.test(body);
-          } });
-          if (cleared) receipt = await withBrowser(browser => executeReferenceSearch(browser, action.input!, writer), undefined,
-            { reference: true, config });
-        }
+        // A fresh, signed page-access judgment is required before requesting human handoff.
+        // The search attempt remains available as evidence even when access is unclear.
+        void first;
       }
       readSearchExecution(root, receipt, action.lane);
       outcome = readSearchExecution(root, receipt, action.lane).status === 'page-observed' ? 'observed' : 'unavailable';

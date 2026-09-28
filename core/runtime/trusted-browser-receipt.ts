@@ -76,7 +76,7 @@ const ENTRY_SURFACE_KEYS = new Set([
   'status',
 ]);
 const CODE = /^[a-z0-9]+(?:[-:][a-z0-9]+)*$/;
-const TRANSCRIPT = /^(?:(?:action-click|action-fill|assertion-pass|assertion-fail):[a-f0-9]{64}|(?:access|safety)-finding:[a-z0-9]+(?:[-:][a-z0-9]+)*)$/;
+const TRANSCRIPT = /^(?:(?:action-click|action-fill|assertion-pass|assertion-fail):[a-f0-9]{64}|(?:access|safety)-finding:[a-z0-9]+(?:[-:][a-z0-9]+)*|rendered-copy-review:(?:1280x900|390x844):[A-Za-z0-9_-]{1,10924})$/;
 
 function malformed(): never {
   throw new TrustedBrowserReceiptError('MALFORMED_TRUSTED_BROWSER_RECEIPT');

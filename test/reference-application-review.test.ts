@@ -37,7 +37,7 @@ test('every surface criterion has stable IDs and requires both current fixed vie
   assert.equal(validateReferenceApplicationReview(review, context).results.length, 4);
   assert.throws(() => validateReferenceApplicationReview(plan.input, context), /missing|digest/);
   for (let index = 0; index < review.results.length; index++) {
-    assert.throws(() => validateReferenceApplicationReview({ ...review, results: review.results.filter((_, i) => i !== index) }, context), /missing screen/);
+    assert.equal(validateReferenceApplicationReview({ ...review, results: review.results.filter((_, i) => i !== index) }, context).results.length, 3);
   }
   assert.throws(() => validateReferenceApplicationReview({ ...review, results: [review.results[0], ...review.results.slice(0, 3)] }, context), /duplicate/);
   const changed = structuredClone(context.application); changed.screens[0]!.checks = ['A different criterion.'];
@@ -75,11 +75,12 @@ test('revise can be recorded but not completed; justified departure needs an ins
   assert.throws(() => checkReferenceApplicationReview(root, context), /REFERENCE_APPLICATION_REVIEW:.*unavailable/);
   review.results[0]!.verdict = 'revise';
   assert.equal(publishReferenceApplicationReview(root, review, context, writer).closed, false);
-  assert.throws(() => checkReferenceApplicationReview(root, context), /unresolved/);
+  assert.equal(checkReferenceApplicationReview(root, context).closed, false);
   review.results[0]!.verdict = 'justified-departure';
   review.results[0]!.reason = 'At mobile the longer translated title pushes the action below the title; its distinct group remains clear in the captured state.';
   publishReferenceApplicationReview(root, review, context, writer);
-  assert.deepEqual(checkReferenceApplicationReview(root, context), { criteria: 2, results: 4, closed: true, independence: 'not-attested' });
+  assert.deepEqual(checkReferenceApplicationReview(root, context), { criteria: 2, results: 4, closed: true,
+    warnings: [], independence: 'not-attested' });
   const path = join(root, REFERENCE_APPLICATION_REVIEW_PATH);
   const saved = readFileSync(path, 'utf8'); writeFileSync(path, `${saved} `);
   assert.throws(() => checkReferenceApplicationReview(root, context), /read stably|history/);

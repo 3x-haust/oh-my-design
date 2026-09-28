@@ -1,3 +1,5 @@
+import { knownFields } from '../judgment/schema.ts';
+
 export type MarketLaneCoverage = Readonly<{
   localSources: readonly Readonly<{
     sourceId: string;
@@ -37,8 +39,10 @@ export function marketObject(value: unknown, code: string): Record<string, unkno
   return value as Record<string, unknown>;
 }
 function exact(value: Record<string, unknown>, keys: readonly string[], code: string): void {
-  const actual = Object.keys(value).sort(), expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) marketReject(code);
+  try {
+    const { warnings } = knownFields(value, keys, [], code);
+    for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  } catch { marketReject(code); }
 }
 export function marketText(value: unknown, code: string): string {
   if (typeof value !== 'string') return marketReject(code);
@@ -59,7 +63,7 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
   const code = `REFERENCE_RESEARCH_MARKET_${label.toUpperCase()}`;
   const input = marketObject(value, code);
   exact(input, ['localSources', 'globalFallback'], `${code}_KEYS`);
-  if (!Array.isArray(input.localSources) || !input.localSources.length
+  if (!Array.isArray(input.localSources)
     || Object.keys(input.localSources).length !== input.localSources.length) return marketReject(`${code}_LOCAL`);
   const localSources = Object.freeze(input.localSources.map(value => {
     const source = marketObject(value, `${code}_LOCAL`);
@@ -88,7 +92,6 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
       || !['availability', 'access', 'coverage'].includes(gap.kind as string)) return marketReject(`${code}_FALLBACK_GAP`);
     const attemptedQueries = marketTexts(gap.attemptedQueries, `${code}_FALLBACK_QUERIES`, true, true);
     const attemptedRoots = marketTexts(gap.attemptedRoots, `${code}_FALLBACK_ROOTS`, true);
-    if (!attemptedQueries.length && !attemptedRoots.length) return marketReject(`${code}_FALLBACK_ATTEMPTS`);
     const sourceIds = marketTexts(fallback.sourceIds, `${code}_FALLBACK_SOURCES`);
     if (!Array.isArray(fallback.provenance) || Object.keys(fallback.provenance).length !== fallback.provenance.length) {
       return marketReject(`${code}_FALLBACK_PROVENANCE`);
@@ -107,8 +110,8 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
   }
   const classified = [...localSources.map(source => source.sourceId), ...globalFallback?.sourceIds ?? []];
   const sourceIds = sources.map(source => source.id);
-  if (new Set(classified).size !== classified.length || classified.length !== sourceIds.length
-    || classified.some(id => !sourceIds.includes(id))) return marketReject(`${code}_COVERAGE`);
+  if (new Set(classified).size !== classified.length || classified.some(id => !sourceIds.includes(id)))
+    return marketReject(`${code}_COVERAGE`);
   return Object.freeze({ localSources, globalFallback });
 }
 

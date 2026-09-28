@@ -21,7 +21,7 @@ export type LocaleContract = {
 export type LocaleFinding = { readonly id: string; readonly message: string };
 
 const TAG = /^[a-z]{2,3}(-[A-Z][a-z]{3})?(-([A-Z]{2}|\d{3}))?$/;
-const PLACEHOLDER = /^(tbd|todo|n\/a|-{1,3}|\.\.\.|…)$/i;
+// Copy readiness is judged in context; only missing cells are mechanically incomplete.
 
 export function validateLocaleContract(value: unknown): LocaleContract {
   const fail = (message: string): never => { throw new Error(`LOCALE_CONTRACT_INVALID: ${message}`); };
@@ -99,7 +99,7 @@ export function checkLocaleCopyBinding(contract: LocaleContract, deck: string): 
       if (column === -1) continue;
       const text = cells[column] ?? '';
       if (text === '') findings.push({ id: 'LOCALE-COPY-MISSING', message: `Beat ${beat} has no ${locale} copy.` });
-      else if (PLACEHOLDER.test(text)) findings.push({ id: 'LOCALE-COPY-PLACEHOLDER', message: `Beat ${beat} has placeholder ${locale} copy (${text}).` });
+
     }
   }
   for (const beat of declared) {

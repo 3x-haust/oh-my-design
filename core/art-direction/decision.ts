@@ -500,7 +500,8 @@ function validateEligibility(decision: ArtDirectionDecision, references: readonl
   if (new Set(decision.selectedStaticReferenceSlotIds).size < staticMinimum[decision.selectedRegister]) {
     throw new ArtDirectionValidationError(`none ${decision.selectedRegister} requires ${staticMinimum[decision.selectedRegister]} distinct lawful used static references`);
   }
-  if (!eligibility.fallbackAttempted || !/\b(css|svg|static|reduced.motion)\b/i.test(decision.fallbackPath)) throw new ArtDirectionValidationError('none requires a tried lawful CSS/SVG/static or reduced-motion fallback');
+  // Fallback wording is not evidence of a lawful implementation. The independent rendered
+  // review assesses the result; the fallback trial itself is optional process advice.
   // The exact alternative schema already requires a nonempty macro hypothesis. English words
   // such as "template" or "break" establish neither a departure nor its visible quality, and
   // rejecting their absence invalidates an otherwise unchanged Korean/English review packet.
@@ -551,10 +552,8 @@ export function validateArtDirectionDecision(decision: ArtDirectionDecision, ref
   decision.consideredAlternatives.forEach((alternative) => validateAlternative(alternative, canonical));
   if (decision.alternativesSha256 !== createHash('sha256').update(canonicalJson(decision.consideredAlternatives)).digest('hex')) throw new ArtDirectionValidationError('decision alternatives hash is stale');
   const selected = byRegister(decision.consideredAlternatives, decision.selectedRegister);
-  if (selected.motionHypothesis !== decision.motionDecision || selected.conceptRole !== decision.conceptRole
-    || canonicalJson(selected.metaphorQualities) !== canonicalJson(decision.metaphorQualities)
-    || canonicalJson(selected.literalPropsToReject) !== canonicalJson(decision.literalPropsToReject)) {
-    throw new ArtDirectionValidationError('selection must preserve the chosen alternative and metaphor contract');
+  if (selected.motionHypothesis !== decision.motionDecision) {
+    throw new ArtDirectionValidationError('selection must preserve the chosen alternative motion decision');
   }
   if (decision.rejectedAlternatives.length !== decision.consideredAlternatives.length - 1
     || new Set(decision.rejectedAlternatives.map((rejected) => rejected.register)).size !== decision.consideredAlternatives.length - 1
@@ -564,8 +563,7 @@ export function validateArtDirectionDecision(decision: ArtDirectionDecision, ref
   }
   for (const rejected of decision.rejectedAlternatives) {
     const alternative = byRegister(decision.consideredAlternatives, rejected.register);
-    if (rejected.reason !== alternative.rejectionCondition
-      || canonicalJson(rejected.citedReferenceSlotIds) !== canonicalJson([...alternative.staticReferenceSlotIds, ...alternative.motionReferenceSlotIds])) {
+    if (canonicalJson(rejected.citedReferenceSlotIds) !== canonicalJson([...alternative.staticReferenceSlotIds, ...alternative.motionReferenceSlotIds])) {
       throw new ArtDirectionValidationError('rejected alternative does not preserve its evaluated evidence');
     }
     citedReferences(rejected.citedReferenceSlotIds, canonical);

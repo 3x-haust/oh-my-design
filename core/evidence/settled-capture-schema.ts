@@ -1,3 +1,5 @@
+import { knownFields } from '../judgment/schema.ts';
+
 export const SETTLED_CAPTURE_SCHEMA = 'settled-capture-receipt-v1' as const;
 
 export type CaptureRect = Readonly<{ x: number; y: number; width: number; height: number }>;
@@ -58,13 +60,9 @@ function record(value: unknown, label: string): JsonRecord {
 }
 
 function exact(value: unknown, keys: readonly string[], label: string): JsonRecord {
-  const data = record(value, label);
-  const actual = Object.keys(data).sort();
-  const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
-    throw new Error(`${label} keys must be exactly ${expected.join(', ')}`);
-  }
-  return data;
+  const { value: projected, warnings } = knownFields(record(value, label), keys, [], label);
+  for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  return projected;
 }
 
 function text(value: unknown, label: string): string {

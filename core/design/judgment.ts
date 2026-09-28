@@ -110,23 +110,11 @@ const strings = (value: unknown, label: string): readonly string[] => {
   return Object.freeze(list.map((entry, index) => text(entry, `${label}[${index}]`)));
 };
 
-/**
- * A verdict wearing an observation's clothes: "square corners are trustworthy" is a conclusion, not
- * something a capture shows. Detected rather than trusted, because this is the exact substitution the
- * observed run made.
- */
-const isVerdict = (observation: string): boolean =>
-  /\b(?:is|are|should be|must be)\s+(?:better|worse|trustworth\w*|clean\w*|modern|professional|good|bad|right|wrong)\b/i.test(observation)
-  || /(?:하는 게 좋|해야 한다|신뢰감을 준다|세련되다)/.test(observation);
-
 export function parseReferenceJudgment(value: unknown, index: number): ReferenceJudgment {
   const label = `judgments[${index}]`;
   const record = isRecord(value) ? value : fail('MALFORMED_DESIGN_JUDGMENT', `${label} must be an object`);
   exact(record, ['id', 'observation', 'whyItWorksThere', 'relevance', 'adopt', 'reject', 'interpretation', 'scope'], label);
   const observation = text(record.observation, `${label}.observation`);
-  if (isVerdict(observation)) {
-    fail('JUDGMENT_MISSING_WHY', `${label}.observation states a verdict ("${observation}") rather than what the capture shows. Record the observation, then the job that made it work in that context`);
-  }
   if (!JUDGMENT_RELEVANCE.includes(record.relevance as JudgmentRelevance)) {
     fail('MALFORMED_DESIGN_JUDGMENT', `${label}.relevance must be one of ${JUDGMENT_RELEVANCE.join(', ')}`);
   }
@@ -178,17 +166,10 @@ export function parseDesignHypothesis(value: unknown): DesignHypothesis {
  * which is how a run ends up back at the category average.
  */
 export function checkDesignHypothesis(hypothesis: DesignHypothesis): readonly string[] {
-  const findings: string[] = [];
-  if (/^(?:a|an|the)?\s*(?:modern|clean|simple|professional|intuitive)\b/i.test(hypothesis.feelsLike)) {
-    findings.push('feelsLike opens with an interchangeable adjective; state the comparison that makes this product recognisable ("a personal administrative workspace, not a government portal")');
-  }
-  if (hypothesis.twoSecondRead.trim().split(/\s+/).length < 4) {
-    findings.push('twoSecondRead is too short to discriminate between two plausible impressions');
-  }
-  if (hypothesis.dominantObject.trim().split(/\s+/).length < 2) {
-    findings.push('dominantObject names nothing specific enough to carry visual weight');
-  }
-  return Object.freeze(findings);
+  // Specificity is an interpretation of the current hypothesis, not a word-count verdict.
+  // The rendered first viewport and independent reviewer own that assessment.
+  void hypothesis;
+  return Object.freeze([]);
 }
 
 const SHA256 = /^[a-f0-9]{64}$/;

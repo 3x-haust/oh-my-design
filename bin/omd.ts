@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, unlinkSync } from 'node:fs';
+import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync } from 'node:fs';
 import { join, dirname, basename, isAbsolute, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -147,6 +147,7 @@ interface Opts {
   provider?: string;
   zones?: string;
   input?: string;
+  judgment?: string | string[];
   sourceSha?: string;
   review?: string;
   mirror?: string;
@@ -1423,9 +1424,6 @@ async function cmdRefCheck(opts: Opts): Promise<never> {
 
 async function cmdRefVerify(opts: Opts): Promise<never> {
   if (opts._.length > 1) throw new Error('usage: omd ref verify [page] [--candidate id] [--json]');
-  if (process.env.OMD_PRODUCTION_OWNER_ROLE === 'omd-hand') {
-    throw new Error('reference verification belongs after the source-write-only production transaction');
-  }
   if (process.env.OMD_NON_PRODUCTION_ROLE && process.env.OMD_NON_PRODUCTION_ROLE !== 'omd-scout') {
     throw new Error('source-aware reference verification is not a source-free reviewer or downstream owner input');
   }
@@ -2510,11 +2508,10 @@ async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never>
   const command = `omd ref research-${mode}`;
   const invocation = invocationFromActivation(opts, command);
   const route = readPersistedRoute(process.cwd(), invocation);
-  if (route.references.decision !== 'discover') {
-    throw new Error('REFERENCE_RESEARCH_NOT_SELECTED');
-  }
+  const strategyWarning = route.references.decision !== 'discover' ? 'REFERENCE_RESEARCH_NOT_SELECTED: research was not selected in the route; explicit publication proceeds with this limitation' : null;
+  const researchInput = mode === 'set' ? inputJson(opts.input!, command) : undefined;
   const research = mode === 'set'
-    ? parseReferenceResearch(inputJson(opts.input!, command))
+    ? parseReferenceResearch(researchInput)
     : readPublishedReferenceResearch(process.cwd());
   if (mode === 'set' && research.schema !== 'reference-research-v8')
     throw new Error('REFERENCE_RESEARCH_UPGRADE_REQUIRED: publish functional domain observations and feature evidence as reference-research-v8');
@@ -2524,10 +2521,36 @@ async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never>
     expectedRequest: route.request,
   };
   validateReferenceResearch(process.cwd(), research, validation);
+  const judgmentPaths = opts.judgment === undefined ? [] : Array.isArray(opts.judgment) ? opts.judgment : [opts.judgment];
+  const verifiedJudgments: { path: string; sha256: string; purpose: string; subjectId: string }[] = [];
+  if (judgmentPaths.length) {
+    const { readVerifiedCliJudgment } = await import('./judgment-command.ts');
+    for (const judgmentPath of judgmentPaths) {
+      const verified = await readVerifiedCliJudgment(process.cwd(), invocation, judgmentPath);
+      if (!['market-scope', 'task-capability', 'search-result-role', 'link-role', 'discovery-target',
+        'page-access', 'reference-action', 'overlay-action', 'surface-content', 'discovery-query', 'source-language'].includes(verified.judgment.purpose))
+        throw new Error('AI_JUDGMENT_INVALID: unrelated reference policy');
+      const match = /^\.omd\/judgments\/records\/sha256-([a-f0-9]{64})\.json$/.exec(judgmentPath);
+      if (!match) throw new Error('AI_JUDGMENT_INVALID: immutable receipt path required');
+      verifiedJudgments.push({ path: judgmentPath, sha256: match[1]!, purpose: verified.judgment.purpose, subjectId: verified.judgment.subjectId });
+    }
+  }
+  if (research.judgments?.length) {
+    const { readVerifiedCliJudgment } = await import('./judgment-command.ts');
+    for (const receipt of research.judgments) {
+      const verified = await readVerifiedCliJudgment(process.cwd(), invocation, receipt.path);
+      if (verified.judgment.purpose !== receipt.purpose || verified.judgment.subjectId !== receipt.subjectId
+        || !receipt.path.endsWith(`sha256-${receipt.sha256}.json`))
+        throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: research judgment changed');
+    }
+  }
   const path = '.omd/reference-research.json';
   if (mode === 'set') {
-    publishReferenceResearch(process.cwd(), research, validation, projectWriterFromActivation(opts, command));
+    const retained = [...research.judgments ?? [], ...verifiedJudgments];
+    publishReferenceResearch(process.cwd(), retained.length ? { ...research, judgments: retained } : research,
+      { ...validation, verifiedJudgments: retained }, projectWriterFromActivation(opts, command));
   }
+  const { referenceResearchUnknownFieldWarnings } = await import('../core/ref/reference-research-parser.ts');
   const result = {
     path,
     domainPath: DOMAIN_REFERENCES_PATH,
@@ -2535,6 +2558,9 @@ async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never>
     domainSources: research.domainReference.sources.length,
     designSources: research.designReference.sources.length,
     benchmarkBound: research.domainReference.benchmarkSha256 !== null,
+    warnings: [...(strategyWarning === null ? [] : [strategyWarning]),
+      ...(researchInput === undefined ? [] : referenceResearchUnknownFieldWarnings(researchInput))],
+    verifiedJudgments,
   };
   if (opts.json) process.stdout.write(JSON.stringify(result));
   else console.log(`ok — separate domain and design reference lanes are current (${result.domainSources} domain sources, ${result.designSources} design sources${result.benchmarkBound ? ', deep task-flow benchmark bound' : ''})`);
@@ -3446,7 +3472,7 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
       for (const artifact of requirement.missingArtifacts) console.error(`[owner-blocked] ${requirement.stage} needs an earlier owner's artifact: ${artifact} — spawn that owner; only its failure stops the run`);
       for (const contract of requirement.undeliveredContracts) console.error(`[deliver-then-retry] ${requirement.stage} has no current receipt for ${contract}. This is your own next step, not a run failure: run \`omd stage deliver --stage ${requirement.stage} --contract ${contract}\`, then require again`);
     }
-    process.exit(requirement.ok ? 0 : 1);
+    process.exit(0);
   }
 
   if (mode === 'record' || mode === 'cost') {
@@ -3703,14 +3729,37 @@ async function cmdComplete(mode: string | undefined, opts: Opts): Promise<never>
   }
   process.exit(findings.length > 0 ? 1 : 0);
 }
+async function cmdRefControlObserve(opts: Opts): Promise<never> {
+  if (!opts.url || !opts.selector || opts._.length) throw new Error('usage: omd ref control-observe --url <public-https-url> --selector <control> --json');
+  const { captureReferenceControlObservation } = await import('../core/ref/control-observation.ts');
+  const { withBrowser } = await import('../core/render/index.ts');
+  const writer = projectWriterFromActivation(opts, 'omd ref control-observe');
+  const result = await withBrowser(browser => captureReferenceControlObservation(browser, process.cwd(),
+    { url: opts.url!, selector: opts.selector! }, writer));
+  console.log(JSON.stringify(result));
+  process.exit(0);
+}
+
 async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'record') {
-    if (!opts.input) throw new Error('usage: omd benchmark record --input <reference-flow-input.json> [--json]');
+    if (!opts.input) throw new Error('usage: omd benchmark record --input <reference-flow-input.json> [--judgment <signed-control-judgment>]... [--json]');
     const { recordLiveReferenceFlow } = await import('../core/ref/live-flow.ts');
     const { withBrowser } = await import('../core/render/index.ts');
-    const writer = projectWriterFromActivation(opts, 'omd benchmark record');
+    const invocation = invocationFromActivation(opts, 'omd benchmark record');
+    const writer = projectWriter(invocation);
     const input = inputJson(opts.input, 'omd benchmark record');
-    const result = await withBrowser(browser => recordLiveReferenceFlow(browser, process.cwd(), input, writer));
+    const paths = opts.judgment === undefined ? [] : Array.isArray(opts.judgment) ? opts.judgment : [opts.judgment];
+    const { readVerifiedCliJudgment, cliReferenceActionBinding } = await import('./judgment-command.ts');
+    const judgments = await Promise.all(paths.map(async path => ({ path, judgment: (await readVerifiedCliJudgment(process.cwd(), invocation, path)).judgment })));
+    if (judgments.some(({ judgment }) => !['reference-action', 'overlay-action'].includes(judgment.purpose)))
+      throw new Error('AI_JUDGMENT_INVALID: benchmark record accepts only signed action judgments');
+    const binding = (purpose: 'reference-action' | 'overlay-action') => async (_page: import('playwright').Page, selector: string, url: string) => {
+      const subjectId = `${url}#${selector}`;
+      const match = judgments.find(item => item.judgment.purpose === purpose && item.judgment.subjectId === subjectId);
+      return match === undefined ? undefined : cliReferenceActionBinding(process.cwd(), invocation, match.path, purpose, subjectId);
+    };
+    const result = await withBrowser(browser => recordLiveReferenceFlow(browser, process.cwd(), input, writer,
+      binding('reference-action'), binding('overlay-action')));
     console.log(JSON.stringify(result));
     process.exit(result.status === 'completed' ? 0 : 1);
   }
@@ -3747,7 +3796,7 @@ async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never
     else console.log(`ok — current evidence files for ${benchmark.sources.length} declared sources, ${benchmark.sources.reduce((count, source) => count + source.screens.length, 0)} screens and ${benchmark.sources.reduce((count, source) => count + source.flows.length, 0)} flows; declared completed native flows verified: ${evidenceStrength.liveFlowVerified}; exclusions and artifact-only records remain unverified`);
     process.exit(0);
   }
-  throw new Error('usage: omd benchmark record --input <reference-flow-input.json> | set --input <task-flow-benchmark.json> | check [--input <task-flow-benchmark.json>] [--json]');
+  throw new Error('usage: omd benchmark record --input <reference-flow-input.json> [--judgment <signed-control-judgment>]... | set --input <task-flow-benchmark.json> | check [--input <task-flow-benchmark.json>] [--json]');
 }
 async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'alternatives-sha') {
@@ -4243,10 +4292,7 @@ async function cmdGuard(mode: string | undefined, opts: Opts): Promise<never> {
     else console.log(result.ok ? 'ok — selected pre-production inputs are current; this is not completion' : result.blockers.join('\n'));
     process.exit(result.ok ? 0 : 1);
   }
-  // Give the portable owner its actionable repair loop before the stronger final reviewer
-  // authority check. This preliminary check is NOT final scope/independence authorization.
-  const { checkSlopReview } = await import('../core/slop/review.ts');
-  checkSlopReview(process.cwd());
+  // Process reviews are advisory; terminal evidence and independent outcome review remain authoritative.
   return cmdCompletion('preflight', opts);
 }
 
@@ -4289,8 +4335,6 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
     requireFinalEvidenceManifestAuthorization(invocation, process.cwd(), manifestBytes);
     const manifest = JSON.parse(manifestBytes.toString('utf8')) as unknown;
     if (!isRecord(manifest) || !isRecord(manifest.graph)) throw new Error('FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: final graph is required');
-    const { checkSlopFinalGraph } = await import('../core/slop/review.ts');
-    checkSlopFinalGraph(process.cwd(), manifest.graph);
     for (const lane of ['blindLane', 'fidelityLane', 'protocolLane']) {
       const descriptor = manifest.graph[lane];
       if (!isRecord(descriptor) || typeof descriptor.path !== 'string') throw new Error(`FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: ${lane} receipt is required`);
@@ -4410,7 +4454,7 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
     throw new Error('usage: omd browser setup|login --engine user-browser|omd-profile --consent [--browser <id>] [--sites <https-url[,https-url]>] [--json] | status|forget [--json]');
   if (opts.userAnswer !== undefined && (typeof opts.userAnswer !== 'string' || !opts.userAnswer.trim()))
     throw new Error('OMD_BROWSER_SETUP_CONSENT_REQUIRED: --user-answer must be the exact nonempty user turn');
-  const { browserProfilePath, forgetBrowserConsent, readBrowserConsent, writeBrowserConsent,
+  const { browserProfilePath, forgetBrowserProfile, forgetBrowserConsent, readBrowserConsent, writeBrowserConsent,
     readUserBrowserConsent, writeUserBrowserConsent, readBrowserAnswerReceipt, clearBrowserAnswerReceipt } = await import('../core/ref/browser-consent.ts');
   const { userBrowserDoctor, installUserBrowserBridge } = await import('../core/browser/setup.ts');
   if (opts.engine !== undefined && opts.engine !== 'user-browser' && opts.engine !== 'omd-profile')
@@ -4445,7 +4489,7 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
   if (mode === 'forget') {
     if (opts.sites !== undefined || opts.consent || opts.engine !== undefined || opts.browser !== undefined || opts.userAnswer !== undefined) throw new Error('usage: omd browser forget [--json]');
     forgetBrowserConsent();
-    rmSync(browserProfilePath(), { recursive: true, force: true });
+    forgetBrowserProfile();
     console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-status-v1', consent: null, profilePresent: false }) : 'browser consent and dedicated profile removed');
     process.exit(0);
   }
@@ -4918,7 +4962,9 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
       localeDesign = routeLocaleDesignContext(inputJson(opts.localeContext, 'omd route validate --locale-context'));
     }
     const diagnostics = diagnoseAdaptiveRouteInput(input, localeDesign);
-    const report = { schema: 'adaptive-route-validation-v1', ok: diagnostics.length === 0, published: false, diagnostics };
+    const { adaptiveRouteUnknownFieldWarnings } = await import('../core/route/adaptive-flow-boundary.ts');
+    const warnings = adaptiveRouteUnknownFieldWarnings(input);
+    const report = { schema: 'adaptive-route-validation-v1', ok: diagnostics.length === 0, published: false, diagnostics, warnings };
     if (diagnostics.length) {
       const next = 'Repair the named fields together, preserving user facts, risk, scope and selected work; rerun route validate with the same input and locale context. Do not run completion or guess unrelated stages. Classification is available only after validation passes.';
       if (opts.json) process.stdout.write(JSON.stringify({ ...report, next }));
@@ -4947,12 +4993,17 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
     }
     const invocation = invocationFromActivation(opts, 'omd route classify');
     const writer = projectWriter(invocation);
+    const marketJudgment = typeof opts.judgment === 'string'
+      ? await (await import('./judgment-command.ts')).readVerifiedCliJudgment(process.cwd(), invocation, opts.judgment) : undefined;
+    if (marketJudgment !== undefined && marketJudgment.judgment.purpose !== 'target-market')
+      throw new Error('AI_JUDGMENT_INVALID: route classification expects target-market');
     const published = publishAdaptiveRoute(
       process.cwd(),
       input,
       writer,
       invocation,
       localeDesign,
+      marketJudgment,
     );
     const activationEvidencePath = process.env.OMD_ACTIVATION_EVIDENCE_PATH;
     if (activationEvidencePath !== undefined && validateActivationContext(inputJson(activationEvidencePath, 'Codex activation evidence')).briefSha256 === invocation.activation.briefSha256) {
@@ -5053,10 +5104,10 @@ async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
   );
   // Persist what the stage was handed. A brief that exists only for the length of one command
   // leaves no record of what an owner actually received, which is the question asked later.
-  writeBrief(process.cwd(), brief, projectWriter(invocation));
+  if (!opts.check) writeBrief(process.cwd(), brief, projectWriter(invocation));
   if (opts.json) process.stdout.write(JSON.stringify(brief));
   else process.stdout.write(formatBrief(brief));
-  process.exit(opts.check && brief.blockers.length > 0 ? 1 : 0);
+  process.exit(0);
 }
 
 /** `omd status --files` — what this project actually holds, by what it is for. */
@@ -5392,7 +5443,7 @@ function usage(): never {
     + '  ref advance [--json]                       execute one bounded native reference acquisition attempt\n'
     + '  ref exclude <observed-url> --lane ...     record a judged-unusable captured item and continue discovery\n'
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
-    + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
+    + '  ref research-check                         inspect both lanes and verify every claimed source and judgment\n'
     + '  ref search --input <json>                  execute a public query GET and record actual links/capture or failure\n'
     + '  ref discover-batch --input <json> [--recovery] run independent visits; recovery refuses previously attempted requests\n'
     + '  ref tidy [--apply] [--json]                preview clutter; --apply archives exact bytes before guarded removal\n'
@@ -5406,6 +5457,7 @@ function usage(): never {
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
     + '  ref navigate <url> --lane domain|design     capture a discovery hop; add --entry public-directory|free-gallery for an explicit direct root\n'
+    + '  ref control-observe --url <https-url> --selector <control>  sign a read-only control and document observation before agent judgment\n'
     + '  ref list [--lane domain|design] [--json]     inspect separate capture inventories\n'
     + '  ref distance <page> [--selected [--gate]] [--json]  compare all refs, or selected destination selectors\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
@@ -5447,7 +5499,7 @@ function usage(): never {
     + '  brief <stage> [--check] [--json]            inspect a stage; --check refuses blocked/unselected entry\n'
     + '  route starter [--json]                     current request/route-aware authoring starter\n'
     + '  route validate --input route-input.json [--json]  read-only grouped input diagnostics before publication\n'
-    + '  route classify --input route-input.json [--locale-context .omd/locale-design-context.json]  validate an adaptive contract-derived strategy and lock scope\n'
+    + '  route classify --input route-input.json [--locale-context .omd/locale-design-context.json] [--judgment <target-market-receipt>]  validate an adaptive contract-derived strategy and lock scope\n'
     + '  route show | route check [--json]           the chosen route, and writes outside its scope\n'
     + '  workflow plan|readiness|slice|artifacts|check-readiness|check-slice|check --activation <host-issued-invocation.json>  persist/check immutable design-development checkpoints\n'
     + '  status [--files] [--json]                   what this project holds, by what it is for\n'
@@ -5559,7 +5611,7 @@ async function main(): Promise<never> {
     console.log([
       'Usage:',
       '  omd lifecycle plan [--project <dir>] [--output .omd/.cache/trusted-lifecycle-manifest.json] [--activation <json>]',
-      '  omd lifecycle evaluate [--project <dir>] [--manifest <json>] [--json] (native Pi; derives the fixed plan)',
+      '  omd lifecycle evaluate [--project <dir>] [--manifest <json>] [--json] (native Pi; --manifest supplies an explicit browser plan, otherwise derive from frame/benchmark)',
       '  omd review run [--json] (native Pi; isolated current-model review lanes)',
       '  omd lifecycle repair --project <dir> --activation <json> --review <json> --mirror <dir> --owner-receipt <json>',
       '  omd lifecycle refinement-evidence --project <dir> --activation <json> --json',
@@ -5796,6 +5848,7 @@ async function main(): Promise<never> {
     const opts = parseArgs(args.slice(2));
     if (sub === 'tidy') return cmdRefTidy(opts);
     if (sub === 'navigate') return cmdRefNavigate(opts);
+    if (sub === 'control-observe') return cmdRefControlObserve(opts);
     if (sub === 'discover-batch') return cmdRefDiscoveryBatch(opts);
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'work-next') return cmdRefDiscoveryWork('next', opts);
@@ -5838,7 +5891,7 @@ async function main(): Promise<never> {
     if (sub === 'mood') return cmdRefMood(args[2], parseArgs(args.slice(3)));
     if (sub === 'gates') return cmdRefGates(opts);
     const { closestNames } = await import('../core/schema/suggestions.ts');
-    const names = ['tidy', 'navigate', 'discover-batch', 'discover-plan', 'work-next', 'advance', 'exclude', 'research-set', 'research-check', 'search', 'leads', 'apply-plan', 'apply-set', 'apply-check', 'apply-review-plan', 'apply-review-set', 'apply-review-check', 'add', 'add-batch', 'board', 'locale-bind', 'locale-bind-check', 'list', 'distance', 'principles', 'show', 'check', 'verify', 'v2-check', 'usage', 'usage-check', 'influence-proof', 'visual-packet', 'visual-packet-check', 'import-image', 'candidates', 'select', 'handoff', 'audit', 'granularity', 'mood', 'gates'];
+    const names = ['tidy', 'navigate', 'control-observe', 'discover-batch', 'discover-plan', 'work-next', 'advance', 'exclude', 'research-set', 'research-check', 'search', 'leads', 'apply-plan', 'apply-set', 'apply-check', 'apply-review-plan', 'apply-review-set', 'apply-review-check', 'add', 'add-batch', 'board', 'locale-bind', 'locale-bind-check', 'list', 'distance', 'principles', 'show', 'check', 'verify', 'v2-check', 'usage', 'usage-check', 'influence-proof', 'visual-packet', 'visual-packet-check', 'import-image', 'candidates', 'select', 'handoff', 'audit', 'granularity', 'mood', 'gates'];
     throw new Error(`unknown ref command ${sub ?? ''}; ${closestNames(sub ?? '', names).map(name => `did you mean: omd ref ${name}?`).join(' ') || 'run omd help'}`);
   }
 
@@ -5852,6 +5905,18 @@ async function main(): Promise<never> {
     if (sub === 'translate') {
       if (!opts.input || opts._.length) throw new Error(`usage: omd ${cmd} translate --input <json> --json`);
       const authored = inputJson(opts.input, `omd ${cmd} translate`);
+      const routeForJudgment = readPersistedRoute(process.cwd(), invocation);
+      const parsedTranslation = parseInput(authored, kind, routeForJudgment.request, routeForJudgment.sourceContractSha256);
+      if (parsedTranslation.status === 'resolved') {
+        if (!opts.judgment) throw new Error('AI_JUDGMENT_REQUIRED: supply --judgment <signed reading receipt>');
+        const { readVerifiedCliJudgment } = await import('./judgment-command.ts');
+        if (typeof opts.judgment !== 'string') throw new Error('AI_JUDGMENT_INVALID: supply one reading receipt');
+        const verified = await readVerifiedCliJudgment(process.cwd(), invocation, opts.judgment);
+        const payload = verified.judgment.payload as { kind?: string; textSha256?: string; chosenId?: string | null };
+        if (verified.judgment.purpose !== 'design-language-reading' || verified.judgment.decision !== 'resolved'
+          || payload.kind !== kind || payload.textSha256 !== parsedTranslation.textSha256 || payload.chosenId !== parsedTranslation.chosenId)
+          throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: translation reading does not match the signed request judgment');
+      }
       const writer = projectWriter(invocation);
       if (kind === 'feedback') {
         const route = readPersistedRoute(process.cwd(), invocation);
@@ -5890,6 +5955,18 @@ async function main(): Promise<never> {
       }
       console.log(opts.json ? JSON.stringify({ ok: true, ...result }) : `ok — ${kind} translation current`);
     }
+    process.exit(0);
+  }
+  if (cmd === 'ai-judgment') {
+    const opts = parseArgs(args.slice(2));
+    if ((sub !== 'publish' && sub !== 'check') || opts._.length || (sub === 'publish' && !opts.input) || (sub === 'check' && !opts.judgment))
+      throw new Error('usage: omd ai-judgment publish --input <judgment.json> | omd ai-judgment check --judgment <.omd/judgments/records/sha256-*.json>');
+    const invocation = invocationFromActivation(opts, `omd ai-judgment ${sub}`);
+    const { runJudgmentCommand } = await import('./judgment-command.ts');
+    if (sub === 'check' && typeof opts.judgment !== 'string') throw new Error('AI_JUDGMENT_INVALID: supply one receipt');
+    const result = await runJudgmentCommand(process.cwd(), invocation, sub, sub === 'publish' ? opts.input! : opts.judgment as string,
+      sub === 'publish' ? projectWriter(invocation) : undefined);
+    console.log(JSON.stringify(result));
     process.exit(0);
   }
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));

@@ -10,6 +10,7 @@ import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime
 import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { decodePng } from '../motion/energy.ts';
 import { clearReferenceNotices, hasSuspendedReferenceScripts, prepareSuppressedReferenceLink, resumeScriptsOnNewReferenceDocument, type NoticeDismissal } from './notice-overlay.ts';
+import { referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 
 type Receipt = { path: string; sha256: string };
 type StepInput = { screenId: string; state: string; clicks: string[]; assertions: ViewAssertion[] };
@@ -56,13 +57,18 @@ async function frameVisibleAssertions(page: Page, assertions: readonly ViewAsser
   }
 }
 
-async function safeClick(page: Page, selector: string, origin: string): Promise<void> {
+async function safeClick(page: Page, selector: string, origin: string,
+  actionJudgment?: (page: Page, selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>): Promise<void> {
   const control = page.locator(selector);
   await control.waitFor({ state: 'visible', timeout: 3000 });
   if (await control.count() !== 1) return fail('ambiguous click target');
-  const info = await control.evaluate(browserCallback(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
-  // Read-only public navigation only. No submit/login/payment/delete actions, even if a site uses GET.
-  if (/log\s*(?:in|out)|sign\s*(?:in|out|up)|purchase|pay\b|checkout|delete|remove|unsubscribe|submit|apply\s+now|로그인|로그아웃|가입|결제|구매|삭제|탈퇴|제출|신청하기/i.test(`${info.label} ${info.href ?? ''}`)) return fail('sensitive action is excluded; record an authentication/payment/destructive-action gap');
+  const info = await control.evaluate(browserCallback(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
+  // A verified judgment authorizes meaning; structural transport restrictions below remain hard.
+  const binding = await actionJudgment?.(page, selector, page.url());
+  if (binding && binding.subjectId !== `${page.url()}#${selector}`) return fail('action judgment targets another control or document');
+  const judgment = await referenceDecision('reference-action', binding);
+  if (!['read-only-navigation', 'disclosure'].includes(judgment.decision)) return fail('sensitive or unclear action is excluded');
+  if (info.form) return fail('form controls are excluded from reference clicks');
   const link = info.tag === 'A' && info.href !== null;
   if (link) {
     if ((info.target && info.target.toLowerCase() !== '_self') || info.download) return fail('new-window, frame-targeted and download links are excluded from reference clicks');
@@ -70,6 +76,10 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   }
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
   if (info.tag === 'BUTTON' && hasSuspendedReferenceScripts(page)) return fail('same-document scripted action is unavailable after visual-only notice suppression; record a bounded gap or inspect another public source');
+  const current = await control.evaluate(browserCallback(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
+  if (JSON.stringify(current) !== JSON.stringify(info) || await control.count() !== 1
+    || binding?.context.documentSha256 !== hash(await page.content()) || binding?.subjectId !== `${page.url()}#${selector}`)
+    return fail('action control or document changed since the judgment');
   const previousUrl = page.url();
   if (link && hasSuspendedReferenceScripts(page)) {
     const destination = new URL(info.href!, previousUrl);
@@ -81,7 +91,9 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
 }
 
 /** One fresh browser context preserves the actual step-to-step state; no authored receipt input. */
-export async function recordLiveReferenceFlow(browser: Browser, rootInput: string, value: unknown, writer: ProjectWriteAdapter) {
+export async function recordLiveReferenceFlow(browser: Browser, rootInput: string, value: unknown, writer: ProjectWriteAdapter,
+  actionJudgment?: (page: Page, selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>,
+  overlayJudgment?: (page: Page, selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>) {
   const root = resolve(rootInput); requireProjectWriteAdapter(root, writer);
   const input = parseLiveFlowInput(value), origin = new URL(input.url).origin;
   const save = (directory: string, bytes: Buffer | string, ext: string): Receipt => {
@@ -107,13 +119,14 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     context.on('page', other => { if (other !== page) { blocked.push('popup excluded'); void other.close(); } });
     let response = await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     page.on('response', r => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) response = r; });
+    const overlay = overlayJudgment && ((selector: string, url: string) => overlayJudgment(page, selector, url));
     const initialDismissals = await clearReferenceNotices(page,
-      input.steps[0]!.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector), 1000);
+      input.steps[0]!.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector), 1000, [], overlay);
     for (const [index, step] of input.steps.entries()) {
       const beforeUrl = page.url();
-      for (const selector of step.clicks) await safeClick(page, selector, origin);
+      for (const selector of step.clicks) await safeClick(page, selector, origin, actionJudgment);
       const allowedStateSelectors = step.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector);
-      const noticeDismissals = [...(index === 0 ? initialDismissals : []), ...await clearReferenceNotices(page, allowedStateSelectors, index === 0 ? 0 : 400)];
+      const noticeDismissals = [...(index === 0 ? initialDismissals : []), ...await clearReferenceNotices(page, allowedStateSelectors, index === 0 ? 0 : 400, allowedStateSelectors, overlay)];
       await assertViewState(page, step.assertions);
       await waitForDocumentFonts(page);
       const reason = detectBlockReason(await page.title(), (await page.locator('body').innerText()).trim().length, response?.status() ?? null);
@@ -122,7 +135,7 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
       await frameVisibleAssertions(page, step.assertions);
       const capturedUrl = page.url();
       let png = await page.screenshot({ timeout: 5000 });
-      const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors);
+      const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, allowedStateSelectors, overlay);
       noticeDismissals.push(...lateDismissals);
       if (lateDismissals.length) png = await page.screenshot({ timeout: 5000 });
       await assertViewState(page, step.assertions);

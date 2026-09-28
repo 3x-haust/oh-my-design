@@ -64,6 +64,7 @@ export type ReferenceResearch = Readonly<{
   schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v7' | 'reference-research-v6' | 'reference-research-v5';
   sourceContractSha256: string;
   marketCoverage?: MarketReferenceCoverage | null;
+  judgments?: readonly Readonly<{ path: string; sha256: string; purpose: string; subjectId: string }>[];
   domainReference: Omit<ResearchLane, 'sources'> & Readonly<{ sources: readonly (ResearchSource | FunctionalSource)[]; benchmarkSha256: string | null }>;
   designReference: ResearchLane & Readonly<{ boardSha256: string }>;
 }>;
@@ -71,4 +72,8 @@ export type ValidationOptions = Readonly<{
   expectedSourceContractSha256: string;
   benchmarkRequired: boolean;
   expectedRequest?: string;
+  /** Host-verified receipts only; a record cannot assert judgments on its own. */
+  verifiedJudgments?: readonly Readonly<{ path: string; sha256: string; purpose: string; subjectId: string }>[];
+  /** Presentation-only findings; callers record an agent-authored limitation before omitting research. */
+  onAdvisory?: (code: string, detail: string) => void;
 }>;

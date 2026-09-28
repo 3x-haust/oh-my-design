@@ -46,11 +46,12 @@ test('every stage names a real owner, artifact, and existing pack contract', () 
   }
 });
 
-test('a stage is blocked until an earlier owner produced its artifact', () => {
+test('a read-only stage requirement reports missing upstream artifacts without refusing diagnostics', () => {
   const dir = project();
   const blocked = run(['stage', 'require', 'frame', '--json'], dir);
-  assert.equal(blocked.status, 1, blocked.stdout);
+  assert.equal(blocked.status, 0, blocked.stdout);
   const requirement = JSON.parse(blocked.stdout);
+  assert.equal(requirement.ok, false);
   assert.deepEqual(requirement.missingArtifacts, ['.omd/domain-brief.json', '.omd/depth.json']);
 
   write(dir, '.omd/domain-brief.json', '{}');

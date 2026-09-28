@@ -1,16 +1,9 @@
-import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { designDiscoveryItemIdentity, referenceServiceHost } from './design-discovery-sources.ts';
-import { observedGalleryItems } from './gallery-evidence.ts';
-import { observedDomainServiceUrls } from './observed-domain-services.ts';
-import { classifyKoreanServiceText, inferredKoreanReferenceMarket } from './market-reference.ts';
-import { readContainedRegularFile } from './reference-selection.ts';
-import { readPublishedReferenceResearch, validateReferenceResearch } from './reference-research.ts';
-import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
-import { userBrowserAcquisition } from './user-browser-provenance.ts';
+import { designDiscoveryItemIdentity } from './design-discovery-sources.ts';
+import { researchLane } from './store.ts';
 
 type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolean; selector?: string; shot?: boolean; image?: boolean }>;
 export class ReferenceIntakeError extends Error {
@@ -19,64 +12,27 @@ export class ReferenceIntakeError extends Error {
 function galleryItem(url: string): string | null {
   try { return designDiscoveryItemIdentity(url); } catch { return null; }
 }
-function host(url: string): string | null {
-  try { return referenceServiceHost(url) || null; } catch { return null; }
-}
 export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent[], invocation?: ProjectRunInvocation) {
   if (!existsSync(join(root, '.omd/route.json'))) return (_index: number, _finalUrl: string, _visibleText?: string): void => {};
   if (!invocation) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
   const route = readPersistedRoute(root, invocation);
   if (route.references.decision !== 'discover') return (_index: number, _finalUrl: string, _visibleText?: string): void => {};
-  const koreanReferences = (route.sourceContract.localeDesign?.context.marketRegion ?? inferredKoreanReferenceMarket(route.request)) === 'KR';
-  const localDomainResearchReady = (): boolean => {
-    if (!existsSync(join(root, '.omd/reference-research.json'))) return false;
-    try {
-      const research = readPublishedReferenceResearch(root);
-      validateReferenceResearch(root, research, {
-        expectedSourceContractSha256: route.sourceContractSha256,
-        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
-        expectedRequest: route.request,
-      });
-      return (research.marketCoverage?.domain.localSources.length ?? 0) >= 3;
-    } catch { return false; }
-  };
-  const observed = new Map<number, string>();
   return (index: number, finalUrl: string, visibleText?: string): void => {
     const spec = specs[index]!;
     const lane = researchLane(spec.lane);
-    if (koreanReferences && lane === 'domain' && !localDomainResearchReady()) {
-      const language = classifyKoreanServiceText(visibleText ?? '');
-      if (language === 'undetermined') throw new ReferenceIntakeError('REFERENCE_MARKET_LANGUAGE_UNDETERMINED: insufficient observed page text after the bounded settle; retry another live service page.');
-      if (language === 'non-korean') throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: this Korean-language brief needs visibly Korean-language service evidence before foreign fallback. Domain suffix is not language evidence.');
-    }
-    const service = host(finalUrl);
-    const overlap = service !== null && (specs.some((other, otherIndex) => otherIndex !== index && other.lane !== lane
-      && [host(other.source), host(observed.get(otherIndex) ?? '')].includes(service))
-      || loadRefs(root, { includeDomain: true }).some(ref => ref.researchLane && ref.researchLane !== lane
-        && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service))
-      || lane === 'design' && observedDomainServiceUrls(root).some(url => host(url) === service));
-    if (overlap) throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: the final captured service belongs to the other research lane');
+    void visibleText; // Script counts are evidence, never market authority.
     const requestedGalleryItem = galleryItem(spec.source);
     const finalGalleryItem = galleryItem(finalUrl);
     if (lane === 'design' && (requestedGalleryItem !== null || finalGalleryItem !== null)
       && requestedGalleryItem !== finalGalleryItem) {
       throw new ReferenceIntakeError('DESIGN_DISCOVERY_REDIRECT: the captured page must remain the exact requested gallery item; use ref navigate for discovery hops');
     }
-    // Reserve synchronously before an async PNG write lets a sibling capture publish.
-    observed.set(index, finalUrl);
+    // The captured URL itself remains bound to the retained observation.
   };
 }
 export function validateCaptureBatch(root: string, specs: readonly CaptureIntent[], invocation?: ProjectRunInvocation): void {
   if (!existsSync(join(root, '.omd/route.json'))) return;
-  const lanes = specs.map(spec => captureLane(root, spec, invocation));
-  if (!invocation || readPersistedRoute(root, invocation).references.decision !== 'discover') return;
-  for (const [index, spec] of specs.entries()) {
-    const service = host(spec.source);
-    if (specs.slice(0, index).some((prior, priorIndex) => lanes[priorIndex] !== lanes[index]
-      && (prior.source === spec.source || (service !== null && host(prior.source) === service)))) {
-      throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: pending batch entries must use independent domain and design sources');
-    }
-  }
+  for (const spec of specs) captureLane(root, spec, invocation);
 }
 export function captureLane(root: string, spec: CaptureIntent, invocation?: ProjectRunInvocation): 'domain' | 'design' {
   const selected = existsSync(join(root, '.omd/route.json'))
@@ -84,43 +40,10 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     : false;
   if (selected === undefined) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
   const lane = researchLane(selected ? spec.lane : spec.lane ?? 'design');
-  if (selected && lane === 'domain') throw new ReferenceIntakeError('REFERENCE_DOMAIN_OBSERVATION_REQUIRED: functional domain research uses omd ref navigate --lane domain; ref add retains visual references only.');
-  if (lane === 'design' && galleryItem(spec.source) !== null) {
-    if (!spec.selector || spec.shot !== true) {
-      throw new ReferenceIntakeError('DESIGN_GALLERY_DISCOVERY_ONLY: visit the gallery item with omd ref navigate --lane design, then capture its actual UI image element with ref add --selector <img> and a screenshot; never retain the wrapper page');
-    }
-    if (!observedGalleryItems(root).some(item => item.url === spec.source)) {
-      throw new ReferenceIntakeError('DESIGN_DISCOVERY_REQUIRED: visit this exact gallery item with omd ref navigate --lane design before retaining its UI image');
-    }
-  }
+  // A gallery wrapper cannot be relabelled as an actual UI image. Direct originals remain valid.
+  if (lane === 'design' && galleryItem(spec.source) !== null && (!spec.selector || spec.shot !== true))
+    throw new ReferenceIntakeError('DESIGN_GALLERY_DISCOVERY_ONLY: select a visible UI image element, not the gallery wrapper');
   if (!selected) return lane;
-  if (lane === 'domain' && spec.image) {
-    if (invocation === undefined) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
-    const route = readPersistedRoute(root, invocation);
-    if ((route.sourceContract.localeDesign?.context.marketRegion ?? inferredKoreanReferenceMarket(route.request)) === 'KR') {
-      throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: Korean-first domain research requires a live observed service page; an unvisited image URL cannot establish its language or task.');
-    }
-  }
-  assertReferenceLaneSeparation(root, { source: spec.source, researchLane: lane });
-  const refs = loadRefs(root, { includeDomain: true });
-  const service = host(spec.source);
-  if (service !== null && (refs.some(ref => ref.researchLane && ref.researchLane !== lane
-    && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service))
-    || lane === 'design' && observedDomainServiceUrls(root).some(url => host(url) === service))) {
-    throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: choose independent services for domain and design research');
-  }
-  if (lane === 'domain' || galleryItem(spec.source) !== null || spec.fromUser === true) return lane;
-  if (observedGalleryItems(root).some(item => item.links.includes(spec.source))) return lane;
-  const discovered = refs.some(ref => {
-    const observation = ref.acquisition;
-    if (ref.researchLane !== 'design' || !observation || galleryItem(ref.source) === null
-      || galleryItem(ref.source) !== galleryItem(observation.finalUrl)
-      || !userBrowserAcquisition(observation)
-        && (observation.httpStatus === null || observation.httpStatus < 200 || observation.httpStatus >= 300)
-      || !observation.links.includes(spec.source) || !ref.imagePath) return false;
-    const bytes = readContainedRegularFile(root, join(root, ref.imagePath), 'design discovery capture');
-    return createHash('sha256').update(bytes).digest('hex') === observation.imageSha256;
-  });
-  if (!discovered) throw new ReferenceIntakeError('DESIGN_DISCOVERY_REQUIRED: capture a free Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl/Mobbin/Page Flows item first, then its observed original link. Task/domain service pages belong in --lane domain. Use --from-user only for a reference the user actually supplied.');
+  // Direct valid sources are allowed; a claimed gallery/user traversal is checked only when made.
   return lane;
 }

@@ -35,7 +35,7 @@ export const MANDATORY_ADAPTIVE_GATES = Object.freeze([
 ] as const);
 
 export const OPTIONAL_STAGE_IDS = Object.freeze([
-  'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'moodboard', 'reference-board',
+  'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'moodboard', 'reference-board',
   'reference-selection', 'art-direction', 'copy', 'type-proof', 'composition',
   'candidate-generation', 'safety-validation',
 ] as const);
@@ -44,9 +44,7 @@ export const OPTIONAL_STAGE_IDS = Object.freeze([
  * accepts a `strategyDecision.skips` reason; `validateAdaptiveStrategyRails` rejects the route
  * when one is absent.
  */
-export const MANDATORY_STAGE_IDS = Object.freeze([
-  'domain',
-] as const);
+export const MANDATORY_STAGE_IDS = Object.freeze([] as const);
 export const OPTIONAL_METHOD_IDS = Object.freeze([
   'reflection-in-action', 'reference-distance', 'image-first-draft',
   'evidence-driven-refinement', 'copy-repair-workflow', 'motion-one',

@@ -119,7 +119,7 @@ test('printed image-fragment input imports local captures and rejects remote inp
   }
   const forged = importValue({ ...input, id: fragment.id });
   assert.equal(forged.status, 1);
-  assert.match(forged.stderr, /unknown or missing keys/);
+  assert.match(forged.stderr, /derived fragment authority/);
 });
 
 test('image pieces preserve acquisition v2 bindings and reject invented DOM measurements or changed requirements', context => {

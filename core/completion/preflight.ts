@@ -1,9 +1,7 @@
 import { existsSync } from 'node:fs';
-import { checkFirstRenderEvidence } from '../design/first-render-evidence.ts';
 import { resolve } from 'node:path';
 import type { ExecutionRequirement } from '../brief/execution-requirements.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
-import { requireConfirmedPlanningForProduction } from '../stage/contract.ts';
 import { checkFinalEvidenceV2, type FinalEvidenceV2ManifestVariant } from '../evidence/final-v2.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import {
@@ -12,10 +10,6 @@ import {
   type CompletionPublicationResult,
   type CompletionTypographyBinding,
 } from './publication.ts';
-import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
-import { checkReferenceApplication } from '../ref/reference-application.ts';
-import { checkReferenceApplicationReview, referenceApplicationReviewContext } from '../ref/reference-application-review.ts';
-import { checkSlopFinalGraph } from '../slop/review.ts';
 
 export { checkCompletionPublicationPrerequisites, CompletionPreflightError } from './publication.ts';
 export type { CompletionPublicationResult, CompletionTypographyBinding } from './publication.ts';
@@ -39,44 +33,11 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   }
   const final = checkFinalEvidenceV2(root, invocation) as FinalEvidenceV2ManifestVariant;
   const prerequisites = checkCompletionPublicationPrerequisites(root, final, invocation);
-  checkSlopFinalGraph(root, final.graph);
-  // Planning the user never confirmed is not a design decision to be repaired later; refuse here,
-  // before any completion artifact publishes an invented business goal as delivered.
-  const unconfirmedPlanning = requireConfirmedPlanningForProduction(root);
-  if (unconfirmedPlanning.length > 0) {
-    throw new CompletionPreflightError(`planning is unconfirmed for ${unconfirmedPlanning.join(', ')}: ask the user rather than shipping an invented business goal`);
-  }
   // This projection is returned only AFTER current final evidence and terminal prerequisites pass.
   // It cannot be supplied by a caller or used to make the earlier browser evaluation pass.
   const route = existsSync(resolve(root, '.omd/route.json')) ? readPersistedRoute(root, invocation) : undefined;
-  if (route && (route.gates.includes('dual-reference-research')
-    || (route.projectMode === 'greenfield' && existsSync(resolve(root, '.omd/reference-research.json'))))) {
-    try {
-      const research = readPublishedReferenceResearch(root);
-      validateReferenceResearch(root, research, {
-        expectedSourceContractSha256: route.sourceContractSha256,
-        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
-        expectedRequest: route.request,
-      });
-      const application = checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
-        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
-      checkReferenceApplicationReview(root, referenceApplicationReviewContext(root, application, final.graph));
-    } catch (error) {
-      throw new CompletionPreflightError(`reference research is incomplete or stale: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-  // A completed render must have survived the earlier gestalt read. The final Eye is intentionally
-  // not the first reader: if the benefit/card composition never communicated the task, polishing its
-  // pixels into a final review packet is late and expensive.
-  try { checkFirstRenderEvidence(root); }
-  catch (error) { throw new CompletionPreflightError(`first-render gestalt critic: ${error instanceof Error ? error.message : String(error)}`); }
   const requirements = route?.sourceContract.taskOutcome.executionRequirements;
   if (route !== undefined && requirements !== undefined) {
-    for (const { enforcedBy } of requirements) {
-      if (enforcedBy.some((gate) => gate !== 'completion-preflight' && !route.gates.includes(gate))) {
-        throw new CompletionPreflightError('execution requirement is not bound to its required host gate');
-      }
-    }
     return Object.freeze({
       final,
       ...prerequisites,

@@ -52,7 +52,7 @@ function fake(options: { challenge?: boolean; login?: boolean; helpOutcome?: str
       identification: { needsChoice: false, candidates: [] }, primary: { id: 'aside', label: 'Aside' }, browsers: [{}] }),
     userBrowserBridgeOnboard: async () => { throw Error('unexpected install'); } };
 }
-test('consented design navigation signs nullable-status engine receipt and native handoff; session stops', async t => {
+test('consented design navigation signs nullable-status engine receipt without inferring challenge from prose; session stops', async t => {
   const root = discoveryFixture(t); writeUserBrowserConsent('consented', root);
   let stopped = 0; let helped = 0;
   const session = createReferenceAcquisitionSession(createTestProjectWriteAdapter(root), {
@@ -67,10 +67,10 @@ test('consented design navigation signs nullable-status engine receipt and nativ
   assert.equal(saved.acquisition.httpStatus, null);
   assert.equal(saved.acquisition.networkIsolation, 'initial-url-check-only');
   assert.equal(saved.acquisition.getOnlyEnforced, false);
-  assert.equal(helped, 1); assert.equal(stopped, 1);
+  assert.equal(helped, 0); assert.equal(stopped, 1);
   await assert.rejects(() => session.navigate('https://localhost/', 'design'));
 });
-test('login cancellation publishes one unavailable attempt and stops without a fallback launch', async t => {
+test('unjudged login prose does not trigger a human handoff; unavailable attempt stops without fallback', async t => {
   const root = discoveryFixture(t); writeUserBrowserConsent('consented', root);
   let stopped = 0; let helped = 0;
   const session = createReferenceAcquisitionSession(createTestProjectWriteAdapter(root), {
@@ -82,7 +82,7 @@ test('login cancellation publishes one unavailable attempt and stops without a f
     assert.equal(readReferenceDiscoveryAttempt(root, receipt).engine, 'user-browser');
     return true;
   });
-  assert.equal(helped, 1); assert.equal(stopped, 1);
+  assert.equal(helped, 0); assert.equal(stopped, 1);
 });
 test('direct design entry and fetch-first domain use separate signed receipt schemas', async t => {
   const root = discoveryFixture(t); writeUserBrowserConsent('consented', root);

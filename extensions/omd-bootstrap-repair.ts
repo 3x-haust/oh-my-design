@@ -9,6 +9,7 @@ type BootstrapContinuation = PortablePiContext & Readonly<{
   repairLoop: RepairLoop;
   revision: number;
   pi: PortablePiApi;
+  responseLocale?: 'ko' | 'en';
 }>;
 
 export async function resumeRouteInput(bootstrap: RouteBootstrap, task: BootstrapContinuation) {
@@ -49,7 +50,7 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
           : 'Classification has not been attempted: this repair authorizes input editing and validation only; do not publish a route or start downstream work from this follow-up.'}\nNext OMD command: ${JSON.stringify(nextArgs)}\n${summary}` },
     { triggerTurn: true, deliverAs: 'followUp' });
   }
-  const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
+  const korean = task.responseLocale === 'ko';
   const status = inputValid
     ? korean ? `OMD 실행 계획 입력 검증은 통과했지만 라우트는 아직 등록되지 않았습니다.${retry ? ' 이미 요청한 등록 단계를 다시 시도합니다.' : ' 입력 검증은 후속 설계·개발의 완료를 의미하지 않습니다.'}`
       : `OMD route input validation passed, but no route was published.${retry ? ' Retrying the already-requested classification.' : ' Input validity is not downstream design or application completion.'}`

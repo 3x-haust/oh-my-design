@@ -53,7 +53,7 @@ test('three signed functional sources cite observed text, compare the request an
   assert.throws(() => validateFunctionalResearch(root, wrongRequest as Parameters<typeof validateFunctionalResearch>[1], options), /REFERENCE_DOMAIN_COMPARISON_REQUEST_MISMATCH/);
   const malformed = structuredClone(research);
   (malformed.domainReference.sources[0] as Record<string, unknown>).taskFlows = [];
-  assert.throws(() => parseReferenceResearch(malformed), /REFERENCE_DOMAIN_FEATURE_EVIDENCE_REQUIRED/);
+  assert.equal(Object.hasOwn(parseReferenceResearch(malformed).domainReference.sources[0]!, 'taskFlows'), false);
 });
 
 test('v8 publishes three functional domain sources without domain PNGs and refuses fabricated claims atomically', async t => {

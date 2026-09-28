@@ -121,8 +121,14 @@ function record(value: unknown): Record<string, unknown> {
 
 function exact(value: Record<string, unknown>, keys: ReadonlySet<string>): void {
   const own = Reflect.ownKeys(value);
-  if (own.length !== keys.size || own.some((key) => typeof key !== 'string' || !keys.has(key))) {
+  if (own.some((key) => typeof key !== 'string' || key === 'authority')
+    || [...keys].some((key) => !Object.hasOwn(value, key))) {
     return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+  }
+  for (const key of own) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    if (!keys.has(key as string)) process.emitWarning(`ignored unknown lifecycle manifest field: ${String(key)}`);
   }
 }
 

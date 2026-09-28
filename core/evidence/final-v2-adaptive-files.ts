@@ -4,6 +4,7 @@ import { validateActivationContext } from '../runtime/activation.ts';
 import { requireFinalReviewerLaneAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { observationV2Sha256, validateObservationV2 } from '../runtime/observation.ts';
 import { parseRouteRecord } from '../route/adaptive-route-record.ts';
+import { hasPublishedTaskFlowBenchmark } from '../ref/reference-research.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
 import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
@@ -111,11 +112,12 @@ function laneContract(
 }
 export function adaptiveBlindLaneContract(
   routeRecord: Pick<AdaptiveRouteRecord, 'projectMode' | 'gates'>,
+  benchmarkAvailable = false,
 ): Readonly<{ schema: string; verdicts: readonly string[]; floors: readonly string[] }> {
   return laneContract(
     'blindLane',
     routeRecord.projectMode,
-    routeRecord.gates.includes('greenfield-task-flow-benchmark'),
+    routeRecord.gates.includes('greenfield-task-flow-benchmark') && benchmarkAvailable,
   );
 }
 function greenValues(value: unknown, keys: readonly string[], label: string, floor: boolean): void {
@@ -310,21 +312,23 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
     const omission = graph.omissions[index];
     const skip = record.strategy.skips.find((entry) => entry.id === mapping[1]);
     if (omission === undefined || omission.id !== mapping[0]
-      || omission.routeSkipId !== mapping[1] || skip === undefined
-      || omission.reason !== skip.reason) {
+      || omission.routeSkipId !== mapping[1] || skip === undefined) {
       fail(`${mapping[0]} omission does not bind the exact current route skip`);
     }
   }
   const activationLoaded = load(root, fs, graph.activation, 'activation'); const activation = validateActivationContext(activationLoaded.value);
   const build = fields(load(root, fs, graph.buildIdentity, 'buildIdentity').value, ['schemaVersion', 'packageVersion', 'buildSha256', 'sourceSkillSha256'], 'buildIdentity');
   if (build.get('schemaVersion') !== 'omd-build-identity-v1' || build.get('buildSha256') !== activation.buildSha256 || build.get('sourceSkillSha256') !== activation.loadedSkillSha256) fail('build identity is not current');
-  const copyBytes = read(root, fs, graph.copy.path, 'copy'); if (hash(copyBytes) !== graph.copy.sha256) fail('copy bytes changed');
+  if (graph.copy !== undefined) {
+    const copyBytes = read(root, fs, graph.copy.path, 'copy');
+    if (hash(copyBytes) !== graph.copy.sha256) fail('copy bytes changed');
+  }
   const sealLoaded = load(root, fs, graph.sourceSeal, 'sourceSeal'); const seal = validateSourceSealArtifact(sealLoaded.value);
   const sourceSealFindings = seal.schemaVersion === 1
     ? validateSourceSeal(root, undefined, graph.route)
     : validateSourceSeal(root, invocation);
   if (seal.route === undefined || canonicalRouteJson(seal.route) !== canonicalRouteJson(graph.route)
-    || seal.inputs.copyDeckSha256 !== graph.copy.sha256
+    || (graph.copy === undefined ? seal.inputs.copyDeckSha256 !== undefined : seal.inputs.copyDeckSha256 !== graph.copy.sha256)
     || sourceSealFindings.length !== 0) {
     fail('source seal does not bind current route and copy bytes');
   }
@@ -349,7 +353,8 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
     ...(graph.contentFit === undefined ? {} : { contentFit: graph.contentFit }),
     observations: observations.map((item) => item.value.evidence),
   });
-  const benchmarkRequired = record.gates.includes('greenfield-task-flow-benchmark');
+  const benchmarkRequired = record.gates.includes('greenfield-task-flow-benchmark')
+    && hasPublishedTaskFlowBenchmark(root, record.sourceContractSha256);
   validateTrustedOutcomeEvidence({
     root,
     branch: 'adaptive-omission',

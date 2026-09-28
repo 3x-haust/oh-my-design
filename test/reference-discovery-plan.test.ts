@@ -3,11 +3,11 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { hasLocaleMarketAuthority } from '../core/route/locale-market-authority.ts';
 import { fileURLToPath } from 'node:url';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { routeLocaleDesignContext } from '../core/locale/design-context.ts';
 import { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } from '../core/ref/discovery-plan.ts';
-import { parseSearchInput } from '../core/ref/search-execution.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
@@ -27,33 +27,22 @@ test('Korean product brief starts both research lanes in Korea without asserting
   input.request = '복지 혜택을 찾아 신청까지 이어가는 한국어 서비스를 만들어줘.';
   input.taskOutcome.goal = '복지 혜택을 탐색하고 신청을 준비한다.';
   const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(input));
-  assert.equal(plan.marketReferencePolicy.marketRegion, 'KR');
-  assert.equal(plan.marketReferencePolicy.mode, 'target-market-first');
-  assert.equal(plan.marketReferencePolicy.targetMarketCoverage, 'required-in-domain-and-design');
-  assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(input => input.query),
-    ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
-  assert.deepEqual(plan.marketReferencePolicy.domainEntryInputs.map(input => new URL(input.url).hostname),
-    ['www.bokjiro.go.kr', 'plus.gov.kr', 'wis.seoul.go.kr', 'www.welfarehello.com', 'www.ynote.kr', 'youthpolicy.co.kr']);
-  for (const lead of ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천',
-    '청년노트 복지 혜택 찾기', '청년정책신문 정책맵']) {
-    assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes(lead));
-  }
-  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query.startsWith('한국 ')));
-  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query === '한국 복지 앱 UI 디자인'),
-    'Korean welfare visual searches should use a short UI pattern, not the whole product outcome');
+  assert.equal(plan.marketReferencePolicy.marketRegion, null);
+  assert.equal(plan.marketReferencePolicy.mode, 'unscoped');
+  assert.deepEqual(plan.marketReferencePolicy.domainEntryInputs, []);
+  assert.ok(plan.lanes.some(lane => lane.id === 'design-reference'));
   assert.equal(plan.marketReferencePolicy.styleInference, 'forbidden');
   assert.equal(inferredKoreanReferenceMarket('미국 복지 신청을 위한 한국어 서비스'), null);
   assert.equal(isMarketQualifiedQuery('미니멀 앱 UI', ['대한민국', '한국', 'South Korea']), false);
-  assert.equal(isMarketQualifiedQuery('정부24 혜택알리미', ['대한민국', '한국', 'South Korea']), true);
+  assert.equal(isMarketQualifiedQuery('정부24 혜택알리미', ['대한민국', '한국', 'South Korea']), false);
 });
 
-test('a benefits-only Korean brief still requires four named local welfare searches', t => {
+test('request language does not force named local searches', t => {
   const input = fixture('medical-new-product');
   input.request = '한국어로 혜택 탐색과 신청을 돕는 서비스를 만들어줘.';
   input.taskOutcome.goal = '혜택 탐색';
   const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(input));
-  assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(item => item.query),
-    ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+  assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs, []);
 });
 
 test('Korean-language service admission measures all visible scripts, not a small translated label', () => {
@@ -103,8 +92,8 @@ test('explicit Korean surface mechanics remain separate from market and source-c
   assert.doesNotMatch(JSON.stringify(plan), /Korean style|Korean users|Korean market/);
 });
 
-test('an explicit Korean market makes both reference lanes target-market-first without inferring a country style', t => {
-  const root = project(t);
+test('explicit market claims cannot pass route authority without a verified judgment', t => {
+  project(t);
   const locale = routeLocaleDesignContext({
     schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
     marketRegion: 'KR', marketAuthorityClaimId: 'market-authority', audience: 'Korean residents comparing public benefits',
@@ -112,41 +101,12 @@ test('an explicit Korean market makes both reference lanes target-market-first w
     brandInvariants: ['Eligibility facts remain source-bound'],
   });
   const input = fixture();
+  input.request = 'Build this for users in South Korea.';
   input.evidenceClaims.claims.push({ id: 'market-authority', text: 'The product targets South Korea.', status: 'confirmed',
     userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: 'Build this for users in South Korea.' }] });
   input.evidenceClaims.userFacts.push('market-authority');
-  const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(input, undefined, locale));
-  assert.equal(plan.schema, 'reference-discovery-plan-v2');
-  assert.deepEqual(plan.marketReferencePolicy, {
-    mode: 'target-market-first', marketRegion: 'KR', marketLabel: 'South Korea', marketSearchLabels: ['대한민국', '한국', 'South Korea'],
-    audience: 'Korean residents comparing public benefits', targetMarketCoverage: 'required-in-domain-and-design',
-    domainSearchInputs: [
-      { lane: 'domain', query: '복지로',
-        url: 'https://www.google.com/search?q=%EB%B3%B5%EC%A7%80%EB%A1%9C', queryParam: 'q' },
-      { lane: 'domain', query: '정부24 혜택알리미',
-        url: 'https://www.google.com/search?q=%EC%A0%95%EB%B6%8024+%ED%98%9C%ED%83%9D%EC%95%8C%EB%A6%AC%EB%AF%B8', queryParam: 'q' },
-      { lane: 'domain', query: '서울복지포털',
-        url: 'https://www.google.com/search?q=%EC%84%9C%EC%9A%B8%EB%B3%B5%EC%A7%80%ED%8F%AC%ED%84%B8', queryParam: 'q' },
-      { lane: 'domain', query: '웰로',
-        url: 'https://www.google.com/search?q=%EC%9B%B0%EB%A1%9C', queryParam: 'q' },
-    ],
-    domainEntryInputs: [
-      { lane: 'domain', entry: 'public-directory', url: 'https://www.bokjiro.go.kr/ssis-tbu/' },
-      { lane: 'domain', entry: 'public-directory', url: 'https://plus.gov.kr/portal/benefitV2/' },
-      { lane: 'domain', entry: 'public-directory', url: 'https://wis.seoul.go.kr/' },
-      { lane: 'domain', entry: 'public-directory', url: 'https://www.welfarehello.com/recommend-policy/situation/main/ALL' },
-      { lane: 'domain', entry: 'public-directory', url: 'https://www.ynote.kr/' },
-      { lane: 'domain', entry: 'public-directory', url: 'https://youthpolicy.co.kr/policy-map' },
-    ],
-    fallback: 'global-equivalent-only-after-documented-target-market-gap', styleInference: 'forbidden',
-  });
-  const firstDomainSearch = plan.marketReferencePolicy.domainSearchInputs[0];
-  assert.ok(firstDomainSearch);
-  assert.equal(parseSearchInput(firstDomainSearch).lane, 'domain');
-  assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes('복지로'));
-  assert.ok(plan.lanes.find(lane => lane.id === 'design-reference')?.querySeeds.some(query => query.startsWith('대한민국 ')));
-  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(input => input.query.startsWith('대한민국 ')));
-  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(input => input.query.startsWith('South Korea ')));
+  const route = routeAdaptiveFlow(input, undefined, locale);
+  assert.equal(hasLocaleMarketAuthority(locale, route.sourceContract.evidenceClaims), false);
 });
 
 test('a one-sentence balanced marketing route investigates craft and motion without inventing a scene lock', t => {

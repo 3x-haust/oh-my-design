@@ -12,7 +12,7 @@ import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { publishDesignJudgment } from '../core/design/judgment-files.ts';
 import { designJudgmentInput } from '../core/design/current-judgment.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
-import { publishReferenceResearch } from '../core/ref/reference-research.ts';
+import { publishReferenceResearch, readPublishedReferenceResearch, validateReferenceResearch } from '../core/ref/reference-research.ts';
 import { publishReferenceApplication, referenceApplicationPlan } from '../core/ref/reference-application.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
@@ -116,23 +116,23 @@ test('native Pi next work keeps production and browser output work after authore
   assert.ok(forged.problems.length > 0);
 });
 
-test('next work repairs missing entry receipts even when every selected output is valid', t => {
+test('next work does not require delivery receipts before useful implementation work', t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-stage-entry-pointer-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const invocation = copyProject(root);
   const before = readFileSync(join(root, '.omd/copy-deck.md'));
   const missing = nextStageWork(root, pack, invocation);
-  assert.equal(missing.stage, 'domain');
-  assert.ok(missing.entryBlockers.some(blocker => blocker.includes('protocol/domain-analysis.md')));
-  assert.deepEqual(missing.progress.validatedStages, []);
+  assert.equal(missing.schema, 'stage-next-v2');
+  assert.equal(missing.stage, null);
+  assert.ok(missing.action === 'implement-or-evaluate' || missing.action === 'validate-selected-gates');
   assert.deepEqual(readFileSync(join(root, '.omd/copy-deck.md')), before);
 
   const receipts = [deliveryReceipt('domain', 'protocol/domain-analysis.md', contractSha256(pack, 'protocol/domain-analysis.md'), '2026-09-21T00:00:00Z')];
   const deliver = () => writeFileSync(join(root, '.omd/delivery.jsonl'), receipts.map(receipt => JSON.stringify(receipt)).join('\n') + '\n');
   deliver();
   const copy = nextStageWork(root, pack, invocation);
-  assert.equal(copy.stage, 'copy');
-  assert.deepEqual(copy.progress.validatedStages, ['domain']);
+  assert.equal(copy.stage, null);
+  assert.ok(copy.progress.validatedStages.includes('domain'));
   for (const contract of ['protocol/copy-deck.md', 'theory/voice.md']) receipts.push(deliveryReceipt('copy', contract, contractSha256(pack, contract), '2026-09-21T00:00:00Z'));
   deliver();
   const ready = nextStageWork(root, pack, invocation);
@@ -141,7 +141,7 @@ test('next work repairs missing entry receipts even when every selected output i
   assert.deepEqual(ready.entryBlockers, []);
 });
 
-test('current reference outputs lead to coordinator interpretation, not an ownerless terminal pointer', t => {
+test('current reference outputs are available without a mandatory interpretation ceremony', t => {
   const f = designAdmissionFixture(t);
   const input = routeInput();
   input.strategyDecision.stages.splice(1, 0, 'scout', 'reference-board');
@@ -154,10 +154,8 @@ test('current reference outputs lead to coordinator interpretation, not an owner
     deliveryReceipt(stage, contract, contractSha256(pack, contract), '2026-09-21T00:00:00Z')));
   writeFileSync(join(f.root, '.omd/delivery.jsonl'), receipts.map(receipt => JSON.stringify(receipt)).join('\n') + '\n');
   const work = nextStageWork(f.root, pack, invocation);
-  assert.equal(work.owner, 'coordinator');
-  assert.equal(work.action, 'interpret-references');
-  assert.equal(work.next, 'omd judgment input --json');
-  assert.ok(work.schemas.some(schema => schema.name === 'design-judgment'));
+  assert.equal(work.stage, null);
+  assert.ok(work.evidenceAvailable.includes('reference-board'));
   publishDesignJudgment(f.root, {
     schema: 'design-judgment-v1', referenceBoardSha256: designJudgmentInput(f.root).referenceBoardSha256,
     hypothesis: { schema: 'design-judgment-v1', feelsLike: 'a personal confirmation workspace, not a portal',
@@ -169,7 +167,7 @@ test('current reference outputs lead to coordinator interpretation, not an owner
   assert.equal(nextStageWork(f.root, pack, invocation).stage, null);
   f.board.candidates[0]!.rationale = 'Revised reference decision.';
   f.refreshBoard();
-  assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
+  assert.equal(nextStageWork(f.root, pack, invocation).stage, null);
 });
 
 test('a missing reference board points to discovery work instead of repeating entry checks', t => {
@@ -192,12 +190,12 @@ test('a missing reference board points to discovery work instead of repeating en
   assert.equal(work.stage, 'reference-board');
   assert.equal(work.action, 'acquire-reference');
   assert.equal(work.referenceWork?.status, 'action');
-  assert.equal(work.referenceWork?.action?.kind, 'collect-leads');
-  assert.ok(work.next.includes('omd ref leads add --input'));
+  assert.equal(work.referenceWork?.action?.kind, 'browser-consent');
+  assert.ok(work.next.length > 0);
   assert.match(work.referenceWork?.workSha256 ?? '', /^[a-f0-9]{64}$/);
 });
 
-test('board work repairs research before application and returns to research when a retained receipt changes', t => {
+test('board work recommends research but stale retained receipts cannot substantiate research', t => {
   const f = designAdmissionFixture(t), input = routeInput();
   input.referenceDiscovery = { ...input.referenceDiscovery, uncertainty: 'unresolved', existingEvidence: 'none', existingEvidenceUse: null, skipReason: null };
   input.strategyDecision.stages.splice(1, 0, 'scout', 'reference-board');
@@ -218,32 +216,27 @@ test('board work repairs research before application and returns to research whe
   writeFileSync(join(f.root, '.omd/delivery.jsonl'), receipts.map(receipt => JSON.stringify(receipt)).join('\n') + '\n');
   const boardBefore = readFileSync(f.boardPath);
   const researchWork = nextStageWork(f.root, pack, invocation);
-  assert.equal(researchWork.stage, 'reference-board');
-  assert.equal(researchWork.action, 'author-research');
-  assert.equal(researchWork.next, 'omd schema reference-research');
-  assert.match(researchWork.problems.join('\n'), /REFERENCE_RESEARCH_MISSING/);
-  assert.deepEqual(researchWork.entryBlockers, []);
+  assert.equal(researchWork.stage, null);
+  assert.ok(!researchWork.evidenceAvailable.includes('reference-board'));
   assert.deepEqual(readFileSync(f.boardPath), boardBefore);
 
   f.research.sourceContractSha256 = route.sourceContractSha256;
   publishReferenceResearch(f.root, f.research, options, writer);
   const applicationWork = nextStageWork(f.root, pack, invocation);
-  assert.equal(applicationWork.action, 'apply-references');
-  assert.equal(applicationWork.next, 'omd ref apply-plan --json');
+  assert.equal(applicationWork.stage, null);
   const plan = referenceApplicationPlan(f.root, options).input;
   const lane = (id: string) => ({ referenceIds: [id], coverage: 'direct', gap: null,
     application: 'Anchor the confirmation record.', doNotTransfer: 'Source branding and claims.', reason: 'Readers need their current record first.' });
   publishReferenceApplication(f.root, { ...plan, screens: plan.screens.map(row => ({ ...row,
     target: { route: '/confirmation', state: 'initial' }, domain: lane('domain-1'), design: lane('visual'), checks: ['Record heading is visible.'] })) }, options, writer);
-  assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
+  assert.equal(nextStageWork(f.root, pack, invocation).stage, null);
   const applicationBefore = readFileSync(join(f.root, '.omd/reference-application.json'));
   const captureBefore = readFileSync(f.source.path);
   writeFileSync(f.source.path, Buffer.concat([captureBefore, Buffer.from('\n')]));
   const stale = nextStageWork(f.root, pack, invocation);
-  assert.equal(stale.action, 'author-research');
-  assert.match(stale.problems.join('\n'), /REFERENCE_RESEARCH_EVIDENCE_STALE/);
-  assert.ok(!stale.progress.validatedStages.includes('reference-board'));
+  assert.equal(stale.schema, 'stage-next-v2');
+  assert.throws(() => validateReferenceResearch(f.root, readPublishedReferenceResearch(f.root), options), /STALE|stale/);
   assert.deepEqual(readFileSync(join(f.root, '.omd/reference-application.json')), applicationBefore);
   writeFileSync(f.source.path, captureBefore);
-  assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
+  assert.equal(nextStageWork(f.root, pack, invocation).stage, null);
 });

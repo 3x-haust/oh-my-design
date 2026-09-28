@@ -20,6 +20,12 @@ export function loadRules(dirPath: string): Rule[] {
   return rules;
 }
 
+// Literal wording matches are retrieval cues for a human/AI reviewer, not rule violations.
+export const CONTEXTUAL_COPY_RULE_IDS = new Set([
+  'SLOP-COPY', 'SLOP-PLACEHOLDER-COPY', 'SLOP-PINK-ELEPHANT', 'SLOP-COPY-KO',
+  'SLOP-KO-REGISTER-MIX', 'SLOP-KO-SIGNPOST', 'SLOP-FAKE-STAT', 'SLOP-BADGE-SPAM',
+]);
+
 type Compiled = Script;
 
 const cache = new Map<string, Compiled>();
@@ -58,10 +64,11 @@ function interpolate(template: string, ctx: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => formatValue(ctx[key]));
 }
 
-export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categories?: Category[] } = {}): Violation[] {
+export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categories?: Category[]; contextualSuggestions?: boolean } = {}): Violation[] {
   const violations: Violation[] = [];
 
   for (const rule of rules) {
+    if (CONTEXTUAL_COPY_RULE_IDS.has(rule.id) !== (opts.contextualSuggestions === true)) continue;
     if (opts.layers && !opts.layers.includes(rule.layer)) continue;
     if (opts.categories && !opts.categories.includes(rule.category)) continue;
 

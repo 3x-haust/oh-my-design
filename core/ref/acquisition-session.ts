@@ -12,10 +12,6 @@ import { readReferenceBrowserConfig, selectReferenceAcquisitionEngine, type Brow
 import { captureUserBrowserNavigation } from './user-browser-navigation.ts';
 import type { UserBrowserDriver } from '../browser/contracts.ts';
 import type { PublicHostLookup } from './public-network.ts';
-import { handoffBrowserChallenge, launchBrowserProfileLogin } from './browser-profile.ts';
-import { readBrowserConsent } from './browser-consent.ts';
-import { detectBlockReason } from '../render/index.ts';
-import { searchChallengeReason } from './search-execution.ts';
 import { NAVIGATION_BUDGET_MS, AcquisitionTimeoutError, withAcquisitionDeadline,
   type AcquisitionDeadlineScope } from './acquisition-deadline.ts';
 
@@ -42,19 +38,8 @@ export function createReferenceAcquisitionSession(writer: ProjectWriteAdapter, o
         try { return userBrowser ? await acquireUserBrowser(parentScope) : await acquire(config); }
         catch (error) {
           if (parentScope?.signal.aborted) throw error;
-          const message = error instanceof Error ? error.message : '';
-          if (!userBrowser && readBrowserConsent(options.consentHome) === 'consented' && config.mode === 'profile'
-            && (/challenge page/i.test(message) || /login form/i.test(message))) {
-            const cleared = /login form/i.test(message)
-              ? await launchBrowserProfileLogin({ sites: [url], ...(parentScope ? { signal: parentScope.signal } : {}) }) === 'closed'
-              : await handoffBrowserChallenge({ url, ...(parentScope ? { signal: parentScope.signal } : {}), cleared: async page => {
-                const body = await page.locator('body').innerText();
-                return !searchChallengeReason(body) && !detectBlockReason(await page.title(), body.length, 200, true);
-              } });
-            if (cleared) {
-              try { return await acquire(config); } catch (retryError) { error = retryError; }
-            }
-          }
+          // Error prose cannot authorize a login or challenge handoff. A signed pre- and
+          // post-handoff page-access judgment must be supplied by the coordinator.
           const attempt = publishFailedAttempt(writer, url, lane, entry,
             error instanceof ReferenceNavigationError ? error.httpStatus : null, error, userBrowser ? 'user-browser' : undefined);
           throw new ReferenceNavigationError(error instanceof Error ? error.message : 'design acquisition failed', attempt);

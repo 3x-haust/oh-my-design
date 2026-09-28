@@ -53,6 +53,15 @@ export function writeBrowserInterpretation(value: BrowserInterpretation, home = 
   finally { rmSync(temporary, { force: true }); }
 }
 export const browserProfilePath = (home = homedir()): string => join(home, '.omd', 'browser-profile');
+/** The consent/profile store is a user-level adapter, not a project-run writer. */
+export function prepareBrowserProfile(home = homedir()): string {
+  const path = browserProfilePath(home);
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  return path;
+}
+export function forgetBrowserProfile(home = homedir()): void {
+  rmSync(browserProfilePath(home), { recursive: true, force: true });
+}
 export const browserConsentPath = (home = homedir()): string => join(home, '.omd', 'browser-consent.json');
 
 export function readBrowserConsent(home = homedir()): BrowserConsent | null {

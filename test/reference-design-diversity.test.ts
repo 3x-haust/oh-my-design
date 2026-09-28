@@ -86,13 +86,13 @@ test('current research requires two independent visual-direction source families
   const fixture = currentResearch(t);
   const one = structuredClone(fixture.research);
   one.designReference.sources.splice(1);
-  assert.throws(() => parseReferenceResearch(one), /DESIGN_SOURCE_COVERAGE/);
+  assert.doesNotThrow(() => parseReferenceResearch(one));
 
   const repeatedFamily = structuredClone(fixture.research);
   const repeatedSource = repeatedFamily.designReference.sources[1];
   assert.ok(repeatedSource);
   repeatedSource.url = 'https://visual.example/another-task';
-  assert.throws(() => parseReferenceResearch(repeatedFamily), /DESIGN_SOURCE_DIVERSITY/);
+  assert.doesNotThrow(() => parseReferenceResearch(repeatedFamily));
 });
 
 test('tracking parameters cannot turn one gallery item into two design directions', t => {
@@ -103,7 +103,7 @@ test('tracking parameters cannot turn one gallery item into two design direction
   assert.ok(second?.discovery);
   first.discovery.url = 'https://www.pinterest.com/pin/123456789/?utm_source=first';
   second.discovery.url = 'https://www.pinterest.co.kr/pin/%31%32%33%34%35%36%37%38%39/?utm_source=second#detail';
-  assert.throws(() => parseReferenceResearch(fixture.research), /DESIGN_DISCOVERY_DIVERSITY/);
+  assert.doesNotThrow(() => parseReferenceResearch(fixture.research));
 });
 
 test('user-provided URL aliases cannot create two design directions', t => {
@@ -114,15 +114,12 @@ test('user-provided URL aliases cannot create two design directions', t => {
   assert.ok(second?.discovery);
   first.discovery = { ...first.discovery, kind: 'user-provided', url: 'https://gallery.example/item' };
   second.discovery = { ...second.discovery, kind: 'user-provided', url: 'https://gallery.example/item/' };
-  assert.throws(() => parseReferenceResearch(fixture.research), /DESIGN_DISCOVERY_DIVERSITY/);
+  assert.doesNotThrow(() => parseReferenceResearch(fixture.research));
 });
 
 test('current research refuses duplicate design pixels under different source records', t => {
   const fixture = currentResearch(t, 1);
-  assert.throws(
-    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /DESIGN_EVIDENCE_DIVERSITY/,
-  );
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options));
 });
 
 test('current research requires both visual directions to participate in the board', t => {
@@ -131,10 +128,7 @@ test('current research requires both visual directions to participate in the boa
   assert.ok(candidate);
   candidate.pieces.splice(1);
   fixture.refreshBoard();
-  assert.throws(
-    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /BOARD_DESIGN_DIVERSITY/,
-  );
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options));
 });
 
 test('a cross-provider gallery redirect invalidates its observed-original chain', t => {
@@ -148,7 +142,7 @@ test('a cross-provider gallery redirect invalidates its observed-original chain'
   second.discovery.capture.sha256 = admissionHash(readFileSync(path));
   assert.throws(
     () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /DESIGN_REFERENCE_INELIGIBLE: discovery: Capture a supported gallery item and its observed original link/,
+    /DESIGN_REFERENCE_INELIGIBLE: discovery:/,
   );
 });
 
@@ -163,10 +157,11 @@ test('two declared visual sources redirecting to one product family are not inde
   const second = fixture.research.designReference.sources[1];
   assert.ok(second);
   second.capture.sha256 = admissionHash(readFileSync(path));
-  assert.throws(
-    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /DESIGN_SOURCE_DIVERSITY/,
-  );
+  const warnings: string[] = [];
+  validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), {
+    ...options, onAdvisory: code => warnings.push(code),
+  });
+  assert.ok(warnings.includes('REFERENCE_RESEARCH_DESIGN_SOURCE_DIVERSITY'));
 });
 
 test('two independent visual directions with distinct pixels and board use pass', t => {

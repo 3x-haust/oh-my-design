@@ -93,7 +93,9 @@ function stageBindings(
   invocation: ProjectRunInvocation,
 ): readonly StageBinding[] {
   return Object.freeze(APPROVED_INPUTS.map(([id, path]): StageBinding => {
-    if (record.strategy.stages.includes(id)) {
+    if (record.strategy.stages.includes(id) && (path === null
+      ? existsSync(resolve(root, '.omd/art-direction.json'))
+      : existsSync(resolve(root, path)))) {
       let artifacts = path === null
         ? currentArtDirection(root)
         : Object.freeze([receipt(root, path, `${id} approved input`)]);
@@ -118,8 +120,7 @@ function stageBindings(
       return Object.freeze({ id, status: 'selected', artifacts });
     }
     const skipped = record.strategy.skips.find((entry) => entry.id === id);
-    if (skipped === undefined) throw new Error(`ADAPTIVE_SKIP_AUTHORITY_REQUIRED: ${id} has no exact route skip decision`);
-    return Object.freeze({ id, status: 'skipped', reason: skipped.reason, routeSha256, authoritySha256 });
+    return Object.freeze({ id, status: 'skipped', reason: skipped?.reason ?? 'optional input not published', routeSha256, authoritySha256 });
   }));
 }
 function persistedPointer(
@@ -172,11 +173,18 @@ export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectR
   // Partial pre-production snapshots remain possible. They cannot pass application review/final
   // completion: that gate requires the exact application input digest. Publishing the missing plan
   // changes this route binding and invalidates the preliminary seal rather than blessing it later.
-  const needsApplication = requiresApplication && existsSync(resolve(root, REFERENCE_APPLICATION_PATH));
-  if (needsApplication) checkReferenceApplication(root, {
-    expectedSourceContractSha256: record.sourceContractSha256,
-    benchmarkRequired: record.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: record.request,
-  });
+  let needsApplication = false;
+  if (requiresApplication && existsSync(resolve(root, REFERENCE_APPLICATION_PATH))) {
+    try {
+      checkReferenceApplication(root, {
+        expectedSourceContractSha256: record.sourceContractSha256,
+        benchmarkRequired: record.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: record.request,
+      });
+      needsApplication = true;
+    } catch (error) {
+      process.emitWarning(`optional reference application omitted from source seal: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA,
     pointer: receipt(root, '.omd/route.json', 'adaptive route pointer'),

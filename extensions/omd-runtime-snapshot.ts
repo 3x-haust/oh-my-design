@@ -38,7 +38,7 @@ const RUNTIME_PATHS = [
 
 const REQUIRED_PATHS = ['package.json', 'bin/omd.mjs', 'bin/run-ts.mjs', 'bin/omd.ts'] as const;
 const MAX_COPY_ATTEMPTS = 3;
-const SNAPSHOT_DEADLINE_MS = 15_000;
+const SNAPSHOT_DEADLINE_MS = 30_000;
 
 export type OmdRuntimeSnapshot = Readonly<{
   root: string;
@@ -213,6 +213,11 @@ export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): Om
         });
       }
       lastMismatch = `attempt ${attempt}: source=${before}/${copied}/${after}; dependencies=${dependencyBefore}/${dependencyAfter}`;
+    } catch (error) {
+      // A concurrently replaced dependency can disappear between cpSync's directory
+      // listing and stat. Only this transient race is retryable; other I/O errors surface.
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
+      lastMismatch = `attempt ${attempt}: dependency changed during snapshot`;
     } finally {
       if (!retained) rmSync(snapshotRoot, { recursive: true, force: true });
     }

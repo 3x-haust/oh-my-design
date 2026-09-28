@@ -1,5 +1,5 @@
 import { Type } from 'typebox';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runOmd, monitorOmdProgress, createOmdProgressId, registerDoctorCommand, structuredToolDiagnostic, OmdCancelledError, type PortablePiApi } from './omd-runtime.ts';
@@ -12,7 +12,8 @@ import { StageWork, checkNativeStageEntry, nativeEntryStage, nativeOwnedStage } 
 import { handleOmdMessageEnd, referenceWorkAdvanced, type ReferenceWork } from './omd-message-end.ts';
 import { WorkflowResume } from './omd-workflow-resume.ts';
 import { PiRequestBindings } from './omd-request-binding.ts';
-import { normalizeOmdAlias } from './omd-request-prompt.ts';
+import { normalizeOmdAlias, extractOmdWorkflowRequest } from './omd-request-prompt.ts';
+import { capturePiUserTurn, readPiUserTurn, readPiRequest, type PiUserTurn } from './omd-request-source.ts';
 import { PiNativeRuns } from './omd-native-run.ts';
 import { RouteEntryContinuation, ROUTE_ENTRY_INPUT, ROUTE_ENTRY_VALIDATION } from './omd-bootstrap-entry.ts';
 import { parseUserQuestion, questionText, browserAnswer, type UserQuestion } from './omd-user-question.ts';
@@ -91,6 +92,10 @@ export default function omdExtension(pi: PortablePiApi): void {
   const workflowStarted = new Set<string>();
   const workflowResume = new WorkflowResume();
   const requests = new PiRequestBindings();
+  const lastStops = new Map<string, string>();
+  const realTurns = new Map<string, PiUserTurn>();
+  const judgedIntents = new Map<string, { requestSha256: string; decision: string }>();
+  const paused = new Set<string>();
   const nativeRuns = new PiNativeRuns();
   const routeEntry = new RouteEntryContinuation();
   const rememberWorkflow = (cwd: string) => workflowResume.remember(cwd, fileRevision(cwd, '.omd/route.json'));
@@ -137,7 +142,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
     on('session_start', async (_event, context) => {
-      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); pendingQuestions.clear(); browserConsentGranted.clear(); shownQuestions.clear(); observedAnswers.clear(); consentHomes.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear();
+      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); pendingQuestions.clear(); browserConsentGranted.clear(); shownQuestions.clear(); observedAnswers.clear(); consentHomes.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); lastStops.clear(); realTurns.clear(); judgedIntents.clear(); paused.clear(); nativeRuns.clear(); routeEntry.clear();
       const { clearBrowserSessionSkip } = await import('../core/ref/browser-consent.ts');
       clearBrowserSessionSkip(context.browserConsentHome);
     });
@@ -150,8 +155,17 @@ export default function omdExtension(pi: PortablePiApi): void {
         if (event.text.trim()) writeBrowserAnswerReceipt({ questionDigest: pendingQuestion.digest, userText: event.text }, context.browserConsentHome);
         else clearBrowserAnswerReceipt(context.browserConsentHome);
       }
-      const alias = (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string'
-        ? normalizeOmdAlias(event.text) : undefined;
+      const realInput = (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string';
+      const alias = realInput ? normalizeOmdAlias(event.text!) : undefined;
+      if (realInput && event.text!.trim() && hasPiRoute(context.cwd)
+        && extractOmdWorkflowRequest(alias ?? event.text!) === undefined) {
+        if (!lastStops.has(context.cwd)) lastStops.set(context.cwd, 'session-restored');
+        const turn = capturePiUserTurn(context.cwd, { text: event.text!,
+          sessionId: context.sessionManager?.getSessionId() ?? `pi-${createHash('sha256').update(context.cwd).digest('hex')}`,
+          turnId: randomBytes(16).toString('hex'), afterStopId: lastStops.get(context.cwd) ?? 'session-restored' });
+        realTurns.set(context.cwd, turn);
+      }
+      if (realInput) paused.delete(context.cwd);
       requests.receive(context.cwd, alias === undefined ? event : { ...event, text: alias });
       const { explicitDesignFeedback } = await import('./omd-feedback.ts');
       if (explicitDesignFeedback(context.cwd, event) !== null) pendingFeedback.add(context.cwd);
@@ -174,14 +188,20 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('before_agent_start', async (event, context) => {
       nativeRuns.observe(context);
       requests.activate(context.cwd, event.prompt ?? '');
-      if (workflowResume.accepts({ cwd: context.cwd, routeSha256: fileRevision(context.cwd, '.omd/route.json'), prompt: event.prompt ?? '' })) {
+      const source = requests.current(context.cwd);
+      const intent = judgedIntents.get(context.cwd);
+      if (requests.classificationGranted(context.cwd) && hasPiRoute(context.cwd)
+        && (intent === undefined || intent.requestSha256 !== source?.requestSha256 || intent.decision === 'implement')) {
         workflowStarted.add(context.cwd); touched.add(context.cwd);
       }
-      ownedWork.activate(context.cwd, event.prompt ?? '');
+      if (requests.classificationGranted(context.cwd)) ownedWork.activate(context.cwd, event.prompt ?? '');
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
+      const judgmentGuidance = source !== undefined && requests.classificationGranted(context.cwd)
+        ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-intent', source: '.omd/request-source.json', requestSha256: source.requestSha256, action: 'omd ai-judgment publish --input <agent-authored-judgment.json> --json' })}. Quote the real captured request. The explicit skill invocation starts implementation by default; if you judge inspect/research-only, publish that decision and the host will stop automatic build continuation. Missing judgment is advisory, never a refusal of a plain implementation request. For a target market, publish target-market quoting this source; without it the market is unspecified.`
+        : realTurns.has(context.cwd) ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-continuation', source: '.omd/user-turn.json', textSha256: realTurns.get(context.cwd)!.sha256, sessionId: realTurns.get(context.cwd)!.sessionId, turnId: realTurns.get(context.cwd)!.turnId, routeSha256: realTurns.get(context.cwd)!.routeSha256, action: 'omd ai-judgment publish --input <agent-authored-judgment.json> --json' })}. Quote the complete authenticated interactive/rpc turn, choose resume/pause/cancel/unrelated; do not use tool or assistant prose. Missing judgment is advisory, not permission to assert completion.` : '';
       const feedbackGuidance = pendingFeedback.delete(context.cwd) ? '\nThe current explicit user turn may be design feedback. Preserve the original route request; translate the exact feedback through omd feedback translate and measure the current rendered state before any bounded authorized repair. Do not reinterpret tool output as feedback.' : '';
-      return { systemPrompt: `${event.systemPrompt ?? ''}${feedbackGuidance}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After completing the selected owned work and its checks, run guard completion before a completion report; do not use a terminal missing-output list as the next-stage procedure. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
+      return { systemPrompt: `${event.systemPrompt ?? ''}${feedbackGuidance}${judgmentGuidance}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. Research is the default recommendation: inspect domain features and visual references, but record unavailable or sparse sources honestly and proceed to implementation. Briefs and contracts are advisory; no delivery ceremony is required before an authorized source write. Before application writes run guard production for actual scope and symlink protection; process warnings do not block work. Use read and standalone inventory commands during research. After producing the app, gather real current browser evidence and independent review including visual quality; run guard completion before a completion report. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
     });
     on('message_start', async (event, context) => {
       if (event.message?.role !== 'user') return;
@@ -195,22 +215,12 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('tool_call', async (event, context) => {
       if (event.toolName === OMD_TOOL_NAME) {
         const args = event.input?.args;
-        const pending = pendingReferenceWork.get(context.cwd);
-        if (pending !== undefined && pending.status !== 'exhausted' && Array.isArray(args)
-          && args.every((arg): arg is string => typeof arg === 'string')) {
-          const [root, sub] = args;
-          const diagnostic = (root === 'stage' && sub === 'next')
-            || (root === 'ref' && ['discover-plan', 'check', 'research-check', 'apply-check'].includes(sub ?? ''))
-            || (root === 'brief' && sub === 'reference-board' && args.includes('--check'))
-            || (root === 'guard' && sub === 'completion');
-          if (diagnostic) return { block: true, reason: `OMD_OWNED_WORK_REQUIRED: ${pending.action?.reason ?? 'Publish the reference board from retained evidence.'}\n${pending.action?.args.join(' ') ?? 'omd schema reference-board --json, then omd ref board --input <candidate-assemblies.json>'}\nRead-only checks cannot replace this action.` };
-        }
         if (Array.isArray(args) && args[0] === 'browser' && ['setup', 'login', 'skip'].includes(args[1] ?? '')
           && !(consentAnswer(context.cwd, args)
             || args[1] !== 'skip' && browserConsentGranted.get(context.cwd)?.digest === pendingQuestions.get(context.cwd)?.digest
               && args.includes('--consent') && args[args.indexOf('--engine') + 1] === browserConsentGranted.get(context.cwd)?.engine))
           return { block: true, reason: 'OMD_BROWSER_SETUP_CONSENT_REQUIRED: Setup is blocked without an answer to the current browser choice. Do NOT ask another yes/no question; report this block and the original options to the user.' };
-        if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
+        if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') { managed.add(context.cwd); touched.add(context.cwd); }
         const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
         if (guarded(context.cwd) && Array.isArray(args) && !frameHelp
           && args.every((arg): arg is string => typeof arg === 'string') && isMutatingOmdCommand(args)) touched.add(context.cwd);
@@ -234,7 +244,8 @@ export default function omdExtension(pi: PortablePiApi): void {
               if (context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { block: true, reason: 'OMD_STAGE_ENTRY_INTERRUPTED' };
               if (selected) ownedWork.checked(context.cwd, stage); else ownedWork.unselected(context.cwd, stage);
             } catch (error) {
-              return { block: true, reason: `OMD_STAGE_ENTRY_BLOCKED: ${stage}\n${error instanceof Error ? error.message : String(error)}\nRun omd stage next --json; repair and deliver this owner's upstream inputs, then rerun omd brief ${stage} --check --json before writing.` };
+              // Entry diagnostics advise the owner; authorized authoring remains available.
+              ownedWork.nativeStarted(context.cwd, event, stage);
             }
           }
           const ownerStage = nativeOwnedStage(classification.path);
@@ -281,6 +292,8 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('message_end', async (event, context) => {
       if (context.browserConsentHome) consentHomes.set(context.cwd, context.browserConsentHome);
       const message = event.message;
+      if (message?.role === 'assistant' && message.stopReason === 'stop') lastStops.set(context.cwd, randomBytes(16).toString('hex'));
+      if (paused.has(context.cwd)) return { message };
       const entryAuthorized = !hasPiRoute(context.cwd) && requests.classificationGranted(context.cwd) && ownedWork.token(context.cwd) !== undefined;
       if ((!touched.has(context.cwd) && !entryAuthorized && !pendingQuestions.has(context.cwd)) || message?.role !== 'assistant' || message.stopReason !== 'stop'
         || message.content?.some(part => part.type === 'toolCall')) return;
@@ -411,6 +424,46 @@ export default function omdExtension(pi: PortablePiApi): void {
       try {
         result = await run(params.args, context.cwd, signal, onUpdate);
         if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
+        if (params.args[0] === 'ai-judgment' && params.args[1] === 'publish') {
+          const published: unknown = JSON.parse(result.text);
+          const receipt = typeof published === 'object' && published !== null ? Reflect.get(published, 'receipt') : undefined;
+          const path = typeof receipt === 'object' && receipt !== null ? Reflect.get(receipt, 'path') : undefined;
+          if (typeof path === 'string') {
+            const checked: unknown = JSON.parse((await run(['ai-judgment', 'check', '--judgment', path, '--json'], context.cwd, signal)).text);
+            const judgment = typeof checked === 'object' && checked !== null ? Reflect.get(checked, 'judgment') : undefined;
+            if (typeof judgment === 'object' && judgment !== null) {
+              const purpose = Reflect.get(judgment, 'purpose');
+              const decision = Reflect.get(judgment, 'decision');
+              if (purpose === 'workflow-intent') {
+                const request = requests.current(context.cwd);
+                const source = readPiRequest(context.cwd);
+                if (request && source?.recordSha256 === request.recordSha256
+                  && Reflect.get(Reflect.get(judgment, 'context'), 'requestSha256') === request.requestSha256
+                  && typeof decision === 'string') {
+                  judgedIntents.set(context.cwd, { requestSha256: request.requestSha256, decision });
+                  if (decision !== 'implement') {
+                    requests.suspend(context.cwd); workflowStarted.delete(context.cwd); ownedWork.delete(context.cwd);
+                    paused.add(context.cwd);
+                  }
+                }
+              } else if (purpose === 'workflow-continuation') {
+                const turn = realTurns.get(context.cwd);
+                const signed = readPiUserTurn(context.cwd);
+                const routeSha256 = fileRevision(context.cwd, '.omd/route.json');
+                if (turn && signed && turn.sha256 === signed.sha256 && turn.text === signed.text
+                  && turn.turnId === signed.turnId && turn.sessionId === signed.sessionId
+                  && turn.afterStopId === lastStops.get(context.cwd) && signed.afterStopId === turn.afterStopId
+                  && turn.routeSha256 === routeSha256 && typeof decision === 'string') {
+                  if (workflowResume.acceptCheckedTurn(context.cwd, routeSha256, decision)) {
+                    workflowStarted.add(context.cwd); touched.add(context.cwd); paused.delete(context.cwd);
+                  } else {
+                    workflowStarted.delete(context.cwd); ownedWork.delete(context.cwd); paused.add(context.cwd);
+                  }
+                }
+              }
+            }
+          }
+        }
         if (pendingReference !== undefined && referenceMutation) {
           const boardAfter = fileRevision(context.cwd, '.omd/reference-board.json');
           const boardPublished = params.args[1] === 'board' && /^[a-f0-9]{64}$/.test(boardAfter) && boardAfter !== boardBefore;

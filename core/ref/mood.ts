@@ -16,6 +16,7 @@
 // licence to ship its pixels.
 
 import { createHash } from 'node:crypto';
+import { knownFields } from '../judgment/schema.ts';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -72,19 +73,23 @@ export class MoodboardError extends Error {
 }
 
 const fail = (code: MoodboardErrorCode, reason: string): never => { throw new MoodboardError(code, reason); };
+import { referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
+
+/** A claim about measured structure needs measured evidence; unjudged wording stays advisory. */
+export async function assessMoodClaim(statementId: string, binding?: ReferenceJudgmentBinding) {
+  if (binding && binding.subjectId !== statementId) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH');
+  return referenceDecision('claim-kind', binding);
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const text = (value: unknown, label: string): string =>
   typeof value === 'string' && value.trim() !== '' ? value : fail('MALFORMED_MOODBOARD', `${label} must be a non-empty string`);
 const exactKeys = (value: Record<string, unknown>, keys: readonly string[], label: string): void => {
-  const actual = Object.keys(value).sort();
-  const want = [...keys].sort();
-  if (actual.length !== want.length || actual.some((key, index) => key !== want[index])) {
-    fail('MALFORMED_MOODBOARD', `${label} has unknown or missing keys`);
-  }
+  try {
+    const { warnings } = knownFields(value, keys, [], label);
+    for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  } catch { fail('MALFORMED_MOODBOARD', `${label} has missing, unsafe or host-owned keys`); }
 };
-
-const isStructural = (quality: string): boolean =>
-  /\b(?:\d+\s*(?:px|em|rem|pt|%|vh|vw)|grid|column|spacing|padding|margin|radius|breakpoint)\b/i.test(quality);
 
 const absoluteHttpUrl = (value: unknown, label: string): string => {
   const parsed = text(value, label);
@@ -115,9 +120,6 @@ function parseMoodItem(value: unknown, index: number): MoodItem {
   if (qualities.length > MAX_MOOD_QUALITIES) fail('MALFORMED_MOODBOARD', `${label}.qualities is bounded to ${MAX_MOOD_QUALITIES}`);
   const parsedQualities = qualities.map((quality, qualityIndex) => {
     const entry = text(quality, `${label}.qualities[${qualityIndex}]`);
-    if (isStructural(entry)) {
-      fail('MOOD_STRUCTURAL_QUALITY', `${label}.qualities[${qualityIndex}] states a measurement ("${entry}") that a visual-only capture cannot support; describe the felt quality instead`);
-    }
     return entry;
   });
   const sha = text(parsed['sha256'], `${label}.sha256`);

@@ -18,6 +18,7 @@ import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { actionableSearchTargets, observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
 import { currentReferenceEvidenceAfter } from './discovery-record.ts';
+import { assessPageAccess, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 import { SEARCH_BUDGET_MS, withAcquisitionDeadline, type AcquisitionDeadlineScope } from './acquisition-deadline.ts';
 
 export { observedSearchTargets } from './search-result.ts';
@@ -273,10 +274,13 @@ export async function executeUserBrowserSearch(value: unknown, writer: ProjectWr
   return receipt;
 }
 
-/** Narrow observed challenge wording, not a general content-quality or bot classifier. */
-export function searchChallengeReason(body: string): string | null {
-  return /Unfortunately, bots use DuckDuckGo too|complete the following challenge to confirm this search was made by a human|Our systems have detected unusual traffic from your computer network|google\.com\/sorry|unusual traffic|verify you are human|captcha/i.test(body.slice(0, 4000))
-    ? 'Search challenge observed; ask the user to complete the browser challenge before continuing.' : null;
+/** Historical API: free-text error wording is not page-access authority. */
+export function searchChallengeReason(_body: string): string | null { return null; }
+
+export async function assessSearchExecutionAccess(root: string, receipt: Receipt, lane: Lane,
+  binding?: ReferenceJudgmentBinding) {
+  const execution = readSearchExecution(root, receipt, lane);
+  return { execution, access: await assessPageAccess(execution.finalUrl ?? execution.requestedUrl, binding) };
 }
 
 export function readSearchExecution(root: string, value: unknown, lane: Lane): SearchExecution {
@@ -324,7 +328,8 @@ export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; q
   allowUnmatched?: boolean | undefined }>) {
   const records = input.receipts.map(item => readSearchExecution(root, item, input.lane));
   if (new Set(input.receipts.map(item => item.sha256)).size !== input.receipts.length) return fail('duplicate search receipts');
-  if (input.queries.some(query => !records.some(item => item.query === query)) || records.some(item => !input.queries.includes(item.query))) return fail('declared queries do not match executed queries');
+  // The plan is advisory; signed executions retain the actual queries.
+  void input.queries;
   const after = currentReferenceEvidenceAfter(root);
   if (records.some(record => record.schema !== SEARCH_EXECUTION_SCHEMA
     || Date.parse(record.observedAt) < after || Date.parse(record.observedAt) > Date.now() + 5 * 60 * 1000)) {

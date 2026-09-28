@@ -1,3 +1,5 @@
+import { knownFields } from '../judgment/schema.ts';
+
 export const UX_POLICY_SCHEMA = 'ux-policy-v1';
 
 export type UxPolicyErrorCode =
@@ -70,14 +72,19 @@ function isObject(value: unknown): value is object {
 }
 
 function hasExactKeys(value: object, expected: readonly string[]): boolean {
-  const keys = Reflect.ownKeys(value);
-  return keys.length === expected.length && expected.every((key) => Object.hasOwn(value, key));
+  try {
+    const projected = knownFields(value, expected, [], 'uxPolicy');
+    for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+    return true;
+  } catch { return false; }
 }
 
 function parseDecision(input: unknown, index: number): UxPolicyDecision {
-  if (!isObject(input) || !('id' in input) || !('kind' in input) || !('status' in input)) {
-    return fail('MALFORMED_POLICY');
-  }
+  if (!isObject(input) || (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)
+    || ['id', 'kind', 'status'].some(key => {
+      const descriptor = Reflect.getOwnPropertyDescriptor(input, key);
+      return descriptor === undefined || !descriptor.enumerable || !('value' in descriptor);
+    }) || !('id' in input) || !('kind' in input) || !('status' in input)) return fail('MALFORMED_POLICY');
   if (typeof input.id !== 'string' || input.id.trim().length === 0) {
     return fail('MALFORMED_POLICY');
   }
@@ -95,10 +102,9 @@ function parseDecision(input: unknown, index: number): UxPolicyDecision {
 
     case 'recommended_method':
       if (input.status !== 'selected' && input.status !== 'skipped') return fail('MALFORMED_POLICY');
-      if (!('reason' in input) || typeof input.reason !== 'string' || input.reason.trim().length === 0) {
-        return fail('RECOMMENDATION_REASON_REQUIRED');
-      }
-      if (!hasExactKeys(input, ['id', 'kind', 'status', 'reason'])) return fail('MALFORMED_POLICY');
+      if (!Object.hasOwn(input, 'reason')) return fail('RECOMMENDATION_REASON_REQUIRED');
+      if (!hasExactKeys(input, ['id', 'kind', 'status', 'reason']) || !('reason' in input)) return fail('MALFORMED_POLICY');
+      if (typeof input.reason !== 'string' || input.reason.trim().length === 0) return fail('RECOMMENDATION_REASON_REQUIRED');
       return Object.freeze({ id: input.id, kind: input.kind, status: input.status, reason: input.reason });
 
     case 'free_choice':

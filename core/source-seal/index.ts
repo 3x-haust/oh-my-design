@@ -99,7 +99,7 @@ function isSourceSealArtifact(value: unknown): value is SourceSealArtifact {
     ? ['copyDeckSha256', 'typeProofSha256', 'compositionSha256'].sort()
     : isAdaptiveSourceSealRoute(route) ? Object.keys(adaptiveSourceSealInputHashes(route)).sort() : [];
   const actualInputs = Object.keys(value.inputs).sort();
-  if (expectedInputs.length === 0 || actualInputs.length !== expectedInputs.length
+  if ((route === undefined && expectedInputs.length === 0) || actualInputs.length !== expectedInputs.length
     || actualInputs.some((key, index) => key !== expectedInputs[index])) return false;
   for (const key of actualInputs) {
     if (typeof value.inputs[key] !== 'string' || !SHA256_PATTERN.test(value.inputs[key])) return false;
@@ -235,7 +235,7 @@ export function createSourceSeal(
   const route = hasAdaptiveRoute && invocation !== undefined ? createAdaptiveSourceSealRoute(root, invocation) : undefined;
   const workflow = hasWorkflow && invocation !== undefined ? createAdaptiveWorkflowSourceBinding(root, invocation) : undefined;
   const proofPaths = ['.omd/type-proof.md', '.omd/composition.md']
-    .filter((path) => existsSync(join(root, path))) as SourceBoundProofPath[];
+    .filter((path) => route?.stages.some((stage) => stage.status === 'selected' && stage.artifacts.some((artifact) => artifact.path === path))) as SourceBoundProofPath[];
   if (route !== undefined && proofPaths.length > 0) {
     const findings = validateSourceBoundProofCurrentness(root, proofPaths);
     if (findings.length > 0) throw new Error(`SOURCE_BOUND_PROOF_CURRENTNESS_RED:${JSON.stringify(findings)}`);
@@ -292,7 +292,7 @@ function createContinuationSourceSeal(
     }
   }
   const proofPaths = ['.omd/type-proof.md', '.omd/composition.md']
-    .filter((path) => existsSync(join(root, path))) as SourceBoundProofPath[];
+    .filter((path) => route.stages.some((stage) => stage.status === 'selected' && stage.artifacts.some((artifact) => artifact.path === path))) as SourceBoundProofPath[];
   if (proofPaths.length > 0) {
     const findings = validateSourceBoundProofCurrentness(root, proofPaths);
     if (findings.length > 0) {

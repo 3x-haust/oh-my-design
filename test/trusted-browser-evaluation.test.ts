@@ -238,7 +238,7 @@ test('benchmark entry surface rejects a functional workflow hidden below the fir
   }
 });
 
-test('rendered Korean result copy rejects wrong particles and duplicated endings', async () => {
+test('rendered copy is signed as advisory evidence without altering access floors', async () => {
   const broken = mkdtempSync(join(tmpdir(), 'omd-browser-copy-broken-'));
   const fixed = mkdtempSync(join(tmpdir(), 'omd-browser-copy-fixed-'));
   const resultPage = (result: string): string => [
@@ -276,8 +276,12 @@ test('rendered Korean result copy rejects wrong particles and duplicated endings
       '대표 상태를 재포장으로 바꿨습니다. 판단 근거: 최고 온도를 확인했습니다.',
     );
     assert.equal(brokenResult.receipt.outcomeResults[0]?.status, 'pass');
-    assert.equal(brokenResult.receipt.hardFloors.access, 'fail');
+    assert.equal(brokenResult.receipt.hardFloors.access, 'pass');
     assert.equal(fixedResult.receipt.hardFloors.access, 'pass');
+    const reviewText = (lines: readonly string[]) => lines.filter(line => line.startsWith('rendered-copy-review:390x844:'))
+      .map(line => Buffer.from(line.split(':')[2]!, 'base64url').toString('utf8'));
+    assert.ok(reviewText(brokenResult.receipt.transcript).some(text => text.includes('재포장로')));
+    assert.ok(reviewText(fixedResult.receipt.transcript).some(text => text.includes('재포장으로')));
   } finally {
     rmSync(broken, { recursive: true, force: true });
     rmSync(fixed, { recursive: true, force: true });

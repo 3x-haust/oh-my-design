@@ -51,10 +51,11 @@ test('retain rejects empty rationale, missing evidence, invalid images, and cont
 test('revise still needs an actual change and reframe records the unresolved question without approving it', () => {
   const { root, input, adapter } = fixture();
   assert.throws(() => recordCraft(root, { ...input, decision: 'revise' }, adapter), /--changed/);
-  assert.throws(() => recordCraft(root, { ...input, decision: 'revise', changed: 'No change' }, adapter), /--changed/);
+  // A word list cannot prove whether the owner actually revised the source.
+  assert.doesNotThrow(() => recordCraft(root, { ...input, decision: 'revise', changed: 'No change' }, adapter));
   recordCraft(root, { ...input, decision: 'revise', changed: 'Reduce the introduction gap from 48px to 24px.' }, adapter);
   recordCraft(root, { ...input, decision: 'reframe', reason: 'The entry task needs an object selection before this action; return to Framer.' }, adapter);
-  assert.deepEqual(readCraft(root).map(item => item.decision), ['revise', 'reframe']);
+  assert.deepEqual(readCraft(root).map(item => item.decision), ['revise', 'revise', 'reframe']);
 });
 
 test('historical change-only notes remain readable and cannot impersonate explicit review decisions', () => {
@@ -63,7 +64,7 @@ test('historical change-only notes remain readable and cannot impersonate explic
   recordCraft(root, legacy, adapter);
   assert.equal(readCraft(root)[0]?.decision, undefined);
   assert.throws(() => recordCraft(root, { ...legacy, criterion: 'Keep the action visible.' }, adapter), /explicit --decision/);
-  assert.throws(() => recordCraft(root, { ...legacy, changed: 'No change' }, adapter), /--changed/);
+  assert.doesNotThrow(() => recordCraft(root, { ...legacy, changed: 'No change' }, adapter));
 });
 
 test('craft CLI preserves and displays an explicit retain decision', () => {

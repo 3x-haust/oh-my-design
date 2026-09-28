@@ -142,8 +142,8 @@ test('investigations cannot become ceremonial paperwork', () => {
   );
 });
 
-test('reference principles must produce observable decisions without copying aesthetics', () => {
-  assert.throws(
+test('reference principle wording is not classified by a surface-word regex', () => {
+  assert.doesNotThrow(
     () => parseDesignDevelopmentContract({
       ...directContract(),
       mode: 'investigate',
@@ -178,7 +178,6 @@ test('reference principles must produce observable decisions without copying aes
       }],
       rationale: 'Use a fashionable reference.',
     }),
-    /DESIGN_DEVELOPMENT_SURFACE_COPY/,
   );
 });
 

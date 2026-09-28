@@ -1,5 +1,5 @@
 import type { PortablePiEvent } from './omd-runtime.ts';
-import { parseOmdWorkflowPrompt } from './omd-request-prompt.ts';
+import { extractOmdWorkflowRequest } from './omd-request-prompt.ts';
 
 const NATIVE_STAGES: Readonly<Record<string, string>> = {
   '.omd/domain-brief.json': 'domain', '.omd/scout.md': 'scout', '.omd/copy-deck.md': 'copy',
@@ -30,11 +30,11 @@ export class StageWork {
   delete(cwd: string): void { this.tasks.delete(cwd); }
   activate(cwd: string, prompt: string): void {
     if (!/(?:^|\s)(?:\/skill:|\$)?omd-ultradesign(?:\s|$)|<skill\s+name=["']omd-ultradesign["']/i.test(prompt) || this.tasks.has(cwd)) return;
-    const grant = parseOmdWorkflowPrompt(prompt);
-    this.tasks.set(cwd, { token: Symbol(), resumeGranted: grant !== null, entryContinues: grant?.kind === 'full-build', checked: new Set(), pending: new Map(), started: false });
+    const request = extractOmdWorkflowRequest(prompt);
+    this.tasks.set(cwd, { token: Symbol(), resumeGranted: request !== undefined, entryContinues: typeof request === 'string' && !!request.trim(), checked: new Set(), pending: new Map(), started: false });
   }
   token(cwd: string): symbol | undefined { return this.tasks.get(cwd)?.token; }
-  started(cwd: string): boolean { const task = this.tasks.get(cwd); return task !== undefined && task.resumeGranted && (task.started || (task.entryContinues && task.checked.size > 0)); }
+  started(cwd: string): boolean { const task = this.tasks.get(cwd); return task !== undefined && task.resumeGranted && task.started; }
   checked(cwd: string, stage: string): void { this.tasks.get(cwd)?.checked.add(stage); }
   unselected(cwd: string, stage: string): void { this.tasks.get(cwd)?.checked.delete(stage); }
   commandSucceeded(cwd: string, command: Readonly<{ args: readonly string[]; token: symbol | undefined }>): boolean {
@@ -45,14 +45,14 @@ export class StageWork {
     if (args[0] === 'route' && args[1] === 'classify') { task.checked.clear(); task.pending.clear(); task.started = false; }
     if (args[0] === 'brief' && args[1] !== undefined && args.includes('--check')) task.checked.add(args[1]);
     const stage = PUBLISHER_STAGES[`${args[0]} ${args[1]}`];
-    if (stage === undefined || !task.checked.has(stage)) return false;
+    if (stage === undefined) return false;
     task.started = true;
     return true;
   }
   nativeStarted(cwd: string, event: PortablePiEvent, stage: string): void {
     const task = this.tasks.get(cwd);
     const path = event.input?.path;
-    if (!task?.checked.has(stage) || !event.toolCallId || !event.toolName || typeof path !== 'string') return;
+    if (!task || !event.toolCallId || !event.toolName || typeof path !== 'string') return;
     task.pending.set(event.toolCallId, { stage, tool: event.toolName, path });
   }
   nativeFinished(cwd: string, event: PortablePiEvent): void {

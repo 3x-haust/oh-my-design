@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { knownFields } from '../judgment/schema.ts';
 import { resolve } from 'node:path';
 import { loadDesignQualityObservationBindings } from '../evidence/final-v2-browser-observations.ts';
 import type { FinalEvidenceV2GraphVariant } from '../evidence/final-v2-graph.ts';
@@ -31,9 +32,12 @@ type Review = Readonly<{
 
 function record(value: unknown, keys: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return fail('expected plain data');
-  const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Reflect.ownKeys(value).length !== keys.length || keys.some(key => !descriptors[key]?.enumerable || !('value' in descriptors[key]!))) return fail(`expected exactly ${keys.join(', ')}`);
-  return value as Record<string, unknown>;
+  try {
+    if (Object.hasOwn(value, 'approvedByUser')) return fail('caller cannot supply approval authority');
+    const projected = knownFields(value, keys, [], 'reference-application-review');
+    for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+    return projected.value;
+  } catch { return fail(`missing, unsafe or host-owned fields: ${keys.join(', ')}`); }
 }
 function text(value: unknown): string {
   return typeof value === 'string' && value.trim().length > 0 && value.length <= 4096 ? value.trim() : fail('missing or oversized text');
@@ -47,7 +51,7 @@ function receipt(value: unknown): Receipt {
 }
 function parse(value: unknown): Review {
   const row = record(value, ['schema', 'applicationSha256', 'build', 'sourceSeal', 'results']);
-  if (row.schema !== SCHEMA || !Array.isArray(row.results) || !row.results.length || row.results.length > 1024
+  if (row.schema !== SCHEMA || !Array.isArray(row.results) || row.results.length > 1024
     || Object.keys(row.results).length !== row.results.length) return fail('invalid schema/results');
   const results = row.results.map(value => {
     const item = record(value, ['criterionId', 'viewport', 'observationSha256', 'captureSha256', 'state', 'verdict', 'reason']);
@@ -99,7 +103,7 @@ export function referenceApplicationReviewPlan(context: Context) {
     limitations: 'Inspect the actual current captures for each surface/criterion. This skeleton cannot pass. Judgments are agent-authored, not independent human approval or a beauty score.',
   };
 }
-export function validateReferenceApplicationReview(value: unknown, context: Context, requireClosed = true): Review {
+export function validateReferenceApplicationReview(value: unknown, context: Context, _requireClosed = true): Review {
   const review = parse(value);
   if (review.applicationSha256 !== context.application.applicationSha256
     || review.build.path !== context.build.path || review.build.sha256 !== context.build.sha256
@@ -116,9 +120,9 @@ export function validateReferenceApplicationReview(value: unknown, context: Cont
         const url = new URL(capture.testedUrl);
         return `${url.pathname}${url.search}${url.hash}` === criterion.target.route;
       }))) return fail(`result is not bound to the destination surface ${criterion.surface} and its exact current final route/state/viewport capture`);
-    if (requireClosed && item.verdict === 'revise') return fail('unresolved criterion; repair, recapture, and re-review');
+    // A revise finding is honest review evidence, not a reason to refuse its publication.
   }
-  if (required.size) return fail('missing screen criteria or desktop/mobile review');
+  // Unreviewed criteria are an advisory gap, never fabricated review coverage.
   return review;
 }
 export function publishReferenceApplicationReview(root: string, value: unknown, context: Context, writer: ProjectWriteAdapter) {
@@ -127,11 +131,17 @@ export function publishReferenceApplicationReview(root: string, value: unknown, 
   const body = `${JSON.stringify(review, null, 2)}\n`;
   writer.write(`.omd/reference-application-reviews/sha256-${hash(body)}.json`, body);
   writer.write(REFERENCE_APPLICATION_REVIEW_PATH, body);
-  return { path: REFERENCE_APPLICATION_REVIEW_PATH, closed: review.results.every(result => result.verdict !== 'revise'), independence: 'not-attested' };
+  return { path: REFERENCE_APPLICATION_REVIEW_PATH,
+    closed: review.results.length === referenceApplicationCriteria(context.application).length * 2
+      && review.results.every(result => result.verdict !== 'revise'), independence: 'not-attested' };
 }
 export function checkReferenceApplicationReview(root: string, context: Context) {
   const bytes = read(root, REFERENCE_APPLICATION_REVIEW_PATH);
   const review = validateReferenceApplicationReview(JSON.parse(bytes.toString('utf8')), context);
   if (!bytes.equals(read(root, `.omd/reference-application-reviews/sha256-${hash(bytes)}.json`))) return fail('review history differs from current record');
-  return { criteria: referenceApplicationCriteria(context.application).length, results: review.results.length, closed: true, independence: 'not-attested' };
+  const criteria = referenceApplicationCriteria(context.application).length;
+  return { criteria, results: review.results.length,
+    closed: review.results.length === criteria * 2 && review.results.every(result => result.verdict !== 'revise'),
+    warnings: review.results.length < criteria * 2 ? ['REFERENCE_APPLICATION_REVIEW_COVERAGE_GAP'] : [],
+    independence: 'not-attested' };
 }

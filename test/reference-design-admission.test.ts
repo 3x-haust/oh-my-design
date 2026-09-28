@@ -273,7 +273,7 @@ test('admission preserves the existing native user-reference contract', t => {
   const { root, capture, writer } = designAdmissionFixture(t);
   const user = capture('https://user.example/reference', 'user', 'design', 9);
   user.ref.origin = 'user'; saveRef(root, user.ref, writer);
-  assert.equal(inspectDesignReferenceAdmission(root, user.ref).code, 'user-provided');
+  assert.equal(inspectDesignReferenceAdmission(root, user.ref).code, 'direct-source');
 });
 
 test('admission rejects a user marker without its native capture', t => {

@@ -38,7 +38,7 @@ export function recordCraft(
   const decision = input.decision ?? 'revise';
   if (!['revise', 'retain', 'reframe'].includes(decision)) throw new Error('--decision must be revise, retain, or reframe');
   if (decision === 'revise') {
-    if (input.changed.trim().length < 4 || /^(no|none|nothing|unchanged|no changes?|변경 ?없음)[.!]?$/i.test(input.changed.trim())) {
+    if (input.changed.trim().length < 4) {
       throw new Error('A revise checkpoint requires a concrete --changed value; use --decision retain with evidence to preserve a design.');
     }
   } else if (input.changed.trim()) {

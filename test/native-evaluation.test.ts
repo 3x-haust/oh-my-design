@@ -40,6 +40,11 @@ function fixture(t: TestContext, options: Readonly<{ broken?: boolean; mixedPhas
   const writer = createTestProjectWriteAdapter(root, invocation);
   const skeleton = inputSkeleton('product-route-input').skeleton;
   assert.ok(typeof skeleton === 'object' && skeleton !== null && !Array.isArray(skeleton));
+  const strategy = Reflect.get(skeleton, 'strategyDecision') as { methods: string[]; skips: { id: string }[] };
+  for (const id of ['design-strategy-balanced-delivery', 'model-capability-probe']) {
+    if (!strategy.methods.includes(id)) strategy.methods.push(id);
+    strategy.skips = strategy.skips.filter(skip => skip.id !== id);
+  }
   publishAdaptiveRoute(root, { ...skeleton, request,
     taskOutcome: { schema: 'task-outcome-contract-v1', goal: 'Review shipment evidence',
       mustHave: [options.mixedPhases ? 'Evidence reviewed' : 'Review shipment evidence'], mustNotHave: ['Invented approval'],
@@ -103,7 +108,20 @@ test('native evaluation executes the project-derived plan and publishes source-b
   assert.deepEqual(new Set(receipt.captures.map(row => `${row.width}x${row.height}`)), new Set(['1280x900', '390x844']));
   assert.ok(receipt.transcript.some(row => row.startsWith('action-click:')));
   assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
-  assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'review-rendered-findings');
+  assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'run-independent-review');
+});
+
+test('native evaluation accepts a complete outcome-bound browser plan without frame or benchmark documents', async t => {
+  const value = fixture(t);
+  const { entrySurface: _entrySurface, ...manifest } = deriveTrustedEvaluationPlanFromProject(value);
+  rmSync(join(value.root, '.omd/frame.md'));
+  rmSync(join(value.root, '.omd/task-flow-benchmark-projection.json'));
+  assert.throws(() => deriveTrustedEvaluationPlanFromProject(value));
+  const result = await runNativeEvaluation({ ...value, manifest });
+  assert.equal(result.ok, true);
+  assert.equal(result.receipt.entrySurface, undefined);
+  assert.equal(result.receipt.outcomeResults.length, 3);
+  assert.ok(result.receipt.captures.length > 0);
 });
 
 test('a serialized browser receipt cannot replace the observation after native evaluation', async t => {

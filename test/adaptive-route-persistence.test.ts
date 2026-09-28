@@ -501,7 +501,7 @@ test('persisted read revalidation rejects a forged sequential execution wave', (
   writeFileSync(join(root, '.omd', path), bytes);
   writeFileSync(pointerPath, `${canonicalJson({ schema: 'adaptive-route-pointer-v1', record: path, sha256: digest })}\n`);
 
-  routeError(() => readPersistedRoute(root, invocation), 'ADAPTIVE_EXECUTION_WAVE_INVALID');
+  routeError(() => readPersistedRoute(root, invocation), 'SOURCE_CONTRACT_MISMATCH');
 });
 
 test('persisted reads reject missing authority and cross-project replay', () => {

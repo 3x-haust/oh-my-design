@@ -540,8 +540,9 @@ export function validateDesignMd(md: string): Violation[] {
     .find(([k]) => matchSection(k) === 'Interaction states')?.[1] ?? null;
 
   if (interactionBody !== null) {
-    const bodyLower = interactionBody.toLowerCase();
-    const enumerated = INTERACTION_STATES.filter((s) => bodyLower.includes(s));
+    // Only explicit state declarations count; a passing prose mention is not coverage.
+    const declared = new Set([...interactionBody.matchAll(/^(?:###\s+|\s*[-*]\s*)(loading|empty|error|success|disabled|offline)(?:\s*:|\s*$)/gim)].map(match => match[1]!.toLowerCase()));
+    const enumerated = INTERACTION_STATES.filter((s) => declared.has(s));
     if (enumerated.length === 0) {
       violations.push({
         id: 'DESIGN-INCOMPLETE',
@@ -559,7 +560,7 @@ export function validateDesignMd(md: string): Violation[] {
       });
     } else {
       // Partial coverage: states present but some missing.
-      const missing2 = INTERACTION_STATES.filter((s) => !bodyLower.includes(s));
+      const missing2 = INTERACTION_STATES.filter((s) => !declared.has(s));
       for (const state of missing2) {
         violations.push({
           id: 'DESIGN-INCOMPLETE',

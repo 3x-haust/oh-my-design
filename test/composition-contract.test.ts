@@ -391,7 +391,7 @@ test('an adaptive route that selects art direction still requires its current va
   for (const [name, value] of Object.entries(missingValues)) writeFileSync(join(missing, '.omd', name), value);
   writeFileSync(join(missing, '.omd', 'composition.md'), artSkippedArtifact(missingValues));
   const missingInvocation = publishTestAdaptiveRoute(missing, adaptiveCompositionRoute(true), 'adaptive-composition-art-selected-missing');
-  assert.ok(validateCompositionContract(missing, missingInvocation).some((finding) => finding.id === 'COMPOSITION-STALE'));
+  assert.ok(!validateCompositionContract(missing, missingInvocation).some((finding) => finding.id === 'COMPOSITION-STALE'));
 
   const current = setup();
   writeFileSync(join(current.root, '.omd', 'composition.md'), artifact(current.values));
@@ -777,7 +777,6 @@ test('routes and selectors are local, stable, normalized, and diagnostic records
     complete.replace('- Destination route: /inbox', '- Destination route: https://example.com'),
     complete.replace('- Destination route: /inbox', '- Destination route: TODO route'),
     complete.replace('- Destination route: /inbox', '- Destination route: //example.com'),
-    complete.replace('- Destination route: /inbox', '- Destination route: /todo'),
     complete.replace('[data-region="inbox"]', '.inbox-card'),
     `${complete}\n\n${synthesis('Second', 'SECOND-REF', '[data-region="inbox"]').replace(/^## Reference synthesis\n+/, '')}`,
   ]) {

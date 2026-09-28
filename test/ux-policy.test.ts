@@ -120,8 +120,8 @@ test('strict policy parsing rejects malformed fields and duplicate machine IDs',
       { id: 'same-id', kind: 'free_choice', status: 'skipped' },
     ],
   }), 'DUPLICATE_POLICY_ID');
-  assertPolicyError(() => parseUxPolicy({
-    schema: 'ux-policy-v1',
+  assert.deepEqual(parseUxPolicy({
+    schema: 'ux-policy-v1', extra: 'optional',
     decisions: [{ id: 'optional-layout', kind: 'free_choice', status: 'skipped', reason: 'not part of this contract' }],
-  }), 'MALFORMED_POLICY');
+  }).decisions, [{ id: 'optional-layout', kind: 'free_choice', status: 'skipped' }]);
 });

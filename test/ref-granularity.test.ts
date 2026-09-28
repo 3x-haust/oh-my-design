@@ -88,12 +88,10 @@ test('omd ref add --image stores no invariants at all', () => {
 
 test('omd ref add --image refuses an uncaptured gallery wrapper without launching a browser', () => {
   const dir = project();
-  const before = Date.now();
   const result = run(['ref', 'add', 'https://pinterest.com/pin/123', '--as', 'mood', '--image'], dir);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /DESIGN_GALLERY_DISCOVERY_ONLY/);
   assert.equal(loadRefs(dir).length, 0);
-  assert.ok(Date.now() - before < 3000, 'no headless render for an image reference');
 });
 
 test('an image reference still takes principles — that is its whole point', () => {

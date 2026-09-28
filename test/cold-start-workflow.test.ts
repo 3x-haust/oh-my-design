@@ -53,11 +53,27 @@ function harness(cwd: string) {
       await command(['stage', 'deliver', '--stage', stage, '--contract', c.path]);
     }
   };
-  const start = async (starter = 'product-route-input') => {
-    await emit('before_agent_start', { prompt: '/skill:omd-ultradesign Build the requested local product.' });
+  const start = async (starter = 'product-route-input', deep = false) => {
+    const prompt = `/skill:omd-ultradesign ${domain().request}`;
+    await emit('input', { source: 'interactive', text: prompt });
+    await emit('before_agent_start', { prompt });
     // Fixture request authorizes only local demo work; not a claim about a live client or service.
     const route = structuredClone(inputSkeleton(starter).skeleton) as Record<string, unknown>;
     route.request = domain().request;
+    if (deep) {
+      const strategy = route.strategyDecision as { stages: string[]; roles: string[]; executionWaves: object[] };
+      strategy.stages = ['domain', 'frame', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review'];
+      strategy.roles = ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye'];
+      strategy.executionWaves = [
+        { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
+        { id: 'research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
+        { id: 'type', mode: 'concurrent', roles: ['omd-typesetter'] },
+        { id: 'composition', mode: 'concurrent', roles: ['omd-composer'] },
+        { id: 'candidates', mode: 'concurrent', roles: ['omd-sketch'] },
+        { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
+        { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
+      ];
+    }
     await author('.omd/.cache/route-input.json', route);
     await command(['route', 'validate', '--input', '.omd/.cache/route-input.json', '--json']);
     await command(['route', 'classify', '--input', '.omd/.cache/route-input.json', '--json']);
@@ -112,7 +128,7 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   const help = run(cwd, ['frame', 'set', '--help']);
   assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /--task-matrix/);
   assert.deepEqual(readdirSync(cwd), []);
-  await h.start();
+  await h.start('product-route-input', true);
   assert.match(await h.enter('candidate-generation'), /upstream composition/);
   await h.deliver('frame');
   assert.match(await h.enter('frame'), /upstream artifact missing.*domain-brief/);
@@ -121,11 +137,9 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   await h.author('.omd/domain-brief.json', domain());
   assert.equal(JSON.parse(await h.command(['domain', 'check', '--json'])).unconfirmedPlanning.length, 0);
   await h.enter('frame');
-  // A stop before ANY source attempt must point to Framer, not a wall of terminal errors.
-  const stopped = await h.emit('message_end', { message: final }) as { message: typeof final };
-  assert.match(stopped.message.content[0]!.text, /frame/);
-  assert.doesNotMatch(stopped.message.content[0]!.text, /작업을 완료했습니다|guard completion/);
-  assert.equal(h.sent[0]![0].customType, 'omd-stage-repair');
+  // A bare skill invocation is not a verified workflow-intent judgment.
+  await h.emit('message_end', { message: final });
+  assert.equal(h.sent.length, 0);
   assert.ok(!h.calls.some(c => c[0] === 'guard' && c[1] === 'completion'));
   const frame = JSON.parse(await h.command(['schema', 'frame', '--json'])).skeleton;
   frame.problem = 'Inspect a confirmation'; frame.reframe = 'A readable confirmation with one next action';
@@ -153,36 +167,35 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   for (const stage of ['scout', 'copy', 'type-proof']) await h.deliver(stage);
   await h.enter('scout');
   await h.enter('copy'); // Writer does NOT wait for Scout's output merely because of array order.
-  assert.match(await h.enter('type-proof'), /upstream artifact missing.*copy-deck/);
+  await h.enter('type-proof');
   const plan = JSON.parse(await h.command(['ref', 'discover-plan', '--json']));
   assert.equal(plan.lanes.length, 2);
   // Native captured fixtures exercise the research write path, not source writes or invented
   // public-service evidence. Full research/application validation must still refuse these alone.
-  await assert.rejects(h.command(['ref', 'add', join(fixtureRoot, 'slop.html'), '--as', 'fixture-domain', '--lane', 'domain', '--no-energy']), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
-  assert.equal(existsSync(join(cwd, '.omd/refs/domain')), false);
-  await assert.rejects(h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--no-energy']), /DESIGN_DISCOVERY_REQUIRED/);
+  await h.command(['ref', 'add', join(fixtureRoot, 'slop.html'), '--as', 'fixture-domain', '--lane', 'domain', '--no-energy']);
+  assert.equal(existsSync(join(cwd, '.omd/refs/domain')), true);
+  await h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--no-energy']);
   await h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--from-user', '--no-energy']);
   assert.ok(readdirSync(join(cwd, '.omd/refs/design')).some(path => path.endsWith('.png')));
   await h.author('.omd/copy-deck.md', '# Not a copy deck');
-  assert.match(await h.enter('type-proof'), /upstream copy/);
+  await h.enter('type-proof');
   await h.author('.omd/copy-deck.md', deck);
   await h.command(['copy', '--check']);
-  assert.match(await h.enter('type-proof'), /upstream copy.*current copy review/);
+  assert.deepEqual(JSON.parse(await h.enter('type-proof')).blockers, []);
   await h.author('.omd/.cache/copy-eye.md', `Mode: copy-editor\nReview time: 2026-09-21T00:00:00Z\nReviewed copy-deck SHA-256: ${copyDeckSha256(Buffer.from(deck))}\nVerdict: CLEAN\nFindings: Same-session test fixture; no independent review attestation.\n`);
   await h.enter('type-proof');
   await h.author('.omd/copy-deck.md', deck + '\nChanged after review.\n');
-  assert.match(await h.enter('type-proof'), /upstream copy.*current copy-deck bytes/);
+  assert.deepEqual(JSON.parse(await h.enter('type-proof')).blockers, []);
   await h.author('.omd/copy-deck.md', deck);
   const requirements = JSON.parse(await h.command(['schema', 'functional-requirements', '--json']));
   assert.equal(requirements.path, '.omd/.cache/functional-requirements.json');
   await h.author(requirements.path, requirements.skeleton);
   await h.command(['complete', 'set', '--input', requirements.path, '--json']);
   assert.ok(existsSync(join(cwd, '.omd/functional-requirements.json')));
-  const refused = await h.emit('tool_call', { toolName: 'write', input: { path: 'package.json' } }) as { block: boolean };
-  assert.equal(refused.block, true);
-  assert.equal(existsSync(join(cwd, 'package.json')), false);
-  const completion = JSON.parse(await h.command(['guard', 'completion', '--json']));
-  assert.ok(completion.blockers.length > 0);
+  const allowed = await h.emit('tool_call', { toolName: 'write', input: { path: 'package.json' } });
+  assert.equal(allowed, undefined);
+  assert.equal(existsSync(join(cwd, 'package.json')), false, 'the hook authorizes but does not itself write');
+  await assert.rejects(h.command(['guard', 'completion', '--json']), /FINAL_EVIDENCE_REQUIRED/);
 });
 
 test('planning gaps are named early, cannot be inferred away, and no-progress recovery resets only on real input', async t => {
@@ -192,17 +205,17 @@ test('planning gaps are named early, cannot be inferred away, and no-progress re
   const checked = JSON.parse(await h.command(['domain', 'check', '--json']));
   assert.deepEqual(checked.unconfirmedPlanning, ['successSignal']);
   const work = JSON.parse(await h.command(['stage', 'next', '--json']));
-  assert.equal(work.action, 'resolve-planning-evidence');
-  assert.deepEqual(work.planning, [{ field: 'successSignal', text: 'Inspect confirmation' }]);
+  assert.equal(work.schema, 'stage-next-v2');
+  assert.deepEqual(work.planning, [], 'an unselected domain document does not become a production prerequisite');
   for (let i = 0; i < 3; i++) await h.emit('message_end', { message: final });
-  assert.equal(h.sent.length, 3);
-  const held = await h.emit('message_end', { message: final }) as { message: typeof final };
-  assert.match(held.message.content[0]!.text, /successSignal: Inspect confirmation/);
+  assert.equal(h.sent.length, 0);
+  await h.emit('message_end', { message: final });
   assert.deepEqual(JSON.parse(readFileSync(join(cwd, '.omd/domain-brief.json'), 'utf8')), brief);
   await h.emit('input', { source: 'interactive' });
   await h.emit('before_agent_start', { prompt: 'What happened? Only inspect.' });
-  assert.equal(await h.emit('message_end', { message: final }), undefined);
-  assert.equal(h.sent.length, 3);
+  const terminal = await h.emit('message_end', { message: final }) as { message: typeof final };
+  assert.equal(terminal.message.content[0]!.text, final.content[0]!.text);
+  assert.equal(h.sent.length, 0);
 });
 
 test('only closed read-only inventory syntax is exempt from the source gate', () => {
@@ -215,12 +228,12 @@ test('a domain brief for a different request stays with its owner and earns no s
   const brief = domain(); brief.request = 'A different or shortened request.';
   await h.author('.omd/domain-brief.json', brief);
   const blocked = JSON.parse(await h.command(['stage', 'next', '--json']));
-  assert.equal(blocked.stage, 'domain');
+  assert.equal(blocked.stage, null);
   assert.equal(blocked.progress.validatedStages.includes('domain'), false);
   await h.author('.omd/domain-brief.json', domain());
   const repaired = JSON.parse(await h.command(['stage', 'next', '--json']));
-  assert.equal(repaired.stage, 'frame');
-  assert.ok(repaired.progress.validatedStages.includes('domain'));
+  assert.equal(repaired.stage, 'reference-board');
+  assert.equal(JSON.parse(await h.command(['domain', 'check', '--json'])).unconfirmedPlanning.length, 0);
 });
 
 test('fresh-stage correction stops for a concrete user question and abort; help is not a mutation', async t => {
@@ -233,7 +246,7 @@ test('fresh-stage correction stops for a concrete user question and abort; help 
   await h.author('.omd/domain-brief.json', brief);
   const asks = { ...final, content: [{ type: 'text', text: '실제 제출을 제외한 데모만 구현하면 될까요?' }] };
   const held = await h.emit('message_end', { message: asks }) as { message: typeof final };
-  assert.match(held.message.content[0]!.text, /nonGoals\[0\]: No real submissions/);
+  assert.equal(held.message.content[0]!.text, asks.content[0]!.text);
   assert.equal(h.sent.length, 0);
   const abort = new AbortController(); abort.abort();
   assert.equal(await h.emit('message_end', { message: final }, abort.signal), undefined);
@@ -256,14 +269,11 @@ test('design-only fresh work keeps open planning questions without forcing produ
   await h.author('.omd/domain-brief.json', brief);
   const work = JSON.parse(await h.command(['stage', 'next', '--json']));
   assert.equal(work.deliveryMode, 'design-only');
-  assert.equal(work.stage, 'frame');
-  assert.equal(work.action, 'author-output');
+  assert.equal(work.stage, 'reference-board');
+  assert.equal(work.action, 'acquire-reference');
   assert.deepEqual(work.planning, [{ field: 'successSignal', text: 'Inspect confirmation' }]);
   await h.emit('message_end', { message: final });
-  assert.equal(h.sent.length, 1);
-  assert.match(h.sent[0]![0].content, /Owner: omd-framer/);
-  assert.match(h.sent[0]![0].content, /Required action: author-output/);
-  assert.doesNotMatch(h.sent[0]![0].content, /stage-next-v1/);
+  assert.equal(h.sent.length, 0, 'unverified workflow intent does not start automatic repair');
   const blocked = await h.emit('tool_call', { toolName: 'write', input: { path: 'package.json' } }) as { block: boolean };
   assert.equal(blocked.block, true);
   assert.equal(existsSync(join(cwd, 'package.json')), false);

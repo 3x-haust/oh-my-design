@@ -17,7 +17,7 @@ import { capturePageForRef, withBrowser } from '../core/render/index.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
-test('a Korean brief refuses foreign-only domain captures before writing, but accepts Korean-language services regardless of TLD', t => {
+test('request language does not refuse a public foreign capture without market judgment', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-korean-intake-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const input = { ...(inputSkeleton('product-route-input').skeleton as Record<string, unknown>),
@@ -26,20 +26,19 @@ test('a Korean brief refuses foreign-only domain captures before writing, but ac
   const english = 'Find government benefits and financial help';
   const korean = '나에게 맞는 복지 혜택을 찾고 신청 준비를 시작하세요';
   const guard = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain' }], invocation);
-  assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
-  assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true }, invocation),
-    /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
-  assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true,
-    fromUser: true }, invocation), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
+  assert.doesNotThrow(() => guard(0, 'https://www.usa.gov/benefits', english));
+  assert.equal(captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true }, invocation), 'domain');
+  assert.equal(captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true,
+    fromUser: true }, invocation), 'domain');
   const allegedUser = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain',
     fromUser: true }], invocation);
-  assert.throws(() => allegedUser(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
-  assert.throws(() => guard(0, 'https://www.usa.gov/benefits',
-    english.repeat(100) + ' 한국어 도움말과 접근성 안내를 확인하세요'), /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.doesNotThrow(() => allegedUser(0, 'https://www.usa.gov/benefits', english));
+  assert.doesNotThrow(() => guard(0, 'https://www.usa.gov/benefits',
+    english.repeat(100) + ' 한국어 도움말과 접근성 안내를 확인하세요'));
   const koreanGuard = captureFinalUrlGuard(cwd, [{ source: 'https://wello.info/benefits', lane: 'domain' }], invocation);
   assert.doesNotThrow(() => koreanGuard(0, 'https://wello.info/benefits', korean));
   const englishKr = captureFinalUrlGuard(cwd, [{ source: 'https://unrelated.kr/benefits', lane: 'domain' }], invocation);
-  assert.throws(() => englishKr(0, 'https://unrelated.kr/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.doesNotThrow(() => englishKr(0, 'https://unrelated.kr/benefits', english));
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   mkdirSync(join(cwd, '.omd/refs/domain'), { recursive: true });
   for (const [index, source] of ['https://welfarehello.com/benefits', 'https://plus.gov.kr/portal/benefitV2',
@@ -55,8 +54,7 @@ test('a Korean brief refuses foreign-only domain captures before writing, but ac
       imagePath, invariants: null, principles: [],
     }));
   }
-  assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/,
-    'locally authored JSON and image bytes cannot authorize foreign fallback before research publication');
+  assert.doesNotThrow(() => guard(0, 'https://www.usa.gov/benefits', english));
 });
 
 test('selector-scoped capture still checks visible language on the full source page', async t => {
@@ -91,16 +89,16 @@ test('a gallery capture must remain the exact requested item regardless of user 
   assert.throws(() => intoGallery(0, source), /DESIGN_DISCOVERY_REDIRECT/);
 });
 
-test('a changed gallery item cannot authorize a later original-source capture', t => {
+test('a changed gallery item cannot fabricate traversal for a direct source', t => {
   const value = designAdmissionFixture(t);
   const invocation = publishTestAdaptiveRoute(value.root, inputSkeleton('product-route-input').skeleton);
   assert.ok(value.gallery.ref.acquisition);
   value.gallery.ref.acquisition.finalUrl = 'https://www.pinterest.com/pin/987654321/';
   writeFileSync(value.gallery.path, JSON.stringify(value.gallery.ref));
-  assert.throws(() => captureLane(value.root, { source: value.source.source, lane: 'design' }, invocation), /DESIGN_DISCOVERY_REQUIRED/);
+  assert.equal(captureLane(value.root, { source: value.source.source, lane: 'design' }, invocation), 'design');
 });
 
-test('redirect aliases cannot publish opposite-lane images in concurrent batches or single recapture', async t => {
+test('a source may inform both lanes without asserting independent corroboration', async t => {
   const server = createServer((req, res) => {
     if (req.url?.startsWith('/redirect')) {
       res.writeHead(302, { Location: `http://[::1]:${port}/same-service` }); res.end(); return;
@@ -125,15 +123,15 @@ test('redirect aliases cannot publish opposite-lane images in concurrent batches
     { source: visual, as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
   ]));
   const command = (...args: string[]) => promisify(execFile)(process.execPath, [cli, ...args], { cwd, env, timeout: 30000 });
-  await assert.rejects(command('ref', 'add-batch', '.omd/.cache/batch.json', '--json'), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
+  await assert.doesNotReject(command('ref', 'add-batch', '.omd/.cache/batch.json', '--json'));
   const refs = loadRefs(cwd, { includeDomain: true });
-  assert.equal(refs.length, 0);
+  assert.equal(refs.length, 2);
   const pngs = ['domain', 'design'].flatMap(lane => {
     const path = join(cwd, '.omd/refs', lane);
     return existsSync(path) ? readdirSync(path).filter(file => file.endsWith('.png')) : [];
   });
-  assert.equal(pngs.length, 0, 'the rejected domain batch writes no PNG or JSON');
-  await assert.rejects(command('ref', 'add', source,
-    '--as', 'retry', '--lane', 'domain', '--from-user', '--no-energy'), /REFERENCE_DOMAIN_OBSERVATION_REQUIRED/);
-  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 0);
+  assert.equal(pngs.length, 2);
+  await assert.doesNotReject(command('ref', 'add', source,
+    '--as', 'retry', '--lane', 'domain', '--from-user', '--no-energy'));
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 3);
 });

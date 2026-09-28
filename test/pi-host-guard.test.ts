@@ -43,7 +43,7 @@ test('test-011 bypass: selected-stage failure blocks native write, edit and scri
   assert.equal(h.calls.length, 3);
   assert.deepEqual(h.calls[0]?.args, ['guard', 'production', '--path', 'package.json', '--json']);
   const held = await h.emit('message_end', { message: final }) as { message: typeof final };
-  assert.match(held.message.content[0]!.text, /미완료/);
+  assert.match(held.message.content[0]!.text, /incomplete/);
   assert.doesNotMatch(held.message.content[0]!.text, /구현했습니다/);
   assert.deepEqual(h.calls.at(-1)?.args, ['guard', 'completion', '--json']);
 });

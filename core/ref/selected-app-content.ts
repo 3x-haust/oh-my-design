@@ -1,8 +1,13 @@
 import { browserCallback } from './browser-evaluation.ts';
 import type { Page } from 'playwright';
+import { referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 
-export async function isSelectedAppContent(page: Page, layerSelector: string, selected: readonly string[]): Promise<boolean> {
+export async function isSelectedAppContent(page: Page, layerSelector: string, selected: readonly string[],
+  contentJudgment?: (selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>): Promise<boolean> {
   if (!selected.length) return false;
+  const binding = await contentJudgment?.(layerSelector, page.url());
+  if (binding && binding.subjectId !== `${page.url()}#${layerSelector}`) return false;
+  if ((await referenceDecision('surface-content', binding)).decision !== 'task-content') return false;
   return page.evaluate(browserCallback(({ layerSelector, selected }: { layerSelector: string; selected: string[] }) => {
     const root = document.querySelector(layerSelector);
     if (!root || !(/^(?:app|root|__next|application)$/i.test(root.id) || root.getAttribute('role') === 'application')) return false;
@@ -12,11 +17,6 @@ export async function isSelectedAppContent(page: Page, layerSelector: string, se
         const targets = document.querySelectorAll(selector);
         if (targets.length !== 1 || targets[0] === root || !root.contains(targets[0]!)) return false;
         const target = targets[0]!, box = target.getBoundingClientRect();
-        const identity = `${target.id} ${typeof target.className === 'string' ? target.className : ''}`;
-        if (/(?:^|[\s_-])(?:error|recovery|maintenance|outage)(?:$|[\s_-])/i.test(identity)) return false;
-        const purpose = (target.textContent ?? '').replace(/\s+/g, ' ').trim();
-        if (/service (?:is )?(?:temporarily )?unavailable|please try again later|잠시 후 다시 이용해 주세요|홈으로 돌아가기/i.test(purpose)
-          || (/문제가 발생|오류가 발생/i.test(purpose) && /다시 시도|홈으로/i.test(purpose))) return false;
         if (box.width <= 0 || box.height <= 0 || target.matches('html,body,main,header,nav,footer,h1,h2,h3,h4,h5,h6,a,button,[role="button"]')
           || target.closest('nav,header,footer,[role="dialog"],[role="alertdialog"],dialog[open]')) return false;
         for (let current: Element | null = target; current; current = current.parentElement) {

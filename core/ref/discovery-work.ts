@@ -17,6 +17,7 @@ import { fetchSearchLeads } from './search-leads.ts';
 import { discoveryProvider, providerCircuitSummaries, type ProviderCircuitSummary } from './provider-circuit.ts';
 import { searchObserved, type SearchExecution } from './search-execution.ts';
 import { actionableSearchTargets, observedSearchTargets } from './search-result.ts';
+import { referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 import { loadRefs } from './store.ts';
 import { userBrowserAcquisition } from './user-browser-provenance.ts';
 
@@ -59,6 +60,10 @@ function nativeAction(kind: 'search' | 'collect-leads' | 'direct-entry' | 'follo
     entry?: 'free-gallery' | 'public-directory' }>): ReferenceDiscoveryAction {
   return { kind, lane, args: ['ref', 'advance', '--json'], reason, ...details };
 }
+export async function assessDiscoveryTarget(url: string, binding?: ReferenceJudgmentBinding) {
+  if (binding && binding.subjectId !== url) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH');
+  return referenceDecision('discovery-target', binding);
+}
 export const BROWSER_CONSENT_QUESTION = '레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요. 로그인된 평소 브라우저에서는 방문 페이지의 네트워크 요청을 OMD가 격리할 수 없어요. 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기 중 무엇을 원하시나요?';
 function searchAction(lane: Lane, input: SearchInput, evidence: LaneEvidence): ReferenceDiscoveryAction {
   const failed = evidence.searches.filter(item => item.query === input.query && !searchObserved(item));
@@ -81,25 +86,13 @@ function publicCandidate(value: string): boolean {
   catch (error) { if (error instanceof Error) return false; throw error; }
 }
 function domainCandidate(value: string): boolean {
-  return publicCandidate(value) && !/^(?:www\.)?(?:facebook\.com|instagram\.com|youtube\.com|linkedin\.com|twitter\.com|x\.com)$/u
-    .test(new URL(value).hostname.toLowerCase());
+  return publicCandidate(value);
 }
 function domainSearchResults(search: SearchExecution, allowUnmatched: boolean): readonly string[] {
-  const labels = new Map((search.results ?? []).flatMap(result =>
-    observedSearchTargets({ links: [result.url] }).map(url => [url, result.text] as const)));
-  return actionableSearchTargets({ ...search, allowUnmatched }).filter(url => {
-    if (!publicCandidate(url)) return false;
-    const host = new URL(url).hostname.toLowerCase();
-    const label = labels.get(url) ?? '';
-    if (/(?:^|\.)(?:namu\.wiki|wikipedia\.org)$/u.test(host)
-      || /나무위키|위키|조회 방법|신청 방법|정책정보|공지사항/iu.test(label)
-      || /\/gvrnPolicy\//iu.test(new URL(url).pathname)) return false;
-    return host !== search.provider && !host.endsWith(`.${search.provider}`)
-      && !/^(?:search\.daum\.net|logins\.daum\.net|www\.google\.com|www\.bing\.com|duckduckgo\.com|map\.kakao\.com)$/u.test(host);
-  }).sort((left, right) => {
-    const score = (url: string) => Number(/[가-힣]/u.test(labels.get(url) ?? ''));
-    return score(right) - score(left);
-  });
+  // Search results remain observable leads. Without a signed discovery-target judgment,
+  // none is automatically promoted to the next visit.
+  void search; void allowUnmatched;
+  return [];
 }
 function queryAlreadySearched(searches: LaneEvidence['searches'], query: string): boolean {
   const browserConsent = readUserBrowserConsent() === 'consented' || readBrowserConsent() === 'consented';
@@ -115,9 +108,8 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   retainedFamilies: ReadonlySet<string>, excludedUrls: ReadonlySet<string>,
   requiredSearch: SearchInput | undefined, leadUrls: readonly string[], leadQueries: ReadonlySet<string>,
   openProviders: ReadonlySet<string>): ReferenceDiscoveryAction | null {
-  if (requiredSearch !== undefined && retainedFamilies.size >= (lane === 'domain' ? 3 : 2)) {
-    return searchAction(lane, requiredSearch, evidence);
-  }
+  // Family quotas do not force searches; the default plan still recommends research.
+  void requiredSearch;
   const failedUrls = new Set(evidence.unavailable.map(item => item.source));
   const excludedFamilies = new Map<string, Set<string>>();
   for (const url of excludedUrls) {
@@ -212,12 +204,9 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
       return sha256(image) === ref.acquisition.imageSha256;
     } catch (error) { if (error instanceof Error) return false; throw error; }
   });
-  const korean = plan.marketReferencePolicy.marketRegion === 'KR';
   const admittedDomain = [...domain.visits, ...domain.entries].filter(item => {
-    try {
-      const observation = readDomainObservation(root, { url: item.observation.url, capture: item.receipt });
-      return !korean || observation.language === 'korean';
-    } catch { return false; }
+    try { readDomainObservation(root, { url: item.observation.url, capture: item.receipt }); return true; }
+    catch { return false; }
   });
   const admittedDesign = refs.filter(ref => ref.researchLane === 'design'
     && inspectDesignReferenceAdmission(root, ref, { references: refs }).eligible);

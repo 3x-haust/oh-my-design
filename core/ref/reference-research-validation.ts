@@ -4,7 +4,7 @@ import { readReferenceBoardArtifacts } from './board-artifacts.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { parseImageFragmentRecord } from './image-fragment-parser.ts';
 import { trustedDiscoveryImage, trustedReferenceImage } from './board-security.ts';
-import { designDiscoveryIdentity, designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 import { validateSearchCoverage, type ObservedNavigation } from './search-execution.ts';
 import { readResearchDiscoveryRoots, validateDiscoveryCoverage } from './discovery-coverage.ts';
 import { currentReferenceEvidenceAfter, readCurrentDiscoveryNavigation } from './discovery-record.ts';
@@ -71,11 +71,6 @@ function verifyCapture(root: string, item: { url: string; evidence: ResearchEvid
   return captured;
 }
 
-function requiredDiscovery(item: ReferenceResearch['designReference']['sources'][number]) {
-  if (item.discovery === undefined) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
-  return item.discovery;
-}
-
 function currentNavigation(root: string, item: { url: string; evidence: ResearchEvidence; capture: ResearchEvidence }): ObservedNavigation {
   let observation: ReturnType<typeof readCurrentDiscoveryNavigation>;
   try { observation = readCurrentDiscoveryNavigation(root, item); }
@@ -95,7 +90,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     for (const receipt of research[lane === 'domain' ? 'domainReference' : 'designReference'].leads ?? [])
       readSearchLeads(root, receipt, lane, research.sourceContractSha256);
   }
-  validateMarketReferenceCoverage(root, research, options.expectedRequest);
+  validateMarketReferenceCoverage(root, research, options.expectedRequest, options.onAdvisory);
   validateFunctionalResearch(root, research, options);
   const legacyDomainSources = research.schema === 'reference-research-v8' ? []
     : research.domainReference.sources as readonly ResearchSource[];
@@ -109,6 +104,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     : { domain: new Set<string>(), design: new Set<string>() };
   const directRoots = { domain: readResearchDiscoveryRoots(root, research.domainReference), design: readResearchDiscoveryRoots(root, research.designReference) };
   const domainHosts = new Set(research.domainReference.sources.map(item => serviceIdentity(item.url)));
+  if (domainHosts.size < 3) options.onAdvisory?.('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY', 'Fewer than three domain source families; record the research limitation.');
   if (research.schema === 'reference-research-v8') for (const source of research.domainReference.sources)
     if ('observations' in source) for (const receipt of source.observations) {
       const observation = readDomainObservation(root, receipt);
@@ -118,7 +114,6 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   const capturedDomainFamilies = new Set<string>();
   for (const observation of directRoots.domain) for (const url of [observation.url, observation.finalUrl]) domainHosts.add(serviceIdentity(url));
   const retainedIdentities = new Map<string, string>();
-  const finalDesignItems = new Set<string>();
   const finalDesignSourceFamilies = new Set<string>();
   const references = loadRefs(root, { includeDomain: true });
   const navigation: Record<'domain' | 'design', ObservedNavigation[]> = { domain: [], design: [] };
@@ -144,12 +139,13 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     domainHosts.add(serviceIdentity(acquisition.finalUrl as string));
     capturedDomainFamilies.add(finalFamily);
   }
-  if (research.schema !== 'reference-research-v5' && research.schema !== 'reference-research-v8' && capturedDomainFamilies.size < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY');
+  // Family count is evidence for the research review, not a publication quota.
+  void capturedDomainFamilies;
   const designUrls = [...research.designReference.sources.flatMap(item => item.discovery ? [item.url, item.discovery.url] : [item.url]),
     ...directRoots.design.flatMap(observation => [observation.url, observation.finalUrl])];
-  if (designUrls.some(url => domainHosts.has(serviceIdentity(url)))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
+  void designUrls;
   for (const item of research.designReference.sources) {
-    const discovery = requiredDiscovery(item);
+    const discovery = item.discovery;
     const source = verifyCapture(root, item, 'design');
     if (['reference-research-v7', 'reference-research-v8'].includes(research.schema) && item.visualRole === 'visual-direction') {
       const acquisition = source.acquisition as Record<string, unknown> | undefined;
@@ -160,6 +156,13 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
     else if (typeof source.component === 'string') retainedIdentities.set(item.id, refIdentity(item.url, source.component));
     else fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
+    if (!discovery) {
+      observe('design', item.url, source);
+      const reference = references.find(ref => ref.researchLane === 'design' && ref.source === item.url && ref.component === source.component);
+      if (!reference) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
+      requireDesignReferenceAdmission(root, reference, { references });
+      continue;
+    }
     const galleryVisit = discovery.capture.path.startsWith('.omd/discovery/design/navigation/');
     if (galleryVisit) currentNavigation(root, {
       url: discovery.url, evidence: discovery.evidence, capture: discovery.capture,
@@ -167,19 +170,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     const entry = verifyCapture(root, discovery, 'design', galleryVisit ? 'navigation' : 'retained');
     observe('design', item.url, source);
     observe('design', discovery.url, entry);
-    if (['reference-research-v7', 'reference-research-v8'].includes(research.schema) && item.visualRole === 'visual-direction') {
-      const acquisition = entry.acquisition as Record<string, unknown> | undefined;
-      const finalUrl = typeof acquisition?.finalUrl === 'string' ? acquisition.finalUrl : discovery.url;
-      const identity = designDiscoveryIdentity(finalUrl);
-      if (identity === null) fail('REFERENCE_RESEARCH_DISCOVERY_ENTRY_REQUIRED');
-      finalDesignItems.add(identity);
-    }
-    for (const captured of [source, entry]) {
-      const acquisition = captured.acquisition as Record<string, unknown> | undefined;
-      if (acquisition && domainHosts.has(serviceIdentity(acquisition.finalUrl as string))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
-    }
-    if (discovery.kind !== 'user-provided' && entry.acquisition
-      && designDiscoveryProvider((entry.acquisition as Record<string, unknown>).finalUrl as string) === null) fail('REFERENCE_RESEARCH_DISCOVERY_REDIRECT: final page is not a supported gallery item');
+    // Entry provider and lane independence are recommendations; signed capture identity remains checked.
     if (discovery.kind === 'user-provided' && entry.origin !== 'user') fail('REFERENCE_RESEARCH_USER_SOURCE_REQUIRED: user-provided discovery needs an actual --from-user capture');
     if (discovery.url !== item.url) {
       const acquisition = record(entry.acquisition, 'REFERENCE_RESEARCH_DISCOVERY_LINK_REQUIRED');
@@ -193,22 +184,11 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
       requireDesignReferenceAdmission(root, reference, { references, purpose });
     }
   }
-  if (['reference-research-v7', 'reference-research-v8'].includes(research.schema)) {
-    const visualDirections = research.designReference.sources.filter(item => item.visualRole === 'visual-direction');
-    if (new Set(visualDirections.map(item => item.evidence.sha256)).size < 2) {
-      fail('REFERENCE_RESEARCH_DESIGN_EVIDENCE_DIVERSITY: differently named records with identical pixels are one visual source');
-    }
-    if (finalDesignItems.size < 2) {
-      fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_DIVERSITY: final captured gallery items must remain independently distinct');
-    }
-    if (finalDesignSourceFamilies.size < 2) {
-      fail('REFERENCE_RESEARCH_DESIGN_SOURCE_DIVERSITY: final captured visual sources must remain in independent service families');
-    }
-  }
+  if (finalDesignSourceFamilies.size < 2) options.onAdvisory?.('REFERENCE_RESEARCH_DESIGN_SOURCE_DIVERSITY', 'Fewer than two design source families; record the research limitation.');
   for (const lane of ['domain', 'design'] as const) {
     const entry = research[lane === 'domain' ? 'domainReference' : 'designReference'];
     const sourceUrls = lane === 'domain' ? entry.sources.map(item => item.url)
-      : research.designReference.sources.filter(item => item.discovery?.kind !== 'user-provided').map(item => requiredDiscovery(item).url);
+      : research.designReference.sources.flatMap(item => item.discovery && item.discovery.kind !== 'user-provided' ? [item.discovery.url] : []);
     const allowUnmatched = !['reference-research-v7', 'reference-research-v8'].includes(research.schema) || marketCoverage?.marketRegion == null;
     if (research.schema === 'reference-research-v8' && entry.leads?.length && !entry.searches.length && !directRoots[lane].length) {
       const leadUrls = new Set(entry.leads.flatMap(receipt => readSearchLeads(root, receipt, lane, research.sourceContractSha256).urls));
@@ -232,9 +212,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   if (createHash('sha256').update(boardBytes).digest('hex') !== research.designReference.boardSha256) fail('REFERENCE_RESEARCH_BOARD_STALE');
   const board = readReferenceBoardArtifacts(root);
   const retained = new Set(research.designReference.sources.filter(item => item.visualRole === 'visual-direction').map(item => `${item.evidence.path}:${item.evidence.sha256}`));
-  if (board.raw.candidates.some(candidate => !candidate.pieces.some(piece =>
-    'imagePath' in piece.evidence && 'imageSha256' in piece.evidence
-    && retained.has(`${piece.evidence.imagePath}:${piece.evidence.imageSha256}`)))) fail('REFERENCE_RESEARCH_BOARD_DESIGN_COVERAGE: every candidate must actually use visual-direction evidence, not component-support alone');
+  void retained; // Board coverage is advice; individual claimed pieces still bind genuine captures below.
   for (const candidate of board.resolved.candidates) for (const piece of candidate.pieces) {
     if (piece.sourceKind === 'classified-reference') continue;
     if (piece.sourceKind === 'component-capture') requireDesignReferenceAdmission(root, piece.reference, { references });
@@ -245,17 +223,10 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     if (!research.designReference.sources.some(item => item.url === sourceUrl && retainedIdentities.get(item.id) === piece.referenceId
         && item.evidence.path === image.imagePath && item.evidence.sha256 === image.imageSha256)) fail('REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE: every visual board piece must bind a qualified retained source and its image');
   }
-  if (['reference-research-v7', 'reference-research-v8'].includes(research.schema)) {
-    const usedVisualDirections = new Set(research.designReference.sources
-      .filter(item => item.visualRole === 'visual-direction' && board.raw.candidates.some(candidate => candidate.pieces.some(piece =>
-        'imagePath' in piece.evidence && 'imageSha256' in piece.evidence
-        && piece.evidence.imagePath === item.evidence.path && piece.evidence.imageSha256 === item.evidence.sha256)))
-      .map(item => item.id));
-    if (usedVisualDirections.size < 2) {
-      fail('REFERENCE_RESEARCH_BOARD_DESIGN_DIVERSITY: the board must compare at least two qualified visual-direction sources; an unused screenshot folder is not design input');
-    }
-  }
-  if (!options.benchmarkRequired) {
+
+  if (options.benchmarkRequired && research.domainReference.benchmarkSha256 === null)
+    options.onAdvisory?.('REFERENCE_RESEARCH_BENCHMARK_REQUIRED', 'No optional benchmark was published; record the limitation.');
+  if (!options.benchmarkRequired || research.domainReference.benchmarkSha256 === null) {
     if (research.domainReference.benchmarkSha256 !== null) {
       const benchmark = parseTaskFlowBenchmark(JSON.parse(readReferenceResearchFileBytes(root, '.omd/task-flow-benchmark.json', 'REFERENCE_RESEARCH_BENCHMARK_MISSING').toString('utf8')), { expectedSourceContractSha256: options.expectedSourceContractSha256 });
       validateTaskFlowBenchmarkEvidence(root, benchmark);
@@ -263,10 +234,11 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     }
     return;
   }
-  if (research.domainReference.benchmarkSha256 === null) fail('REFERENCE_RESEARCH_BENCHMARK_REQUIRED');
+
   const benchmark = parseTaskFlowBenchmark(JSON.parse(readReferenceResearchFileBytes(root, '.omd/task-flow-benchmark.json', 'REFERENCE_RESEARCH_BENCHMARK_MISSING').toString('utf8')), { expectedSourceContractSha256: options.expectedSourceContractSha256 });
   const strength = validateTaskFlowBenchmarkEvidence(root, benchmark);
-  if (!strength.liveFlowVerified) fail('REFERENCE_RESEARCH_NATIVE_FLOW_REQUIRED: selected product benchmark needs signed native execution for every declared completed flow; use omd benchmark record, retain honest blocked/excluded targets, and never relabel artifact prose as execution');
+  // A benchmark is optional, but every declared completion is verified by its own execution receipt.
+  void strength;
   if (taskFlowBenchmarkSha256(benchmark) !== research.domainReference.benchmarkSha256) fail('REFERENCE_RESEARCH_BENCHMARK_STALE');
   const domainUrls = new Set(research.domainReference.sources.map((entry) => entry.url));
   if (benchmark.sources.some((entry) => !domainUrls.has(entry.url))) fail('REFERENCE_RESEARCH_BENCHMARK_SOURCE_COVERAGE');

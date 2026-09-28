@@ -11,16 +11,20 @@ test('every explicit market requires current local coverage regardless of fit mo
   for (const overrides of [{ desiredFit: 'locale-mechanics-only', audience: null },
     { desiredFit: 'market-grounded', audience: null }]) {
     writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify({ ...marketContext, ...overrides }));
-    assert.throws(() => validateReferenceResearch(fixture.root,
-      parseReferenceResearch(fixture.research), marketOptions), /MARKET_COVERAGE_REQUIRED/);
+    const warnings: string[] = [];
+    validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), {
+      ...marketOptions, onAdvisory: code => warnings.push(code),
+    });
+    assert.ok(warnings.includes('REFERENCE_RESEARCH_MARKET_COVERAGE_REQUIRED'));
   }
 });
 
-test('a Korean-language service brief cannot silently publish only UK and US references', t => {
+test('request script alone does not assert a target market', t => {
   const fixture = designAdmissionFixture(t);
-  assert.throws(() => validateReferenceResearch(fixture.root,
-    parseReferenceResearch(fixture.research), {
-      ...marketOptions,
-      expectedRequest: '복지 혜택을 찾고 신청을 도와주는 한국어 서비스를 만든다.',
-    }), /MARKET_COVERAGE_REQUIRED/);
+  const warnings: string[] = [];
+  validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), {
+    ...marketOptions, expectedRequest: '복지 혜택을 찾고 신청을 도와주는 한국어 서비스를 만든다.',
+    onAdvisory: code => warnings.push(code),
+  });
+  assert.ok(!warnings.includes('REFERENCE_RESEARCH_MARKET_COVERAGE_REQUIRED'));
 });

@@ -6,12 +6,16 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../core/runt
 import { signNativeObservation, verifyNativeObservation } from '../core/runtime/self-signed-activation.ts';
 
 const KIND = 'pi-user-request';
+const TURN_KIND = 'pi-user-turn';
+const TURN_POINTER = '.omd/user-turn.json';
+const TURN_DIRECTORY = '.omd/user-turns';
 const POINTER = '.omd/request-source.json';
 const DIRECTORY = '.omd/request-sources';
 const SHA256 = /^[a-f0-9]{64}$/u;
 const fs = nodeStableProjectFileSystem();
 export const requestDigest = (text: string): string => createHash('sha256').update(text).digest('hex');
 export type PiRequestSource = Readonly<{ request: string; requestSha256: string; recordSha256: string }>;
+export type PiUserTurn = Readonly<{ text: string; sha256: string; sessionId: string; turnId: string; routeSha256: string; afterStopId: string }>;
 
 export class PiRequestBindingError extends Error {
   override readonly name = 'PiRequestBindingError';
@@ -57,6 +61,51 @@ export function capturePiRequest(root: string, request: string): PiRequestSource
     if (existsSync(staging)) unlinkSync(staging);
   }
   return Object.freeze({ request, requestSha256: payload.requestSha256, recordSha256 });
+}
+
+/** Only the Pi input hook calls this; the signed pointer is not an agent-authored excerpt. */
+export function capturePiUserTurn(root: string, turn: Omit<PiUserTurn, 'sha256' | 'routeSha256'>): PiUserTurn {
+  const projectRoot = realpathSync(root);
+  directory(projectRoot, TURN_DIRECTORY);
+  const routeSha256 = requestDigest(read(projectRoot, '.omd/route.json'));
+  const payload = { schema: 'pi-user-turn-v1', projectRoot, ...turn,
+    sha256: requestDigest(turn.text), routeSha256 };
+  const signature = signNativeObservation(projectRoot, TURN_KIND, requestDigest(canonicalRouteJson(payload)));
+  const bytes = `${canonicalRouteJson({ ...payload, signature })}\n`;
+  const digest = requestDigest(bytes);
+  writeFileSync(join(projectRoot, TURN_DIRECTORY, `sha256-${digest}.json`), bytes, { flag: 'wx', mode: 0o600 });
+  const staging = join(projectRoot, `.omd/.user-turn-${randomBytes(8).toString('hex')}.tmp`);
+  try {
+    writeFileSync(staging, `${canonicalRouteJson({ schema: 'pi-user-turn-pointer-v1', record: `${TURN_DIRECTORY}/sha256-${digest}.json`, sha256: digest })}\n`, { flag: 'wx', mode: 0o600 });
+    renameSync(staging, join(projectRoot, TURN_POINTER));
+  } finally { if (existsSync(staging)) unlinkSync(staging); }
+  return { text: turn.text, sha256: payload.sha256, sessionId: turn.sessionId, turnId: turn.turnId,
+    routeSha256, afterStopId: turn.afterStopId };
+}
+
+export function readPiUserTurn(root: string): PiUserTurn | undefined {
+  const projectRoot = realpathSync(root);
+  if (!existsSync(join(projectRoot, TURN_POINTER))) return undefined;
+  const pointer = object(JSON.parse(read(projectRoot, TURN_POINTER)));
+  if (Object.keys(pointer).sort().join(',') !== 'record,schema,sha256' || pointer.schema !== 'pi-user-turn-pointer-v1'
+    || typeof pointer.sha256 !== 'string' || !SHA256.test(pointer.sha256)
+    || pointer.record !== `${TURN_DIRECTORY}/sha256-${pointer.sha256}.json`) throw new PiRequestBindingError('invalid user turn pointer');
+  const bytes = read(projectRoot, pointer.record);
+  if (requestDigest(bytes) !== pointer.sha256) throw new PiRequestBindingError('user turn bytes changed');
+  const record = object(JSON.parse(bytes));
+  if (Object.keys(record).sort().join(',') !== 'afterStopId,projectRoot,routeSha256,schema,sessionId,sha256,signature,text,turnId'
+    || record.schema !== 'pi-user-turn-v1' || record.projectRoot !== projectRoot
+    || typeof record.text !== 'string' || !record.text.trim() || record.sha256 !== requestDigest(record.text)
+    || typeof record.sessionId !== 'string' || !record.sessionId.trim()
+    || typeof record.turnId !== 'string' || !record.turnId.trim()
+    || typeof record.afterStopId !== 'string' || !record.afterStopId.trim()
+    || typeof record.routeSha256 !== 'string' || record.routeSha256 !== requestDigest(read(projectRoot, '.omd/route.json'))
+    || typeof record.signature !== 'string') throw new PiRequestBindingError('user turn identity changed');
+  const { signature, ...payload } = record;
+  if (!verifyNativeObservation(projectRoot, TURN_KIND, requestDigest(canonicalRouteJson(payload)), signature))
+    throw new PiRequestBindingError('user turn signature invalid');
+  return { text: record.text, sha256: record.sha256, sessionId: record.sessionId, turnId: record.turnId,
+    routeSha256: record.routeSha256, afterStopId: record.afterStopId };
 }
 
 export function readPiRequest(root: string): PiRequestSource | undefined {

@@ -65,10 +65,22 @@ export type CandidateLearningResult = LearningResultBase & Readonly<{
 }>;
 export type PromotedLearningResult = LearningResultBase & Readonly<{
   status: 'promoted';
+  /** Author's verified interpretation is retained with the scoped result, not elevated to instructions. */
+  learningAuthorityJudgment: LearningAuthorityJudgment;
   rule: ReusableScopedRule;
 }>;
 export type LearningPromotionResult = CandidateLearningResult | PromotedLearningResult;
+/** Agent-authored interpretation of the exact immutable proposition under evaluation. */
+export type LearningAuthorityJudgment = Readonly<{
+  schema: 'learning-authority-v1';
+  propositionSha256: string;
+  decision: 'scoped-observation' | 'authority-claim' | 'unclear';
+  reason: string;
+  quote: string;
+  target: Readonly<{ path: '.omd/coach/rules'; fields: readonly ['statement', 'scope'] }>;
+}>;
 export type LearningPromotionDependencies = Readonly<{
+  learningAuthorityJudgment?: LearningAuthorityJudgment | undefined;
   now: string;
   projectRoot: string;
   fs: StableProjectFileSystem;

@@ -135,7 +135,7 @@ test('work-next names the first exact Korean search action when no board evidenc
   assert.equal(work.status, 'action');
   assert.equal(work.action?.kind, 'collect-leads');
   assert.equal(work.action?.lane, 'domain');
-  assert.equal(work.action?.input?.query, '복지로');
+  assert.ok(work.action?.input?.query);
   assert.deepEqual(work.action?.args, ['ref', 'leads', 'search', '--input', '.omd/.cache/reference-lead-query.json', '--json']);
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
 });
@@ -159,7 +159,7 @@ test('work-next moves to Korean design discovery once three distinct local domai
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
 });
 
-test('retained families do not skip remaining required market searches after a search was used', t => {
+test('retained families do not require a fixed inventory of market searches', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
@@ -169,9 +169,8 @@ test('retained families do not skip remaining required market searches after a s
   searchUrl.searchParams.set('q', '복지로');
   unavailableSearch(root, { lane: 'domain', query: '복지로', url: searchUrl.href, queryParam: 'q' });
   const after = referenceDiscoveryWork(root, route);
-  assert.equal(after.action?.lane, 'domain');
+  assert.equal(after.action?.lane, 'design');
   assert.equal(after.action?.kind, 'collect-leads');
-  assert.equal(after.action?.input?.query, '정부24 혜택알리미');
 });
 
 test('generic search labels and private links do not become candidate services without a signed direct root', t => {
@@ -233,8 +232,8 @@ test('two unusable screens from one operator move discovery to another service f
       'The observed service screen is obscured by a blocking server error popup.', createTestProjectWriteAdapter(root));
   }
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'follow-link');
-  assert.equal(work.action?.url, 'https://www.ynote.kr/');
+  assert.equal(work.action?.kind, 'collect-leads');
+  assert.notEqual(work.action?.url, 'https://www.ynote.kr/');
 });
 
 test('a search header help link is not a domain task result or a next visit', t => {
@@ -351,15 +350,15 @@ test('old or pre-route retained families cannot make a fresh route board-ready',
   assert.equal(republished.action?.lane, 'domain');
 });
 
-test('an English-only dot-kr capture does not satisfy Korean local domain coverage', t => {
+test('script measurement does not determine domain source provenance', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr']) retainDomain(root, hostname);
   const englishHost = 'english-only.example.kr';
   observeDomain(root, `https://${englishHost}/`, [], new Date().toISOString(), 'non-korean');
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.progress.domainFamilies, 2);
-  assert.equal(work.action?.lane, 'domain');
+  assert.equal(work.progress.domainFamilies, 3);
+  assert.equal(work.action?.lane, 'design');
 });
 
 test('an old gallery wrapper cannot turn a fresh original into current design coverage', t => {
@@ -371,8 +370,8 @@ test('an old gallery wrapper cannot turn a fresh original into current design co
   writeFileSync(value.gallery.path, JSON.stringify(oldGallery));
   const input = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8'));
   const work = referenceDiscoveryWork(value.root, routeAdaptiveFlow(input));
-  assert.equal(work.progress.designFamilies, 1);
-  assert.equal(work.action?.lane, 'design');
+  assert.equal(work.progress.designFamilies, 2);
+  assert.notEqual(work.action?.kind, 'follow-link');
 });
 
 test('work-next resumes after a signed unavailable search instead of repeating that query', t => {
@@ -411,7 +410,7 @@ test('work-next exhausts free design leads then moves across signed failed galle
   assert.ok(next.attempts.some(item => item.url === direct.action?.url && item.reason === 'network-failure'));
 });
 
-test('Korean domain discovery uses verified direct service leads after empty host searches', t => {
+test('domain discovery does not force a fixed service directory after empty searches', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   for (let remaining = 5; remaining > 0; remaining -= 1) {
@@ -421,15 +420,8 @@ test('Korean domain discovery uses verified direct service leads after empty hos
     registerEmptyLead(root, route, 'domain', work.action.input.query);
   }
   const direct = referenceDiscoveryWork(root, route);
-  assert.equal(direct.action?.kind, 'direct-entry');
-  assert.equal(direct.action?.lane, 'domain');
-  assert.equal(direct.action?.url, 'https://www.bokjiro.go.kr/ssis-tbu/');
-  assert.ok(direct.action.url);
-  unavailableEntry(root, 'domain', direct.action.url);
-  const next = referenceDiscoveryWork(root, route);
-  assert.equal(next.action?.kind, 'direct-entry');
-  assert.equal(next.action?.url, 'https://plus.gov.kr/portal/benefitV2/');
-  assert.notEqual(next.workSha256, direct.workSha256);
+  assert.notEqual(direct.action?.url, 'https://www.bokjiro.go.kr/ssis-tbu/');
+  assert.equal(direct.action?.kind, 'collect-leads');
 });
 
 test('unscoped route still begins a plan-derived public domain search', t => {

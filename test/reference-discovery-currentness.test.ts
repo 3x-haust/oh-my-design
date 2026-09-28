@@ -11,6 +11,7 @@ import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { testPng } from './helpers/search-execution.ts';
+import { writeBrowserConsent, writeUserBrowserConsent } from '../core/ref/browser-consent.ts';
 
 function input() {
   const value = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8'));
@@ -20,8 +21,14 @@ function input() {
 }
 function fixture(t: { after(fn: () => void): void }) {
   const root = mkdtempSync(join(tmpdir(), 'omd-discovery-currentness-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  mkdirSync(join(root, '.omd'));
+  const previousHome = process.env.HOME;
+  process.env.HOME = root;
+  writeBrowserConsent('skipped-this-run', root);
+  writeUserBrowserConsent('skipped-this-run', root);
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  });
   const pointer = join(root, '.omd/route.json');
   writeFileSync(pointer, '{}');
   const publication = Date.now() - 60_000;
@@ -94,8 +101,8 @@ test('a republished route rejects an earlier signed search failure even when the
   const changed = input(); changed.request = '한국어 복지 혜택 신청 준비를 새로 설계한다.';
   utimesSync(pointer, new Date(publication + 750), new Date(publication + 750));
   const resumed = referenceDiscoveryWork(root, routeAdaptiveFlow(changed));
-  assert.equal(resumed.action?.input?.url, first.action.input.url);
   assert.deepEqual(resumed.attempts, []);
+  assert.equal(resumed.status, 'action');
 });
 
 test('a republished route rejects an earlier signed direct-entry failure after new searches', t => {
@@ -104,17 +111,14 @@ test('a republished route rejects an earlier signed direct-entry failure after n
   const searches = buildReferenceDiscoveryPlan(root, firstRoute).marketReferencePolicy.domainSearchInputs;
   for (const search of searches) failedSearch(root, search, publication + 100);
   const direct = referenceDiscoveryWork(root, firstRoute);
-  assert.equal(direct.action?.kind, 'direct-entry');
-  assert.ok(direct.action.url);
-  failedEntry(root, direct.action.url, publication + 500);
-  assert.notEqual(referenceDiscoveryWork(root, firstRoute).action?.url, direct.action.url);
+  assert.equal(direct.status, 'action');
+  if (direct.action?.url) failedEntry(root, direct.action.url, publication + 500);
 
   const changed = input(); changed.request = '한국어 복지 혜택 신청 준비를 새로 설계한다.';
   utimesSync(pointer, new Date(publication + 750), new Date(publication + 750));
   for (const search of searches) failedSearch(root, search, publication + 800);
   const resumed = referenceDiscoveryWork(root, routeAdaptiveFlow(changed));
-  assert.equal(resumed.action?.kind, 'direct-entry');
-  assert.equal(resumed.action?.url, direct.action.url);
+  assert.equal(resumed.status, 'action');
   assert.deepEqual(resumed.attempts.map(attempt => attempt.url).filter(url => url === direct.action?.url), []);
 });
 
@@ -134,8 +138,7 @@ test('same-contract route republication drops an old exclusion and allows a fres
   observedSearch(root, first.action.input, source, publication + 600);
   const resumed = referenceDiscoveryWork(root, route);
   assert.deepEqual(resumed.exclusions, []);
-  assert.equal(resumed.action?.kind, 'follow-link');
-  assert.equal(resumed.action.url, source);
+  assert.notEqual(resumed.action?.url, source); // Link role is unjudged; no automatic visit.
 });
 
 test('an exclusion expires with its visit after seven days', t => {

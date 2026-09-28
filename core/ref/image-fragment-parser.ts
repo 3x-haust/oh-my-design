@@ -1,4 +1,5 @@
 import { ReferenceBoardResolutionError } from './board-contract.ts';
+import { knownFields } from '../judgment/schema.ts';
 import { parseImageFragmentProvenance, parseImageFragmentTransfer } from './board-fragment.ts';
 import { IMAGE_FRAGMENT_SCHEMA_VERSION, type ImageFragmentInput, type ImageFragmentRecord } from './image-fragment.ts';
 
@@ -6,8 +7,10 @@ const fail = (reason: string): never => { throw new ReferenceBoardResolutionErro
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const record = (value: unknown, label: string): Record<string, unknown> => isRecord(value) ? value : fail(`${label} must be an object`);
 const exactKeys = (value: Record<string, unknown>, keys: readonly string[], label: string): void => {
-  const actual = Object.keys(value);
-  if (actual.length !== keys.length || actual.some((key) => !keys.includes(key))) fail(`${label} has unknown or missing keys`);
+  try {
+    const { warnings } = knownFields(value, keys, [], label);
+    for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  } catch { fail(`${label} has missing, unsafe or host-owned keys`); }
 };
 const localInputPath = (value: unknown): string => {
   if (typeof value !== 'string') return fail('inputPath must be a local PNG path');
@@ -25,6 +28,7 @@ const imagePath = (value: unknown, sha: string): string => {
 
 export function parseImageFragmentInput(value: unknown): ImageFragmentInput {
   const parsed = record(value, 'input');
+  if (['id', 'sha256', 'imagePath', 'schemaVersion'].some(key => Object.hasOwn(parsed, key))) fail('input cannot supply derived fragment authority');
   exactKeys(parsed, ['inputPath', 'provenance', 'transfer'], 'input');
   return {
     inputPath: localInputPath(parsed['inputPath']),

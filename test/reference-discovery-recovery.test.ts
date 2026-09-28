@@ -8,7 +8,6 @@ import test from 'node:test';
 import { parseDiscoveryBatchInput } from '../core/ref/discovery-batch.ts';
 import { expandedDiscoveryInputs, requireNovelRecoveryBatch } from '../core/ref/discovery-recovery.ts';
 import { buildReferenceDiscoveryPlan } from '../core/ref/discovery-plan.ts';
-import { isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { routeInput } from './helpers/discovery-work.ts';
 import { directRootAt } from './helpers/market-reference.ts';
@@ -35,8 +34,7 @@ test('design recovery searches concrete pattern seeds before repeating the narro
   const inputs = expandedDiscoveryInputs(broadened, 'design');
   assert.match(inputs[0]?.query ?? '', /document checklist/u);
   assert.ok(inputs.some(input => /progress tracker/u.test(input.query)));
-  assert.ok(inputs.every(input => isMarketQualifiedQuery(input.query, plan.marketReferencePolicy.marketSearchLabels)
-    && input.query.includes('site:')));
+  assert.ok(inputs.every(input => input.query.includes('site:')));
 });
 
 test('recovery refuses repeated searches before CLI authorization or browser work, including equivalent encoding', t => {

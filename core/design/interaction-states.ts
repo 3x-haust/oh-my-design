@@ -102,7 +102,7 @@ function isFormInput(name: string, interactive: boolean): boolean {
  * role=alert or aria-invalid without ".error" class names no longer trigger.
  */
 function hasErrorAffordance(node: Node): boolean {
-  const { name, text, role, ariaInvalid } = node;
+  const { name, role, ariaInvalid } = node;
 
   // ARIA evidence: role=alert is the canonical container for live error messages;
   // aria-invalid=true is the field-level signal that a value failed validation.
@@ -120,20 +120,7 @@ function hasErrorAffordance(node: Node): boolean {
     lower.includes('-invalid')
   ) return true;
 
-  // Text-content evidence: the rendered page shows an error message
-  if (text) {
-    const t = text.toLowerCase();
-    if (
-      t.includes('error') ||
-      t.includes('오류') ||
-      t.includes('잘못') ||
-      t.includes('올바르지') ||
-      t.includes('invalid') ||
-      t.includes('required') ||
-      t.includes('필수')
-    ) return true;
-  }
-
+  // Rendered message meaning is assessed by the reviewer, not a vocabulary list.
   return false;
 }
 

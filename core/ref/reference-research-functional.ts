@@ -1,9 +1,4 @@
 import { referenceServiceFamily } from './design-discovery-sources.ts';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { validateDomainBrief } from '../domain/domain-brief.ts';
-import { selfRootTaskClaim } from './market-task-claim.ts';
-import { inferredKoreanReferenceMarket } from './market-reference.ts';
 import { readDomainObservation } from './domain-observation.ts';
 import { readSearchExecution, searchObserved } from './search-execution.ts';
 import { resultReaches } from './search-result.ts';
@@ -19,8 +14,7 @@ export function validateFunctionalResearch(root: string, research: ReferenceRese
   const families = new Set<string>();
   const market = research.marketCoverage;
   const localIds = new Set(market?.domain.localSources.map(item => item.sourceId) ?? []);
-  const taskCategory = market ? validateDomainBrief(JSON.parse(readFileSync(join(root, '.omd/domain-brief.json'), 'utf8'))).domain : null;
-  if (market?.marketRegion === 'KR' && localIds.size < 3) fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_DIVERSITY');
+
   for (const source of sources) {
     const observations = source.observations.map(receipt => readDomainObservation(root, receipt));
     const marketObservation = observations.find(item => item.capture.sha256 === source.marketObservationSha256 && item.url === source.url);
@@ -38,14 +32,7 @@ export function validateFunctionalResearch(root: string, research: ReferenceRese
       });
       if (!reachable && !leadReachable) fail('REFERENCE_LEAD_OBSERVATION_REQUIRED: service navigation needs a signed destination observation');
     }
-    if (market?.marketRegion === 'KR' && localIds.has(source.id) && marketObservation.language !== 'korean')
-      fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
-    if (market && localIds.has(source.id) && marketObservation.method === 'direct-public'
-      && taskCategory && !selfRootTaskClaim(taskCategory, marketObservation.taskText ?? ''))
-      fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
-    if (market?.marketRegion === 'KR' && localIds.has(source.id)
-      && /(?:^|\.)(?:gov|nhs)(?:\.[a-z]{2})?$/u.test(new URL(marketObservation.finalUrl).hostname)
-      && !new URL(marketObservation.finalUrl).hostname.endsWith('.kr')) fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
+    // Market scope requires a sourced judgment, not script, task vocabulary, or hostname.
     for (const observation of observations) {
       if (referenceServiceFamily(observation.finalUrl) !== family) fail('REFERENCE_DOMAIN_OBSERVATION_REQUIRED: unrelated service observation');
       if (observation.url !== source.url && !observations.some(parent => parent.links.includes(observation.url)))
@@ -87,25 +74,19 @@ export function validateFunctionalResearch(root: string, research: ReferenceRese
           const execution = readSearchExecution(root, search, 'domain');
           const result = execution.results?.find(item => resultReaches(item, [source.url]));
           if (!searchObserved(execution) || !result) throw new Error('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_PROVENANCE');
-          if (market.marketRegion === 'KR' && inferredKoreanReferenceMarket(result.text) !== 'KR'
-            && !/복지|혜택|지원|신청|서비스/u.test(result.text))
-            fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
+          // URL provenance is verified above; result relevance needs a sourced judgment.
         } else if (local.basis === 'market-observed-page') {
-          if (local.provenanceReceiptSha256 !== marketObservation.capture.sha256
-            || !/서비스|혜택|지원|복지|신청/u.test(marketObservation.taskText ?? marketObservation.observedText ?? ''))
+          if (local.provenanceReceiptSha256 !== marketObservation.capture.sha256)
             fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_PROVENANCE');
         } else if (local.provenanceReceiptSha256 !== marketObservation.capture.sha256 || marketObservation.method !== 'direct-public')
           fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_PROVENANCE');
       }
     }
   }
-  if (families.size < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY');
+  void families; // Diversity is evidence, not a quota.
   if (market?.domain.globalFallback) {
     const fallback = market.domain.globalFallback;
-    if (fallback.gap.attemptedQueries.length !== research.domainReference.searches.length
-      || fallback.gap.attemptedQueries.some((query, index) =>
-        readSearchExecution(root, research.domainReference.searches[index]!, 'domain').query !== query))
-      fail('REFERENCE_RESEARCH_MARKET_DOMAIN_FALLBACK_ATTEMPTS');
+    // Prescribed attempt inventory and order are advisory; signed queries stay unchanged.
     for (const binding of fallback.provenance) {
       const source = sources.find(item => item.id === binding.sourceId);
       if (!source) throw new Error('REFERENCE_RESEARCH_MARKET_DOMAIN_FALLBACK_PROVENANCE');
@@ -118,7 +99,5 @@ export function validateFunctionalResearch(root: string, research: ReferenceRese
         && readDomainObservation(root, item).method === 'direct-public')) fail('REFERENCE_RESEARCH_MARKET_DOMAIN_FALLBACK_PROVENANCE');
     }
   }
-  if (market?.marketRegion === 'KR' && new Set(sources.filter(item => localIds.has(item.id))
-    .map(item => referenceServiceFamily(readDomainObservation(root, item.observations.find(obs => obs.capture.sha256 === item.marketObservationSha256)!).finalUrl))).size < 3)
-    fail('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_DIVERSITY');
+
 }

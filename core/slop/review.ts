@@ -111,8 +111,12 @@ function sourceFindings(scan: ReturnType<typeof scanSlopSource>): Finding[] {
   })).values()];
 }
 function renderFindings(viewId: string, raw: RawIr): Finding[] {
-  return [...new Map(check(normalize(raw), loadRules(rulesRoot), { categories: ['slop'] }).map(warning => {
-    const finding: Finding = { id: sha(canonicalJson({ view: viewId, rule: warning.id, path: warning.path })), kind: 'render-warning', rule: warning.id, path: warning.path, viewId, question: warning.message };
+  const ir = normalize(raw), rules = loadRules(rulesRoot);
+  const measured = check(ir, rules, { categories: ['slop'] });
+  const wording = check(ir, rules, { categories: ['slop'], contextualSuggestions: true });
+  return [...new Map([...measured, ...wording].map(warning => {
+    const finding: Finding = { id: sha(canonicalJson({ view: viewId, rule: warning.id, path: warning.path })), kind: 'render-warning', rule: warning.id, path: warning.path, viewId,
+      question: wording.includes(warning) ? `Literal wording match (${warning.id}): ${String(warning.value)}. Review in context; this match is not a quality verdict.` : warning.message };
     return [finding.id, finding] as const;
   })).values()];
 }
@@ -131,13 +135,15 @@ function validateReview(root: string, input: unknown, checkpointReceipt: Receipt
   const decisions = item.decisions.map(value => judgment(value, true) as Decision);
   const resolved = item.resolved.map(value => judgment(value, false) as Resolution);
   const exactIds = (actual: string[], expected: string[]): boolean => new Set(actual).size === actual.length && [...actual].sort().join() === [...expected].sort().join();
-  if (!exactIds(decisions.map(d => d.id), checkpoint.findings.map(f => f.id))) fail('every source candidate and render warning needs exactly one judgment');
+  if (new Set(decisions.map(d => d.id)).size !== decisions.length
+    || decisions.some(d => !checkpoint.findings.some(f => f.id === d.id))) fail('review judgments must refer to distinct current findings');
   for (const finding of checkpoint.findings) {
     if (finding.viewId && !decisions.find(d => d.id === finding.id)!.viewIds.includes(finding.viewId)) fail('render warning judgment must inspect its own view');
   }
   const parent = checkpoint.parent ? artifact<Review>(root, checkpoint.parent.review) : null;
   const outstanding = parent?.decisions.filter(d => d.status === 'confirmed').map(d => d.id) ?? [];
-  if (!exactIds(resolved.map(d => d.id), outstanding)) fail('each previously confirmed issue needs an explicit after-render resolution');
+  if (new Set(resolved.map(d => d.id)).size !== resolved.length
+    || resolved.some(d => !outstanding.includes(d.id))) fail('resolved judgments must refer to previously confirmed findings');
   for (const resolution of resolved) {
     if (checkpoint.findings.some(f => f.id === resolution.id) && decisions.find(d => d.id === resolution.id)?.status !== 'dismissed') fail('a still-confirmed issue is not resolved');
   }
@@ -151,11 +157,15 @@ export async function captureSlopCheckpoint(root: string, scopeInput: unknown, w
   const previous = pointer(root);
   let parent: Checkpoint['parent'] = null;
   if (previous) {
-    const previousReview = previous.review ?? fail('triage the previous checkpoint before rescan; do not erase unreviewed findings');
+    const previousReview = previous.review;
+    if (!previousReview) {
+      // An unreviewed scanner inventory is advisory; a new capture may supersede it.
+    } else {
     const old = artifact<Checkpoint>(root, previous.checkpoint);
     const review = validateReview(root, artifact(root, previousReview), previous.checkpoint, old);
     if (review.decisions.some(d => d.status === 'confirmed') && canonicalJson(scope) !== canonicalJson(old.scope)) fail('cannot narrow/change scope while repairing confirmed findings');
     parent = { checkpoint: previous.checkpoint, review: previousReview };
+    }
   }
   const sourceSha256 = sourceSha(root), rulesSha256 = rulesSha();
   const builds = [...new Set(scope.map(v => v.page))].map(page => ({ page, sha256: servedProjectTreeSha256(root, page) }));

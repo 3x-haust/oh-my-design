@@ -4,6 +4,7 @@ import { relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
 import { validateTaskCoverageMatrix } from '../frame/check-ux.ts';
 import { decodePng } from '../motion/energy.ts';
+import { normalizeQuoteWhitespace, knownFields } from '../judgment/index.ts';
 import { validateProbePlan, type ProbePlan, type ProbeResult } from '../probe/index.ts';
 import { requireProductCaptureResultAuthorization, requireProductProbeResultAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { acquireProjectLock, createProjectDirectory, replaceProjectFileAtomically, writeImmutableProjectFile } from '../runtime/project-write.ts';
@@ -22,7 +23,7 @@ interface Render { path: string; sha256: string; viewport: Viewport; authorizati
 interface Transient { path: string; sha256: string; captureMode: 'settled' | 'reduced-motion'; probeRole: 'primary' | 'recovery'; stateSelector: string; stepIndex: number; viewport: Viewport; authorization: CaptureAuthorization }
 interface LegacyRender { path: string; sha256: string; viewport: Viewport }
 interface LegacyTransient { path: string; sha256: string; captureMode: 'settled' | 'reduced-motion'; probeRole: 'primary' | 'recovery'; stateSelector: string; stepIndex: number; viewport: Viewport }
-interface Task { id: string; context: 'production'; production: { route: string; locator: string; workObject: string }; probes: Probe[]; renders: Render[]; invalidSubmit?: Probe; transient?: Transient[] }
+interface Task { id: string; context: 'production'; production: { route: string; locator: string; workObject: string }; probes: Probe[]; renders: Render[]; invalidSubmit?: Probe; invalidSubmitFeedback?: Readonly<{ decision: 'actionable'; reason: string; quote: string }>; transient?: Transient[] }
 interface LegacyTask { id: string; context: 'production'; production: Task['production']; probes: Probe[]; renders: LegacyRender[]; invalidSubmit?: Probe; transient?: LegacyTransient[] }
 export interface ValidatedTaskEvidence extends TaskEvidence {
   readonly snapshot: Readonly<{ probes: readonly Readonly<{ taskId: string; role: ProbeRole; viewport: Viewport; target: string; resultSha256: string }>[]; captures: readonly Readonly<CaptureAuthorization>[] }>;
@@ -46,8 +47,15 @@ function freeze<T>(value: T): T {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 function exact(value: Record<string, unknown>, keys: readonly string[], label: string): void {
-  const actual = Object.keys(value).sort(compare); const expected = [...keys].sort(compare);
-  if (actual.length !== expected.length || actual.some((key, i) => key !== expected[i])) throw new Error(`${label} has unknown or missing keys`);
+  if (label === 'legacy task evidence manifest' && Object.hasOwn(value, 'buildSha256'))
+    throw new Error(`${label} cannot supply current build authority`);
+  if (label.endsWith('.authorization') || Object.hasOwn(value, 'authorization') && !keys.includes('authorization')) {
+    const actual = Object.keys(value).sort(compare); const expected = [...keys].sort(compare);
+    if (actual.length !== expected.length || actual.some((key, i) => key !== expected[i])) throw new Error(`${label} has unknown or missing keys`);
+    return;
+  }
+  const projected = knownFields(value, keys, [], label);
+  for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
 }
 function string(value: unknown, label: string): string {
   if (typeof value !== 'string' || !value || value.trim() !== value) throw new Error(`${label} must be a canonical non-empty string`);
@@ -191,8 +199,8 @@ function reservedProductionTarget(production: Task['production']): boolean {
 }
 function parseTask(value: unknown, index: number): Task {
   const label = `tasks[${index}]`; if (!isRecord(value)) throw new Error(`${label} must be an object`);
-  const allowed = ['id', 'context', 'production', 'probes', 'renders', 'invalidSubmit', 'transient'];
-  if (Object.keys(value).some(key => !allowed.includes(key))) throw new Error(`${label} has unknown keys`);
+  const allowed = ['id', 'context', 'production', 'probes', 'renders', 'invalidSubmit', 'invalidSubmitFeedback', 'transient'];
+  for (const warning of knownFields(value, [], allowed, label).warnings) process.emitWarning(`ignored optional field ${warning.field}`);
   if (!Array.isArray(value.probes) || !Array.isArray(value.renders) || !isRecord(value.production) || value.context !== 'production') throw new Error(`${label} is invalid`);
   exact(value.production, ['route', 'locator', 'workObject'], `${label}.production`);
   const production = { route: string(value.production.route, `${label}.production.route`), locator: string(value.production.locator, `${label}.production.locator`), workObject: string(value.production.workObject, `${label}.production.workObject`) };
@@ -202,6 +210,17 @@ function parseTask(value: unknown, index: number): Task {
   if (!probes.some(item => item.role === 'primary') || new Set(probes.map(item => `${item.role}:${item.viewport}`)).size !== probes.length) throw new Error(`${label} requires unique role and viewport probe executions`);
   if (!renders.length || new Set(renders.map(item => item.viewport)).size !== renders.length) throw new Error(`${label}.renders must have unique viewports`);
   const invalidSubmit = value.invalidSubmit === undefined ? undefined : parseProbe(value.invalidSubmit, `${label}.invalidSubmit`, ['invalid-submit']);
+  const feedback = value.invalidSubmitFeedback;
+  if (feedback !== undefined) {
+    if (!isRecord(feedback)) throw new Error(`${label}.invalidSubmitFeedback is invalid`);
+    exact(feedback, ['decision', 'reason', 'quote'], `${label}.invalidSubmitFeedback`);
+    if (feedback.decision !== 'actionable') throw new Error(`${label}.invalidSubmitFeedback requires an actionable AI decision`);
+  }
+  const invalidSubmitFeedback = feedback === undefined ? undefined : {
+    decision: 'actionable' as const, reason: string((feedback as Record<string, unknown>).reason, `${label}.invalidSubmitFeedback.reason`),
+    quote: string((feedback as Record<string, unknown>).quote, `${label}.invalidSubmitFeedback.quote`),
+  };
+  if (invalidSubmitFeedback !== undefined && invalidSubmit === undefined) throw new Error(`${label}.invalidSubmitFeedback has no probe`);
   if (value.transient !== undefined && (!Array.isArray(value.transient) || !value.transient.length)) throw new Error(`${label}.transient must be non-empty`);
   const transient = value.transient?.map((item, n) => parseTransient(item, `${label}.transient[${n}]`));
   const id = string(value.id, `${label}.id`);
@@ -214,12 +233,12 @@ function parseTask(value: unknown, index: number): Task {
       throw new Error(`${label} capture authorization does not bind the exact production task artifact`);
     }
   }
-  return { id, context: 'production', production, probes, renders, ...(invalidSubmit ? { invalidSubmit } : {}), ...(transient ? { transient } : {}) };
+  return { id, context: 'production', production, probes, renders, ...(invalidSubmit ? { invalidSubmit } : {}), ...(invalidSubmitFeedback ? { invalidSubmitFeedback } : {}), ...(transient ? { transient } : {}) };
 }
 function parseLegacyTask(value: unknown, index: number): LegacyTask {
   const label = `tasks[${index}]`; if (!isRecord(value)) throw new Error(`${label} must be an object`);
   const allowed = ['id', 'context', 'production', 'probes', 'renders', 'invalidSubmit', 'transient'];
-  if (Object.keys(value).some(key => !allowed.includes(key))) throw new Error(`${label} has unknown keys`);
+  for (const warning of knownFields(value, [], allowed, label).warnings) process.emitWarning(`ignored optional field ${warning.field}`);
   if (!Array.isArray(value.probes) || !Array.isArray(value.renders) || !isRecord(value.production) || value.context !== 'production') throw new Error(`${label} is invalid`);
   exact(value.production, ['route', 'locator', 'workObject'], `${label}.production`);
   const production = { route: string(value.production.route, `${label}.production.route`), locator: string(value.production.locator, `${label}.production.locator`), workObject: string(value.production.workObject, `${label}.production.workObject`) };
@@ -360,11 +379,15 @@ function verifyInvalidSubmit(root: string, evidence: Probe, task: Task): ProbeRe
     if (activation < 0) continue;
     const observed = result.steps[activation]!;
     const expectations = plan.steps[activation]!.expect ?? [];
-    const error = expectations.some((expectation, index) => (expectation.type === 'visible' || expectation.type === 'text') && expectationMatches(expectation, observed.expectations[index]!) && /error|invalid|required|must/i.test(expectation.type === 'text' ? expectation.value : expectation.selector));
+    // The probe proves only that quoted feedback was rendered. Its meaning is a
+    // contextual review judgment, not a property of English error keywords.
+    const feedback = expectations.some((expectation, index) => expectation.type === 'text'
+      && expectation.value.trim() !== '' && expectationMatches(expectation, observed.expectations[index]!)
+      && (task.invalidSubmitFeedback === undefined || normalizeQuoteWhitespace(expectation.value).includes(normalizeQuoteWhitespace(task.invalidSubmitFeedback.quote))));
     const preserved = expectations.some((expectation, index) => expectation.type === 'attribute' && expectation.selector === fill.selector && expectation.name === 'value' && expectation.value === fill.value && expectationMatches(expectation, observed.expectations[index]!));
-    if (error && preserved) return result;
+    if (feedback && preserved) return result;
   }
-  throw new Error(`invalid-submit evidence must fill, activate the production locator, then expose an actionable error and preserved value: ${task.id}`);
+  throw new Error(`invalid-submit evidence must fill, activate the production locator, then expose quoted rendered feedback and preserved value: ${task.id}`);
 }
 function verifyPng(bytes: Buffer, expected: { width: number; height: number }, label: string): ReturnType<typeof decodePng> {
   const png = decodePng(bytes);
@@ -549,6 +572,9 @@ export function publishTaskEvidence(rootInput: string, input: string, invocation
     const manifest = file(root, relativeInput);
     const manifestBytes = readFileSync(manifest);
     const evidence = parseManifest(JSON.parse(manifestBytes.toString('utf8')));
+    if (evidence.tasks.some(task => task.invalidSubmit !== undefined && task.invalidSubmitFeedback === undefined)) {
+      throw new Error('invalid-submit AI judgment with a quoted rendered result is required for new publication');
+    }
     verify(root, evidence);
     requireTaskEvidenceProbeAuthorizations(root, evidence, invocation);
     const bytes = Buffer.from(`${canonical(evidence)}\n`);

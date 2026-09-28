@@ -8,6 +8,11 @@ import { decodePng } from '../core/motion/energy.ts';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
 import { clearReferenceNotices, prepareSuppressedReferenceLink, resumeScriptsOnNewReferenceDocument } from '../core/ref/notice-overlay.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { signedBrowserJudgment } from './helpers/reference-judgment.ts';
+const allowInformationalOverlay = (page: import('playwright').Page, selector: string, url: string) =>
+  signedBrowserJudgment(page, selector, url, 'overlay-action', 'suppress-informational');
+const selectTaskContent = (page: import('playwright').Page, selector: string, url: string) =>
+  signedBrowserJudgment(page, selector, url, 'surface-content', 'task-content');
 
 const content = (mode: 'notice' | 'consent' | 'unclosable') => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>복지 서비스</title>
   <style>body{margin:0;background:white;color:black;font:20px sans-serif}main{padding:40px}h1{margin:0}#backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}
@@ -29,7 +34,7 @@ test('reference capture closes an informational notice before retaining page pix
   const writer = createTestProjectWriteAdapter(root);
   writer.mkdir('.omd/refs/domain');
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`, { width: 800, height: 600 },
-    { shotOut, adapter: writer }));
+    { shotOut, adapter: writer, overlayJudgment: allowInformationalOverlay }));
   assert.equal(result.acquisition.noticeDismissals?.length, 1);
   assert.deepEqual(result.raw.meta?.measurementCoverage, { interactionProbe: 'not-measured', motionProbe: 'not-measured', energyCurve: 'not-measured' });
   const { pixels, width, channels } = decodePng(readFileSync(shotOut));
@@ -96,7 +101,7 @@ test('a deceptive close control is not clicked, so it cannot send a request whil
   const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
   const shotOut = join(root, '.omd/refs/domain/deceptive.png');
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut, adapter: writer }));
+    { width: 800, height: 600 }, { shotOut, adapter: writer, overlayJudgment: allowInformationalOverlay }));
   assert.deepEqual(requests, []);
   assert.equal(existsSync(shotOut), true);
   assert.equal(result.acquisition.noticeDismissals?.[0]?.method, 'visual-only');
@@ -104,7 +109,7 @@ test('a deceptive close control is not clicked, so it cannot send a request whil
     const page = await browser.newPage();
     try {
       await page.goto(`http://127.0.0.1:${address.port}`);
-      await clearReferenceNotices(page);
+      await clearReferenceNotices(page, [], 0, [], selector => allowInformationalOverlay(page, selector, page.url()));
       assert.equal(await page.evaluate(() => document.cookie), '');
       assert.equal(await page.evaluate(() => localStorage.getItem('consent')), null);
     } finally { await page.close(); }
@@ -202,7 +207,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
       }
     } else {
       const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-        { width: 800, height: 600 }, { shotOut, adapter: writer }));
+        { width: 800, height: 600 }, { shotOut, adapter: writer, overlayJudgment: allowInformationalOverlay }));
       assert.ok(result.acquisition.noticeDismissals?.[0]?.suppressedBackdrops);
       const { pixels, width, channels } = decodePng(readFileSync(shotOut));
       assert.deepEqual([...pixels.slice((20 * width + 20) * channels, (20 * width + 20) * channels + 3)], [255, 255, 255]);
@@ -228,7 +233,7 @@ test('a safe feature link still loads its stylesheet after visual-only notice su
     const page = await browser.newPage({ serviceWorkers: 'block' });
     try {
       await page.goto(base);
-      assert.equal((await clearReferenceNotices(page)).length, 1);
+      assert.equal((await clearReferenceNotices(page, [], 0, [], selector => allowInformationalOverlay(page, selector, page.url()))).length, 1);
       prepareSuppressedReferenceLink(page, `${base}/detail#feature`);
       await page.locator('#detail').click();
       await resumeScriptsOnNewReferenceDocument(page);
@@ -258,7 +263,7 @@ test('a hash target cannot fetch a stateful resource after notice suppression', 
     const page = await browser.newPage({ serviceWorkers: 'block' });
     try {
       await page.goto(`http://127.0.0.1:${address.port}`);
-      assert.equal((await clearReferenceNotices(page)).length, 1);
+      assert.equal((await clearReferenceNotices(page, [], 0, [], selector => allowInformationalOverlay(page, selector, page.url()))).length, 1);
       await page.locator('#jump').click();
       await assert.rejects(clearReferenceNotices(page, [], 300), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: suppressed document attempted a request/);
       assert.deepEqual(requests, []);
@@ -283,7 +288,7 @@ test('a whitelisted link cannot navigate an iframe instead of the main page', as
     const page = await browser.newPage({ serviceWorkers: 'block' });
     try {
       await page.goto(base);
-      assert.equal((await clearReferenceNotices(page)).length, 1);
+      assert.equal((await clearReferenceNotices(page, [], 0, [], selector => allowInformationalOverlay(page, selector, page.url()))).length, 1);
       prepareSuppressedReferenceLink(page, `${base}/mutate`);
       await page.locator('#frame-link').click();
       await assert.rejects(clearReferenceNotices(page, [], 300), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: suppressed document attempted a request/);
@@ -359,12 +364,12 @@ test('a fixed div app shell requires a selected visible feature instead of autom
     assert.equal(existsSync(shotOut), false);
   }
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#benefits' }));
+    { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#benefits', contentJudgment: selectTaskContent }));
   assert.equal(result.acquisition.noticeDismissals, undefined);
   assert.equal(existsSync(shotOut), true);
   const supportShot = join(root, '.omd/refs/domain/div-app-support.png');
   await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut: supportShot, adapter: writer, selector: '#benefits-support' }));
+    { width: 800, height: 600 }, { shotOut: supportShot, adapter: writer, selector: '#benefits-support', contentJudgment: selectTaskContent }));
   assert.equal(existsSync(supportShot), true);
 });
 
@@ -384,7 +389,8 @@ test('a safe notice can be suppressed over a fixed full-viewport app shell', asy
   const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
   const shotOut = join(root, '.omd/refs/domain/app-notice.png');
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#app' }));
+    { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#app', overlayJudgment: allowInformationalOverlay,
+      contentJudgment: selectTaskContent }));
   assert.equal(result.acquisition.noticeDismissals?.length, 1);
   assert.equal(existsSync(shotOut), true);
 });
@@ -408,7 +414,7 @@ test('site scripts stay disabled after suppression so delayed style observers ca
   const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
   const shotOut = join(root, '.omd/refs/domain/style-observer.png');
   const captured = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut, adapter: writer }));
+    { width: 800, height: 600 }, { shotOut, adapter: writer, overlayJudgment: allowInformationalOverlay }));
   assert.equal(captured.acquisition.noticeDismissals?.[0]?.method, 'visual-only');
   assert.equal(existsSync(shotOut), true);
   assert.deepEqual(mutations, []);
@@ -416,8 +422,7 @@ test('site scripts stay disabled after suppression so delayed style observers ca
     const page = await browser.newPage();
     try {
       await page.goto(`http://127.0.0.1:${address.port}`);
-      await clearReferenceNotices(page, [], 100);
-      await page.waitForTimeout(1000);
+      await clearReferenceNotices(page, [], 0, [], selector => allowInformationalOverlay(page, selector, page.url()));
       assert.equal(await page.evaluate(() => document.cookie), '');
     } finally { await page.close(); }
   });

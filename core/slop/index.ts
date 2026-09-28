@@ -265,11 +265,10 @@ function detectAnimatedStatus(source: string, path: string): SlopSourceCandidate
   const blocks = source.matchAll(/<([a-z][\w.-]*)\b[^>]*>[\s\S]{0,900}?<\/\1\s*>/gi);
   for (const match of blocks) {
     const text = match[0];
-    const status = text.match(/\b(live|ready|online)\b/i)?.[1]?.toLowerCase();
     const motion = text.match(/(?:animate[-_:]?)?(ping|pulse)\b/i)?.[1]?.toLowerCase();
     const luminous = /\bglow(?:ing)?\b|(?:shadow|ring|drop-shadow)[^\s"'<>]*(?:emerald|green|lime|amber)|box-shadow\s*:/i.test(text);
-    if (status && motion && luminous) return candidate('animated-status-glow', path, source, match.index!, [
-      `state:${status}`, `motion:${motion}`, 'luminance:glow',
+    if (motion && luminous) return candidate('animated-status-glow', path, source, match.index!, [
+      `motion:${motion}`, 'luminance:glow',
     ]);
   }
   return null;

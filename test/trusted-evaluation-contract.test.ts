@@ -86,7 +86,7 @@ test('evaluation identity rejects an entry path outside route scope', () => {
   );
 });
 
-test('lifecycle manifest forbids caller-authored authority and closes its shape', () => {
+test('lifecycle manifest forbids caller-authored authority and ignores ordinary extra fields', () => {
   assert.throws(
     () => parseTrustedLifecycleManifest({
       schema: 'trusted-lifecycle-manifest-v1',
@@ -97,16 +97,13 @@ test('lifecycle manifest forbids caller-authored authority and closes its shape'
     (error: unknown) => error instanceof TrustedEvaluationContractError
       && error.code === 'LIFECYCLE_MANIFEST_AUTHORITY_FORBIDDEN',
   );
-  assert.throws(
-    () => parseTrustedLifecycleManifest({
-      schema: 'trusted-lifecycle-manifest-v1',
-      entryPath: 'index.html',
-      scripts: [],
-      extra: true,
-    }),
-    (error: unknown) => error instanceof TrustedEvaluationContractError
-      && error.code === 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST',
-  );
+  const projected = parseTrustedLifecycleManifest({
+    schema: 'trusted-lifecycle-manifest-v1',
+    entryPath: 'index.html',
+    scripts: [],
+    extra: true,
+  });
+  assert.equal(Object.hasOwn(projected, 'extra'), false);
 });
 
 test('lifecycle manifest accepts one closed benchmark-bound entry surface', () => {

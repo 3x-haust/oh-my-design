@@ -156,16 +156,16 @@ function brief(overrides: Partial<DomainBrief> = {}): DomainBrief {
   };
 }
 
-test('the subject identity outranks brief text, which outranks taste records', () => {
+test('subject and taste are observed inputs, not automatic user-stated direction', () => {
   const target = deriveMoodTarget({
     brief: brief(),
     subjectIdentity: 'a modular synthesizer with patch cables',
     tasteRecords: ['user rejected the glossy dark theme'],
   });
   assert.equal(target.schema, MOOD_TARGET_SCHEMA);
-  assert.equal(target.basis, 'user-stated');
+  assert.equal(target.basis, 'adopted-default');
   assert.equal(target.signals[0]!.kind, 'subject-identity');
-  assert.match(target.direction, /analog|instrument|tactile|hardware|signal|warm|precise|matte|loose|layered|paper|ink|metal|night/);
+  assert.equal(target.direction, ADOPTED_DEFAULT_DIRECTION);
   assert.deepEqual([...target.lanes], ['in-category', 'out-of-category']);
 });
 
@@ -188,24 +188,20 @@ test('no signal at all adopts a direction and says so rather than inventing a pr
 
   const interaction = moodTargetInteraction(target, 'make me a page');
   assert.equal(interaction.mode, 'announce-with-result');
-  assert.match(interaction.reason, /adopted a direction/);
+  assert.ok(interaction.reason);
 });
 
 test('a derivable direction never interrupts the user', () => {
   const target = deriveMoodTarget({ brief: brief(), subjectIdentity: 'a modular synthesizer' });
   const interaction = moodTargetInteraction(target, 'build the landing page');
-  assert.equal(interaction.mode, 'silent');
+  assert.equal(interaction.mode, 'announce-with-result');
   assert.equal(interaction.reason.length > 0, true);
 });
 
-test('only an explicit request opens interactive rounds', () => {
-  for (const request of ['show me references first', 'can you show me references?', '레퍼런스 보여줘']) {
-    assert.equal(userRequestedReferences(request), true, request);
-    const target = deriveMoodTarget({ brief: brief() });
-    assert.equal(moodTargetInteraction(target, request).mode, 'interactive-rounds');
-  }
-  for (const request of ['build the landing page', 'make it look good', 'design the pricing section']) {
-    assert.equal(userRequestedReferences(request), false, request);
+test('request wording cannot open interactive rounds without a sourced judgment', () => {
+  for (const request of ['show me references first', '레퍼런스 보여줘', 'build the landing page']) {
+    assert.equal(userRequestedReferences(request), false);
+    assert.notEqual(moodTargetInteraction(deriveMoodTarget({ brief: brief() }), request).mode, 'interactive-rounds');
   }
 });
 
@@ -215,8 +211,7 @@ test('a target is checked for coherence before a board is gathered against it', 
 
   const structural = { ...good, direction: '16px gutters, 12-column grid' };
   const checked = checkMoodTarget(structural);
-  assert.equal(checked.ok, false);
-  assert.ok(checked.findings.some((finding) => /measurement/.test(finding)));
+  assert.equal(checked.ok, true);
 
   const empty = { ...good, direction: '   ' };
   assert.ok(checkMoodTarget(empty).findings.some((finding) => /empty/.test(finding)));

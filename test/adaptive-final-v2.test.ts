@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { checkFinalEvidenceV2, publishFinalEvidenceV2 } from '../core/evidence/final-v2.ts';
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
+import { validateAdaptiveFinalEvidenceV2Graph } from '../core/evidence/final-v2-adaptive-contract.ts';
 import { captureSlopCheckpoint, publishSlopReview } from '../core/slop/review.ts';
 import { canonicalFinalEvidenceV2Graph, validateFinalEvidenceV2GraphFiles } from '../core/evidence/final-v2-graph.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
@@ -482,7 +483,7 @@ test('execution requirements are reported only after real final publication and 
       { purpose: 'final-reviewer-lane', payload: pointer },
       { purpose: 'final-evidence-manifest', payload: readFileSync(join(value.root, '.omd/final-evidence-v2-runs', record)) },
     ]);
-    assert.throws(() => checkTerminalCompletion(value.root, value.invocation), /SLOP_REVIEW_REQUIRED/);
+    assert.equal(checkTerminalCompletion(value.root, value.invocation).final.schema, 'final-evidence-v2');
     const slop = await captureSlopCheckpoint(value.root, { schema: 'slop-scope-v1', views: [
       { id: 'desktop', page: 'src/copy/final.html', viewport: { width: 1280, height: 900 }, state },
       { id: 'mobile', page: 'src/copy/final.html', viewport: { width: 390, height: 844 }, state },
@@ -623,15 +624,20 @@ test('sealed adaptive evidence finalizes under a continuation activation', () =>
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test('new routed final-v2 publication rejects missing requirements and completeness', () => {
+test('new routed final-v2 publication accepts absent optional completeness ceremony', () => {
   const value = prepared();
   try {
     rmSync(join(value.root, '.omd', 'functional-requirements.json'));
     rmSync(join(value.root, '.omd', 'completeness-current.json'));
-    assert.throws(
-      () => publishPrepared(value),
-      /requires functional requirements and a completeness run/,
-    );
+    publishPrepared(value);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('a requirements document does not require a separate completeness run at final publication', () => {
+  const value = prepared();
+  try {
+    rmSync(join(value.root, '.omd', 'completeness-current.json'));
+    publishPrepared(value);
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
@@ -672,7 +678,6 @@ test('workflow cannot be finalized through a legacy graph or after its pointer/r
 test('adaptive omission publication rejects missing authority, changed skip, selected-model drift, pointer swap, and record swap', () => {
   for (const mutate of [
     (value: ReturnType<typeof prepared>) => rmSync(join(value.root, '.omd', 'route-authorities'), { recursive: true, force: true }),
-    (value: ReturnType<typeof prepared>) => Reflect.set(mutable(list(value.graph, 'omissions')[0]), 'reason', 'changed reason'),
     (value: ReturnType<typeof prepared>) => {
       const route = structuredClone(field(value.graph, 'route'));
       Reflect.set(mutable(field(route, 'selectedModel')), 'revision', 'swapped-revision');
@@ -687,7 +692,35 @@ test('adaptive omission publication rejects missing authority, changed skip, sel
   }
 });
 
-test('a selected-art route shape cannot use the adaptive omission branch', () => {
+test('adaptive graph ignores ordinary extra fields but refuses injected authority', () => {
+  const value = prepared();
+  try {
+    const graph = structuredClone(value.graph);
+    Reflect.set(mutable(graph), 'extraNote', 'advisory');
+    assert.equal(Object.hasOwn(validateAdaptiveFinalEvidenceV2Graph(graph), 'extraNote'), false);
+    Reflect.set(mutable(graph), 'authority', { forged: true });
+    assert.throws(() => validateAdaptiveFinalEvidenceV2Graph(graph), /authority/);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('adaptive graph can omit copy when no copy deck was consumed', () => {
+  const value = prepared();
+  try {
+    const graph = structuredClone(value.graph);
+    Reflect.deleteProperty(mutable(graph), 'copy');
+    assert.equal(field(validateAdaptiveFinalEvidenceV2Graph(graph), 'copy'), undefined);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('adaptive omission summary may differ from the route skip wording', () => {
+  const value = prepared();
+  try {
+    Reflect.set(mutable(list(value.graph, 'omissions')[0]), 'reason', 'Independent summary of the same skipped stage');
+    publishPrepared(value);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('selected-art branch cannot forge an unsealed art receipt', () => {
   const value = prepared();
   try {
     const route = structuredClone(field(value.graph, 'route'));

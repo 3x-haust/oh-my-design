@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { knownFields } from '../judgment/schema.ts';
 
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
 import { parseRouteRecord } from '../route/adaptive-route-record.ts';
@@ -143,20 +144,11 @@ function fail(code: AdaptiveWorkflowPlanErrorCode): never {
 function fields(value: unknown, expected: readonly string[]): Fields {
   if (typeof value !== 'object' || value === null || Array.isArray(value)
     || Reflect.getPrototypeOf(value) !== Object.prototype) return fail('WORKFLOW_PLAN_MALFORMED');
-  const keys = Reflect.ownKeys(value);
-  if (keys.length !== expected.length
-    || keys.some((key) => typeof key !== 'string' || !expected.includes(key))) {
-    return fail('WORKFLOW_PLAN_MALFORMED');
-  }
-  const result = new Map<string, unknown>();
-  for (const key of expected) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) {
-      return fail('WORKFLOW_PLAN_MALFORMED');
-    }
-    result.set(key, descriptor.value);
-  }
-  return result;
+  try {
+    const projected = knownFields(value, expected, [], 'workflow-plan');
+    for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+    return new Map(Object.entries(projected.value));
+  } catch { return fail('WORKFLOW_PLAN_MALFORMED'); }
 }
 
 function arrayValues(value: unknown): readonly unknown[] {

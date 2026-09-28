@@ -143,10 +143,13 @@ test('authenticity stays conjunctive and marketing remains unaffected', () => {
 });
 
 test('applicable adaptive publication upgrades the blind lane contract', () => {
-  const benchmark = adaptiveBlindLaneContract({
-    projectMode: 'greenfield',
-    gates: ['greenfield-task-flow-benchmark'],
+  const selectedWithoutArtifact = adaptiveBlindLaneContract({
+    projectMode: 'greenfield', gates: ['greenfield-task-flow-benchmark'],
   });
+  assert.equal(selectedWithoutArtifact.verdicts.includes('interactionBenchmarkFit'), false);
+  const benchmark = adaptiveBlindLaneContract({
+    projectMode: 'greenfield', gates: ['greenfield-task-flow-benchmark'],
+  }, true);
   assert.equal(benchmark.schema, 'adaptive-blind-review-v3');
   assert.deepEqual(benchmark.verdicts, [
     'blindVisual',

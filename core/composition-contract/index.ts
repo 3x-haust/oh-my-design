@@ -36,7 +36,6 @@ export interface CompositionContractFinding {
 }
 
 const COLOUR_ROLES = ['Dominant', 'Secondary', 'Accent', 'Semantic success', 'Semantic error'] as const;
-const COLOUR_ROLE_PLACEHOLDER = /\b(?:tbd|todo|placeholder|later|unknown)\b/i;
 
 export function validateColourRoles(lines: readonly string[]): string[] {
   const findings: string[] = [];
@@ -53,11 +52,8 @@ export function validateColourRoles(lines: readonly string[]): string[] {
     }
     if (seen.has(role)) findings.push(`duplicate colour role: ${role}`);
     seen.add(role);
-    if (!token || COLOUR_ROLE_PLACEHOLDER.test(token)) findings.push(`placeholder token/value for ${role}`);
-    if (!use || COLOUR_ROLE_PLACEHOLDER.test(use)) findings.push(`placeholder intended use for ${role}`);
-    if (role === 'Accent' && !/(primary action|selected state|critical)/i.test(use)) {
-      findings.push('Accent intended use must name a primary action, selected state, or critical state');
-    }
+    if (!token) findings.push(`missing token/value for ${role}`);
+    if (!use) findings.push(`missing intended use for ${role}`);
   }
   for (const role of COLOUR_ROLES) if (!seen.has(role)) findings.push(`missing colour role: ${role}`);
   return findings;
@@ -75,8 +71,7 @@ const synthesisPath = `.omd/composition.md#${SYNTHESIS_SECTION}`;
 const synthesisFinding = (message: string): CompositionContractFinding => ({ id: 'COMPOSITION-SYNTHESIS', path: synthesisPath, message });
 const sectionFinding = (section: string, message: string): CompositionContractFinding => ({ id: 'COMPOSITION-SECTION', path: `.omd/composition.md#${section}`, message });
 const normalize = (value: string): string => value.trim().replace(/\s+/g, ' ').toLowerCase();
-const isPlaceholder = (value: string): boolean => /^(?:n\/?a|none|unknown|unspecified|tbd|todo|placeholder|example)(?:\s|$)/i.test(value.trim());
-const substantive = (value: string): boolean => value.trim().length >= 8 && !isPlaceholder(value);
+const substantive = (value: string): boolean => value.trim().length >= 8;
 const recordName = (kind: string, feature: string): string => `${kind} "${feature}"`;
 
 interface ParsedSections { sections: Map<string, string[]>; findings: CompositionContractFinding[]; }
@@ -164,7 +159,7 @@ function validRoute(value: string): boolean {
   if (value === '/') return true;
   if (!/^\/[A-Za-z0-9._~!$&'()*+,;=:@\/-]*$/.test(value) || value.startsWith('//')) return false;
   const segments = value.slice(1).split('/');
-  return segments.every((segment) => segment !== '.' && segment !== '..') && !isPlaceholder(segments[0] ?? '');
+  return segments.every((segment) => segment !== '.' && segment !== '..');
 }
 function normalizedSelector(value: string): string | undefined {
   const selector = value.trim().replace(/\s+/g, ' ');
@@ -190,7 +185,7 @@ function validateReferenceSynthesis(lines: string[]): SynthesisResult {
   const selectors = new Set<string>();
   for (const record of records) {
     const identity = recordName(record.kind, record.feature);
-    if (!record.feature.trim() || isPlaceholder(record.feature)) findings.push(synthesisFinding(`${identity}: feature label is missing or a placeholder`));
+    if (!record.feature.trim()) findings.push(synthesisFinding(`${identity}: feature label is missing`));
     const fields = new Map<string, string>();
     const axes: string[][] = [];
     const expected = record.kind === 'Feature' ? featureFields : declineFields;

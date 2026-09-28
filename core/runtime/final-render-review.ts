@@ -13,6 +13,7 @@ import { adaptiveBlindLaneContract } from '../evidence/final-v2-adaptive-files.t
 import { validateTrustedOutcomeEvidence } from '../evidence/final-v2-outcome-gate.ts';
 import { DESIGN_QUALITY_AXES, DESIGN_QUALITY_AXIS_FLOORS } from '../evidence/final-v2-design-quality.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
+import { hasPublishedTaskFlowBenchmark } from '../ref/reference-research.ts';
 import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import {
   validateBrowserObservationArtifacts,
@@ -183,7 +184,8 @@ export function finalRenderReviewerPacket(input: Readonly<{
   const artDirectionBinding = artSelected
     ? currentArtDirectionSha256(root)
     : undefined;
-  const benchmarkRequired = route.gates.includes('greenfield-task-flow-benchmark');
+  const benchmarkRequired = route.gates.includes('greenfield-task-flow-benchmark')
+    && hasPublishedTaskFlowBenchmark(root, route.sourceContractSha256);
   validateTrustedOutcomeEvidence({
     root,
     branch: artSelected ? 'art-selected' : 'adaptive-omission',
@@ -241,7 +243,7 @@ export function finalRenderReviewerPacket(input: Readonly<{
     || left.state.localeCompare(right.state) || left.captureSha256.localeCompare(right.captureSha256));
   if (!rows.some(({ viewport }) => viewport === 'desktop')
     || !rows.some(({ viewport }) => viewport === 'mobile')) fail('fixed-viewports');
-  const adaptiveContract = adaptiveBlindLaneContract(route);
+  const adaptiveContract = adaptiveBlindLaneContract(route, benchmarkRequired);
   const laneSchema: FinalRenderReviewerLaneSchema = artSelected
     ? 'blind-review-v2'
     : adaptiveContract.schema === 'adaptive-blind-review-v3'

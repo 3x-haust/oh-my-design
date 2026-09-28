@@ -22,6 +22,7 @@ import { AcquisitionTimeoutError, type AcquisitionDeadlineScope } from '../ref/a
 import { collectGalleryImageCandidates } from '../ref/gallery-image-candidates.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
 import { clearReferenceNotices, suspendReferenceScriptsForShot, type NoticeDismissal } from '../ref/notice-overlay.ts';
+import type { ReferenceJudgmentBinding } from '../ref/judgment-policy.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -106,35 +107,11 @@ export class BlockedPageError extends Error {
   }
 }
 
-/** Challenge-page title patterns that indicate bot/Cloudflare/WAF blocking. */
-const CHALLENGE_TITLE_PATTERNS: RegExp[] = [
-  /^just a moment/i,
-  /^attention required/i,
-  /^access denied/i,
-  /^ddos.{0,20}protection/i,
-  /^please (verify|wait)/i,
-  /^security check/i,
-  /^cloudflare/i,
-  /^are you (a )?human/i,
-  /^checking your browser/i,
-  /^one more step/i,
-  /^403\b/,
-  /^error\s+403\b/i,
-  /^(503|502|500)\b/,
-];
+
 
 /**
- * Pure heuristic, fully testable without a browser.
- *
- * Returns the block reason string when the signals indicate a bot-challenge or
- * hollow page; returns null when the page looks valid.
- *
- * Rules, in order:
- *   1. HTTP 4xx/5xx → unavailable, blocked, or server error (never reference content)
- *   2. Challenge-page title → Cloudflare / WAF interstitial
- *   3. Near-empty body (< 200 visible chars) → hollow unless a visible, nonempty
- *      component has been measured in a successful response. Length alone does
- *      not distinguish an empty page from a standalone component example.
+ * Only transport status is sufficient to refuse here. Page-access meaning needs
+ * a judgment grounded in the signed visible observation.
  */
 export function detectBlockReason(
   title: string,
@@ -145,16 +122,8 @@ export function detectBlockReason(
   if (httpStatus !== null && httpStatus >= 400) {
     return `HTTP ${httpStatus}`;
   }
-  for (const pattern of CHALLENGE_TITLE_PATTERNS) {
-    if (pattern.test(title.trim())) {
-      return `challenge page: "${title.trim()}"`;
-    }
-  }
-  const sparseComponent = hasMeasuredComponent && bodyTextLength > 0
-    && httpStatus !== null && httpStatus >= 200 && httpStatus < 300;
-  if (bodyTextLength < 200 && !sparseComponent) {
-    return `near-empty body (${bodyTextLength} visible chars)`;
-  }
+  // Titles and sparse content are observations for page-access judgment, not blockers.
+  void title; void bodyTextLength; void hasMeasuredComponent;
   return null;
 }
 
@@ -282,6 +251,7 @@ export async function waitForDocumentFonts(
 
 
 type Browser = import('playwright').Browser;
+type Page = import('playwright').Page;
 
 /** Launch one chromium, run fn, close it. Batch capture reuses a single browser across many pages. */
 export async function withBrowser<T>(
@@ -806,7 +776,9 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean; deadline?: Pick<AcquisitionDeadlineScope, 'signal' | 'assertLive'> },
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean; deadline?: Pick<AcquisitionDeadlineScope, 'signal' | 'assertLive'>;
+    overlayJudgment?: (page: Page, selector: string, url: string) => Promise<ReferenceJudgmentBinding | undefined>;
+    contentJudgment?: (page: Page, selector: string, url: string) => Promise<ReferenceJudgmentBinding | undefined> },
 ): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; visibleText: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null; noticeDismissals?: NoticeDismissal[] } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
@@ -831,12 +803,14 @@ export async function capturePageForRef(
     }
     const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
     const selectedContentSelectors = [...(opts.selector ? [opts.selector] : []), ...allowedStateSelectors];
-    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000, selectedContentSelectors);
+    const overlayJudgment = opts.overlayJudgment && ((selector: string, url: string) => opts.overlayJudgment!(page, selector, url));
+    const contentJudgment = opts.contentJudgment && ((selector: string, url: string) => opts.contentJudgment!(page, selector, url));
+    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000, selectedContentSelectors, overlayJudgment, contentJudgment);
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
     let raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
     if (preparation) await observeCapturePreparation(page, preparation);
     await assertNotBlocked(page, httpStatus, resolvedUrl, opts.selector ?? null);
-    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
+    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors, overlayJudgment, contentJudgment);
     noticeDismissals.push(...laterDismissals);
     if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
     const resumeScripts = await suspendReferenceScriptsForShot(page);
@@ -875,7 +849,7 @@ export async function capturePageForRef(
       if (!opts.adapter) throw new Error('reference screenshot requires a project-write adapter');
       shotBytes = await page.screenshot({ fullPage: true });
     }
-    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
+    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors, overlayJudgment, contentJudgment);
     noticeDismissals.push(...lateDismissals);
     if (lateDismissals.length && shotBytes) shotBytes = opts.selector
       ? await page.locator(opts.selector).screenshot()

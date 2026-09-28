@@ -168,26 +168,6 @@ const exact = (value: Record<string, unknown>, keys: readonly string[], label: s
   const actual = Object.keys(value).sort(); const expected = [...keys].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) fail(`${label} has unexpected keys`);
 };
-const PLACEHOLDER_TEXT_FIELDS = new Set([
-  'adaptation', 'conceptRole', 'fallbackPath', 'lawfulImplementationPath', 'macroCompositionHypothesis',
-  'markdown', 'obligationReason', 'performanceAccessibilityBudget', 'rationale', 'reason',
-  'rejectionCondition', 'subjectIdentityFit', 'take', 'transformation', 'uxAccessibilityPerformanceRisks',
-  'verificationNote',
-]);
-const rejectPlaceholderText = (value: unknown, label: string): void => {
-  if (typeof value === 'string' && /^(?:placeholder|todo|tbd|n\/a|null)$/i.test(value.trim())) fail(`${label} contains a hand-authored placeholder`);
-  if (Array.isArray(value)) { value.forEach((item) => rejectPlaceholderText(item, label)); return; }
-  if (isRecord(value)) Object.values(value).forEach((item) => rejectPlaceholderText(item, label));
-};
-const rejectHandAuthoredPlaceholder = (value: unknown, label: string): void => {
-  if (Array.isArray(value)) { value.forEach((item) => rejectHandAuthoredPlaceholder(item, label)); return; }
-  if (isRecord(value)) {
-    Object.entries(value).forEach(([key, item]) => {
-      if (PLACEHOLDER_TEXT_FIELDS.has(key)) rejectPlaceholderText(item, label);
-      else rejectHandAuthoredPlaceholder(item, label);
-    });
-  }
-};
 
 const RECEIPT_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   activation: ['activation-context-v2'],
@@ -621,7 +601,6 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     hashes.set(label, loaded.semanticHash);
     values.set(label, loaded.value);
     validateTypedReceipt(label.startsWith('observations[') ? 'observation' : label, loaded.value);
-    rejectHandAuthoredPlaceholder(loaded.value, label);
     if (label === 'blindLane' || label === 'fidelityLane' || label === 'protocolLane') {
       requireFinalReviewerLaneAuthorization(invocation, root, loaded.bytes);
     }

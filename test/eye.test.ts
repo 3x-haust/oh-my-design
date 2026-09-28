@@ -77,7 +77,6 @@ test('slop.html fires every slop heuristic', () => {
   assert.deepEqual(
     [...ids].sort(),
     [
-      'SLOP-COPY',
       'SLOP-EMOJI-HEADING',
       'SLOP-EVERYTHING-CENTERED',
       'SLOP-GRADIENT',

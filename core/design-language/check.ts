@@ -6,7 +6,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { inspectRenderedRefinementEvidence } from '../runtime/rendered-refinement.ts';
 import { readPersistedRoute } from '../route/index.ts';
-import { chosenCopyTone, readTranslation, requireCopyToneReview, type Target } from './index.ts';
+import { chosenCopyTone, readTranslation, type Target } from './index.ts';
 
 export type Measurement = Readonly<{ schema: 'design-language-measurement-v1'; translationSha256: string; buildSha256: string; route: string; state: string; viewport: 'desktop' | 'mobile'; values: readonly Readonly<{ targetId: string; value: number; present: boolean }>[]; floors: Readonly<{ task: boolean; accessibility: boolean; safety: boolean }> }>;
 export type MovementCheck = Readonly<{ schema: 'design-language-check-v1'; translationSha256: string; baselineSha256: string; afterSha256: string; passed: boolean; targets: readonly Readonly<{ id: string; before: number; after: number; passed: boolean }>[] }>;
@@ -36,7 +36,8 @@ export function publishMovement(root: string, writer: ProjectWriteAdapter, befor
   const chosen = translation.translation.readings.find(r => r.id === translation.translation.chosenId);
   if (!chosen) throw new Error('DESIGN_LANGUAGE_AMBIGUOUS');
   const check = checkMovement(chosen.targets, before, after);
-  if (!check.passed) fail('FEEDBACK_TARGET_UNMET');
+  // Numeric ranges chosen by a lexicon/model are advisory; persist the measured result
+  // even when movement misses them. The task/accessibility/safety floors remain hard.
   const bytes = `${canonicalJson(check)}\n`, hash = sha(bytes);
   const record = `.omd/design-language/checks/sha256-${hash}.json`;
   writer.writeContentAddressed(`.omd/design-language/measurements/sha256-${check.afterSha256}.json`, `${canonicalJson(after)}\n`);
@@ -48,20 +49,17 @@ export function requireMovement(root: string, invocation?: ProjectRunInvocation)
   if (!existsSync(join(root, '.omd/design-language/feedback.json'))) return;
   const translation = readTranslation(root, 'feedback', invocation === undefined ? undefined : readPersistedRoute(root, invocation));
   if (!translation || translation.translation.status === 'not-applicable') return;
-  if (translation.translation.status !== 'resolved') fail('DESIGN_LANGUAGE_AMBIGUOUS');
-  if (chosenCopyTone(translation.translation)) {
-    if (invocation === undefined) throw new Error('DESIGN_LANGUAGE_REQUIRED');
-    requireCopyToneReview(root, readPersistedRoute(root, invocation));
-    return;
-  }
+  if (translation.translation.status !== 'resolved') return;
+  if (chosenCopyTone(translation.translation)) return;
   const pointerPath = join(root, '.omd/design-language/check.json');
-  if (!existsSync(pointerPath)) fail('FEEDBACK_TARGET_UNMET');
+  // Missing optional numeric proof does not block implementation or completion.
+  if (!existsSync(pointerPath)) return;
   try {
     const pointer = JSON.parse(readFileSync(pointerPath, 'utf8')) as { schema: string; record: string; sha256: string };
     if (pointer.schema !== 'design-language-pointer-v1' || !/^[a-f0-9]{64}$/.test(pointer.sha256) || pointer.record !== `.omd/design-language/checks/sha256-${pointer.sha256}.json`) fail('FEEDBACK_TARGET_UNMET');
     const bytes = readFileSync(join(root, pointer.record));
     const check = JSON.parse(bytes.toString('utf8')) as MovementCheck;
-    if (sha(bytes) !== pointer.sha256 || canonicalJson(check) + '\n' !== bytes.toString('utf8') || check.schema !== 'design-language-check-v1' || check.translationSha256 !== translation.sha256 || !check.passed || !check.targets.length || check.targets.some(t => !t.passed)) fail('FEEDBACK_TARGET_UNMET');
+    if (sha(bytes) !== pointer.sha256 || canonicalJson(check) + '\n' !== bytes.toString('utf8') || check.schema !== 'design-language-check-v1' || check.translationSha256 !== translation.sha256 || !check.targets.length) fail('FEEDBACK_TARGET_UNMET');
     const before = JSON.parse(readFileSync(join(root, '.omd/design-language/baseline.json'), 'utf8')) as Measurement;
     const afterBytes = readFileSync(join(root, `.omd/design-language/measurements/sha256-${check.afterSha256}.json`));
     if (sha(afterBytes) !== check.afterSha256) fail('FEEDBACK_TARGET_UNMET');

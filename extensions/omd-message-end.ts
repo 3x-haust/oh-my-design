@@ -46,6 +46,7 @@ type MessageEndTask = Readonly<{
   pi: PortablePiApi;
   ui?: { select?(title: string, options: string[]): Promise<string | undefined> };
   browserConsentHome?: string;
+  responseLocale?: 'ko' | 'en';
   onBrowserConsentRequired?(question: string): void;
   onUserQuestion?(question: UserQuestion): void;
   onBrowserAnswer?(answer: 'user-browser' | 'omd-profile' | null, digest: string): void;
@@ -120,9 +121,10 @@ function referenceWork(value: unknown): ReferenceWork | null {
 
 function parseStageWork(text: string): StageWorkPointer | null {
   const value: unknown = JSON.parse(text);
-  if (typeof value !== 'object' || value === null || Reflect.get(value, 'schema') !== 'stage-next-v1') return null;
-  const stage = Reflect.get(value, 'stage');
-  if (typeof stage !== 'string') return null;
+  if (typeof value !== 'object' || value === null || !['stage-next-v1', 'stage-next-v2'].includes(Reflect.get(value, 'schema'))) return null;
+  const stageValue = Reflect.get(value, 'stage');
+  if (stageValue === null && Reflect.get(value, 'schema') === 'stage-next-v1') return null;
+  const stage = typeof stageValue === 'string' ? stageValue : Reflect.get(value, 'deliveryMode') === 'design-only' ? 'design-handoff' : 'production';
   const progress = Reflect.get(value, 'progress');
   const routeSha256 = typeof progress === 'object' && progress !== null ? Reflect.get(progress, 'routeSha256') : null;
   const validatedStages = typeof progress === 'object' && progress !== null ? stringList(Reflect.get(progress, 'validatedStages')) : [];
@@ -183,8 +185,7 @@ function actionPacket(work: StageWorkPointer): string {
   ].join('\n');
 }
 
-const koreanMessage = (message: NonNullable<PortablePiEvent['message']>): boolean =>
-  message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? '')) ?? false;
+const koreanMessage = (_message: NonNullable<PortablePiEvent['message']>, locale?: 'ko' | 'en'): boolean => locale === 'ko';
 
 export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown> {
   const { cwd, signal, message, run, interrupted, bootstrap, repairLoop, revision, pi } = task;
@@ -260,15 +261,14 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
           ? await (await import('../core/browser/setup.ts')).userBrowserDoctor() : null;
         const { readReferenceBrowserConfig } = await import('../core/ref/browser-config.ts');
         const config = readReferenceBrowserConfig(process.env, task.browserConsentHome);
-        const designAttempts = work.referenceWork?.attempts.filter(attempt => attempt.lane === 'design'
-          && /login|challenge|captcha|authentication/i.test(attempt.reason)) ?? [];
+        const designAttempts = work.referenceWork?.attempts.filter(attempt => attempt.lane === 'design') ?? [];
         const needsSetup = config.mode !== 'cdp' && config.storageState === undefined && config.executablePath === undefined
           && work.stage === 'reference-board' && work.referenceWork !== null
-          && (work.referenceWork.action?.kind === 'browser-consent' || designAttempts.length > 0)
+          && work.referenceWork.action?.kind === 'browser-consent'
           && (userConsent === null && consent === null
             || userConsent === 'consented' && userDoctor?.state !== 'ready'
             || consent === 'consented' && !existsSync(browserProfilePath(task.browserConsentHome))
-            || designAttempts.some(attempt => /session expired/i.test(attempt.reason)));
+            );
         if (needsSetup && !interrupted()) {
           const question = work.referenceWork?.action?.question ?? '레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요. 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기 중 무엇을 원하시나요?';
           const sites = [...new Set(designAttempts.map(attempt => attempt.url)
@@ -312,9 +312,7 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
             return { message: { ...message, content: [{ type: 'text', text: `OMD_BROWSER_SETUP_CONSENT_REQUIRED: ${question}\nOptions: 평소 쓰는 브라우저 그대로 쓰기 / OMD 전용 로그인 브라우저 / 이번엔 건너뛰기 / 다시 묻지 않기. Ask the user; interpret their answer and run omd browser setup --engine user-browser|omd-profile --consent --user-answer "<exact user text>" or omd browser skip --decision skipped-this-run|never-ask --user-answer "<exact user text>". Do not infer consent from keywords.\n${actionPacket(work)}` }] } };
           }
         }
-        const askingForPlanning = work.action === 'resolve-planning-evidence' && work.planning.length > 0
-          && message.content?.some(part => part.type === 'text'
-            && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));
+        const askingForPlanning = work.action === 'resolve-planning-evidence' && work.planning.length > 0;
         const decision = work.routeSha256 === null
           ? { retry: false, pass: 0, stalled: true }
           : repairLoop.next(cwd, 'stage', 'selected-run', {
@@ -331,7 +329,7 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
         }
         const questions = work.action === 'resolve-planning-evidence'
           ? work.planning.map(item => `- ${item.field}: ${item.text}`).join('\n') : '';
-        const korean = koreanMessage(message);
+        const korean = koreanMessage(message, task.responseLocale);
         const stallCode = decision.stalled && work.routeSha256 !== null && !askingForPlanning ? 'OMD_REPAIR_STALLED: Three consecutive completed repairs made no material progress.\n' : '';
         const status = korean
           ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행하고 ${work.next}로 검증합니다.` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled && work.referenceWork !== null ? '수집된 실제 화면을 판단하고 아래 소유 작업을 완료해야 합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
@@ -360,7 +358,7 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
         content: `OMD repair pass ${decision.pass}: terminal validation failed. Start with one concise user-visible progress note, repair the named selected-stage inputs or rendered review loop, then rerun guard completion. Continue while the relevant artifact or blocker changes; never forge evidence, alter the route to remove requirements, or claim independent review.\n${failure.summary}` },
       { triggerTurn: true, deliverAs: 'followUp' });
     }
-    const korean = koreanMessage(message);
+    const korean = koreanMessage(message, task.responseLocale);
     const status = korean
       ? `OMD 작업은 미완료입니다. guard completion 검증을 통과하지 못해 최종 완료 보고를 보류했습니다.${retry ? ' 누락된 작업의 수정·재검사 루프를 이어갑니다.' : decision.stalled ? ' 같은 차단에서 검사만 반복되어 루프를 멈췄습니다.' : ' 누락·오래된 산출물 또는 권한 문제를 해결해야 합니다.'}`
       : `OMD is incomplete. The guard completion claim was withheld.${retry ? ' Continuing the repair/recheck loop.' : decision.stalled ? ' Checks repeated without progress, so the loop stopped.' : ' Resolve the missing, stale, or unauthorized inputs.'}`;

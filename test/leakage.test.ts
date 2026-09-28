@@ -143,12 +143,12 @@ test('CLI: the same page with no .omd present reports no leak violation', () => 
 // legitimate privacy/policy copy — "We don't use third-party trackers"), so this fixture
 // was changed from "We don't use jargon here" to "No jargon here" — it still matches the
 // kept `no (?:fluff|jargon|nonsense) here` branch and preserves the test's intent.
-test('SLOP-COPY also fires on self-negating meta-copy ("no jargon here")', () => {
+test('SLOP-COPY does not make a semantic verdict from phrase matching', () => {
   const builtin = loadRules(new URL('../core/rules/builtin/', import.meta.url).pathname);
   const node: RawNode = textNode('n1', 'No jargon here, just plain facts.');
   const ir = normalize(irWith([node]));
   const v: Violation[] = check(ir, builtin, { categories: ['slop'] });
-  assert.ok(v.some((x) => x.id === 'SLOP-COPY'), must(v[0], 'at least one slop violation').id);
+  assert.equal(v.some((x) => x.id === 'SLOP-COPY'), false);
 });
 
 // F2: false-positive regression — these are ordinary, legitimate prose and must NOT fire.
@@ -168,9 +168,9 @@ test('SLOP-COPY does not fire on legitimate privacy/policy and empty-state copy'
 
 // F3: the Korean self-negation pattern moved from SLOP-COPY to SLOP-PINK-ELEPHANT,
 // which covers the full family (이런 내용|것 + 여기/이 페이지에는 ...).
-test('SLOP-PINK-ELEPHANT fires on the Korean self-negating pattern ("이런 내용은 없습니다")', () => {
+test('SLOP-PINK-ELEPHANT does not make a semantic verdict from phrase matching', () => {
   const builtin = loadRules(new URL('../core/rules/builtin/', import.meta.url).pathname);
   const ir = normalize(irWith([textNode('n1', '이런 내용은 없습니다, 저희는 다르게 접근합니다.')]));
   const v: Violation[] = check(ir, builtin, { categories: ['slop'] });
-  assert.ok(v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), must(v[0], 'at least one slop violation').id);
+  assert.equal(v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), false);
 });

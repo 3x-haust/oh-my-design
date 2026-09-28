@@ -322,30 +322,14 @@ async function collectEntrySurfaceFindings(
   }
 }
 
-async function collectRenderedKoreanCopyFindings(
+async function recordRenderedCopyForReview(
   page: Page,
   viewport: Readonly<{ width: number; height: number }>,
-  findings: Set<string>,
+  transcript: string[],
 ): Promise<void> {
   const text = await page.locator('body').innerText().catch(() => '');
-  if (/(?:합니다|했습니다|됩니다|되었습니다|입니다)\.(?:입니다|합니다|했습니다|됩니다|되었습니다)(?=[\s.!?]|$)/u
-    .test(text)) {
-    findings.add(`korean-result-ending-duplicated:${viewport.width}x${viewport.height}`);
-  }
-  for (const match of text.matchAll(
-    /(?:상태|처분|결과|값|단계|모드)(?:를|을)\s+([가-힣]+)(으로|로)\s+(?:바꿨|변경|설정|전환)/gu,
-  )) {
-    const noun = match[1]!;
-    const particle = match[2]!;
-    const finalCode = noun.charCodeAt(noun.length - 1);
-    const jongseong = finalCode >= 0xac00 && finalCode <= 0xd7a3
-      ? (finalCode - 0xac00) % 28
-      : 0;
-    const expected = jongseong === 0 || jongseong === 8 ? '로' : '으로';
-    if (particle !== expected) {
-      findings.add(`korean-result-particle-mismatch:${viewport.width}x${viewport.height}`);
-    }
-  }
+  // Copy quality is contextual; preserve the observed text as advisory review input.
+  if (text) transcript.push(`rendered-copy-review:${viewport.width}x${viewport.height}:${Buffer.from(text.slice(0, 2_048)).toString('base64url')}`);
 }
 
 export async function runTrustedBrowserEvaluation(input: Readonly<{
@@ -424,7 +408,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
         }).catch(() => false);
         if (!focused) accessFindings.add(`keyboard-focus-missing:${viewport.width}x${viewport.height}`);
         await collectInteractiveLabelFindings(page, viewport, accessFindings);
-        await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
+        await recordRenderedCopyForReview(page, viewport, transcript);
         for (const [scriptIndex, script] of input.manifest.scripts.entries()) {
           const findings = behaviorByOutcome.get(script.outcomeRef);
           if (findings === undefined) {
@@ -482,7 +466,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             }
           }
           await collectInteractiveLabelFindings(page, viewport, accessFindings);
-          await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
+          await recordRenderedCopyForReview(page, viewport, transcript);
           const observedUrl = new URL(page.url());
           if (observedUrl.origin !== new URL(served.url).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
           const captureBytes = await page.screenshot({ fullPage: false });

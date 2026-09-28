@@ -1,7 +1,6 @@
-import { detectBlockReason } from '../render/index.ts';
 import type { AcquisitionPage } from './acquisition-engine.ts';
 import { publicDiscoveryUrl } from './discovery-record.ts';
-import { searchChallengeReason } from './search-execution.ts';
+import { assessPageAccess, type ReferenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 import { assertPublicNetworkUrl, type PublicHostLookup } from './public-network.ts';
 
 export type UserBrowserObservation = Readonly<{
@@ -113,19 +112,21 @@ export async function observeUserBrowser(page: AcquisitionPage, lookup?: PublicH
 }
 
 export async function clearUserBrowserChallenge(page: AcquisitionPage, lookup?: PublicHostLookup,
-  signal?: AbortSignal, allowSparse = false): Promise<UserBrowserObservation> {
+  signal?: AbortSignal, _allowSparse = false,
+  judgmentFor?: (observation: UserBrowserObservation, stage: 'before' | 'after') => Promise<ReferenceJudgmentBinding | undefined>
+): Promise<UserBrowserObservation & { access: ReferenceDecision }> {
   let state = await observeUserBrowser(page, lookup);
-  const reason = state.loginOccludes ? 'login form obscures the reference'
-    : searchChallengeReason(state.body) ?? detectBlockReason(state.title, state.body.length, null, state.links.length > 0);
-  if (!reason || allowSparse && reason.startsWith('near-empty body')) return state;
-  if (!state.loginOccludes && !/challenge page|Just a moment/i.test(reason)) throw new Error(reason);
+  const assess = async (stage: 'before' | 'after') => {
+    const binding = await judgmentFor?.(state, stage);
+    return assessPageAccess(state.url, binding);
+  };
+  let access = await assess('before');
+  if (access.decision !== 'challenge' && access.decision !== 'login') return { ...state, access };
   const outcome = await page.requestHelp({ title: 'Complete browser sign-in or verification', prompt: 'Please complete the sign-in or verification in this browser window.',
     completionCriteria: 'The requested page is visible after verification.', timeoutMs: 120_000 });
   if (signal?.aborted) throw new Error('OMD Browser acquisition cancelled');
   if (!['completed', 'continued', 'navigated'].includes(outcome)) throw new Error(`OMD Browser handoff ${outcome}`);
   state = await observeUserBrowser(page, lookup);
-  const remaining = detectBlockReason(state.title, state.body.length, null, state.links.length > 0);
-  if (state.loginOccludes || searchChallengeReason(state.body) || remaining && !(allowSparse && remaining.startsWith('near-empty body')))
-    throw new Error('OMD Browser challenge remains after human handoff');
-  return state;
+  access = await assess('after'); // Pre-handoff judgment can never clear a changed page.
+  return { ...state, access };
 }

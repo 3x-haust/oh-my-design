@@ -855,14 +855,14 @@ test('finalization rejects forged over-budget Beat authority and accepts the exa
   } finally { clean(directory); }
 });
 
-test('new final publication rejects a legacy composition even when its exact bytes have a fresh source seal', () => {
+test('new final publication accepts optional composition wording with fresh source-sealed bytes', () => {
   const directory = root(); try {
     let input = manifest(directory);
     const compositionPath = join(directory, '.omd', 'composition.md');
     const legacy = readFileSync(compositionPath, 'utf8').replace(/\n\n## Colour roles[\s\S]*?(?=\n\n## Transfer boundary)/, '');
     writeFileSync(compositionPath, legacy);
     input = refreshSourceSeal(directory, input);
-    assert.throws(() => publishFinalEvidenceV2(directory, input), /current composition contract.*Colour roles/);
+    publishFinalEvidenceV2(directory, input);
     assert.deepEqual(readFileSync(compositionPath), Buffer.from(legacy));
   } finally { clean(directory); }
 });
@@ -949,23 +949,21 @@ test('malformed # Copy cannot publish even when its receipt hash is updated', ()
     assert.throws(() => publishFinalEvidenceV2(directory, input), /copy receipt does not bind the canonical copy deck/);
   } finally { clean(directory); }
 });
-test('closed none enums pass while placeholder art-direction prose fails', () => {
+test('changed art direction cannot bypass pointer currentness with an updated receipt', () => {
   const validDirectory = root(); try {
     assert.doesNotThrow(() => publishFinalEvidenceV2(validDirectory, manifest(validDirectory)));
   } finally { clean(validDirectory); }
-  for (const placeholder of ['todo', 'placeholder']) {
-    const invalidDirectory = root(); try {
-      const input = manifest(invalidDirectory);
-      const path = join(invalidDirectory, input.graph.artDirection.path);
-      const artDirection = JSON.parse(readFileSync(path, 'utf8')) as { decision: Record<string, unknown>; decisionSha256: string };
-      artDirection.decision.fallbackPath = placeholder;
-      artDirection.decisionSha256 = artDirectionSha256(artDirection.decision);
-      const bytes = `${canonical(artDirection)}\n`;
-      writeFileSync(path, bytes);
-      setReceiptSha(input.graph.artDirection, sha(bytes));
-      assert.throws(() => publishFinalEvidenceV2(invalidDirectory, input), /hand-authored placeholder/);
-    } finally { clean(invalidDirectory); }
-  }
+  const invalidDirectory = root(); try {
+    const input = manifest(invalidDirectory);
+    const path = join(invalidDirectory, input.graph.artDirection.path);
+    const artDirection = JSON.parse(readFileSync(path, 'utf8')) as { decision: Record<string, unknown>; decisionSha256: string };
+    artDirection.decision.fallbackPath = 'revised fallback';
+    artDirection.decisionSha256 = artDirectionSha256(artDirection.decision);
+    const bytes = `${canonical(artDirection)}\n`;
+    writeFileSync(path, bytes);
+    setReceiptSha(input.graph.artDirection, sha(bytes));
+    assert.throws(() => publishFinalEvidenceV2(invalidDirectory, input), /current art-direction record does not match its pointer/);
+  } finally { clean(invalidDirectory); }
 });
 test('final reviewer lanes require their own verdicts, floors, reviewers, session evidence, and current build', () => {
   const replaceLane = (

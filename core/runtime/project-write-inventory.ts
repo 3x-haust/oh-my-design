@@ -83,6 +83,8 @@ const FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION = 'final-evidence-v2 stable des
 const FIGMA_AUTHORITY_STORE_ADAPTER = 'core/figma/artifact-authority-store.ts';
 const FIGMA_AUTHORITY_STORE_EXCEPTION = 'external host-owned Figma artifact authority store (audited exact-identity adapter)';
 const ACTIVATION_KEY_STORE = 'core/runtime/self-signed-activation.ts';
+const BROWSER_USER_STORE = 'core/ref/browser-consent.ts';
+const BROWSER_USER_STORE_EXCEPTION = 'audited user-level browser consent and profile store';
 const ACTIVATION_KEY_STORE_EXCEPTION = 'project activation key and atomic nonce store (audited private fixed paths and exclusive claims)';
 const GUARD_ENTRYPOINTS = [
   'writeExternalObservationFile',
@@ -207,6 +209,18 @@ function activationKeyStoreAdapter(
     && !source.includes('rmSync(')
     && !source.includes('unlinkSync(')
     && !source.includes('rmdirSync(');
+}
+
+function browserUserStoreAdapter(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): boolean {
+  if (filePath !== BROWSER_USER_STORE || mutations.length === 0) return false;
+  const allowed = new Set(['mkdirSync', 'writeFileSync', 'renameSync', 'rmSync']);
+  return mutations.every(mutation => allowed.has(mutation.operation))
+    && source.includes("export const browserProfilePath = (home = homedir()): string => join(home, '.omd', 'browser-profile');")
+    && source.includes("export const browserConsentPath = (home = homedir()): string => join(home, '.omd', 'browser-consent.json');")
+    && source.includes('const temporary = `${path}.${process.pid}.tmp`;')
+    && source.includes('rmSync(browserProfilePath(home), { recursive: true, force: true });')
+    && !source.includes('process.cwd()')
+    && !source.includes('join(home, \'..\'');
 }
 
 function sourcePath(repositoryRoot: string, absolutePath: string): string {
@@ -582,6 +596,7 @@ export function inventoryProjectRunMutations(
     const finalEvidenceDescriptorAdapter = finalEvidenceStableDescriptorAdapter(filePath, source, directMutations);
     const figmaAuthorityAdapter = figmaAuthorityStoreAdapter(filePath, source, directMutations);
     const activationKeyAdapter = activationKeyStoreAdapter(filePath, source, directMutations);
+    const browserUserAdapter = browserUserStoreAdapter(filePath, source, directMutations);
     const nativePiAdapterException = nativePiWriterException(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')
@@ -592,7 +607,7 @@ export function inventoryProjectRunMutations(
       ? 'guarded'
       : reviewerLiveSocketException
         ? 'external-exception'
-        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter || activationKeyAdapter || nativePiAdapterException !== undefined
+        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter || activationKeyAdapter || browserUserAdapter || nativePiAdapterException !== undefined
           ? 'external-exception'
           : 'unclassified';
     const exception = hasExternalObservationWrapper
@@ -605,7 +620,9 @@ export function inventoryProjectRunMutations(
             ? FIGMA_AUTHORITY_STORE_EXCEPTION
             : activationKeyAdapter
               ? ACTIVATION_KEY_STORE_EXCEPTION
-              : nativePiAdapterException;
+              : browserUserAdapter
+                ? BROWSER_USER_STORE_EXCEPTION
+                : nativePiAdapterException;
     owners.push({
       filePath,
       classification,

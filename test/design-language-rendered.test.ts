@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { lexicon, lexiconSha256 } from '../core/design-language/index.ts';
+import { publishReadingJudgment } from './design-language-judgment-cli.ts';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const cli = join(repo, 'bin/omd.mjs');
@@ -40,17 +41,18 @@ test('real native feedback CLI measures cramped form before and after CSS repair
       chosenId: 'space', decision: 'Current form rows have an 8px gap, below the scoped reading range.',
     };
     writeFileSync(join(root, '.omd/.cache/feedback.json'), JSON.stringify(authored));
-    const translated = run('feedback', 'translate', '--input', '.omd/.cache/feedback.json', '--page', entry, '--json');
+    const judgment = publishReadingJudgment(root, authored, run);
+    const translated = run('feedback', 'translate', '--input', '.omd/.cache/feedback.json', '--judgment', judgment, '--page', entry, '--json');
     assert.equal(translated.status, 0, translated.stderr);
     const baseline = JSON.parse(readFileSync(join(root, '.omd/design-language/baseline.json'), 'utf8')) as { values: { value: number }[] };
     assert.equal(baseline.values[0]?.value, 8);
     const pointer = readFileSync(join(root, '.omd/design-language/feedback.json'), 'utf8');
     writeFileSync(join(root, entry), html(8).replace('padding:20px', 'padding:22px'));
     const noMovementSource = readFileSync(join(root, entry), 'utf8');
-    const refused = run('feedback', 'check', '--page', entry, '--json');
-    assert.equal(refused.status, 1);
-    assert.match(refused.stderr, /FEEDBACK_TARGET_UNMET/);
-    assert.equal(existsSync(join(root, '.omd/design-language/check.json')), false);
+    const advisory = run('feedback', 'check', '--page', entry, '--json');
+    assert.equal(advisory.status, 0, advisory.stderr);
+    const advisoryPointer = JSON.parse(readFileSync(join(root, '.omd/design-language/check.json'), 'utf8')) as { record: string };
+    assert.equal((JSON.parse(readFileSync(join(root, advisoryPointer.record), 'utf8')) as { passed: boolean }).passed, false);
     assert.equal(readFileSync(join(root, '.omd/design-language/feedback.json'), 'utf8'), pointer);
     assert.equal(readFileSync(join(root, entry), 'utf8'), noMovementSource);
     writeFileSync(join(root, entry), html(18));

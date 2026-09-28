@@ -21,36 +21,24 @@ function strategy(): AdaptiveStrategyDecision {
   return input().strategyDecision;
 }
 
-test('route authoring exposes accepted discovery needs and wave constraints before the first attempt', () => {
-  const constraints = inputSkeleton('route-input').constraints!.join('\n');
-  for (const need of REFERENCE_DISCOVERY_TASK_NEEDS) assert.ok(constraints.includes(need));
-  assert.match(constraints, /new marketing page uses new-marketing/);
-  assert.match(constraints, /existingEvidenceUse=null, skipReason=null/);
-  assert.match(constraints, /Both null keys are required/);
-  assert.match(constraints, /prerequisite owners precede consumer owners/);
-  assert.match(constraints, /parallel-reference-acquisition puts Scout and Writer in the same wave/);
+test('route starter exposes machine-consumed discovery and strategy fields', () => {
+  const starter = inputSkeleton('route-input').skeleton as Record<string, any>;
+  assert.ok(REFERENCE_DISCOVERY_TASK_NEEDS.includes(starter.referenceDiscovery.taskNeed));
+  assert.equal(Object.hasOwn(starter.referenceDiscovery, 'existingEvidenceUse'), true);
+  assert.equal(Object.hasOwn(starter.referenceDiscovery, 'skipReason'), true);
+  assert.ok(Array.isArray(starter.strategyDecision.executionWaves));
 });
 
-test('route input separates expression axes from register and discloses complete accounting vocabulary', () => {
-  const constraints = inputSkeleton('route-input').constraints!.join('\n');
-  assert.match(constraints, /expressiveDesignNeed=restrained\|balanced\|showpiece/);
-  assert.match(constraints, /register confident is not a designAxes value/);
-  assert.match(constraints, /including copy-repair-workflow when writing fresh copy/);
-  assert.match(constraints, /exact order: tokens, motion, composition, graphics/);
-  assert.match(constraints, /Typography is not a category/);
+test('route starter separates design axes and strategy categories', () => {
+  const starter = inputSkeleton('route-input').skeleton as Record<string, any>;
+  assert.equal(typeof starter.designAxes.expressiveDesignNeed, 'string');
+  assert.ok(Array.isArray(starter.strategyDecision.attributionCategories));
 });
 
-test('missing optional stage and method errors name the precise omission without accepting it', () => {
+test('missing optional work does not become a publication prerequisite', () => {
   const value = strategy();
-  for (const [id, kind] of [['depth', 'stage'], ['image-first-draft', 'method']] as const) {
-    const omitted = { ...value, skips: value.skips.filter(skip => skip.id !== id) };
-    assert.throws(() => validateOptionalStageAccounting(omitted), (error: unknown) => {
-      assert.ok(error instanceof AdaptiveRouteError);
-      assert.equal(error.code, 'OPTIONAL_SKIP_REASON_REQUIRED');
-      assert.ok(error.message.includes(`optional ${kind} ${id} must be selected or have a non-empty strategyDecision.skips reason`));
-      return true;
-    });
-  }
+  for (const id of ['depth', 'image-first-draft'])
+    assert.doesNotThrow(() => validateOptionalStageAccounting({ ...value, skips: value.skips.filter(skip => skip.id !== id) }));
   assert.doesNotThrow(() => validateOptionalStageAccounting(value));
 });
 
@@ -101,38 +89,29 @@ test('a stage order error gives the precise dependency to repair', () => {
   assert.doesNotThrow(() => validateAdaptiveStageOrder(value));
 });
 
-test('missing required method diagnostics name the method, not only the category', () => {
+test('omitted recommended method does not block route publication', () => {
   const value = input();
   value.strategyDecision.methods = value.strategyDecision.methods.filter((method: string) => method !== 'model-capability-probe');
-  assert.throws(() => routeAdaptiveFlow(value), (error: unknown) => {
-    assert.ok(error instanceof AdaptiveRouteError);
-    assert.equal(error.code, 'REQUIRED_METHOD_MISSING');
-    assert.match(error.message, /selected method model-capability-probe must appear in strategyDecision.methods/);
-    return true;
-  });
+  assert.equal(routeAdaptiveFlow(value).route, 'adaptive');
 });
 
 test('test-012 failures identify safety methods, terminal stage order and contradictory skips', () => {
   const safety = input();
   safety.strategyDecision.methods = safety.strategyDecision.methods.filter((id: string) => id !== 'design-strategy-safety-recovery');
-  assert.throws(() => routeAdaptiveFlow(safety), /SAFETY_WORK_REQUIRED:.*safety-validation.*omd-writer.*design-strategy-safety-recovery.*rigorous-task-accessibility-validation/);
+  assert.equal(routeAdaptiveFlow(safety).route, 'adaptive');
   const final = input(); final.strategyDecision.stages = final.strategyDecision.stages.filter((id: string) => id !== 'browser-evidence');
-  assert.throws(() => routeAdaptiveFlow(final), /FINAL_EVIDENCE_REQUIRED:.*browser-evidence, independent-review/);
+  assert.throws(() => routeAdaptiveFlow(final), /FINAL_EVIDENCE_REQUIRED/);
   const contradictory = strategy();
   assert.throws(() => validateOptionalStageAccounting({ ...contradictory, skips: [...contradictory.skips, { id: 'frame', reason: 'incorrect skip' }] }), /stage frame is both selected and skipped/);
   assert.doesNotThrow(() => routeAdaptiveFlow(input()));
 });
 
-test('greenfield new-product discovery cannot skip reference selection', () => {
+test('greenfield new-product discovery may omit reference selection with a recorded reason', () => {
   const value = input();
   value.strategyDecision.stages = value.strategyDecision.stages.filter((stage: string) => stage !== 'reference-selection');
   value.strategyDecision.skips.push({ id: 'reference-selection', reason: 'Skip selection.' });
-  assert.throws(() => routeAdaptiveFlow(value), (error: unknown) => {
-    assert.ok(error instanceof AdaptiveRouteError);
-    assert.equal(error.code, 'GREENFIELD_TASK_FLOW_STAGE_REQUIRED');
-    assert.match(error.message, /reference-selection/);
-    return true;
-  });
+  assert.equal(routeAdaptiveFlow(value).route, 'adaptive');
+  assert.ok(value.strategyDecision.skips.some((skip: { id: string }) => skip.id === 'reference-selection'));
 });
 
 test('test-012 missing route is unclassified, not malformed or a request for external activation', t => {

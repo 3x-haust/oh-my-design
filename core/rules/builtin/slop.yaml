@@ -153,7 +153,7 @@
   # "it['’]s not just.*it['’]s" — a stock antithesis formula that delays the concrete claim.
   # "blazing.?fast" — stock performance adjective; real benchmarks use numbers.
   assert: "!/\\b(seamlessly|effortlessly|unlock the power|elevate your|supercharge|game.?chang|take .* to the next level|revolutioniz|cutting.?edge|unleash|no (?:fluff|jargon|nonsense) here|say goodbye to|blazing.?fast)\\b|it[\\u2019']s not just|결론적으로|시사하는 바가 크|주목할 만하|첫째[,，]/i.test(value)"
-  message: "Interchangeable marketing phrase: \"{value}\". It fits many products and leaves the reader without a specific capability, cost, proof, or next action. Replace it with the verified fact this product can uniquely support; quoted discussion of the phrase is a contextual exception for source review."
+  message: "Literal wording match: \"{value}\". Review whether this copy is grounded in the current product and context; the match alone is not a quality judgment."
 
 # Exact whole-node placeholder copy. Narrow whole-string matching avoids flagging documentation
 # that discusses placeholders, TODO tooling, or content design as a subject.
@@ -164,7 +164,7 @@
   when: "Boolean(node.text)"
   value: "node.text.trim()"
   assert: "!/^(?:lorem ipsum(?: dolor sit amet)?[.,]?|your (?:content|headline|tagline) here[.!]?|(?:todo|tbd|placeholder)(?: text| copy)?[.!]?|\\[(?:todo|tbd|placeholder)\\])$/i.test(value)"
-  message: "Visible placeholder copy: \"{value}\". The user cannot evaluate hierarchy, wrapping, or the promised action against unspecified content. Replace it with representative task-specific copy; documentation that merely discusses placeholder syntax is outside this exact whole-node match."
+  message: "Literal placeholder-shaped text match: \"{value}\". Review its role in the rendered context; the match alone is not a readiness verdict."
 
 # The pink-elephant failure: a page told "no clutter" that writes "No clutter here."
 # Copy must state what IS — the positive fact the negation was hiding. This rule catches
@@ -180,7 +180,7 @@
   when: "Boolean(node.text) && node.text.length > 8"
   value: "node.text"
   assert: "!/you won't find [^.]{0,40} here|we (?:won't|will never) (?:bore|spam|waste)|\\b(?:no|zero) (?:ads|clutter|distractions|gimmicks)[,.]? just\\b|\\bnot (?:a |an |just a )?(?:hypothetical ?)?(?:demo|mock-?up|mockup|prototype|placeholder|simulation|wireframe|dummy|proof.?of.?concept|hypothetical)s?\\b|이런 (?:내용|것)[은는] 없|(?:여기|이 페이지)에는 [가-힣 ]{0,15}(?:광고|잡동사니|군더더기)[가는은]? 없|(?:가상\\s*)?(?:데모|목업|시안|시제품|프로토타입|플레이스홀더|더미|샘플)(?:이|가|은|는)?\\s*아(?:닙니다|니에요|니라)/i.test(value)"
-  message: "Self-negating meta-copy: \"{value}\". The sentence repeats a rejected condition instead of telling the reader what exists. Replace it with the positive, verifiable fact: what the reader gets, what it costs, or what happens next; privacy, error, empty, and availability statements remain valid exceptions."
+  message: "Literal negation-shaped wording match: \"{value}\". Review the actual claim and surrounding context; the match alone is not a copy verdict."
 
 # Korean product-copy patterns that warrant contextual review.
 #
@@ -207,7 +207,7 @@
   when: "Boolean(node.text) && node.text.length > 8"
   value: "node.text"
   assert: "!/(?:그러나|하지만|또한|따라서|즉),[ \\t]|살펴보겠습니다|알아보겠습니다|둘째[,，]|셋째[,，]/u.test(value)"
-  message: "Korean document-cadence pattern: \"{value}\". A translated connective comma, structural 살펴보겠습니다/알아보겠습니다 opener, or mechanical 둘째/셋째 enumeration delays the product's actual claim. Write the specific fact or action directly; a genuine long-form essay is the contextual exception."
+  message: "Literal Korean wording match: \"{value}\". Review cadence and purpose in context; the match alone is not a quality verdict."
 
 # Korean translation-punctuation review: a spaced em-dash ( — ) or en-dash ( – ) inside a
 # sentence that contains Hangul. The spaced dash is standard English typography but unusual
@@ -250,7 +250,7 @@
   when: "Boolean(node.text) && node.text.length > 8 && /[가-힣]/u.test(node.text)"
   value: "node.text"
   assert: "!(/요[.!?]/.test(value) && /니다[.!?]/.test(value)) || /[\"'\\u201C\\u201D\\u2018\\u2019\\u300C\\u300D]/.test(value)"
-  message: "Mixed speech levels in one text block: \"{value}\". 해요체 endings (요.) and 합니다체 endings (니다.) alternate inside one paragraph, making authority and audience relationship inconsistent. Choose the level justified by the voice study; quoted dialogue remains exempt."
+  message: "Korean ending-pattern match: \"{value}\". Review speech level and quotations in context; the match alone is not a register verdict."
 
 - id: SLOP-TRIPLE-CARD
   layer: 1
@@ -289,7 +289,7 @@
   when: "Boolean(node.text) && node.text.length > 8 && /[가-힣]/u.test(node.text)"
   value: "node.text"
   assert: "!/아래는\\s+.{0,30}(?:기록|내용|목록|정리)|다음은\\s+.{0,30}(?:입니다|이에요)/u.test(value)"
-  message: "Document-structure narration copy: \"{value}\". '아래는 … 기록/내용/목록' and '다음은 … 입니다/이에요' introduce the document's structure in essay cadence. On a product page, write what the product does — not that we will now look at what the product does. Delete the announcing sentence and replace it with the specific fact or action it was narrating."
+  message: "Literal Korean signpost match: \"{value}\". Review its function in context; the match alone is not a copy verdict."
 
 # ── the machine-default aesthetic, measured ────────────────────────────────────────────
 #
@@ -323,7 +323,7 @@
   when: "node.parent === null"
   value: "(() => { const p = [/\\b\\d+[kK]\\+/, /\\b9[89](?:\\.\\d)?%/, /\\b24\\/7\\b/]; const hits = ir.nodes.filter(n => n.text && p.some(r => r.test(n.text))).map(n => n.text.slice(0, 40)); return hits.length >= 2 ? hits : null; })()"
   assert: "value === null"
-  message: "Invented stat row: {value}. Round heroic numbers (10k+, 99.9%, 24/7) on a new product are decoration — the user has no reason to believe them. Write odd, specific, sourced numbers ('847 teams migrated in Q1') or nothing."
+  message: "Numeric-pattern match: {value}. Check factual support for each claim in context; this pattern alone cannot establish fabrication."
 
 # Oversized drop shadow: shadow blur ≥40px on a node whose smaller dimension is less than
 # or equal to the blur. A shadow that large maps to no real surface — it is fog. Elevation
@@ -409,7 +409,7 @@
   when: "Boolean(node.text) && node.text.length <= 30 && node.box.h <= 36"
   value: "node.text"
   assert: "!/^[\\s\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]*\\b(?:new|beta|hot|popular|trending|pro|soon)\\b[\\s!]*$/iu.test(value)"
-  message: "Manufactured badge: \"{value}\". New / Beta / Hot / Popular tags manufacture buzz. Use badge treatments only for genuine, time-bounded status: a feature launched this week, an actual version number, a real availability flag. Decoration badges erode trust by the third one."
+  message: "Badge-label pattern match: \"{value}\". Check whether the label conveys a real state in context; this match alone cannot establish manufactured status."
 
 # Flat type hierarchy: when three or more distinct font sizes cluster between 13–19px, or
 # adjacent steps differ by less than 1.15×, size stops carrying hierarchy. The eye cannot

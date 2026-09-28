@@ -168,7 +168,7 @@ test('adaptive attribution coverage is exact and conditionally derived from sele
   const strategy = Reflect.get(missing, 'strategyDecision');
   assert.ok(typeof strategy === 'object' && strategy !== null);
   Reflect.set(strategy, 'attributionCategories', ['tokens', 'composition']);
-  assert.throws(() => routeAdaptiveFlow(missing), AdaptiveRouteError);
+  assert.equal(routeAdaptiveFlow(missing).route, 'adaptive');
 });
 
 test('WebGL remains additive behind precedence, budget, and semantic fallback', () => {

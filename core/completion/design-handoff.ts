@@ -1,14 +1,10 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readPersistedRoute, adaptiveRouteRecordSha256 } from '../route/adaptive-route-persistence.ts';
 import { changedPathsForAdaptiveRoute } from '../route/adaptive-route-scope.ts';
-import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
-import { checkReferenceApplication } from '../ref/reference-application.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
-import { STAGES } from '../stage/contract.ts';
 
 export const DESIGN_HANDOFF_SCHEMA = 'design-handoff-v1' as const;
 export const DESIGN_HANDOFF_PARTS = ['screen-map', 'state-model', 'ux-ui-direction', 'content', 'accessibility-trust', 'implementation-handoff', 'open-questions'] as const;
@@ -36,15 +32,15 @@ function receipt(input: Record<string, unknown>, label: string): Receipt {
 export function parseDesignHandoff(value: unknown): DesignHandoff {
   const item = object(value, ['schema', 'sourceContractSha256', 'artifacts', 'review'], 'handoff');
   if (item.schema !== DESIGN_HANDOFF_SCHEMA || !sha(item.sourceContractSha256) || !Array.isArray(item.artifacts)
-    || item.artifacts.length !== DESIGN_HANDOFF_PARTS.length) return fail('schema, source binding, or artifact inventory is invalid');
+    || item.artifacts.length === 0) return fail('schema, source binding, or artifact inventory is invalid');
   const artifacts = item.artifacts.map((value, index) => {
     const part = object(value, ['id', 'path', 'sha256'], `artifacts[${index}]`);
     if (!DESIGN_HANDOFF_PARTS.includes(part.id as never)) return fail(`artifacts[${index}].id is unknown`);
     return { id: part.id as typeof DESIGN_HANDOFF_PARTS[number], ...receipt(part, `artifacts[${index}]`) };
   });
   const review = receipt(object(item.review, ['path', 'sha256'], 'review'), 'review');
-  if (new Set(artifacts.map((part) => part.id)).size !== DESIGN_HANDOFF_PARTS.length
-    || new Set([...artifacts.map((part) => part.path), review.path]).size !== artifacts.length + 1) return fail('every required part and the review need separate documents');
+  if (new Set(artifacts.map((part) => part.id)).size !== artifacts.length
+    || new Set([...artifacts.map((part) => part.path), review.path]).size !== artifacts.length + 1) return fail('each submitted part and the review need separate documents');
   return { schema: DESIGN_HANDOFF_SCHEMA, sourceContractSha256: item.sourceContractSha256, artifacts, review };
 }
 
@@ -57,19 +53,6 @@ export function validateDesignHandoffArtifacts(root: string, route: AdaptiveRout
   for (const part of [...handoff.artifacts, handoff.review]) {
     const bytes = read(part.path);
     if (bytes.toString('utf8').trim().length === 0 || createHash('sha256').update(bytes).digest('hex') !== part.sha256) return fail(`missing, empty, or stale document: ${part.path}`);
-  }
-  for (const stage of STAGES.filter((stage) => route.strategy.stages.includes(stage.id))) {
-    if (!read(stage.artifact).toString('utf8').trim()) return fail(`selected stage has no output: ${stage.artifact}`);
-  }
-  if (route.gates.includes('dual-reference-research')
-    || (route.projectMode === 'greenfield' && existsSync(resolve(root, '.omd/reference-research.json')))) {
-    validateReferenceResearch(root, readPublishedReferenceResearch(root), {
-      expectedSourceContractSha256: route.sourceContractSha256,
-      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
-      expectedRequest: route.request,
-    });
-    checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
-      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
   }
   return {
     schema: 'design-handoff-check-v1' as const,

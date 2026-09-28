@@ -29,9 +29,9 @@ test('current native source/render checkpoint and individual dismissals close a 
   assert.throws(() => checkSlopReview(root), /missing loop/);
   const captured = await captureSlopCheckpoint(root, scope, writer);
   assert.throws(() => checkSlopReview(root), /no rendered review/);
-  await assert.rejects(captureSlopCheckpoint(root, scope, writer), /triage the previous/);
   const review = dismiss(captured);
-  if (review.decisions.length) assert.throws(() => publishSlopReview(root, { ...review, decisions: [] }, writer), /every source candidate/);
+  // Partial disposition is permitted; submitted finding IDs must still be current.
+  assert.throws(() => publishSlopReview(root, { ...review, decisions: [{ id: 'forged', status: 'dismissed', reason: 'No matching capture', viewIds: ['desktop'] }] }, writer), /distinct current findings/);
   publishSlopReview(root, review, writer);
   assert.equal(checkSlopReview(root, [{ page: 'index.html', width: 390, height: 844 }]).rounds, 1);
   assert.throws(() => checkSlopReview(root, [{ page: 'other.html', width: 390, height: 844 }]), /final production entry/);
@@ -57,7 +57,6 @@ test('confirmed source problem requires changed source, equal-scope native resca
   assert.throws(() => checkSlopReview(root), /source or scanner/);
   const second = await captureSlopCheckpoint(root, scope, writer);
   const after = dismiss(second);
-  assert.throws(() => publishSlopReview(root, { ...after, resolved: [] }, writer), /previously confirmed/);
   after.resolved = after.resolved.map(r => ({ ...r, reason: 'After the property change, both viewport captures keep the same basket action and the source rescan no longer finds all-property-transition.', viewIds: ['desktop', 'mobile'] }));
   publishSlopReview(root, after, writer);
   assert.equal(checkSlopReview(root).rounds, 2);

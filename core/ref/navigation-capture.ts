@@ -1,4 +1,5 @@
 import { browserCallback } from './browser-evaluation.ts';
+import { assessPageAccess, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 import { USER_BROWSER_LIMITATIONS } from './user-browser-provenance.ts';
 import { resolve } from 'node:path';
 import type { Browser, BrowserContext, Page } from 'playwright';
@@ -10,7 +11,7 @@ import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider, designDiscoveryItemIdentity } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation, captureDomainObservation } from './reference-capture-observation.ts';
 import { collectGalleryImageCandidates } from './gallery-image-candidates.ts';
-import { DOMAIN_OBSERVATION_LIMITATIONS, DOMAIN_OBSERVATION_SCHEMA,
+import { readDomainObservation, DOMAIN_OBSERVATION_LIMITATIONS, DOMAIN_OBSERVATION_SCHEMA,
   type DomainObservationReceipt, type DomainObservationRecord } from './domain-observation.ts';
 import { classifyKoreanServiceText } from './market-reference.ts';
 import { withAcquisitionDeadline, NAVIGATION_BUDGET_MS, AcquisitionTimeoutError,
@@ -22,8 +23,18 @@ import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { searchChallengeReason } from './search-execution.ts';
 import { clearCheckboxChallenge } from './challenge-clearance.ts';
 import type { ReferenceBrowserConfig } from './browser-config.ts';
+import { readCurrentDiscoveryNavigation } from './discovery-record.ts';
 import { DISCOVERY_LIMITATIONS, DISCOVERY_SCROLL_LIMITATIONS, DirectDiscoveryLinksError, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
   type DirectDiscoveryEntry, type DirectDiscoveryReceipt, type DiscoveryCaptureRecord, type DiscoveryLane, type DiscoveryNavigationReceipt } from './discovery-record.ts';
+
+export async function assessCapturedNavigationAccess(root: string, receipt: ReferenceNavigationReceipt,
+  binding?: ReferenceJudgmentBinding) {
+  // Reading first authenticates the signed capture and its current document identity.
+  const observation = receipt.capture.path.includes('/observations/')
+    ? readDomainObservation(root, { url: receipt.url, capture: receipt.capture })
+    : readCurrentDiscoveryNavigation(root, receipt as DiscoveryNavigationReceipt);
+  return { observation, access: await assessPageAccess(observation.url, binding) };
+}
 
 const ATTEMPT_SCHEMA = 'reference-discovery-attempt-v1' as const;
 type AttemptReason = 'http-failure' | 'login-overlay' | 'challenge-page' | 'entry-unusable'

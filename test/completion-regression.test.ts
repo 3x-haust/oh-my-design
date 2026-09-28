@@ -84,10 +84,7 @@ test('legacy functional-requirements-v1 stays readable while v2 has a distinct s
     () => parseFunctionalRequirements({ ...requirementsV2, evidence: { states: [], viewports: requirementsV2.evidence.viewports } }),
     /at least one evidence state/,
   );
-  assert.throws(
-    () => parseFunctionalRequirements({ ...requirementsV2, extra: true }),
-    /exactly evidence, requirements, schema/,
-  );
+  assert.deepEqual(parseFunctionalRequirements({ ...requirementsV2, extra: true }), parseFunctionalRequirements(requirementsV2));
   const inherited = Object.create(requirementsV2) as object;
   assert.throws(() => parseFunctionalRequirements(inherited), /must not inherit input properties/);
   const accessor = Object.create(null) as Record<string, unknown>;
@@ -408,14 +405,13 @@ test('typography applicability is immutable and exact-byte checked', () => {
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test('rendered Korean display text rejects a route-authorized type-proof omission', () => {
+test('rendered Korean display text can omit optional type-proof documentation', () => {
   const value = prepare(false, 'display');
   try {
     publishCompletenessRun(value.root, value.input, value.invocation);
-    assert.throws(
-      () => checkCompletionPublicationPrerequisites(value.root, { graph: value.graph }, value.invocation),
-      /Korean display text.*type proof/i,
-    );
+    const result = checkCompletionPublicationPrerequisites(value.root, { graph: value.graph }, value.invocation);
+    assert.equal(result.typography.status, 'skipped');
+    assert.equal(result.typography.applicability.koreanDisplayText, true);
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
