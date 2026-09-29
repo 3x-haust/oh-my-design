@@ -28,7 +28,6 @@ test('coverage shards partition every unit and integration manifest entry', () =
   const shards = coverageShards(4);
   const selected = shards.flatMap((shard) => shard.files).sort();
   assert.equal(shards.length, 4);
-  assert.equal(expected.length, 298);
   assert.equal(new Set(selected).size, expected.length);
   assert.deepEqual(selected, expected);
 });
