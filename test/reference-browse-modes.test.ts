@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
+import { channel } from 'node:diagnostics_channel';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -112,7 +113,19 @@ test('pending command retry is replay-safe and an unacknowledged click is publis
     const send = async () => { const response = await fetch(driver!.endpoint, { method: 'POST', headers: { authorization: `Bearer ${driver!.capability}`, 'content-type': 'application/json' }, body: JSON.stringify({ ticket, args }) }); assert.equal(response.status, 200); return response.json(); };
     const first = await send(), repeated = await send(); assert.deepEqual(repeated, first);
     const result = await run(['shot', '--assert-visible', '#details']); assert.equal(result.ok, true); assert.equal(/invocations: (\d+)/.exec(result.observation!.text)?.[1], '1');
-    const end = await run(['end']); assert.equal(end.ok, true);
+    const requests: Array<{ connection: string | undefined; socket: object }> = [];
+    const httpRequests = channel('http.server.request.start');
+    const observe = (event: unknown) => {
+      const { request } = event as { request: import('node:http').IncomingMessage };
+      if (request.url === '/' && request.headers.authorization?.startsWith('Bearer ')) requests.push({ connection: request.headers.connection, socket: request.socket });
+    };
+    httpRequests.subscribe(observe);
+    let end: Awaited<ReturnType<typeof run>>;
+    try { end = await run(['end']); } finally { httpRequests.unsubscribe(observe); }
+    assert.equal(end.ok, true);
+    assert.equal(requests.length, 3, 'pending, end, and ACK each reach the authenticated driver');
+    assert.ok(requests.every(request => request.connection === 'close'));
+    assert.equal(new Set(requests.map(request => request.socket)).size, requests.length, 'RPC never reuses a stale keep-alive socket');
     // The terminal ACK has been consumed; listener shutdown must not race its fetch.
     const pending = { operation: 'pending' as const }, afterEnd = issueBrowseCommandTicket(bound!, driver!.challenge, 'after-end', pending, invocation, writer);
     const response = await fetch(driver!.endpoint, { method: 'POST', headers: { authorization: `Bearer ${driver!.capability}`, 'content-type': 'application/json' }, body: JSON.stringify({ ticket: afterEnd, args: pending }) });

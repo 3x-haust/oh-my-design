@@ -12,9 +12,7 @@ export async function runBrowseDriver(binding: Binding, dependencies: BrowseBrow
   const engine = new BrowseEngine(binding, dependencies), capability = randomBytes(32).toString('hex'), challenge = randomBytes(32).toString('hex');
   let pending: { id: string; digest: string; reply: DriverReply } | null = null, busy = false;
   const completed = new Map<string, { digest: string; reply: DriverReply }>();
-  const trace = (event: string) => { if (process.env.OMD_BROWSE_RPC_TRACE) process.stderr.write(`browse RPC ${event}\n`); };
   const server = createServer(async (request, response) => {
-    request.socket.once('close', () => trace(`socket closed, complete=${request.complete}`));
     const send = (status: number, value: unknown) => { response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); response.end(JSON.stringify(value)); };
     try {
       if (request.method !== 'POST' || request.url !== '/' || request.headers.origin || request.headers.authorization !== `Bearer ${capability}`) { send(403, { error: 'BROWSE_RPC_AUTHORITY' }); return; }
@@ -22,8 +20,6 @@ export async function runBrowseDriver(binding: Binding, dependencies: BrowseBrow
       for await (const part of request) { bytes = Buffer.concat([bytes, part]); if (bytes.length > 64 * 1024) browseFail('BROWSE_RPC_SIZE', 'bounded command required', 2); }
       const { ticket, args } = JSON.parse(bytes.toString('utf8')) as { ticket: CommandTicket; args: DriverRequest };
       verifyBrowseCommandTicket(binding, challenge, ticket, args);
-      trace(`received ${args.operation}${args.operation === 'action' ? `:${args.action.verb}` : ''}, listening=${server.listening}`);
-      response.once('finish', () => trace(`finished ${args.operation}, listening=${server.listening}`));
       if (busy) browseFail('BROWSE_SESSION_BUSY', 'one action in flight', 2);
       if (args.operation === 'pending') { send(200, pending); return; }
       if (args.operation === 'ack') {
@@ -58,16 +54,13 @@ export async function runBrowseDriver(binding: Binding, dependencies: BrowseBrow
         send(200, reply);
       } finally { busy = false; }
     } catch (error) {
-      trace(`handler error ${error instanceof Error ? error.message : String(error)}`);
       send(error instanceof BrowseError ? 409 : 500, { code: error instanceof BrowseError ? error.code : 'BROWSE_DRIVER_ERROR', message: error instanceof BrowseError ? error.message : 'Driver request failed.', exitCode: error instanceof BrowseError ? error.exitCode : 2 });
     }
   });
-  server.once('close', () => trace('server closed'));
-  server.on('clientError', error => trace(`client error ${error.message}`));
   server.requestTimeout = 30_000; server.headersTimeout = 10_000;
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve(); }); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('BROWSE_RPC_BIND');
   let cleanup = setTimeout(() => { void close().catch(error => process.stderr.write(`${String(error)}\n`)); }, Math.max(1, Date.parse(binding.budget.deadline) - Date.now() + 120_000)); cleanup.unref();
-  async function close() { trace('driver.close called'); clearTimeout(cleanup); await engine.close(); server.closeAllConnections(); if (server.listening) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
+  async function close() { clearTimeout(cleanup); await engine.close(); server.closeAllConnections(); if (server.listening) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
   return { endpoint: `http://127.0.0.1:${address.port}/`, capability, challenge, pid: process.pid, close };
 }

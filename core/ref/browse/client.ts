@@ -56,7 +56,9 @@ async function rpc<T>(state: State, args: DriverRequest, invocation: ProjectRunI
   const endpoint = new URL(state.connection.endpoint);
   if (endpoint.protocol !== 'http:' || endpoint.hostname !== '127.0.0.1' || endpoint.pathname !== '/' || !endpoint.port) browseFail('BROWSE_RPC_ENDPOINT', 'invalid private driver endpoint', 2);
   const ticket = issueBrowseCommandTicket(state.binding, state.connection.challenge, requestId, args, invocation, writer);
-  const response = await fetch(endpoint, { method: 'POST', headers: { authorization: `Bearer ${state.connection.capability}`, 'content-type': 'application/json' },
+  // Publishing an action may outlive the HTTP keep-alive lease (especially under coverage).
+  // Never reuse an idle socket for the next signed ACK: its peer may have already closed it.
+  const response = await fetch(endpoint, { method: 'POST', headers: { authorization: `Bearer ${state.connection.capability}`, 'content-type': 'application/json', connection: 'close' },
     body: JSON.stringify({ ticket, args }), redirect: 'error', signal: AbortSignal.timeout(60_000) });
   const text = await response.text(); if (text.length > 360 * 1024 * 1024) browseFail('BROWSE_RPC_SIZE', 'reply exceeds session bound', 2);
   const value = JSON.parse(text);
