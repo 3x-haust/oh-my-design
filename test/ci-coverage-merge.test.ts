@@ -1,26 +1,10 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync, mkdirSync, readdirSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mergeCoverage } from '../scripts/ci/merge-coverage.ts';
 import { coverageShards } from '../scripts/ci/coverage-shard.ts';
-
-test('merges overlapping LCOV identities before checking full-suite thresholds', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'omd-coverage-'));
-  try {
-    const first = join(directory, 'first.info');
-    const second = join(directory, 'second.info');
-    writeFileSync(first, 'TN:\nSF:core/a.ts\nFN:1,a\nFNDA:1,a\nFNF:1\nFNH:1\nBRDA:1,0,0,1\nBRDA:2,1,0,0\nBRF:2\nBRH:1\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n');
-    writeFileSync(second, 'TN:\nSF:core/a.ts\nFN:1,a\nFNDA:1,a\nFNF:1\nFNH:1\nBRDA:1,0,0,0\nBRDA:2,1,0,1\nBRF:2\nBRH:1\nDA:1,0\nDA:2,1\nLF:2\nLH:1\nend_of_record\n');
-    const { lcov, summary } = mergeCoverage([first, second]);
-    assert.match(lcov, /FNDA:2,a\nFNH:1\nFNF:1\nBRDA:1,0,0,1\nBRDA:2,0,0,1\nBRH:2\nBRF:2\nDA:1,1\nDA:2,1\nLH:2\nLF:2/);
-    assert.match(summary, /\| Lines \| 2 \| 2 \| 100\.00%/);
-    assert.match(summary, /\| Branches \| 2 \| 2 \| 100\.00%/);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-});
 
 test('coverage shards partition every unit and integration manifest entry', () => {
   const { tiers } = JSON.parse(readFileSync('test/test-manifest.json', 'utf8')) as { tiers: { unit: string[]; integration: string[] } };
@@ -32,13 +16,58 @@ test('coverage shards partition every unit and integration manifest entry', () =
   assert.deepEqual(selected, expected);
 });
 
-test('fails closed if combined coverage is below a threshold or a shard is missing', () => {
+test('raw V8 coverage keeps opposite hits and rejects incomplete shard reports', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'omd-coverage-'));
   try {
-    const report = join(directory, 'report.info');
-    writeFileSync(report, 'TN:\nSF:core/a.ts\nFN:1,a\nFNDA:1,a\nFNF:1\nFNH:1\nBRDA:1,0,0,1\nBRDA:2,1,0,0\nBRF:2\nBRH:1\nDA:1,1\nDA:2,1\nLF:2\nLH:2\nend_of_record\n');
-    assert.throws(() => mergeCoverage([report]), /Branches coverage 50\.00% is below 72%/);
-    assert.throws(() => mergeCoverage([report, join(directory, 'missing.info')]), /ENOENT/);
+    mkdirSync(join(directory, 'core'));
+    writeFileSync(join(directory, 'core', 'lib.mjs'), 'export function pick(value) { return value ? "yes" : "no"; }\n');
+    for (const [name, value] of [['first', 'true'], ['second', 'false']]) {
+      writeFileSync(join(directory, `${name}.test.mjs`),
+        `import { test } from 'node:test';\nimport { pick } from './core/lib.mjs';\ntest('pick', () => { pick(${value}); });\n`);
+    }
+    const run = (name: string, files: string[]) => {
+      const raw = join(directory, name);
+      mkdirSync(raw);
+      const env: NodeJS.ProcessEnv = { ...process.env, NODE_V8_COVERAGE: raw };
+      delete env.NODE_TEST_CONTEXT;
+      const result = spawnSync(process.execPath, [
+        '--test', '--experimental-test-coverage', '--test-coverage-include=core/**',
+        '--test-reporter=spec', '--test-reporter-destination=stdout',
+        '--test-reporter=lcov', `--test-reporter-destination=${join(raw, 'report.info')}`, ...files,
+      ], { cwd: directory, env, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.ok(existsSync(join(raw, 'report.info')), `${result.stdout}\n${result.stderr}\n${readdirSync(raw)}`);
+      return raw;
+    };
+    const first = run('first-raw', ['first.test.mjs']);
+    const second = run('second-raw', ['second.test.mjs']);
+    const full = run('full-raw', ['first.test.mjs', 'second.test.mjs']);
+    const expected = readFileSync(join(full, 'report.info'), 'utf8');
+    const merge = (shards: string[]) => spawnSync(process.execPath,
+      ['--expose-internals', join(process.cwd(), 'scripts/ci/merge-coverage.ts'), ...shards],
+      { cwd: directory, encoding: 'utf8' });
+    const merged = merge([first, second]);
+    assert.equal(merged.status, 0, merged.stderr);
+    const lcov = readFileSync(join(directory, 'coverage', 'lcov.info'), 'utf8');
+    assert.match(lcov, /BRDA:1,0,0,[1-9]\d*\nBRDA:1,1,0,[1-9]\d*/);
+    assert.match(expected, /BRH:1/);
+    assert.match(lcov, /FNDA:2,pick/);
+    assert.match(merged.stdout, /\| Branches \| \d+ \| \d+ \| 100\.00%/);
+    const missing = merge([first, join(directory, 'missing-raw')]);
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /missing coverage shard/);
+    writeFileSync(join(first, 'coverage-9-0000000000000-0.json'), '{"result":');
+    const corrupt = merge([first, second]);
+    assert.notEqual(corrupt.status, 0);
+    assert.match(corrupt.stderr, /JSON|coverage/i);
+    writeFileSync(join(directory, 'core', 'lib.mjs'),
+      'export function pick(value) { return value ? "yes" : "no"; }\n'
+      + 'export function unusedA() { return 1; }\n'
+      + 'export function unusedB() { return 2; }\n');
+    const low = run('low-raw', ['first.test.mjs']);
+    const belowThreshold = merge([low]);
+    assert.notEqual(belowThreshold.status, 0);
+    assert.match(belowThreshold.stderr, /coverage .* is below/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
