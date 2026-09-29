@@ -6,6 +6,8 @@ const MARKER_END = '# ── OMD END ──';
 const FEATURE_KEYS = ['hooks', 'plugins', 'plugin_hooks', 'multi_agent'] as const;
 const TAG = ' # OMD';
 const RESTORE_FEATURE = '# OMD RESTORE FEATURE ';
+// smol-toml 1.9 returns null-prototype tables; compare their values, not parser prototypes.
+const parseConfig = (text: string) => structuredClone(parseToml(text));
 
 const escapeRegExp = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -19,14 +21,14 @@ export function patchConfigToml(text: string, opts: { agents?: string[] } = {}):
   // Other configuration tools may serialize TOML and remove our marker comments.
   // Existing agent tables then belong to the preserved input: do not redeclare
   // them or overwrite a user-selected config_file when reinstalling OMD.
-  const current = parseToml(unpatched);
+  const current = parseConfig(unpatched);
   const currentAgents = current.agents;
   const features = current.features;
   if (features !== undefined && (features === null || typeof features !== 'object' || Array.isArray(features))) throw new Error('CODEX_CONFIG_INVALID: features must be a table');
   const missing = FEATURE_KEYS.filter(key => !features || !Object.hasOwn(features, key));
   const expected = { ...current, features: { ...features as object, ...Object.fromEntries(missing.map(key => [key, true])) } };
   const matches = (candidate: string): boolean => {
-    try { return isDeepStrictEqual(parseToml(candidate), expected); } catch { return false; }
+    try { return isDeepStrictEqual(parseConfig(candidate), expected); } catch { return false; }
   };
 
   const featuresIdx = lines.findIndex((l, index) => {
@@ -75,7 +77,7 @@ export function patchConfigToml(text: string, opts: { agents?: string[] } = {}):
   // Never let a best-effort textual patch corrupt the host's global config.
   const expectedAgents = { ...currentAgents as object } as Record<string, unknown>;
   for (const name of agents) if (!Object.hasOwn(expectedAgents, name)) expectedAgents[name] = { config_file: `./agents/${name}.toml` };
-  if (!isDeepStrictEqual(parseToml(output), { ...expected, ...(agents.length ? { agents: expectedAgents } : {}) })) {
+  if (!isDeepStrictEqual(parseConfig(output), { ...expected, ...(agents.length ? { agents: expectedAgents } : {}) })) {
     throw new Error('CODEX_CONFIG_INVALID: patched semantics differ from the intended update; config was not written');
   }
   return output;

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, normalize, relative, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { cpus } from 'node:os';
 
 const ROOT = process.cwd();
@@ -221,6 +221,25 @@ function runTier(tier: Tier, files: readonly string[], options: Options): void {
   if (status !== 0) process.exit(status);
 }
 
+async function runFullSuite(filesByTier: ReadonlyMap<Tier, readonly string[]>, options: Options): Promise<void> {
+  // Independent test processes have isolated fixture roots; keep packaging last because it
+  // rebuilds generated outputs. Share the available cores across the other four tiers.
+  const concurrency: Record<Exclude<Tier, 'packaging'>, number> = { native: 1, unit: 2, integration: 3, browser: 3 };
+  const statuses = await Promise.all((['native', 'unit', 'integration', 'browser'] as const).map(tier => {
+    const files = filesByTier.get(tier) ?? [];
+    if (!files.length) return Promise.resolve(0);
+    const args = ['--test', `--test-concurrency=${options.concurrency ?? concurrency[tier]}`, ...reporterArguments(options.reporters), ...files];
+    console.log(`==> ${tier}: ${files.length} files, concurrency ${options.concurrency ?? concurrency[tier]}`);
+    return new Promise<number>((resolve, reject) => {
+      const child = spawn(process.execPath, args, { cwd: ROOT, stdio: 'inherit', env: process.env });
+      child.once('error', reject);
+      child.once('exit', (code, signal) => resolve(code ?? (signal ? 1 : 0)));
+    });
+  }));
+  const packaging = executeTests('packaging', filesByTier.get('packaging') ?? [], options.concurrency ?? defaultConcurrency('packaging'), options);
+  if (statuses.some(status => status !== 0) || packaging !== 0) process.exitCode = 1;
+}
+
 function validateLcovReporters(reporters: readonly string[]): void {
   for (const reporter of reporters) {
     if (!reporter.startsWith('lcov:')) continue;
@@ -299,10 +318,9 @@ const filesByTier = new Map<Tier, readonly string[]>(options.tiers.map((tier) =>
 ]));
 if (options.coverage) {
   runCoverage(options.tiers, filesByTier, options);
+} else if (options.tiers.length === TIER_ORDER.length && options.changed === undefined && options.shard === undefined
+  && options.reporters.every(entry => !entry.includes(':') || /:(?:stdout|stderr)$/.test(entry))) {
+  await runFullSuite(filesByTier, options);
 } else {
-  // Run the serial native lifecycle before browser workers leave Chromium descendants behind.
-  for (const tier of TIER_ORDER.filter((name) => options.tiers.includes(name)).sort((a, b) =>
-    (a === 'native' ? -1 : b === 'native' ? 1 : TIER_ORDER.indexOf(a) - TIER_ORDER.indexOf(b)))) {
-    runTier(tier, filesByTier.get(tier) ?? [], options);
-  }
+  for (const tier of options.tiers) runTier(tier, filesByTier.get(tier) ?? [], options);
 }
