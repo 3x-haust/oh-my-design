@@ -50,7 +50,9 @@ test('raw V8 coverage keeps opposite hits and rejects incomplete shard reports',
     assert.equal(merged.status, 0, merged.stderr);
     const lcov = readFileSync(join(directory, 'coverage', 'lcov.info'), 'utf8');
     assert.match(lcov, /BRDA:1,0,0,[1-9]\d*\nBRDA:1,1,0,[1-9]\d*/);
-    assert.match(expected, /BRH:1/);
+    const fullBranches = expected.match(/BRF:(\d+)\nBRH:(\d+)/);
+    assert.ok(fullBranches);
+    assert.equal(fullBranches[1], fullBranches[2]);
     assert.match(lcov, /FNDA:2,pick/);
     assert.match(merged.stdout, /\| Branches \| \d+ \| \d+ \| 100\.00%/);
     const missing = merge([first, join(directory, 'missing-raw')]);
