@@ -68,9 +68,43 @@ export function publishDeterministicProtocol(root: string, graph: Graph, writer:
     writer.writeContentAddressed(path, bytes); return { path, sha256: hash };
   } finally { release(); }
 }
+// Reject authenticated identity collisions before replaying expensive browser/production facts.
+// Passing this precheck never grants acceptance: the full validation below still re-reads
+// every receipt and verifies its policy, packet, measurements, handback and current graph.
+function checkReviewerIdentityCollisions(root: string, terminal: ReturnType<typeof parseMeasuredTerminal>, invocation: ProjectRunInvocation, policy: ReviewPolicy): void {
+  const reviewer = new Set<number>(), sessions = new Set<string>(), nonces = new Set<string>();
+  const consumed = new Set<number>(), consumedSessions = new Set<string>(), consumedNonces = new Set<string>();
+  for (const lane of lanes) {
+    const descriptor = terminal.lanes[lane];
+    if (!policy.lanes[policyLane(lane)]) {
+      if (descriptor) v.fail('policy-unselected lane must be absent');
+      continue;
+    }
+    if (!descriptor) continue;
+    const record = load(root, descriptor); requireFinalReviewerLaneAuthorization(invocation, root, record.bytes);
+    const receipts = record.value.executionReceipts;
+    if (!Array.isArray(receipts)) return v.fail('measured execution receipts required');
+    for (const receipt of receipts) {
+      const execution = load(root, receipt as Receipt); requireFinalReviewerLaneAuthorization(invocation, root, execution.bytes);
+      const value = execution.value, proof = value.evidenceConsumption as Record<string, unknown> | null;
+      if (!proof || typeof proof !== 'object') return v.fail('measured evidence consumption identity required');
+      v.integer(value.processPid); v.text(value.sessionId); v.text(value.nonce);
+      v.integer(proof.processPid); v.text(proof.sessionId); v.text(proof.nonce);
+      const pid = value.processPid as number, session = value.sessionId as string, nonce = value.nonce as string;
+      const consumerPid = proof.processPid as number, consumerSession = proof.sessionId as string, consumerNonce = proof.nonce as string;
+      if (reviewer.has(pid) || sessions.has(session) || nonces.has(nonce)) v.fail('reviewer execution is reused or bound to another policy');
+      if (consumed.has(consumerPid) || consumedSessions.has(consumerSession) || consumedNonces.has(consumerNonce)) v.fail('measured evidence consumption identity reused');
+      reviewer.add(pid); sessions.add(session); nonces.add(nonce);
+      consumed.add(consumerPid); consumedSessions.add(consumerSession); consumedNonces.add(consumerNonce);
+    }
+  }
+  if ([...reviewer].some(pid => consumed.has(pid)) || [...sessions].some(id => consumedSessions.has(id)) || [...nonces].some(id => consumedNonces.has(id))) v.fail('reviewer and evidence-consumption identities overlap');
+}
 /** Replays native facts and all signed-host publication bindings. No caller PASS flag exists. */
 export function validateMeasuredTerminal(root: string, graph: Graph, invocation: ProjectRunInvocation): void {
-  const terminal = parseMeasuredTerminal(graph.measuredTerminal), facts = protocolFacts(root, graph, invocation), policy = loadReviewPolicy(root, invocation);
+  const terminal = parseMeasuredTerminal(graph.measuredTerminal), policy = loadReviewPolicy(root, invocation);
+  checkReviewerIdentityCollisions(root, terminal, invocation, policy);
+  const facts = protocolFacts(root, graph, invocation);
   const process = loadTerminalProcess(root, invocation, graph.observations.map(o => o.sha256));
   const protocol = terminal.deterministicProtocol ?? v.fail('separate deterministic protocol receipt required');
   if (protocol.path !== `.omd/final-review/protocol/sha256-${protocol.sha256}.json`) v.fail('protocol receipt must be immutable');

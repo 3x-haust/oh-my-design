@@ -25,8 +25,9 @@ export async function runBrowseDriver(binding: Binding, dependencies: BrowseBrow
       if (args.operation === 'ack') {
         if (pending && (pending.id !== args.requestId || pending.reply.result.head !== args.head)) browseFail('BROWSE_ACK', 'acknowledgement does not bind pending reply', 2);
         if (pending) { completed.set(pending.id, { digest: pending.digest, reply: pending.reply }); pending = null; }
+        // Do not close the HTTP server until the terminal ACK has been flushed to its client.
+        if (args.head && engine.events.at(-1)?.action.verb === 'end') response.once('finish', () => server.close());
         send(200, { acknowledged: true });
-        if (args.head && engine.events.at(-1)?.action.verb === 'end') server.close();
         return;
       }
       if (args.operation !== 'action') browseFail('BROWSE_RPC_OPERATION', 'closed RPC surface', 2);

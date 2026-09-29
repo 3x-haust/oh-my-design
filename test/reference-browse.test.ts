@@ -93,26 +93,7 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     const sheet = await run(['contact-sheet']); assert.equal(sheet.ok, true, JSON.stringify(sheet.error));
     assert.ok(sheet.contactSheet?.image.path.endsWith('.png')); assert.ok(sheet.contactSheet?.metadata.path.endsWith('.json'));
     assert.equal(loadRefs(root).length, 0, 'no provisional tray item enters retained namespace');
-    const endTrace: string[] = [];
-    const fetchBeforeEnd = globalThis.fetch;
-    globalThis.fetch = async (input, init) => {
-      const request = init?.body && typeof init.body === 'string' ? JSON.parse(init.body) as { args?: { operation?: string } } : null;
-      const operation = request?.args?.operation;
-      if (operation) endTrace.push(`sending ${operation}`);
-      try {
-        const response = await fetchBeforeEnd(input, init);
-        if (operation) endTrace.push(`${operation} status ${response.status}`);
-        return response;
-      } catch (error) {
-        if (operation) endTrace.push(`${operation} transport ${String(error)}`);
-        throw error;
-      }
-    };
-    let ended: Awaited<ReturnType<typeof run>>;
-    try { ended = await run(['end']); }
-    catch (error) { t.diagnostic(`end RPC trace: ${endTrace.join('; ')}`); throw error; }
-    finally { globalThis.fetch = fetchBeforeEnd; }
-    assert.equal(ended.ok, true, JSON.stringify(ended.error)); assert.ok(ended.seal); assert.equal(ended.retained!.length, 2);
+    const ended = await run(['end']); assert.equal(ended.ok, true, JSON.stringify(ended.error)); assert.ok(ended.seal); assert.equal(ended.retained!.length, 2);
     const refs = loadRefs(root); assert.equal(refs.length, 2);
     for (const ref of refs) {
       assert.equal(ref.referenceUnit, 'whole-screen'); assert.equal(verifyBrowseRetention(root, ref).reference.source, 'https://design.fixture.test/item');
