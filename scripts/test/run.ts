@@ -173,14 +173,15 @@ function shard(files: readonly string[], request: { index: number; total: number
   const known = Object.values(timings.files ?? {}).filter((duration) => Number.isFinite(duration) && duration > 0).sort((a, b) => a - b);
   const median = known.length === 0 ? 1 : known[Math.floor(known.length / 2)]!;
   const bins = Array.from({ length: request.total }, () => ({ total: 0, files: [] as string[] }));
-  for (const file of [...files].sort((left, right) => ((timings.files?.[right] ?? median) - (timings.files?.[left] ?? median)) || left.localeCompare(right))) {
+  const longestFirst = (left: string, right: string): number => ((timings.files?.[right] ?? median) - (timings.files?.[left] ?? median)) || left.localeCompare(right);
+  for (const file of [...files].sort(longestFirst)) {
     const bin = bins.reduce((best, candidate) => candidate.total < best.total ? candidate : best);
     bin.files.push(file);
     bin.total += timings.files?.[file] ?? median;
   }
   const selected = bins[request.index - 1]!;
   console.log(`==> shard ${request.index}/${request.total}: ${selected.files.length} files, estimated ${selected.total.toFixed(1)}s`);
-  return selected.files.sort();
+  return selected.files.sort(longestFirst);
 }
 
 function defaultConcurrency(tier: Tier): number {
@@ -311,10 +312,9 @@ if (options.list) {
   console.log(selected.join('\n'));
   process.exit(0);
 }
-const selectedSet = new Set(selected);
 const filesByTier = new Map<Tier, readonly string[]>(options.tiers.map((tier) => [
   tier,
-  manifest.tiers[tier].filter((file) => selectedSet.has(file)),
+  selected.filter((file) => manifest.tiers[tier].includes(file)),
 ]));
 if (options.coverage) {
   runCoverage(options.tiers, filesByTier, options);

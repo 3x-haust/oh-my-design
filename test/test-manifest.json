@@ -354,6 +354,7 @@
       "test/research-path-diagnostic.test.ts",
       "test/role-brief-delivery.test.ts",
       "test/scoped-sparse-capture.test.ts",
+      "test/selected-direction-publication.test.ts",
       "test/selected-direction-terminal.test.ts",
       "test/selected-reference-distance-cli.test.ts",
       "test/stateful-design-inspection.test.ts",

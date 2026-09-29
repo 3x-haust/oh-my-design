@@ -1,7 +1,7 @@
 {
   "version": 1,
   "node": "v24.11.0",
-  "date": "2026-09-26",
+  "date": "2026-09-29",
   "platform": "darwin",
   "concurrency": {
     "unit": 2,
@@ -333,6 +333,7 @@
     "test/render-proofs.test.ts": 8.891,
     "test/research-path-diagnostic.test.ts": 6.864,
     "test/scoped-sparse-capture.test.ts": 10.646,
+    "test/selected-direction-publication.test.ts": 143.259,
     "test/reference-notice-capture.test.ts": 72.673,
     "test/stateful-design-inspection.test.ts": 27.591,
     "test/trusted-browser-evaluation.test.ts": 22.223,

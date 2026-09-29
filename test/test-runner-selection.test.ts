@@ -33,3 +33,13 @@ test('changed test selection falls back for untraced executable or runner config
   assert.deepEqual(selected('scripts/test/classify.ts'), files);
   assert.deepEqual(selected('README.md'), []);
 });
+
+test('sharded tests start the longest estimated file before shorter files', () => {
+  const timings = join(dir, 'timings.json');
+  writeFileSync(timings, JSON.stringify({ files: { 'test/ir.test.ts': 1, 'test/test-manifest.test.ts': 10 } }));
+  const result = spawnSync(process.execPath, ['scripts/test/run.ts', '--tier', 'unit', '--shard', '1/1', '--list'], {
+    cwd: root, encoding: 'utf8', env: { ...process.env, OMD_TEST_MANIFEST: manifest, OMD_TEST_TIMINGS: timings },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.stdout.trim().split('\n').filter(line => line.startsWith('test/')), files.toReversed());
+});
