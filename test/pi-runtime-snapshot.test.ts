@@ -126,12 +126,12 @@ test('dependency mutation cannot publish a mixed runtime snapshot', async t => {
   writeFileSync(join(sourceRoot, 'bin/omd.ts'), 'export {};\n');
   writeFileSync(dependencyFile, Buffer.alloc(8 * 1024 * 1024, 0x41));
   const mutator = spawn(process.execPath, ['-e', [
-    'const { writeFileSync } = require("node:fs");',
+    'const { writeFileSync, renameSync } = require("node:fs");',
     'const [target] = process.argv.slice(1);',
     'process.stdout.write("ready\\n");',
     'for (let index = 0; index < 12; index += 1) {',
-    '  writeFileSync(target, Buffer.alloc(8 * 1024 * 1024, index % 2 ? 0x41 : 0x42));',
-    '  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);',
+    '  writeFileSync(target + ".next", Buffer.alloc(8 * 1024 * 1024, index % 2 ? 0x41 : 0x42));',
+    '  renameSync(target + ".next", target);',
     '}',
   ].join('\n'), dependencyFile], { timeout: 5_000 });
   if (mutator.stdout === null) throw new Error('mutation child did not expose a readiness stream');

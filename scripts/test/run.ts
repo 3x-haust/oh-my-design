@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, extname, join, normalize, relative, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { cpus } from 'node:os';
 
 const ROOT = process.cwd();
@@ -16,6 +16,7 @@ type Options = {
   reporters: string[];
   changed?: string;
   coverage: boolean;
+  list: boolean;
 };
 
 function fail(message: string): never {
@@ -30,7 +31,7 @@ function parseTierList(value: string): Tier[] {
 }
 
 function parseArguments(argv: string[]): Options {
-  const options: Options = { tiers: [...TIER_ORDER], reporters: [], coverage: false };
+  const options: Options = { tiers: [...TIER_ORDER], reporters: [], coverage: false, list: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
     const value = argv[index + 1];
@@ -57,8 +58,10 @@ function parseArguments(argv: string[]): Options {
       if (options.changed === value) index += 1;
     } else if (argument === '--coverage') {
       options.coverage = true;
+    } else if (argument === '--list') {
+      options.list = true;
     } else if (argument === '--help' || argument === '-h') {
-      console.log('Usage: node scripts/test/run.ts [--tier unit,integration,browser,native,packaging] [--shard i/n] [--concurrency n] [--reporter spec] [--reporter junit:path] [--changed [base]] [--coverage]');
+      console.log('Usage: node scripts/test/run.ts [--tier unit,integration,browser,native,packaging] [--shard i/n] [--concurrency n] [--reporter spec] [--reporter junit:path] [--changed [base]] [--coverage] [--list]');
       process.exit(0);
     } else {
       fail(`unknown argument '${argument}'`);
@@ -141,41 +144,51 @@ function resolveImport(importer: string, specifier: string): string | undefined 
 
 function affectedTests(files: readonly string[], base: string): string[] {
   const changed = gitChanged(base);
+  // Runner/build configuration affects the entire suite, not just its direct importers.
+  if ([...changed].some((file) => file === 'package.json' || file === 'package-lock.json' || file === 'tsconfig.json' || file === 'test/test-manifest.json' || file.startsWith('scripts/test/') || file.startsWith('adapters/build.ts'))) return [...files];
   const memo = new Map<string, boolean>();
+  const visited = new Set<string>();
   function reachesChanged(file: string, visiting = new Set<string>()): boolean {
     const cached = memo.get(file);
     if (cached !== undefined) return cached;
+    visited.add(file);
     if (changed.has(file)) return true;
     if (visiting.has(file) || !existsSync(join(ROOT, file))) return false;
     const nextVisiting = new Set(visiting).add(file);
-    const affected = importsFor(file).some((specifier) => {
+    const affected = importsFor(file).map((specifier) => {
       const dependency = resolveImport(file, specifier);
       return dependency !== undefined && reachesChanged(dependency, nextVisiting);
-    });
+    }).some(Boolean);
     memo.set(file, affected);
     return affected;
   }
-  return files.filter((file) => reachesChanged(file));
+  const affected = files.filter((file) => reachesChanged(file));
+  // Static assets, scripts invoked through a CLI, and generated inputs are not import edges.
+  // A changed executable source file with no traced importer needs the full suite.
+  if ([...changed].some((file) => /\.(?:ts|mjs|js|yaml|json)$/.test(file) && !file.startsWith('.omo/') && !visited.has(file))) return [...files];
+  return affected;
 }
 
 function shard(files: readonly string[], request: { index: number; total: number }, timings: Timings): string[] {
   const known = Object.values(timings.files ?? {}).filter((duration) => Number.isFinite(duration) && duration > 0).sort((a, b) => a - b);
   const median = known.length === 0 ? 1 : known[Math.floor(known.length / 2)]!;
   const bins = Array.from({ length: request.total }, () => ({ total: 0, files: [] as string[] }));
-  for (const file of [...files].sort((left, right) => ((timings.files?.[right] ?? median) - (timings.files?.[left] ?? median)) || left.localeCompare(right))) {
+  const longestFirst = (left: string, right: string): number => ((timings.files?.[right] ?? median) - (timings.files?.[left] ?? median)) || left.localeCompare(right);
+  for (const file of [...files].sort(longestFirst)) {
     const bin = bins.reduce((best, candidate) => candidate.total < best.total ? candidate : best);
     bin.files.push(file);
     bin.total += timings.files?.[file] ?? median;
   }
   const selected = bins[request.index - 1]!;
   console.log(`==> shard ${request.index}/${request.total}: ${selected.files.length} files, estimated ${selected.total.toFixed(1)}s`);
-  return selected.files.sort();
+  return selected.files.sort(longestFirst);
 }
 
 function defaultConcurrency(tier: Tier): number {
   if (tier === 'native') return 1;
-  if (tier === 'browser') return 2;
-  return process.platform === 'darwin' ? 2 : Math.max(2, Math.min(4, cpus().length));
+  // Browser workers launch multiple Chromium processes; leave room for those children.
+  if (tier === 'browser') return Math.min(4, Math.max(2, Math.floor(cpus().length / 2)));
+  return Math.min(4, Math.max(2, cpus().length - 2));
 }
 
 function reporterArguments(reporters: readonly string[]): string[] {
@@ -207,6 +220,25 @@ function executeTests(label: string, files: readonly string[], concurrency: numb
 function runTier(tier: Tier, files: readonly string[], options: Options): void {
   const status = executeTests(tier, files, options.concurrency ?? defaultConcurrency(tier), options);
   if (status !== 0) process.exit(status);
+}
+
+async function runFullSuite(filesByTier: ReadonlyMap<Tier, readonly string[]>, options: Options): Promise<void> {
+  // Independent test processes have isolated fixture roots; keep packaging last because it
+  // rebuilds generated outputs. Share the available cores across the other four tiers.
+  const concurrency: Record<Exclude<Tier, 'packaging'>, number> = { native: 1, unit: 2, integration: 3, browser: 3 };
+  const statuses = await Promise.all((['native', 'unit', 'integration', 'browser'] as const).map(tier => {
+    const files = filesByTier.get(tier) ?? [];
+    if (!files.length) return Promise.resolve(0);
+    const args = ['--test', `--test-concurrency=${options.concurrency ?? concurrency[tier]}`, ...reporterArguments(options.reporters), ...files];
+    console.log(`==> ${tier}: ${files.length} files, concurrency ${options.concurrency ?? concurrency[tier]}`);
+    return new Promise<number>((resolve, reject) => {
+      const child = spawn(process.execPath, args, { cwd: ROOT, stdio: 'inherit', env: process.env });
+      child.once('error', reject);
+      child.once('exit', (code, signal) => resolve(code ?? (signal ? 1 : 0)));
+    });
+  }));
+  const packaging = executeTests('packaging', filesByTier.get('packaging') ?? [], options.concurrency ?? defaultConcurrency('packaging'), options);
+  if (statuses.some(status => status !== 0) || packaging !== 0) process.exitCode = 1;
 }
 
 function validateLcovReporters(reporters: readonly string[]): void {
@@ -272,17 +304,23 @@ const manifestPath = process.env.OMD_TEST_MANIFEST ?? join(ROOT, 'test/test-mani
 const timingsPath = process.env.OMD_TEST_TIMINGS ?? join(ROOT, 'test/.timings.json');
 const manifest = loadJson<Manifest>(manifestPath);
 const timings = existsSync(timingsPath) ? loadJson<Timings>(timingsPath) : {};
-if (options.tiers.includes('packaging') || distIsStale()) runBuild();
+if (!options.list && (options.tiers.includes('packaging') || distIsStale())) runBuild();
 let selected = options.tiers.flatMap((tier) => manifest.tiers[tier]);
 if (options.changed !== undefined) selected = affectedTests(selected, options.changed);
 if (options.shard !== undefined) selected = shard(selected, options.shard, timings);
-const selectedSet = new Set(selected);
+if (options.list) {
+  console.log(selected.join('\n'));
+  process.exit(0);
+}
 const filesByTier = new Map<Tier, readonly string[]>(options.tiers.map((tier) => [
   tier,
-  manifest.tiers[tier].filter((file) => selectedSet.has(file)),
+  selected.filter((file) => manifest.tiers[tier].includes(file)),
 ]));
 if (options.coverage) {
   runCoverage(options.tiers, filesByTier, options);
+} else if (options.tiers.length === TIER_ORDER.length && options.changed === undefined && options.shard === undefined
+  && options.reporters.every(entry => !entry.includes(':') || /:(?:stdout|stderr)$/.test(entry))) {
+  await runFullSuite(filesByTier, options);
 } else {
   for (const tier of options.tiers) runTier(tier, filesByTier.get(tier) ?? [], options);
 }

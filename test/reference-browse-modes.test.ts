@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn, fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
+import { channel } from 'node:diagnostics_channel';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -59,15 +60,27 @@ test('profile is opt-in, persists only browser state and does not pretend to con
 
 test('CDP creates a guarded separate context, imports only approved cookies and leaves the original browser/tab alive', { timeout: 60_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-cdp-test-')), profile = mkdtempSync(join(tmpdir(), 'omd-cdp-profile-'));
-  const chrome = spawn(chromium.executablePath(), ['--headless', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const chrome = spawn(chromium.executablePath(), ['--headless', ...(process.platform === 'linux' ? ['--no-sandbox'] : []), '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   let output = '';
-  const endpoint = await new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Chrome did not publish its CDP endpoint')), 15_000);
-    chrome.once('error', error => { clearTimeout(timer); reject(error); });
-    chrome.stderr.on('data', chunk => { output += String(chunk); const match = /DevTools listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/.exec(output); if (match) { clearTimeout(timer); resolve(match[1]!); } });
-  });
-  const original = await chromium.connectOverCDP(endpoint), originalContext = original.contexts()[0]!, tab = originalContext.pages()[0]!;
+  let original: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
   try {
+    const endpoint = await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => finish(new Error(`Chrome did not publish its CDP endpoint: ${output}`)), 45_000);
+      const onError = (error: Error) => finish(error);
+      const onExit = (code: number | null) => finish(new Error(`Chrome exited before CDP readiness (${code}): ${output}`));
+      const onData = (chunk: Buffer) => {
+        output += String(chunk);
+        const match = /DevTools listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/.exec(output);
+        if (match) finish(null, match[1]);
+      };
+      function finish(error: Error | null, endpoint?: string) {
+        clearTimeout(timer); chrome.off('error', onError); chrome.off('exit', onExit); chrome.stderr.off('data', onData);
+        if (error) reject(error); else resolve(endpoint!);
+      }
+      chrome.once('error', onError); chrome.once('exit', onExit); chrome.stderr.on('data', onData);
+    });
+    original = await chromium.connectOverCDP(endpoint);
+    const originalContext = original.contexts()[0]!, tab = originalContext.pages()[0]!;
     await tab.setContent('<title>Original tab survives</title><h1>User content</h1>');
     await originalContext.addCookies([{ name: 'approved', value: 'yes', url: 'https://app.fixture.test' }, { name: 'unrelated', value: 'no', url: 'https://other.fixture.test' }]);
     const value = binding(root, ['start', '--lane', 'design', '--mode', 'cdp', '--cdp-url', endpoint, '--user-opt-in', '--allow-auth-origin', 'https://app.fixture.test']);
@@ -77,7 +90,10 @@ test('CDP creates a guarded separate context, imports only approved cookies and 
     await browser.close();
     assert.equal(await tab.title(), 'Original tab survives'); assert.equal(original.isConnected(), true);
   } finally {
-    await original.close(); const exited = once(chrome, 'exit', { signal: AbortSignal.timeout(10_000) }); chrome.kill(); await exited;
+    await original?.close();
+    if (chrome.exitCode === null && chrome.signalCode === null) {
+      const exited = once(chrome, 'exit', { signal: AbortSignal.timeout(10_000) }); chrome.kill(); await exited;
+    }
     rmSync(root, { recursive: true, force: true }); rmSync(profile, { recursive: true, force: true });
   }
 });
@@ -97,6 +113,22 @@ test('pending command retry is replay-safe and an unacknowledged click is publis
     const send = async () => { const response = await fetch(driver!.endpoint, { method: 'POST', headers: { authorization: `Bearer ${driver!.capability}`, 'content-type': 'application/json' }, body: JSON.stringify({ ticket, args }) }); assert.equal(response.status, 200); return response.json(); };
     const first = await send(), repeated = await send(); assert.deepEqual(repeated, first);
     const result = await run(['shot', '--assert-visible', '#details']); assert.equal(result.ok, true); assert.equal(/invocations: (\d+)/.exec(result.observation!.text)?.[1], '1');
-    const end = await run(['end']); assert.equal(end.ok, true);
+    const requests: Array<{ connection: string | undefined; socket: object }> = [];
+    const httpRequests = channel('http.server.request.start');
+    const observe = (event: unknown) => {
+      const { request } = event as { request: import('node:http').IncomingMessage };
+      if (request.url === '/' && request.headers.authorization?.startsWith('Bearer ')) requests.push({ connection: request.headers.connection, socket: request.socket });
+    };
+    httpRequests.subscribe(observe);
+    let end: Awaited<ReturnType<typeof run>>;
+    try { end = await run(['end']); } finally { httpRequests.unsubscribe(observe); }
+    assert.equal(end.ok, true);
+    assert.equal(requests.length, 3, 'pending, end, and ACK each reach the authenticated driver');
+    assert.ok(requests.every(request => request.connection === 'close'));
+    assert.equal(new Set(requests.map(request => request.socket)).size, requests.length, 'RPC never reuses a stale keep-alive socket');
+    // The terminal ACK has been consumed; listener shutdown must not race its fetch.
+    const pending = { operation: 'pending' as const }, afterEnd = issueBrowseCommandTicket(bound!, driver!.challenge, 'after-end', pending, invocation, writer);
+    const response = await fetch(driver!.endpoint, { method: 'POST', headers: { authorization: `Bearer ${driver!.capability}`, 'content-type': 'application/json' }, body: JSON.stringify({ ticket: afterEnd, args: pending }) });
+    assert.equal(response.status, 200); assert.equal(await response.json(), null);
   } finally { await driver?.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
 });

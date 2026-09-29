@@ -313,7 +313,7 @@ function paths(root: string): { omd: string; runs: string; consumptions: string;
     gcQuarantineClaim: resolve(omd, '.final-evidence-v2-gc-quarantine.claim'),
   };
 }
-function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, value: unknown, invocation?: ProjectRunInvocation, consumeMotionAuthorizations = false): FinalEvidenceV2ManifestVariant {
+function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, value: unknown, invocation?: ProjectRunInvocation, consumeMotionAuthorizations = false): Readonly<{ manifest: FinalEvidenceV2ManifestVariant; bindings: ReturnType<typeof validateFinalEvidenceV2GraphFiles>['bindings'] }> {
   const manifest = validateFinalEvidenceV2ManifestVariant(value);
   const currentInvocation = invocation ?? fail('a fresh host invocation is required to validate final evidence');
   const graph = validateFinalEvidenceV2GraphFiles(root, manifest.graph, fs, currentInvocation);
@@ -342,11 +342,11 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
       validateRenderedBeatResultAuthority(beat, { root, invocation: currentInvocation, buildSha256: graph.bindings.buildSha256, artDirectionHash: graph.bindings.selectedDirectionSha256,
         route: captured!.route, target: captured!.target, taskId: captured!.taskId, consumeResult: true });
     }
-    return manifest;
+    return { manifest, bindings: graph.bindings };
   }
   if (graph.bindings.branch === 'adaptive-omission') {
     if ((!isAdaptiveFinalEvidenceV2Graph(manifest.graph) && !isWorkflowAdaptiveFinalEvidenceV2Graph(manifest.graph)) || canonical(manifest.claimPublication) !== canonical(graph.bindings.claimPublication)) fail('claim publication does not match the adaptive source contract');
-    return manifest;
+    return { manifest, bindings: graph.bindings };
   }
   if (isAdaptiveFinalEvidenceV2Manifest(manifest) || isSelectedDirectionManifest(manifest)) fail('nonlegacy graph bindings are inconsistent');
   const artDirectionPath = resolve(root, manifest.graph.artDirection.path);
@@ -440,7 +440,7 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
     });
   }
   if (consumeMotionAuthorizations) consumeRenderedBeatAuthorization(root, fs, manifest, graph.bindings, invocation ?? fail('rendered Beat consumption requires a fresh host invocation'));
-  return manifest;
+  return { manifest, bindings: graph.bindings };
 }
 function consumeRenderedBeatAuthorization(
   root: string,
@@ -475,7 +475,7 @@ function recordFor(root: string, fs: FinalEvidenceV2FileSystem, runDirectory: st
   requireRealAncestors(root, path, fs, 'final evidence record');
   const bytes = readStableRegularFile(fs, path, 'final evidence record');
   if (hash(bytes) !== pointer.sha256 || pointer.record !== `sha256-${pointer.sha256}.json`) fail('pointer does not identify an intact immutable record');
-  return validateBackedManifest(root, fs, parseJsonBytes(bytes, 'final evidence record'), invocation);
+  return validateBackedManifest(root, fs, parseJsonBytes(bytes, 'final evidence record'), invocation).manifest;
 }
 function committedManifest(
   fs: FinalEvidenceV2FileSystem,
@@ -490,7 +490,7 @@ function committedManifest(
   const bytes = readStableRegularFile(fs, record, 'final evidence record');
   if (hash(bytes) !== pointer.sha256 || pointer.record !== `sha256-${pointer.sha256}.json`) fail('pointer does not identify an intact immutable record');
   requireFinalEvidenceManifestAuthorization(invocation, root, bytes);
-  const manifest = validateBackedManifest(root, fs, parseJsonBytes(bytes, 'final evidence record'), invocation);
+  const { manifest } = validateBackedManifest(root, fs, parseJsonBytes(bytes, 'final evidence record'), invocation);
   assertRequiredMotionConsumptions(root, fs, location, requiredMotionConsumptions(root, fs, manifest, invocation, pointer.sha256));
   return { record: pointer.record, manifest };
 }
@@ -687,8 +687,7 @@ export function checkFinalEvidenceV2(rootInput: string, invocation?: ProjectRunI
   return committed.manifest;
 }
 
-function requireCurrentGraphIdentity(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2ManifestVariant, invocation: ProjectRunInvocation): void {
-  const bindings = validateFinalEvidenceV2GraphFiles(root, manifest.graph, fs, invocation).bindings;
+function requireCurrentGraphIdentity(bindings: ReturnType<typeof validateFinalEvidenceV2GraphFiles>['bindings'], invocation: ProjectRunInvocation): void {
   if (bindings.branch !== 'adaptive-omission'
     && (bindings.activation.buildSha256 !== invocation.current.buildSha256
     || bindings.activation.loadedSkillSha256 !== invocation.current.loadedSkillSha256
@@ -930,8 +929,7 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
   const graph = revalidateFinalEvidenceGraph(preflightGraph, graphPreflight);
   checkCompletionPublicationPrerequisites(root, submitted, invocation);
   const manifest: FinalEvidenceV2ManifestVariant = { ...submitted, graphRootHash: graph.rootHash };
-  validateBackedManifest(root, fs, manifest, invocation);
-  requireCurrentGraphIdentity(root, fs, manifest, invocation);
+  requireCurrentGraphIdentity(validateBackedManifest(root, fs, manifest, invocation).bindings, invocation);
   const location = paths(root);
   ensureDirectory(fs, location.omd);
   const bytes = `${canonical(manifest)}\n`;
@@ -943,8 +941,7 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
     ensureDirectory(fs, location.runs);
     assertStableLock(fs, location.lock, lockFd, 'after runs directory creation');
     requireFinalEvidenceV2Authority(root, invocation);
-    validateBackedManifest(root, fs, manifest, invocation);
-    requireCurrentGraphIdentity(root, fs, manifest, invocation);
+    requireCurrentGraphIdentity(validateBackedManifest(root, fs, manifest, invocation).bindings, invocation);
     checkCompletionPublicationPrerequisites(root, manifest, invocation);
     if (directoryExists(fs, location.pointer)) {
       const current = pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer'));
@@ -970,8 +967,7 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
     const persisted = readStableRegularFile(fs, record, 'immutable record');
     if (!persisted.equals(Buffer.from(bytes)) || hash(persisted) !== manifestHash) fail('immutable record changed before commit');
     requireFinalEvidenceV2Authority(root, invocation);
-    validateBackedManifest(root, fs, parseJsonBytes(persisted, 'persisted final evidence record'), invocation);
-    requireCurrentGraphIdentity(root, fs, manifest, invocation);
+    requireCurrentGraphIdentity(validateBackedManifest(root, fs, parseJsonBytes(persisted, 'persisted final evidence record'), invocation).bindings, invocation);
     checkCompletionPublicationPrerequisites(root, manifest, invocation);
 
     const pointer: FinalEvidenceV2Pointer = { schema: FINAL_EVIDENCE_V2_POINTER_SCHEMA, record: `sha256-${manifestHash}.json`, sha256: manifestHash };
@@ -985,8 +981,7 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
       assertMotionConsumptionsAvailable(root, fs, location, consumptions);
       writePublicationJournal(fs, location, { schema: 'final-evidence-v2-publication-journal', manifestSha256: manifestHash, pointer });
       consumptions.forEach((consumption) => persistMotionConsumption(root, fs, location, consumption));
-      validateBackedManifest(root, fs, parseJsonBytes(persisted, 'persisted final evidence record'), invocation, true);
-      requireCurrentGraphIdentity(root, fs, manifest, invocation);
+      requireCurrentGraphIdentity(validateBackedManifest(root, fs, parseJsonBytes(persisted, 'persisted final evidence record'), invocation, true).bindings, invocation);
       checkCompletionPublicationPrerequisites(root, manifest, invocation);
       fs.rename(pointerTemp, location.pointer);
       syncDirectory(fs, location.omd);
