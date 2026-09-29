@@ -47,6 +47,7 @@ test('unknown vector overlap is incomparable, not zero novelty; budgets and rate
 });
 
 test('real stateful browser: whole-screen keeps, attached details, original item image, signed trace and tray PNG', { timeout: 120_000 }, async t => {
+  const previousTrace = process.env.OMD_BROWSE_RPC_TRACE; process.env.OMD_BROWSE_RPC_TRACE = '1';
   const root = temp(), fixture = await browseFixture(), drivers: Awaited<ReturnType<typeof runBrowseDriver>>[] = [];
   const invocation = createTestProjectRunInvocation(root), writer = createTestProjectWriteAdapter(root, invocation);
   let clock = 0;
@@ -109,7 +110,10 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     const tracePath = join(root, verified.seal.trace.path), original = readFileSync(tracePath); writeFileSync(tracePath, original.subarray(0, original.length - 1));
     assert.throws(() => verifyBrowseSession(root, ended.seal!), /BROWSE_DIGEST/); writeFileSync(tracePath, original);
     const ref = refs[0]!; assert.throws(() => verifyBrowseRetention(root, { ...ref, source: 'https://forged.example/' }), /PROJECTION/);
-  } finally { for (const driver of drivers) await driver.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    for (const driver of drivers) await driver.close(); await fixture.close(); rmSync(root, { recursive: true, force: true });
+    if (previousTrace === undefined) delete process.env.OMD_BROWSE_RPC_TRACE; else process.env.OMD_BROWSE_RPC_TRACE = previousTrace;
+  }
 });
 
 test('verified adapter progress uses the latest cumulative cycle counter across lane sessions', { timeout: 90_000 }, async () => {
