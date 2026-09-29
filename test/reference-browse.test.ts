@@ -98,10 +98,12 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     const endTrace: string[] = [];
     const onRequest = (event: unknown) => {
       const { request } = event as { request: import('node:http').IncomingMessage };
-      endTrace.push('server received end RPC');
-      request.socket.once('close', () => endTrace.push('server socket closed'));
+      if (request.url === '/' && request.headers.authorization?.startsWith('Bearer ')) endTrace.push('driver received RPC');
     };
-    const onResponse = () => endTrace.push('server finished end RPC response');
+    const onResponse = (event: unknown) => {
+      const { request } = event as { request: import('node:http').IncomingMessage };
+      if (request.url === '/' && request.headers.authorization?.startsWith('Bearer ')) endTrace.push('driver finished RPC response');
+    };
     requestChannel.subscribe(onRequest); responseChannel.subscribe(onResponse);
     let ended: Awaited<ReturnType<typeof run>>;
     try { ended = await run(['end']); }
