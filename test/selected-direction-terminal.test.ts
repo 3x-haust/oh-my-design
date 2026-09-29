@@ -24,7 +24,9 @@ import { measureProject } from '../core/measure/index.ts';
 import { captureNativeSelectedDirection, validateSelectedDirectionCapture } from '../core/runtime/trusted-selected-direction-capture.ts';
 
 test('selected art v3 and effective tokens reach isolated profile review and native terminal completion', { timeout: 600_000 }, async t => {
+  const startedAt = performance.now();
   const f = await selectedTerminalFixture(t), processBinding = loadTerminalProcess(f.root, f.invocation, f.observationSha256s)!;
+  t.diagnostic(`selected fixture: ${((performance.now() - startedAt) / 1000).toFixed(2)}s`);
   assert.equal(processBinding.binding.direction!.record.sha256, f.art.record.sha256);
   assert.equal(processBinding.surfaceRows.length, 2);
   assert.equal(loadContracts(f.root).inputs.find(i => i.kind === 'tokens')!.consumedContractSha256, f.tokens.effectiveTokensSha256);
@@ -37,6 +39,7 @@ test('selected art v3 and effective tokens reach isolated profile review and nat
   const invocation = createTestNativePiInvocation({ root: f.root, host, current: f.invocation.current });
   authorizeNativePiPayload(invocation, f.root, 'product-probe-result', Buffer.from(`${canonicalJson(f.evaluation.receipt)}\n`));
   const reviewed = await runNativeFinalReview({ root: f.root, invocation, signal: t.signal });
+  t.diagnostic(`native review: ${((performance.now() - startedAt) / 1000).toFixed(2)}s total`);
   assert.deepEqual(Object.keys(reviewed.lanes), ['blindLane']);
   const lane = JSON.parse(readFileSync(join(f.root, reviewed.lanes.blindLane!.path), 'utf8'));
   assert.deepEqual(lane.fixedBindings.reviewProfile, reviewProfileBinding('blindLane'));
@@ -44,9 +47,11 @@ test('selected art v3 and effective tokens reach isolated profile review and nat
   const activation = Buffer.from(canonicalJson(invocation.activation)), path = `.omd/activation/sha256-${sha256(activation)}.json`;
   createProjectWriteAdapter(f.root, invocation).writeContentAddressed(path, activation);
   const manifest = buildNativeFinalManifest(f.root, invocation, path);
+  t.diagnostic(`manifest: ${((performance.now() - startedAt) / 1000).toFixed(2)}s total`);
   assert.equal(manifest.graph.schema, 'final-evidence-v2-selected-direction-graph-v1');
   assert.equal(manifest.staticEvidence, undefined);
   assert.equal(validateFinalEvidenceV2GraphFiles(f.root, manifest.graph, nodeStableProjectFileSystem(), invocation).bindings.branch, 'selected-direction');
+  t.diagnostic(`graph validation: ${((performance.now() - startedAt) / 1000).toFixed(2)}s total`);
   const packet = loadMeasurement(f.root, f.measurements[0]!), view = packet.scope.find(v => v.state === 'initial')!, capture = packet.captures.find(c => c.viewId === view.id)!;
   const raw = JSON.parse(readFileSync(join(f.root, capture.ir.path), 'utf8')); raw.meta.url = new URL(view.route, 'http://127.0.0.1').href;
   write(f.root, '.omd/functional-requirements.json', canonicalBytes({ schema: 'functional-requirements-v2', requirements: [{ id: 'R-1', kind: 'content', statement: 'The approved confirmation is visible.', label: 'Approved confirmation sentence.' }], evidence: { states: ['initial'], viewports: [{ width: 1280, height: 900 }, { width: 390, height: 844 }] } }));
@@ -54,7 +59,9 @@ test('selected art v3 and effective tokens reach isolated profile review and nat
   const applicability = publishTypographyApplicability(f.root, raw, invocation);
   publishCompletenessRun(f.root, { schema: 'functional-completeness-run-input-v2', requirements: receipt(f.root, '.omd/functional-requirements.json', 'functional-requirements-v2'), buildIdentity: manifest.graph.buildIdentity,
     sourceSeal: manifest.graph.sourceSeal, typographyApplicability: applicability, testedUrl: raw.meta.url, testedState: 'initial', viewports: [{ width: 1280, height: 900 }, { width: 390, height: 844 }], observations: manifest.graph.observations, findings: [] }, invocation);
+  t.diagnostic(`completeness: ${((performance.now() - startedAt) / 1000).toFixed(2)}s total`);
   finalizeNativeEvidence({ root: f.root, invocation });
+  t.diagnostic(`finalization: ${((performance.now() - startedAt) / 1000).toFixed(2)}s total`);
   assert.equal(checkTerminalCompletion(f.root, invocation).final.graph.schema, 'final-evidence-v2-selected-direction-graph-v1');
   const surfacePath = join(f.root, lane.surfaceReview.path), surface = JSON.parse(readFileSync(surfacePath, 'utf8')); surface.rows[0].criteria.hierarchy = 'unassessed';
   writeFileSync(surfacePath, JSON.stringify(surface));

@@ -300,5 +300,9 @@ const filesByTier = new Map<Tier, readonly string[]>(options.tiers.map((tier) =>
 if (options.coverage) {
   runCoverage(options.tiers, filesByTier, options);
 } else {
-  for (const tier of options.tiers) runTier(tier, filesByTier.get(tier) ?? [], options);
+  // Run the serial native lifecycle before browser workers leave Chromium descendants behind.
+  for (const tier of TIER_ORDER.filter((name) => options.tiers.includes(name)).sort((a, b) =>
+    (a === 'native' ? -1 : b === 'native' ? 1 : TIER_ORDER.indexOf(a) - TIER_ORDER.indexOf(b)))) {
+    runTier(tier, filesByTier.get(tier) ?? [], options);
+  }
 }

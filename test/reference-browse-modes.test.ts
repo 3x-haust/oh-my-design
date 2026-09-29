@@ -59,7 +59,7 @@ test('profile is opt-in, persists only browser state and does not pretend to con
 
 test('CDP creates a guarded separate context, imports only approved cookies and leaves the original browser/tab alive', { timeout: 60_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-cdp-test-')), profile = mkdtempSync(join(tmpdir(), 'omd-cdp-profile-'));
-  const chrome = spawn(chromium.executablePath(), ['--headless', '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  const chrome = spawn(chromium.executablePath(), ['--headless', ...(process.platform === 'linux' ? ['--no-sandbox'] : []), '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
   let output = '';
   let original: Awaited<ReturnType<typeof chromium.connectOverCDP>> | undefined;
   try {

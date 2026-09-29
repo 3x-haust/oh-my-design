@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { channel } from 'node:diagnostics_channel';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -93,7 +94,20 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     const sheet = await run(['contact-sheet']); assert.equal(sheet.ok, true, JSON.stringify(sheet.error));
     assert.ok(sheet.contactSheet?.image.path.endsWith('.png')); assert.ok(sheet.contactSheet?.metadata.path.endsWith('.json'));
     assert.equal(loadRefs(root).length, 0, 'no provisional tray item enters retained namespace');
-    const ended = await run(['end']); assert.equal(ended.ok, true, JSON.stringify(ended.error)); assert.ok(ended.seal); assert.equal(ended.retained!.length, 2);
+    const requestChannel = channel('http.server.request.start'), responseChannel = channel('http.server.response.finish');
+    const endTrace: string[] = [];
+    const onRequest = (event: unknown) => {
+      const { request } = event as { request: import('node:http').IncomingMessage };
+      endTrace.push('server received end RPC');
+      request.socket.once('close', () => endTrace.push('server socket closed'));
+    };
+    const onResponse = () => endTrace.push('server finished end RPC response');
+    requestChannel.subscribe(onRequest); responseChannel.subscribe(onResponse);
+    let ended: Awaited<ReturnType<typeof run>>;
+    try { ended = await run(['end']); }
+    catch (error) { t.diagnostic(`end RPC trace: ${endTrace.join('; ')}; ${String(error)}`); throw error; }
+    finally { requestChannel.unsubscribe(onRequest); responseChannel.unsubscribe(onResponse); }
+    assert.equal(ended.ok, true, JSON.stringify(ended.error)); assert.ok(ended.seal); assert.equal(ended.retained!.length, 2);
     const refs = loadRefs(root); assert.equal(refs.length, 2);
     for (const ref of refs) {
       assert.equal(ref.referenceUnit, 'whole-screen'); assert.equal(verifyBrowseRetention(root, ref).reference.source, 'https://design.fixture.test/item');
