@@ -25,13 +25,15 @@ export async function runBrowseDriver(binding: Binding, dependencies: BrowseBrow
       if (args.operation === 'ack') {
         if (pending && (pending.id !== args.requestId || pending.reply.result.head !== args.head)) browseFail('BROWSE_ACK', 'acknowledgement does not bind pending reply', 2);
         if (pending) { completed.set(pending.id, { digest: pending.digest, reply: pending.reply }); pending = null; }
-        // A terminal ACK must reach the client before the driver stops listening. Closing
-        // the server at response.finish can reset an active keep-alive fetch on Linux.
-        if (args.head && engine.events.at(-1)?.action.verb === 'end') {
-          request.socket.once('close', () => server.close());
-          response.setHeader('connection', 'close');
-        }
         send(200, { acknowledged: true });
+        // server.close() terminates pooled keep-alive sockets even after response.finish.
+        // The client has not necessarily consumed this ACK yet; use the bounded sealed
+        // lease for cleanup instead of racing the response against listener shutdown.
+        if (args.head && engine.events.at(-1)?.action.verb === 'end') {
+          clearTimeout(cleanup);
+          cleanup = setTimeout(() => { void close().catch(error => process.stderr.write(`${String(error)}\n`)); }, 120_000);
+          cleanup.unref();
+        }
         return;
       }
       if (args.operation !== 'action') browseFail('BROWSE_RPC_OPERATION', 'closed RPC surface', 2);
@@ -58,7 +60,7 @@ export async function runBrowseDriver(binding: Binding, dependencies: BrowseBrow
   server.requestTimeout = 30_000; server.headersTimeout = 10_000;
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve(); }); });
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('BROWSE_RPC_BIND');
-  const cleanup = setTimeout(() => { void close().catch(error => process.stderr.write(`${String(error)}\n`)); }, Math.max(1, Date.parse(binding.budget.deadline) - Date.now() + 120_000)); cleanup.unref();
+  let cleanup = setTimeout(() => { void close().catch(error => process.stderr.write(`${String(error)}\n`)); }, Math.max(1, Date.parse(binding.budget.deadline) - Date.now() + 120_000)); cleanup.unref();
   async function close() { clearTimeout(cleanup); await engine.close(); server.closeAllConnections(); if (server.listening) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
   return { endpoint: `http://127.0.0.1:${address.port}/`, capability, challenge, pid: process.pid, close };
 }

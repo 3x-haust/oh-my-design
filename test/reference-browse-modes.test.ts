@@ -113,5 +113,9 @@ test('pending command retry is replay-safe and an unacknowledged click is publis
     const first = await send(), repeated = await send(); assert.deepEqual(repeated, first);
     const result = await run(['shot', '--assert-visible', '#details']); assert.equal(result.ok, true); assert.equal(/invocations: (\d+)/.exec(result.observation!.text)?.[1], '1');
     const end = await run(['end']); assert.equal(end.ok, true);
+    // The terminal ACK has been consumed; listener shutdown must not race its fetch.
+    const pending = { operation: 'pending' as const }, afterEnd = issueBrowseCommandTicket(bound!, driver!.challenge, 'after-end', pending, invocation, writer);
+    const response = await fetch(driver!.endpoint, { method: 'POST', headers: { authorization: `Bearer ${driver!.capability}`, 'content-type': 'application/json' }, body: JSON.stringify({ ticket: afterEnd, args: pending }) });
+    assert.equal(response.status, 200); assert.equal(await response.json(), null);
   } finally { await driver?.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
 });
