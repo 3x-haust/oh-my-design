@@ -1,108 +1,77 @@
 #!/usr/bin/env node
-import { readFileSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
+import { Readable, type Transform } from 'node:stream';
 
-type Counts = Map<string, number>;
-type Source = { lines: Counts; branches: Counts; functions: Counts };
+type CoverageTotals = {
+  totalLineCount: number;
+  totalBranchCount: number;
+  totalFunctionCount: number;
+  coveredLineCount: number;
+  coveredBranchCount: number;
+  coveredFunctionCount: number;
+};
+type CoverageSummary = { totals: CoverageTotals; files: readonly unknown[]; workingDirectory: string };
+type CoverageReader = { summary(): CoverageSummary };
+
+// CI pins Node 24.11.0. Its own coverage collector preserves range identity and
+// source-map handling; LCOV's line/ordinal branch IDs cannot be merged faithfully.
 const thresholds = { Lines: 59, Branches: 72, Functions: 65 } as const;
 
-export function mergeCoverage(reports: readonly string[]): { lcov: string; summary: string } {
-  if (!reports.length) throw new Error('at least one LCOV report is required');
-  const sources = new Map<string, Source>();
-  for (const report of reports) {
-    const text = readFileSync(report, 'utf8');
-    if (!text.startsWith('TN:\n') || !text.includes('\nend_of_record\n')) throw new Error(`invalid or empty LCOV: ${report}`);
-    let source: Source | undefined;
-    let declarations = new Map<string, string[]>();
-    let reportBranches = new Map<string, number[]>();
-    let records = 0;
-    for (const line of text.trimEnd().split('\n')) {
-      if (line === 'TN:') continue;
-      if (line.startsWith('SF:')) {
-        const file = line.slice(3).replaceAll('\\', '/').replace(/^\.\//, '');
-        if (!file || file.startsWith('/') || file.split('/').includes('..')) throw new Error(`invalid source in ${report}: ${line}`);
-        source = sources.get(file);
-        if (!source) {
-          source = { lines: new Map(), branches: new Map(), functions: new Map() };
-          sources.set(file, source);
+export async function mergeCoverage(directories: readonly string[], cwd = process.cwd()): Promise<{ lcov: string; summary: string }> {
+  if (directories.length === 0) throw new Error('at least one raw V8 coverage shard is required');
+  const require = createRequire(import.meta.url);
+  const { TestCoverage }: { TestCoverage: new (directory: string, original: undefined, options: object) => CoverageReader } =
+    require('internal/test_runner/coverage');
+  const LcovReporter: new () => Transform = require('internal/test_runner/reporter/lcov');
+  const combined = mkdtempSync(join(tmpdir(), 'omd-coverage-merge-'));
+  try {
+    let index = 0;
+    for (const directory of directories) {
+      if (!existsSync(directory)) throw new Error(`missing coverage shard: ${directory}`);
+      const files = readdirSync(directory).filter((name) => /^coverage-\d+-\d{13}-\d+\.json$/.test(name));
+      if (files.length === 0) throw new Error(`empty raw V8 coverage shard: ${directory}`);
+      for (const file of files) {
+        const path = resolve(directory, file);
+        const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+        if (!parsed || typeof parsed !== 'object' || !('result' in parsed) || !Array.isArray(parsed.result)) {
+          throw new Error(`invalid raw V8 coverage: ${path}`);
         }
-        declarations = new Map();
-        reportBranches = new Map();
-        records++;
-      } else if (line === 'end_of_record') {
-        if (!source) throw new Error(`orphan end_of_record in ${report}`);
-        // Node's BRDA block indexes shift when a different subset of scripts executes.
-        // A line and its ordinal branch are stable; retain only the largest observed
-        // count at each ordinal, a conservative lower bound when identities differ.
-        for (const [branchLine, hits] of reportBranches) {
-          for (const [ordinal, hit] of hits.sort((a, b) => b - a).entries()) {
-            const key = `${branchLine},${ordinal},0`;
-            source.branches.set(key, Math.max(source.branches.get(key) ?? -1, hit));
-          }
-        }
-        source = undefined;
-      } else if (source && line.startsWith('FN:')) {
-        const declaration = line.slice(3);
-        const separator = declaration.indexOf(',');
-        if (separator < 1) throw new Error(`invalid function declaration in ${report}: ${line}`);
-        const name = declaration.slice(separator + 1);
-        declarations.set(name, [...(declarations.get(name) ?? []), declaration]);
-      } else if (source && /^(DA|BRDA|FNDA):/.test(line)) {
-        const separator = line.indexOf(':');
-        const values = line.slice(separator + 1).split(',');
-        const rawHits = line.startsWith('FNDA:') ? values.shift() : values.pop();
-        const hits = rawHits === '-' && line.startsWith('BRDA:') ? -1 : Number(rawHits);
-        if (!Number.isFinite(hits) || hits < -1 || (hits === -1 && rawHits !== '-')) throw new Error(`invalid hit count in ${report}: ${line}`);
-        if (line.startsWith('BRDA:')) {
-          if (values.length !== 3 || !/^\d+$/.test(values[0]!)) throw new Error(`invalid branch in ${report}: ${line}`);
-          const branchLine = values[0]!;
-          reportBranches.set(branchLine, [...(reportBranches.get(branchLine) ?? []), hits]);
-        } else {
-          const key = line.startsWith('FNDA:') ? declarations.get(values.join(','))?.shift() : values.join(',');
-          if (!key) throw new Error(`missing FN declaration in ${report}: ${line}`);
-          const map = line.startsWith('DA:') ? source.lines : source.functions;
-          map.set(key, (map.get(key) ?? 0) + hits);
-        }
-      } else if (source && /^(LF|LH|BRF|BRH|FNF|FNH):/.test(line)) {
-        // Aggregate totals from merged identities instead of summing shard totals.
-      } else {
-        throw new Error(`unexpected LCOV entry in ${report}: ${line}`);
+        symlinkSync(path, join(combined, `coverage-${++index}-0000000000000-0.json`));
       }
     }
-    if (source || !records) throw new Error(`incomplete LCOV: ${report}`);
-  }
-  const counts = { Lines: [0, 0], Branches: [0, 0], Functions: [0, 0] } as Record<keyof typeof thresholds, [number, number]>;
-  const chunks = ['TN:'];
-  const sort = (a: string, b: string) => a.localeCompare(b, 'en', { numeric: true });
-  for (const [file, source] of [...sources].sort(([a], [b]) => sort(a, b))) {
-    chunks.push(`SF:${file}`);
-    for (const [declaration] of [...source.functions].sort(([a], [b]) => sort(a, b))) chunks.push(`FN:${declaration}`);
-    for (const [label, map, row, total, hit] of [
-      ['FNDA', source.functions, 'Functions', 'FNF', 'FNH'],
-      ['BRDA', source.branches, 'Branches', 'BRF', 'BRH'],
-      ['DA', source.lines, 'Lines', 'LF', 'LH'],
-    ] as const) {
-      for (const [key, value] of [...map].sort(([a], [b]) => sort(a, b))) chunks.push(label === 'FNDA' ? `FNDA:${value},${key.slice(key.indexOf(',') + 1)}` : `${label}:${key},${value === -1 ? '-' : value}`);
-      chunks.push(`${hit}:${[...map.values()].filter((value) => value > 0).length}`, `${total}:${map.size}`);
-      counts[row][0] += [...map.values()].filter((value) => value > 0).length;
-      counts[row][1] += map.size;
+    const coverage = new TestCoverage(combined, undefined, {
+      cwd,
+      sourceMaps: true,
+      coverageIncludeGlobs: ['core/**', 'bin/**', 'adapters/**', 'extensions/**', 'scripts/**'],
+      coverageExcludeGlobs: ['test/**', 'dist/**', 'node_modules/**'],
+    }).summary();
+    const rows = [
+      { metric: 'Lines', covered: coverage.totals.coveredLineCount, found: coverage.totals.totalLineCount },
+      { metric: 'Branches', covered: coverage.totals.coveredBranchCount, found: coverage.totals.totalBranchCount },
+      { metric: 'Functions', covered: coverage.totals.coveredFunctionCount, found: coverage.totals.totalFunctionCount },
+    ] as const;
+    if (coverage.files.length === 0 || rows.some(({ found }) => found === 0)) throw new Error('raw V8 coverage has no instrumented source');
+    const summary = ['## Coverage', '', '| Metric | Covered | Total | Percent | Threshold |', '|---|---:|---:|---:|---:|',
+      ...rows.map(({ metric, covered, found }) =>
+        `| ${metric} | ${covered} | ${found} | ${(100 * covered / found).toFixed(2)}% | ${thresholds[metric]}% |`), ''].join('\n');
+    for (const { metric, covered, found } of rows) {
+      if (100 * covered / found < thresholds[metric]) throw new Error(`${metric} coverage ${(100 * covered / found).toFixed(2)}% is below ${thresholds[metric]}%`);
     }
-    chunks.push('end_of_record');
+    const reporter = Readable.from([{ type: 'test:coverage', data: { summary: coverage } }]).pipe(new LcovReporter());
+    const chunks: string[] = [];
+    for await (const chunk of reporter) chunks.push(String(chunk));
+    return { lcov: chunks.join(''), summary };
+  } finally {
+    rmSync(combined, { recursive: true, force: true });
   }
-  const rows = Object.entries(counts).map(([metric, [covered, found]]) => {
-    if (!found) throw new Error(`coverage has no ${metric.toLowerCase()}`);
-    return { metric: metric as keyof typeof thresholds, covered, found, percent: 100 * covered / found };
-  });
-  const summary = ['## Coverage', '', '| Metric | Covered | Total | Percent | Threshold |', '|---|---:|---:|---:|---:|',
-    ...rows.map(({ metric, covered, found, percent }) => `| ${metric} | ${covered} | ${found} | ${percent.toFixed(2)}% | ${thresholds[metric]}% |`), ''].join('\n');
-  for (const { metric, percent } of rows) {
-    if (percent < thresholds[metric]) throw new Error(`${metric} coverage ${percent.toFixed(2)}% is below ${thresholds[metric]}%`);
-  }
-  return { lcov: chunks.join('\n') + '\n', summary };
 }
 
 if (process.argv[1]?.endsWith('/merge-coverage.ts')) {
   try {
-    const { lcov, summary } = mergeCoverage(process.argv.slice(2));
+    const { lcov, summary } = await mergeCoverage(process.argv.slice(2));
     mkdirSync('coverage', { recursive: true });
     writeFileSync('coverage/lcov.info', lcov);
     console.log(summary);

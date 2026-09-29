@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Match scripts/test/run.ts sharding over the combined unit + integration manifest.
 import { readFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 export function coverageShards(total: number): { total: number; files: string[] }[] {
@@ -28,6 +29,8 @@ const files = selected.files;
 if (!files.length) throw new Error(`empty coverage shard ${index}/${total}`);
 console.log(`==> coverage shard ${index}/${total}: ${files.length} files, estimated ${selected.total.toFixed(1)}s`);
 mkdirSync('coverage', { recursive: true });
+const rawDirectory = resolve('coverage/raw');
+mkdirSync(rawDirectory, { recursive: true });
 const result = spawnSync(process.execPath, [
   '--test', '--test-concurrency=2', '--experimental-test-coverage',
   '--test-coverage-include=core/**', '--test-coverage-include=bin/**', '--test-coverage-include=adapters/**',
@@ -36,7 +39,7 @@ const result = spawnSync(process.execPath, [
   '--test-reporter=spec', '--test-reporter-destination=stdout',
   '--test-reporter=lcov', '--test-reporter-destination=coverage/lcov.info',
   '--test-reporter=junit', '--test-reporter-destination=coverage/junit.xml', ...files,
-], { stdio: 'inherit' });
+], { stdio: 'inherit', env: { ...process.env, NODE_V8_COVERAGE: rawDirectory } });
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;
 }
