@@ -16,6 +16,7 @@
       "test/candidate-novelty.test.ts",
       "test/capture-resilience.test.ts",
       "test/check-applicability.test.ts",
+      "test/ci-coverage-merge.test.ts",
       "test/codex-search-policy.test.ts",
       "test/component-stress-proof.test.ts",
       "test/content-grain-fit.test.ts",

@@ -13,21 +13,32 @@ export function mergeCoverage(reports: readonly string[]): { lcov: string; summa
     if (!text.startsWith('TN:\n') || !text.includes('\nend_of_record\n')) throw new Error(`invalid or empty LCOV: ${report}`);
     let source: Source | undefined;
     let declarations = new Map<string, string[]>();
+    let reportBranches = new Map<string, number[]>();
     let records = 0;
     for (const line of text.trimEnd().split('\n')) {
       if (line === 'TN:') continue;
       if (line.startsWith('SF:')) {
-        const file = line.slice(3);
-        if (!file) throw new Error(`empty SF in ${report}`);
+        const file = line.slice(3).replaceAll('\\', '/').replace(/^\.\//, '');
+        if (!file || file.startsWith('/') || file.split('/').includes('..')) throw new Error(`invalid source in ${report}: ${line}`);
         source = sources.get(file);
         if (!source) {
           source = { lines: new Map(), branches: new Map(), functions: new Map() };
           sources.set(file, source);
         }
         declarations = new Map();
+        reportBranches = new Map();
         records++;
       } else if (line === 'end_of_record') {
         if (!source) throw new Error(`orphan end_of_record in ${report}`);
+        // Node's BRDA block indexes shift when a different subset of scripts executes.
+        // A line and its ordinal branch are stable; retain only the largest observed
+        // count at each ordinal, a conservative lower bound when identities differ.
+        for (const [branchLine, hits] of reportBranches) {
+          for (const [ordinal, hit] of hits.sort((a, b) => b - a).entries()) {
+            const key = `${branchLine},${ordinal},0`;
+            source.branches.set(key, Math.max(source.branches.get(key) ?? -1, hit));
+          }
+        }
         source = undefined;
       } else if (source && line.startsWith('FN:')) {
         const declaration = line.slice(3);
@@ -38,12 +49,19 @@ export function mergeCoverage(reports: readonly string[]): { lcov: string; summa
       } else if (source && /^(DA|BRDA|FNDA):/.test(line)) {
         const separator = line.indexOf(':');
         const values = line.slice(separator + 1).split(',');
-        const hits = Number(line.startsWith('FNDA:') ? values.shift() : values.pop());
-        if (!Number.isFinite(hits) || hits < 0) throw new Error(`invalid hit count in ${report}: ${line}`);
-        const key = line.startsWith('FNDA:') ? declarations.get(values.join(','))?.shift() : values.join(',');
-        if (!key) throw new Error(`missing FN declaration in ${report}: ${line}`);
-        const map = line.startsWith('DA:') ? source.lines : line.startsWith('BRDA:') ? source.branches : source.functions;
-        map.set(key, (map.get(key) ?? 0) + hits);
+        const rawHits = line.startsWith('FNDA:') ? values.shift() : values.pop();
+        const hits = rawHits === '-' && line.startsWith('BRDA:') ? -1 : Number(rawHits);
+        if (!Number.isFinite(hits) || hits < -1 || (hits === -1 && rawHits !== '-')) throw new Error(`invalid hit count in ${report}: ${line}`);
+        if (line.startsWith('BRDA:')) {
+          if (values.length !== 3 || !/^\d+$/.test(values[0]!)) throw new Error(`invalid branch in ${report}: ${line}`);
+          const branchLine = values[0]!;
+          reportBranches.set(branchLine, [...(reportBranches.get(branchLine) ?? []), hits]);
+        } else {
+          const key = line.startsWith('FNDA:') ? declarations.get(values.join(','))?.shift() : values.join(',');
+          if (!key) throw new Error(`missing FN declaration in ${report}: ${line}`);
+          const map = line.startsWith('DA:') ? source.lines : source.functions;
+          map.set(key, (map.get(key) ?? 0) + hits);
+        }
       } else if (source && /^(LF|LH|BRF|BRH|FNF|FNH):/.test(line)) {
         // Aggregate totals from merged identities instead of summing shard totals.
       } else {
@@ -63,7 +81,7 @@ export function mergeCoverage(reports: readonly string[]): { lcov: string; summa
       ['BRDA', source.branches, 'Branches', 'BRF', 'BRH'],
       ['DA', source.lines, 'Lines', 'LF', 'LH'],
     ] as const) {
-      for (const [key, value] of [...map].sort(([a], [b]) => sort(a, b))) chunks.push(label === 'FNDA' ? `FNDA:${value},${key.slice(key.indexOf(',') + 1)}` : `${label}:${key},${value}`);
+      for (const [key, value] of [...map].sort(([a], [b]) => sort(a, b))) chunks.push(label === 'FNDA' ? `FNDA:${value},${key.slice(key.indexOf(',') + 1)}` : `${label}:${key},${value === -1 ? '-' : value}`);
       chunks.push(`${hit}:${[...map.values()].filter((value) => value > 0).length}`, `${total}:${map.size}`);
       counts[row][0] += [...map.values()].filter((value) => value > 0).length;
       counts[row][1] += map.size;

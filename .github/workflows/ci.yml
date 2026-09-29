@@ -275,7 +275,7 @@ jobs:
           pattern: coverage-shard-*
           path: coverage-shards
       - name: Test coverage aggregation
-        run: node --test test/ci-coverage-merge.ts
+        run: node --test test/ci-coverage-merge.test.ts
       - name: Merge and enforce full-suite coverage thresholds
         run: node scripts/ci/merge-coverage.ts coverage-shards/coverage-shard-{1,2,3,4}/lcov.info
       - if: always()

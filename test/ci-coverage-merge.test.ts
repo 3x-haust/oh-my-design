@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mergeCoverage } from '../scripts/ci/merge-coverage.ts';
+import { coverageShards } from '../scripts/ci/coverage-shard.ts';
 
 test('merges overlapping LCOV identities before checking full-suite thresholds', () => {
   const directory = mkdtempSync(join(tmpdir(), 'omd-coverage-'));
@@ -13,12 +14,23 @@ test('merges overlapping LCOV identities before checking full-suite thresholds',
     writeFileSync(first, 'TN:\nSF:core/a.ts\nFN:1,a\nFNDA:1,a\nFNF:1\nFNH:1\nBRDA:1,0,0,1\nBRDA:2,1,0,0\nBRF:2\nBRH:1\nDA:1,1\nDA:2,0\nLF:2\nLH:1\nend_of_record\n');
     writeFileSync(second, 'TN:\nSF:core/a.ts\nFN:1,a\nFNDA:1,a\nFNF:1\nFNH:1\nBRDA:1,0,0,0\nBRDA:2,1,0,1\nBRF:2\nBRH:1\nDA:1,0\nDA:2,1\nLF:2\nLH:1\nend_of_record\n');
     const { lcov, summary } = mergeCoverage([first, second]);
-    assert.match(lcov, /FNDA:2,a\nFNH:1\nFNF:1\nBRDA:1,0,0,1\nBRDA:2,1,0,1\nBRH:2\nBRF:2\nDA:1,1\nDA:2,1\nLH:2\nLF:2/);
+    assert.match(lcov, /FNDA:2,a\nFNH:1\nFNF:1\nBRDA:1,0,0,1\nBRDA:2,0,0,1\nBRH:2\nBRF:2\nDA:1,1\nDA:2,1\nLH:2\nLF:2/);
     assert.match(summary, /\| Lines \| 2 \| 2 \| 100\.00%/);
     assert.match(summary, /\| Branches \| 2 \| 2 \| 100\.00%/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('coverage shards partition every unit and integration manifest entry', () => {
+  const { tiers } = JSON.parse(readFileSync('test/test-manifest.json', 'utf8')) as { tiers: { unit: string[]; integration: string[] } };
+  const expected = [...tiers.unit, ...tiers.integration].sort();
+  const shards = coverageShards(4);
+  const selected = shards.flatMap((shard) => shard.files).sort();
+  assert.equal(shards.length, 4);
+  assert.equal(expected.length, 298);
+  assert.equal(new Set(selected).size, expected.length);
+  assert.deepEqual(selected, expected);
 });
 
 test('fails closed if combined coverage is below a threshold or a shard is missing', () => {
