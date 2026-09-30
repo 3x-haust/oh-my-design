@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import type { Browser, BrowserContext, Locator, Page } from 'playwright';
 import { captureReferenceNavigation, readReferenceDiscoveryAttempt } from '../core/ref/navigation-capture.ts';
 import { executeReferenceSearch, readSearchExecution } from '../core/ref/search-execution.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { observeDocumentResponses } from '../core/ref/document-observation.ts';
+import { captureDiscoveryObservation } from '../core/ref/reference-capture-observation.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { discoveryBrowser, discoveryFixture, directoryHtml } from './helpers/discovery-capture.ts';
 
@@ -13,6 +15,58 @@ const searchUrl = 'https://www.google.com/search?q=task';
 const directoryUrl = 'https://directory.example/tasks';
 const destination = 'https://final-item.example/';
 const unreachable = (value: never): never => assert.fail(`Unexpected scenario: ${String(value)}`);
+
+function browserWithInterruptedInspection(browser: Browser, source: string, finalUrl: string, finalHtml: string) {
+  let interruptions = 0;
+  const preparePage = async (page: Page): Promise<Page> => {
+    await page.route(source, route => route.fulfill({ status: 200, contentType: 'text/html',
+      body: '<main><h1>Redirect wrapper</h1><p>This document must not be retained.</p></main>' }));
+    let releaseFinal!: () => void;
+    let finalRequested!: () => void;
+    const release = new Promise<void>(resolve => { releaseFinal = resolve; });
+    const requested = new Promise<void>(resolve => { finalRequested = resolve; });
+    await page.route(finalUrl, async route => {
+      finalRequested();
+      await release;
+      await route.fulfill({ status: 201, contentType: 'text/html', body: finalHtml });
+    });
+    const locator = page.locator.bind(page);
+    page.locator = ((selector: string, ...args: Parameters<Page['locator']> extends [string, ...infer Rest] ? Rest : never) => {
+      const found = locator(selector, ...args);
+      if (selector !== 'body') return found;
+      return new Proxy(found, { get(target, property, receiver) {
+        if (property !== 'evaluate') return Reflect.get(target, property, receiver);
+        return async (...evaluateArgs: Parameters<Locator['evaluate']>) => {
+          if (interruptions > 0) return target.evaluate(...evaluateArgs);
+          interruptions++;
+          const body = await target.elementHandle();
+          assert.ok(body);
+          const loaded = page.waitForURL(finalUrl, { waitUntil: 'domcontentloaded', timeout: 5000 });
+          const request = page.waitForRequest(finalUrl, { timeout: 5000 });
+          await page.evaluate(href => { location.replace(href); }, finalUrl);
+          await Promise.all([request, requested]);
+          releaseFinal();
+          await loaded;
+          return body.evaluate(...evaluateArgs);
+        };
+      } });
+    }) as Page['locator'];
+    return page;
+  };
+  const prepareContext = (context: BrowserContext): BrowserContext => {
+    const newPage = context.newPage.bind(context);
+    context.newPage = async () => preparePage(await newPage());
+    return context;
+  };
+  return {
+    browser: new Proxy(browser, { get(target, property, receiver) {
+      if (property === 'newContext') return async (...args: Parameters<Browser['newContext']>) =>
+        prepareContext(await target.newContext(...args));
+      return Reflect.get(target, property, receiver);
+    } }),
+    interruptions: () => interruptions,
+  };
+}
 
 function assertOnlyFailedDirectAttempt(root: string): void {
   const directory = join(root, '.omd/discovery/domain');
@@ -171,6 +225,54 @@ for (const route of ['direct', 'search'] as const) {
     });
   });
 }
+
+test('navigation capture retries an interrupted inspection against the bound final document', async t => {
+  const root = discoveryFixture(t);
+  const source = 'https://redirect-wrapper.example/start';
+  const finalUrl = 'https://final-reference.example/workspace';
+  const finalLink = 'https://final-reference.example/task/42';
+  const finalHtml = directoryHtml(finalLink).replace('Public directory', 'Final application workspace');
+  await withBrowser(async browser => {
+    const scenario = browserWithInterruptedInspection(browser, source, finalUrl, finalHtml);
+    const receipt = await captureReferenceNavigation(scenario.browser, source, 'design', createTestProjectWriteAdapter(root));
+    const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
+    assert.equal(scenario.interruptions(), 1);
+    assert.equal(record.acquisition.finalUrl, finalUrl);
+    assert.equal(record.acquisition.httpStatus, 201);
+    assert.deepEqual(record.acquisition.links, [finalLink]);
+    assert.match(record.observedText, /Final application workspace/);
+    assert.doesNotMatch(record.observedText, /Redirect wrapper/);
+    assert.equal(readFileSync(join(root, receipt.evidence.path)).subarray(1, 4).toString(), 'PNG');
+  });
+});
+
+test('stable-document inspection errors are not retried as navigation', async () => {
+  await withBrowser(async browser => {
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      const url = 'https://stable-error.example/';
+      await page.route(url, route => route.fulfill({ status: 200, contentType: 'text/html', body: directoryHtml(destination) }));
+      const documents = await observeDocumentResponses(page);
+      try {
+        await page.goto(url, { waitUntil: 'domcontentloaded' });
+        const failure = new Error('unrelated inspection failure');
+        let evaluations = 0;
+        const locator = page.locator.bind(page);
+        page.locator = ((selector: string, ...args: Parameters<Page['locator']> extends [string, ...infer Rest] ? Rest : never) => {
+          const found = locator(selector, ...args);
+          if (selector !== 'body') return found;
+          return new Proxy(found, { get(target, property, receiver) {
+            if (property !== 'evaluate') return Reflect.get(target, property, receiver);
+            return async () => { evaluations++; throw failure; };
+          } });
+        }) as Page['locator'];
+        await assert.rejects(captureDiscoveryObservation(page, documents), error => error === failure);
+        assert.equal(evaluations, 1);
+      } finally { await documents.close(); }
+    } finally { await context.close(); }
+  });
+});
 
 test('about:blank cannot claim a main-document HTTP response', async () => {
   await withBrowser(async browser => {
