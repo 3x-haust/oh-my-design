@@ -18,6 +18,7 @@ import { testSearchReceipt } from './helpers/search-execution.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
 import { createHash } from 'node:crypto';
+import { writeUserBrowserConsent } from '../core/ref/browser-consent.ts';
 
 const pack = fileURLToPath(new URL('../core', import.meta.url));
 const deck = `# Copy deck
@@ -172,7 +173,18 @@ test('current reference outputs are available without a mandatory interpretation
 
 test('a missing reference board points to discovery work instead of repeating entry checks', t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-stage-reference-pointer-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const home = mkdtempSync(join(tmpdir(), 'omd-stage-reference-home-'));
+  const previousHome = process.env.HOME;
+  const previousEngine = process.env.OMD_REFERENCE_BROWSER_ENGINE;
+  process.env.HOME = home;
+  process.env.OMD_REFERENCE_BROWSER_ENGINE = 'user-browser';
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    if (previousEngine === undefined) delete process.env.OMD_REFERENCE_BROWSER_ENGINE;
+    else process.env.OMD_REFERENCE_BROWSER_ENGINE = previousEngine;
+    rmSync(root, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  });
   const input = routeInput();
   input.referenceDiscovery = { ...input.referenceDiscovery, uncertainty: 'unresolved', existingEvidence: 'none', existingEvidenceUse: null, skipReason: null };
   input.strategyDecision.stages.splice(1, 0, 'scout', 'reference-board');
@@ -193,6 +205,14 @@ test('a missing reference board points to discovery work instead of repeating en
   assert.equal(work.referenceWork?.action?.kind, 'browser-consent');
   assert.ok(work.next.length > 0);
   assert.match(work.referenceWork?.workSha256 ?? '', /^[a-f0-9]{64}$/);
+
+  writeUserBrowserConsent('consented', home);
+  const authorized = nextStageWork(root, pack, invocation);
+  assert.equal(authorized.stage, 'reference-board');
+  assert.equal(authorized.action, 'acquire-reference');
+  assert.equal(authorized.referenceWork?.status, 'action');
+  assert.equal(authorized.referenceWork?.action?.kind, 'search');
+  assert.equal(authorized.referenceWork?.action?.engine, 'user-browser');
 });
 
 test('board work recommends research but stale retained receipts cannot substantiate research', t => {
