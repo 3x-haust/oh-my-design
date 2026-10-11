@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
+import { readCurrentCandidateSelection } from '../brief/candidate-choice.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readDesignJudgment } from './judgment-files.ts';
 import { checkFirstRenderEvidence } from './first-render-evidence.ts';
@@ -42,6 +43,22 @@ function candidateTarget(root: string) {
   const pointer = validateCandidateSelectionPointer(piParse(
     bytesAt(root, CANDIDATE_SELECTION_POINTER_PATH).toString('utf8'), 'candidate-target'));
   resolveCandidateSelection(root, pointer);
+  if ('selection' in pointer) {
+    const selected = readCurrentCandidateSelection(root);
+    const renders = (['desktop', 'mobile'] as const).map((viewport) => {
+      const dimensions = FIRST_RENDER_VIEWPORTS[viewport];
+      const preview = selected.previews.find((item) =>
+        item.viewport.width === dimensions.width && item.viewport.height === dimensions.height)
+        ?? fail(`selected candidate needs an approved ${viewport} visual target`);
+      return {
+        role: 'selected-first-party-target', viewport,
+        width: preview.viewport.width, height: preview.viewport.height,
+        captureSha256: preview.png.sha256,
+        pngBase64: bytesAt(root, preview.png.path).toString('base64'),
+      };
+    });
+    return { sha256: sha256(canonicalJson(pointer)), renders };
+  }
   if (pointer.visual === undefined) return fail('selected candidate needs both approved visual targets');
   return {
     sha256: sha256(canonicalJson(pointer)),
@@ -114,7 +131,7 @@ function prepareFirstRenderReviewPacket(
   invocation: ProjectRunInvocation,
   previous: ReturnType<typeof readReviewRecord>,
 ) {
-  const current = checkFirstRenderEvidence(root);
+  const current = checkFirstRenderEvidence(root, 'review');
   if (current === null || current.schema !== 'first-render-check-v3') return fail('capture both fixed viewports first');
   const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('hypothesis missing');
   const captures: unknown = current.captures;
@@ -194,7 +211,7 @@ export function requireRetainedFirstRenderReview(root: string, invocation: Proje
 export async function runFirstRenderReview(root: string, invocation: ProjectRunInvocation, signal?: AbortSignal) {
   const run = getNativePiRun(invocation, root);
   const previous = readFirstRenderReview(run.projectRoot);
-  const capture = checkFirstRenderEvidence(run.projectRoot);
+  const capture = checkFirstRenderEvidence(run.projectRoot, 'review');
   const target = candidateTarget(run.projectRoot);
   const next = (review: FirstRenderReview) => {
     const owners = { direction: 'coordinator', composition: 'omd-composer', type: 'omd-typesetter',

@@ -15,9 +15,9 @@ export const ACQUISITION_PLAN_V2_SCHEMA = 'reference-acquisition-plan-v2' as con
 export const REFERENCE_INFLUENCE_AXIS_VALUES = ['structure', 'proportion', 'density', 'rhythm', 'motion', 'content', 'voice', 'rejection'] as const;
 export type ReferenceInfluenceAxis = (typeof REFERENCE_INFLUENCE_AXIS_VALUES)[number];
 
-export type DecisionStage = 'frame' | 'copy' | 'type' | 'composition' | 'structure' | 'production' | 'refinement';
+export type DecisionStage = 'frame' | 'copy' | 'type' | 'composition' | 'structure' | 'production' | 'refinement' | 'concept' | 'art-direction';
 export type DecisionRisk = 'low' | 'medium' | 'high' | 'critical';
-export type DecisionOwner = 'omd-framer' | 'omd-writer' | 'omd-typesetter' | 'omd-composer' | 'omd-eye' | 'omd-hand';
+export type DecisionOwner = 'omd-framer' | 'omd-writer' | 'omd-typesetter' | 'omd-composer' | 'omd-eye' | 'omd-hand' | 'omd-art-director';
 
 export type DecisionAlternative = { readonly id: string; readonly label: string };
 export type RejectedAlternative = { readonly id: string; readonly reason: string };
@@ -146,9 +146,11 @@ const exact = (v: Record<string, unknown>, keys: readonly string[]): boolean => 
 const finding = (out: ContractFinding[], id: string, path: string, message: string): void => { out.push({ id, path, message }); };
 
 const DECISION_KEYS = ['affects', 'alternatives', 'constraints', 'dependsOn', 'evidence', 'id', 'owner', 'question', 'rejected', 'reversible', 'risk', 'selected', 'stage', 'tradeoffs'] as const;
-const STAGES = new Set<DecisionStage>(['frame', 'copy', 'type', 'composition', 'structure', 'production', 'refinement']);
+const STAGES = new Set<DecisionStage>(['frame', 'copy', 'type', 'composition', 'structure', 'production', 'refinement', 'concept', 'art-direction']);
 const RISKS = new Set<DecisionRisk>(['low', 'medium', 'high', 'critical']);
 const OWNER_BY_STAGE: Record<DecisionStage, DecisionOwner> = {
+  concept: 'omd-art-director',
+  'art-direction': 'omd-art-director',
   frame: 'omd-framer',
   copy: 'omd-writer',
   type: 'omd-typesetter',
@@ -177,7 +179,7 @@ export function validateDecisionGraph(value: unknown): { readonly value?: Decisi
     if (STAGES.has(d.stage as DecisionStage) && d.owner !== OWNER_BY_STAGE[d.stage as DecisionStage]) finding(out, 'DECISION-OWNER', `${path}.owner`, `${d.stage} decisions belong to ${OWNER_BY_STAGE[d.stage as DecisionStage]}, not the coordinator`);
     if (!text(d.question)) finding(out, 'DECISION-QUESTION', `${path}.question`, 'question must be substantive');
     const alternativesValid = Array.isArray(d.alternatives)
-      && d.alternatives.length >= 2
+      && d.alternatives.length >= (d.stage === 'art-direction' ? 1 : 2)
       && d.alternatives.every((a) => record(a) && exact(a, ['id', 'label']) && slug(a.id) && text(a.label));
     if (!alternativesValid) finding(out, 'DECISION-NO-DIVERGENCE', `${path}.alternatives`, 'a decision needs at least two named alternatives');
     const alternativeIds = Array.isArray(d.alternatives)

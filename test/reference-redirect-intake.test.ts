@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFile, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,8 +10,9 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { loadRefs } from '../core/ref/store.ts';
+import { loadDesignCandidates } from '../core/ref/reference-candidate.ts';
 import { captureFinalUrlGuard, captureLane } from '../core/ref/capture-intake.ts';
-import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { publishTestAdaptiveRoute, withTestReviewPurposeAuthority } from './helpers/project-write.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
 
@@ -22,7 +23,7 @@ test('request language does not refuse a public foreign capture without market j
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const input = { ...(inputSkeleton('product-route-input').skeleton as Record<string, unknown>),
     request: '한국어로 복지 혜택을 찾고 신청하는 데스크톱 서비스를 구현해줘.' };
-  const invocation = publishTestAdaptiveRoute(cwd, input);
+  const invocation = publishTestAdaptiveRoute(cwd, withTestReviewPurposeAuthority(cwd, input));
   const english = 'Find government benefits and financial help';
   const korean = '나에게 맞는 복지 혜택을 찾고 신청 준비를 시작하세요';
   const guard = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain' }], invocation);
@@ -75,7 +76,7 @@ test('selector-scoped capture still checks visible language on the full source p
 test('a gallery capture must remain the exact requested item regardless of user origin', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-gallery-redirect-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  const invocation = publishTestAdaptiveRoute(cwd, inputSkeleton('product-route-input').skeleton);
+  const invocation = publishTestAdaptiveRoute(cwd, withTestReviewPurposeAuthority(cwd, inputSkeleton('product-route-input').skeleton));
   const source = 'https://dribbble.com/shots/123-ui';
   const guard = captureFinalUrlGuard(cwd, [{ source, lane: 'design' }], invocation);
   assert.doesNotThrow(() => guard(0, source));
@@ -91,7 +92,7 @@ test('a gallery capture must remain the exact requested item regardless of user 
 
 test('a changed gallery item cannot fabricate traversal for a direct source', t => {
   const value = designAdmissionFixture(t);
-  const invocation = publishTestAdaptiveRoute(value.root, inputSkeleton('product-route-input').skeleton);
+  const invocation = publishTestAdaptiveRoute(value.root, withTestReviewPurposeAuthority(value.root, inputSkeleton('product-route-input').skeleton));
   assert.ok(value.gallery.ref.acquisition);
   value.gallery.ref.acquisition.finalUrl = 'https://www.pinterest.com/pin/987654321/';
   writeFileSync(value.gallery.path, JSON.stringify(value.gallery.ref));
@@ -99,39 +100,32 @@ test('a changed gallery item cannot fabricate traversal for a direct source', t 
 });
 
 test('a source may inform both lanes without asserting independent corroboration', async t => {
-  const server = createServer((req, res) => {
-    if (req.url?.startsWith('/redirect')) {
-      res.writeHead(302, { Location: `http://[::1]:${port}/same-service` }); res.end(); return;
-    }
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(`<main><h1>Service workspace</h1><p>${'Application preparation status and confirmed requirements. '.repeat(15)}</p></main>`);
-  });
-  await new Promise<void>(resolve => server.listen(0, resolve));
-  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
-  const address = server.address(); assert.ok(address && typeof address !== 'string');
-  const port = address.port;
   const cwd = mkdtempSync(join(tmpdir(), 'omd-redirect-intake-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
-  writeFileSync(join(cwd, '.omd/.cache/route.json'), JSON.stringify(inputSkeleton('product-route-input').skeleton));
+  const source = join(cwd, 'same-service.html');
+  const visual = source;
+  const serviceHtml = `<main><h1>Service workspace</h1><p>${'Application preparation status and confirmed requirements. '.repeat(15)}</p></main>`;
+  writeFileSync(source, serviceHtml);
+  writeFileSync(join(cwd, '.omd/.cache/route.json'), JSON.stringify(withTestReviewPurposeAuthority(cwd, inputSkeleton('product-route-input').skeleton)));
   const classified = spawnSync(process.execPath, [cli, 'route', 'classify', '--input', '.omd/.cache/route.json'], { cwd, env, encoding: 'utf8' });
   assert.equal(classified.status, 0, classified.stderr);
-  const source = `http://127.0.0.1:${port}/redirect-domain`;
-  const visual = `http://localhost:${port}/redirect-design`;
   writeFileSync(join(cwd, '.omd/.cache/batch.json'), JSON.stringify([
     { source, as: 'task', lane: 'domain', energy: false, shot: true },
     { source: visual, as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
   ]));
   const command = (...args: string[]) => promisify(execFile)(process.execPath, [cli, ...args], { cwd, env, timeout: 30000 });
-  await assert.doesNotReject(command('ref', 'add-batch', '.omd/.cache/batch.json', '--json'));
+  const batch = await command('ref', 'add-batch', '.omd/.cache/batch.json', '--json')
+    .then(result => ({ ok: true as const, result }), error => ({ ok: false as const, error }));
+  assert.equal(batch.ok, true, batch.ok ? '' : `${batch.error.stdout}\n${batch.error.stderr}`);
   const refs = loadRefs(cwd, { includeDomain: true });
-  assert.equal(refs.length, 2);
-  const pngs = ['domain', 'design'].flatMap(lane => {
-    const path = join(cwd, '.omd/refs', lane);
-    return existsSync(path) ? readdirSync(path).filter(file => file.endsWith('.png')) : [];
-  });
-  assert.equal(pngs.length, 2);
+  assert.equal(refs.length, 1);
+  assert.equal(refs[0]?.researchLane, 'domain');
+  const candidates = loadDesignCandidates(cwd);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.reference.source, visual);
+  assert.equal(refs[0]?.source, candidates[0]?.reference.source);
   await assert.doesNotReject(command('ref', 'add', source,
     '--as', 'retry', '--lane', 'domain', '--from-user', '--no-energy'));
-  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 3);
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 2);
 });

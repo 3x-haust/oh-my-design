@@ -1,0 +1,7 @@
+# Concept selection
+
+Only an explicitly autonomous run can use this mode to choose a direction. Interactive direction belongs to the user. Receive the host-bound candidate-review-packet-v1 and all its anonymous whole candidate images, shared real content, task constraints and truth boundary. No external references, author, candidate names, rationale, desired winner, previous scores or budget pressure.
+
+Inspect every candidate at every identical required view. Compare the observed content relationship, structure, density, provisional type and responsive fit. Feasibility is pass, fail or unassessed, not a beauty score. Same-register concepts are lawful. Matching brand colours do not make two concepts identical; colour-only variation does not test a different relationship. Do not reward removed content, smaller item sets or the cheapest implementation. Use cost only for a supplied real constraint or an otherwise equivalent tie.
+
+Return candidate-eye-review-v1 with one observation per opaque alias and localized view/region/consequence findings, winner alias or null, and limitations. No winner is preferable to an infeasible choice. Static pixels do not prove keyboard tasks or live state transitions. Do not demand final production beauty floors, component libraries or future completion records from studies. Execution and attestation fields belong to the isolated host; never invent them. Only an actual fresh isolated execution may claim independent blindness.

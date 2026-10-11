@@ -149,6 +149,8 @@ test('native candidate selection refuses visual loss before publishing and binds
   const result = await selectReviewedCandidate(root, invocation, { ...pointer, indexSha256: hash(repaired) }, t.signal);
   assert.equal(result.referenceReview?.decision, 'retain');
   const selected = validateCandidateSelectionPointer(JSON.parse(readFileSync(join(root, CANDIDATE_SELECTION_POINTER_PATH), 'utf8')));
+  assert.ok('directory' in selected);
+  assert.ok(selected.visual);
   assert.doesNotThrow(() => checkCandidateReferenceReview(root, invocation, selected));
   const changedAcceptedPlan = await captureCandidateSelection(root, {
     ...pointer, indexSha256: hash(repaired), captureStates: changedPlan,

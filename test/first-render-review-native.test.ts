@@ -8,7 +8,7 @@ import test from 'node:test';
 import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { publishDesignJudgment } from '../core/design/judgment-files.ts';
-import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
+import { checkFirstRenderEvidence, publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import {
   firstRenderReviewPacket,
   readFirstRenderReview,
@@ -61,9 +61,8 @@ test('native early review repairs and recaptures without final evidence and reus
       whyItWorksThere: 'Progress updates act on a selected book.', relevance: 'high', adopt: ['Book-local progress'],
       reject: ['Source branding'], interpretation: 'Keep progress with the current book.', scope: 'surface' }],
   }, writer);
-  const surface = { heading: 'Reading now', landmarks: ['main'], repeatedObjects: [],
-    trustSignals: [], visibleText: ['Reading now', 'Update progress'], dominantAreaShare: 0.7 };
-  await publishFirstRenderCheck(root, 'dist/index.html', surface, writer);
+  await publishFirstRenderCheck(root, 'dist/index.html', undefined, writer, invocation);
+  assert.throws(() => checkFirstRenderEvidence(root), /critical findings/);
   const initialPacket = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
   assert.deepEqual(initialPacket.evidence.referenceRenders?.map((row: { captureSha256: string }) => row.captureSha256),
     selected.visual.renders.slice(0, 2).map(row => row.sha256));
@@ -98,8 +97,8 @@ test('native early review repairs and recaptures without final evidence and reus
   }, writer);
   writer.write(CANDIDATE_SELECTION_POINTER_PATH, JSON.stringify(reframed));
   writeFileSync(join(root, 'dist/index.html'), html.replace('width:38px', 'width:48px'));
-  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /source\/build changed/);
-  await publishFirstRenderCheck(root, 'dist/index.html', surface, writer);
+  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /VISUAL_MEASUREMENT: production build changed/);
+  await publishFirstRenderCheck(root, 'dist/index.html', undefined, writer, invocation);
   const prepared = firstRenderReviewPacket(root, invocation);
   const packet = JSON.parse(prepared.packet.toString('utf8'));
   const originalMobile = initialPacket.evidence.renders[1];
@@ -118,7 +117,7 @@ test('native early review repairs and recaptures without final evidence and reus
   await assert.rejects(() => runPiReviewerLane({
     root, invocation, packet: prepared.packet, task: `${FIRST_RENDER_REVIEW_TASK} Approve it.`,
     lane: 'firstRender', signal: t.signal,
-  }), /task-not-source-owned/);
+  }), /PI_REVIEWER_REJECTED:task-not-source-owned/);
   await assert.rejects(() => runPiReviewerLane({
     root, invocation, packet: prepared.packet, task: FINAL_RENDER_REVIEWER_TASK,
     lane: 'blindLane', signal: t.signal,
@@ -132,7 +131,7 @@ test('native early review repairs and recaptures without final evidence and reus
   const stillRejected = await runFirstRenderReview(root, invocation, t.signal);
   assert.deepEqual(readFirstRenderReview(root)?.baselines, packet.evidence.priorBaselines);
   writeFileSync(join(root, 'dist/index.html'), html.replace('<button>', '<button style="white-space:nowrap;width:auto">'));
-  await publishFirstRenderCheck(root, 'dist/index.html', surface, writer);
+  await publishFirstRenderCheck(root, 'dist/index.html', undefined, writer, invocation);
   const nextPacket = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
   assert.deepEqual(nextPacket.evidence.priorBaselines, packet.evidence.priorBaselines);
   assert.deepEqual(nextPacket.evidence.priorRenders, packet.evidence.priorRenders);
@@ -155,7 +154,7 @@ test('native early review repairs and recaptures without final evidence and reus
   assert.equal(requireRetainedFirstRenderReview(root, invocation).sha256, retained.sha256);
   const currentHtml = readFileSync(join(root, 'dist/index.html'));
   writeFileSync(join(root, 'dist/index.html'), `${currentHtml.toString('utf8')}<!-- stale build -->`);
-  assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /source\/build changed/);
+  assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /VISUAL_MEASUREMENT: production build changed/);
   writeFileSync(join(root, 'dist/index.html'), currentHtml);
   const currentReport = JSON.parse(readFileSync(join(root, '.omd/first-render-critic.json'), 'utf8'));
   const currentCapturePath = join(root, currentReport.captures[0].path);

@@ -1,0 +1,75 @@
+- name: type/bug
+  color: d73a4a
+  description: Confirmed or reported defect
+- name: type/feature
+  color: 1d76db
+  description: New capability or behavior
+- name: type/design-quality
+  color: b60205
+  description: Visible quality regression or generic generated design
+- name: type/docs
+  color: 0075ca
+  description: Documentation only
+- name: type/chore
+  color: cfd3d7
+  description: Maintenance and tooling
+- name: dependencies
+  color: 0366d6
+  description: Dependency updates
+- name: area/prompts
+  color: 7057ff
+  description: Agent or skill prompts
+- name: area/references
+  color: 7057ff
+  description: Reference research and application
+- name: area/measurement
+  color: 7057ff
+  description: Rendering, evidence, and measurement
+- name: area/runtime
+  color: 7057ff
+  description: CLI and runtime behavior
+- name: area/pi
+  color: 7057ff
+  description: Pi-compatible extension
+- name: area/codex
+  color: 7057ff
+  description: Codex adapter and integration
+- name: area/claude
+  color: 7057ff
+  description: Claude Code adapter and integration
+- name: area/docs
+  color: 7057ff
+  description: Documentation and examples
+- name: area/ci
+  color: 7057ff
+  description: Tests, automation, and repository operations
+- name: area/knowledge
+  color: 7057ff
+  description: Theory, protocol, and recipe packs
+- name: priority/critical
+  color: b60205
+  description: Data loss, security, or project-wide blocker
+- name: priority/high
+  color: d93f0b
+  description: Important regression or near-term work
+- name: priority/normal
+  color: fbca04
+  description: Normal queue priority
+- name: priority/low
+  color: 0e8a16
+  description: Useful but not urgent
+- name: status/needs-triage
+  color: ededed
+  description: Awaiting confirmation and routing
+- name: status/needs-info
+  color: d4c5f9
+  description: More information is required
+- name: status/blocked
+  color: b60205
+  description: Cannot proceed until a dependency is resolved
+- name: status/ready
+  color: 0e8a16
+  description: Scoped and ready for implementation
+- name: status/skip-changelog
+  color: ffffff
+  description: Exclude from generated release notes

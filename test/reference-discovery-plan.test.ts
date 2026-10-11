@@ -170,8 +170,9 @@ test('visual acquisition questions remain decisions and never become domain sear
   assert.deepEqual(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds, []);
   assert.deepEqual(expandedDiscoveryInputs(plan, 'domain'), []);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.lane, 'domain');
-  assert.equal(work.action?.input?.query, route.sourceContract.taskOutcome.goal);
+  assert.equal(work.action?.lane, 'design');
+  assert.equal(work.action?.kind, 'start-browse');
+  assert.equal(work.next, 'omd ref browse start --lane design --mode headless --json');
   assert.equal(plan.decisions[0]?.question, question);
   const decision = plan.decisions[0];
   assert.ok(decision);

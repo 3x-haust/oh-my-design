@@ -6,7 +6,8 @@ import test from 'node:test';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { publishReferenceDiscoveryExclusion } from '../core/ref/discovery-exclusion.ts';
-import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
+// Preserve legacy catalogue work semantics explicitly; the default v2 browse pointer has separate integration tests.
+import { legacyReferenceDiscoveryWork as referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { browserProfilePath, forgetBrowserConsent, writeBrowserConsent, writeUserBrowserConsent } from '../core/ref/browser-consent.ts';
 import { publishSearchLeads } from '../core/ref/search-leads.ts';
 import { readStrictDiscoveryNavigation } from '../core/ref/discovery-record.ts';

@@ -65,10 +65,12 @@ the after state both matter — this is a state transition, not an arrival or de
 Use for: position changes, size changes, content crossfades where both the source and
 destination are meaningful.
 
-**linear**: no easing. Use for opacity changes on hover states only — eased opacity on a
-hover feels sluggish in a way that is hard to name but immediate to feel. Also correct for
-looping animations (a spinner, a progress bar) where acceleration and deceleration would
-produce visible stuttering on each cycle.
+**Hover easing follows the property and interaction.** There is no single correct hover curve.
+An immediate color or opacity acknowledgement may be linear or use a shallow ease-out. A small
+transform that suggests arrival usually benefits from ease-out. A reversible state should return
+without lag or overshoot. Judge entry and exit at pointer speed, keyboard focus, and repeated use.
+Looping motion often uses linear timing when speed changes would expose the cycle, but an
+indeterminate indicator may use a designed velocity profile if the loop remains continuous.
 
 A design system that uses a single easing curve for all motion has a vocabulary of one word.
 It can make things move, but it cannot say anything different about different movements.
@@ -96,13 +98,17 @@ precise. The user's pointer moved; the interface answered. Rauno Freiberg's web 
 guidelines (interfaces.rauno.me) specify that animation duration should not exceed 200ms
 for interactions to feel immediate — 150ms for hover is the stricter constraint.
 
-**Animate only `transform` and `opacity`.** Animating `width`, `height`, `top`, `left`,
-or any property that triggers layout recalculation causes the browser to reflow and repaint
-the document on every frame. The GPU cannot help. At 60 frames per second, this causes
-visible jank on mid-range hardware. `transform: translate()` and `opacity` are composited
-off the main thread — they animate at 60fps on all reasonable hardware without touching
-layout. This is not a performance tradeoff to weigh against visual quality; it is a hard
-rule with no exceptions.
+**Prefer `transform` and `opacity`, then measure exceptions.** These properties usually avoid
+layout and paint work and are the safest default for continuous or large-area motion. They are
+not guaranteed to run off the main thread or at 60 fps; layer promotion, rasterization, element
+size, memory pressure, filters, and concurrent work still matter.
+
+Short transitions on `color`, `background-color`, `border-color`, and restrained `box-shadow`
+are allowed when they communicate hover, focus, selection, elevation, or status more clearly.
+Keep the affected area small, avoid continuous paint animation, and measure representative
+hardware. Layout properties such as width, height, inset, margin, and padding are the last choice;
+prefer FLIP when spatial continuity matters. Accept motion from observed behavior: stable layout,
+responsive input, no sustained main-thread blockage, and no visible dropped frames.
 
 **No scroll-jacking.** The user controls scroll. Intercepting scroll events to drive
 animations or reposition content removes control from the user in a way they can feel but
@@ -111,11 +117,36 @@ not name — which is worse than a failure they can describe. NN/g ("Parallax Sc
 being able to articulate what broke. The concept must be extraordinary to justify the cost.
 
 **`prefers-reduced-motion` is not optional.** WCAG 2.1 criterion 2.3.3 (Level AAA) requires a
-mechanism to disable non-essential animation. In practice: one media query wraps the
-entire motion layer, and in its presence, all transitions reduce to instant opacity changes
-or disappear entirely. Not because most users trigger it — because those who need it need
-it completely. A motion system that does not honour it is broken for those users,
-regardless of how thoughtfully it was built for everyone else.
+mechanism to disable non-essential animation. Remove nonessential travel, parallax, scale, and
+repeated loops; preserve state recognition with an instant change or short non-spatial fade when
+appropriate. A blanket opacity conversion is unnecessary. A motion system that does not honour
+the preference is broken for users who need it, regardless of how thoughtfully it was built for
+everyone else.
+
+---
+
+## Role-based duration and easing
+
+Durations are starting ranges, not universal constants. Distance, size, input method, task frequency,
+and device may justify values outside them. Start at the lower end for repeated product work.
+
+| Motion role | Typical duration | Starting easing |
+| --- | ---: | --- |
+| Pressed or active acknowledgement | 0–80ms | linear or shallow ease-out |
+| Hover or focus paint change | 60–140ms | linear or ease-out |
+| Tooltip or menu appearance | 80–160ms | ease-out |
+| Checkbox, switch, or selection | 100–180ms | ease-out |
+| Toast or inline status arrival | 140–220ms | ease-out |
+| Popover or small overlay | 140–220ms | ease-out entry, faster ease-in exit |
+| Drawer or bottom sheet | 180–320ms | emphasized ease-out |
+| Modal transition | 160–260ms | ease-out entry, ease-in exit |
+| Reorder or FLIP continuity | 180–320ms | ease-in-out |
+| Product route continuity | 180–350ms | ease-in-out or none |
+| One-time narrative entrance | 300–600ms | concept-specific ease-out |
+
+Reduced motion removes nonessential travel, parallax, scale, and repeated loops. Preserve state
+recognition with an instant change or short non-spatial fade where appropriate; content, focus,
+task order, and completion feedback must not depend on animation.
 
 ---
 
@@ -209,20 +240,16 @@ about what is coming, how much there is, or how long it will take. Under any unc
 about wait duration, spinners increase anxiety — the user cannot estimate, and estimation
 is how humans manage waiting.
 
-**Skeleton screens** communicate structural presence: "The layout is here; the content is
-arriving." By showing the shape of the content before the content loads, the skeleton
-gives the brain a structure to place the incoming data. Research comparing skeleton screens
-to spinners and progress bars (NN/g, "Skeleton Screens vs. Progress Bars vs. Spinners",
-2020) shows that skeleton screens are perceived as faster even at identical actual load
-times, and studies show they can reduce abandonment by up to 30% by communicating that
-progress is already happening.
+**Skeleton screens** communicate expected structure: "The layout is here; the content is
+arriving." Comparative guidance reports that a well-matched skeleton can feel faster than an
+indeterminate spinner at the same wait time. The evidence does not establish a universal
+abandonment reduction, so do not claim one without product-specific measurement.
 
-Condition → choice → reason: use skeleton screens for page-level content loads where the
-layout is predictable (a list of cards, a article page, a dashboard grid). Use spinners for
-short indeterminate operations where the structural result cannot be previewed (file upload
-progress, authentication, payment processing). Never use a skeleton where the actual
-layout will be substantially different from the skeleton — a skeleton that does not match
-what loads is more disorienting than a spinner that made no promises.
+Use a skeleton when the destination structure is stable and loading is long enough for a
+placeholder to help. Match the final geometry, avoid shimmer when stillness is clearer, and keep
+content that has loaded visible. Use a spinner or progress indicator for short operations, unknown
+result shapes, authentication, payment, and file processing. Measure completion, duplicate actions,
+and perceived delay in the actual product before claiming an outcome.
 
 ---
 
@@ -268,9 +295,10 @@ Recipes are installed with `omd recipe add`, not reimplemented; what follows is 
 **CSS first, always.** `animation-timeline: view()`/`scroll()` is the default for scroll-linked motion
 and the only path that satisfies the scroll-scene contract without scripting: the compositor advances
 it as the reader scrolls, so it is scroll-position-scrubbed by construction and it survives with
-JavaScript disabled. `transform` and `opacity` are the only properties to animate — they reach the
-composite step without touching layout — and a CSS `transition` is interruptible where a `keyframes`
-animation is not, which is why state changes belong in transitions.
+JavaScript disabled. Prefer `transform` and `opacity` for continuous or large-area motion; allow
+measured small-area paint transitions where they communicate state more clearly. A CSS `transition`
+is interruptible where a `keyframes` animation is not, which is why reversible state changes usually
+belong in transitions.
 
 **GSAP where CSS cannot reach.** GSAP became free for every use in 2024 under Webflow's stewardship,
 including ScrollTrigger, Flip, MotionPath, Observer, and SplitText, so the licence question that used

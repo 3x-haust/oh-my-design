@@ -189,10 +189,35 @@ test('printed input skeletons carry exactly the keys their validators accept', a
     const input = inputSkeleton(name);
     assert.deepEqual(Object.keys(input.skeleton as object), [...input.keys]);
   }
-  for (const name of ['design-judgment', 'candidate-selection']) {
-    const input = inputSkeleton(name);
-    assert.deepEqual(Object.keys(input.skeleton as object), [...input.keys]);
-  }
+  const judgment = inputSkeleton('design-judgment');
+  assert.deepEqual(Object.keys(judgment.skeleton as object), [...judgment.keys]);
+  const candidateSelection = inputSkeleton('candidate-selection');
+  const {
+    CANDIDATE_SELECTION_ALLOWED_KEYS,
+    CANDIDATE_SELECTION_OPTIONAL_KEYS,
+    CANDIDATE_SELECTION_REQUIRED_KEYS,
+  } = await import('../core/schema/candidate-selection.ts');
+  const { validateCandidateSelectionPointer } = await import('../core/brief/candidate-selection.ts');
+  assert.deepEqual(candidateSelection.keys, CANDIDATE_SELECTION_ALLOWED_KEYS);
+  assert.deepEqual(Object.keys(candidateSelection.skeleton as object), [...CANDIDATE_SELECTION_REQUIRED_KEYS]);
+  assert.deepEqual(CANDIDATE_SELECTION_OPTIONAL_KEYS, ['captureStates']);
+  const legacyCandidateSelection = {
+    ...candidateSelection.skeleton as object,
+    directory: 'selected',
+    indexSha256: '0'.repeat(64),
+    selectionSha256: '1'.repeat(64),
+  };
+  assert.doesNotThrow(() => validateCandidateSelectionPointer(legacyCandidateSelection));
+  assert.doesNotThrow(() => validateCandidateSelectionPointer({
+    ...legacyCandidateSelection,
+    captureStates: [{
+      name: 'details',
+      startRoute: '/',
+      route: '/details',
+      actions: [{ kind: 'click', selector: '#details' }],
+      assertions: [{ selector: '#details-panel', state: 'visible' }],
+    }],
+  }));
   const { parseSearchInput } = await import('../core/ref/search-execution.ts');
   assert.doesNotThrow(() => parseSearchInput(inputSkeleton('reference-search').skeleton));
   const { parseDiscoveryBatchInput } = await import('../core/ref/discovery-batch.ts');
@@ -275,6 +300,11 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const printed = run(['schema', 'depth-input', '--json'], dir);
   assert.equal(printed.status, 0, printed.stderr);
   assert.deepEqual(JSON.parse(printed.stdout).skeleton, depth.skeleton);
+  const printedCandidateSelection = run(['schema', 'candidate-selection', '--json'], dir);
+  assert.equal(printedCandidateSelection.status, 0, printedCandidateSelection.stderr);
+  const publicCandidateSelection = JSON.parse(printedCandidateSelection.stdout);
+  assert.deepEqual(publicCandidateSelection.keys, [...CANDIDATE_SELECTION_ALLOWED_KEYS]);
+  assert.deepEqual(Object.keys(publicCandidateSelection.skeleton), [...CANDIDATE_SELECTION_REQUIRED_KEYS]);
   const printedBoard = run(['schema', 'reference-board'], dir);
   assert.equal(printedBoard.status, 0, printedBoard.stderr);
   assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);

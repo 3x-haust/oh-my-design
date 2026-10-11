@@ -28,10 +28,15 @@ test('ordinary unknown fields warn and are discarded; getters and missing fields
 });
 test('publication is verified before writing, signed and checked again on read', async () => {
   const memory = new Map<string, string>(); const context = fixtureContext();
-  const publication = { ...context, author: { role: 'coordinator', invocationSha256: hash('invocation') }, now: () => '2026-09-28T00:00:00.000Z', sign: (digest: string) => `signed:${digest}`, write: async (path: string, bytes: string) => { memory.set(path, bytes); } };
+  const publication = { ...context, author: { role: 'coordinator', invocationSha256: hash('invocation'), displayName: 'Host-only metadata' }, now: () => '2026-09-28T00:00:00.000Z', sign: (digest: string) => `signed:${digest}`, write: async (path: string, bytes: string) => { memory.set(path, bytes); } };
   const receipt = await publishJudgment(fixtureJudgment(), fixturePolicy, publication);
   const reader = { ...context, read: async (path: string) => Buffer.from(memory.get(path)!), verifySignature: (digest: string, signature: string) => signature === `signed:${digest}` };
   assert.equal((await readCurrentJudgment(receipt, fixturePolicy, reader)).judgment.decision, 'implement');
+  for (const now of ['', 'invalid-date']) {
+    await assert.rejects(publishJudgment(fixtureJudgment(), fixturePolicy, { ...publication, now: () => now }));
+  }
+  await assert.rejects(publishJudgment(fixtureJudgment(), fixturePolicy, { ...publication, sign: () => '' }));
+  assert.equal(memory.size, 1);
   await assert.rejects(publishJudgment({ ...fixtureJudgment(), quotes: [{ ...fixtureJudgment().quotes[0]!, text: 'fabricated' }] }, fixturePolicy, publication));
   assert.equal(memory.size, 1);
   await assert.rejects(readCurrentJudgment(receipt, fixturePolicy, { ...reader, documentSha256: hash('new document') }));

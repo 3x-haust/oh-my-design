@@ -14,10 +14,17 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import { validateAdaptiveFinalEvidenceV2Graph } from '../evidence/final-v2-adaptive-contract.ts';
+import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
+import { checkAdaptiveWorkflow } from '../design-development/workflow-persistence.ts';
+import { requiresMeasuredTerminal, loadReviewPolicy } from '../measure/review-policy.ts';
+import { validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
+import { validateFinalEvidenceV2Graph } from '../evidence/final-v2-graph.ts';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 
 export type CompletionTypographyBinding = Readonly<
   | { id: 'type-proof'; status: 'selected'; path: string; sha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
+  | { id: 'type-proof'; status: 'not-selected'; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'legacy-unassessed'; reason: string }
 >;
 export type CompletionPublicationResult = Readonly<{
@@ -105,6 +112,9 @@ function typographyBinding(
     const artifact = stage.artifacts[0] ?? fail('selected typography proof has no artifact');
     return Object.freeze({ id: 'type-proof', status: 'selected', path: artifact.path, sha256: artifact.sha256, applicability });
   }
+  if (stage.status === 'not-selected') return Object.freeze({
+    id: 'type-proof', status: 'not-selected', routeSha256: stage.routeSha256, authoritySha256: stage.authoritySha256, applicability,
+  });
   return Object.freeze({ id: 'type-proof', status: 'skipped', reason: stage.reason, routeSha256: stage.routeSha256, authoritySha256: stage.authoritySha256, applicability });
 }
 
@@ -115,9 +125,22 @@ export function checkCompletionPublicationPrerequisites(
   invocation: ProjectRunInvocation,
 ): CompletionPublicationResult {
   const graph = graphReceipts(manifest);
+  if (existsSync(resolve(root, '.omd/route.json')) && requiresMeasuredTerminal(readPersistedRoute(root, invocation))) {
+    loadReviewPolicy(root, invocation); // Revalidate the signed host/user purpose under every publication lock.
+    if (!graph.raw.measuredTerminal) fail('current implemented-UI completion requires immutable measured terminal graph evidence');
+    validateMeasuredTerminal(root, validateFinalEvidenceV2Graph(graph.raw), invocation);
+  }
   const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
     ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route
     : undefined;
+  const hasWorkflow = existsSync(`${root}/.omd/workflow-plan.json`);
+  if (hasWorkflow) {
+    if (graph.schema !== 'final-evidence-v2-workflow-graph-v1' && graph.schema !== 'final-evidence-v2-selected-direction-graph-v1') fail('current workflow requires the additive workflow final graph');
+    const workflow = checkAdaptiveWorkflow(root, invocation).binding;
+    if (canonicalJson(graph.workflow) !== canonicalJson(workflow)) fail('final graph does not bind the exact current workflow plan, artifacts, and reviews');
+  } else if (graph.schema === 'final-evidence-v2-workflow-graph-v1') {
+    fail('workflow final graph has no current workflow plan');
+  }
   if (graph.schema === 'final-evidence-v2-graph' || (graph.schema === 'final-evidence-v2-workflow-graph-v1'
     && graph.productionSchema === 'final-evidence-v2-graph')) {
     const distance = dataObject(graph.referenceDistance, 'selected reference distance receipt');
@@ -126,12 +149,19 @@ export function checkCompletionPublicationPrerequisites(
       || distance.schema !== 'selected-reference-distance-v1') {
       fail('selected reference distance receipt is not the current typed gate');
     }
+    const compositionFindings = validateCurrentCompositionContract(root, invocation);
+    if (compositionFindings.length > 0) {
+      fail(`current composition contract is invalid: ${compositionFindings.map((finding) => `${finding.id} ${finding.path}`).join(', ')}`);
+    }
   }
-  if (!existsSync(`${root}/.omd/completeness-current.json`)) {
+  if (!existsSync(`${root}/.omd/functional-requirements.json`)) {
+    if (existsSync(`${root}/.omd/route.json`)) {
+      fail('current routed publication requires functional requirements and a completeness run');
+    }
     return Object.freeze({ typography: Object.freeze({
       id: 'type-proof',
       status: 'legacy-unassessed',
-      reason: 'optional completeness run was not published',
+      reason: 'historical non-routed publication has no completion requirements',
     }) });
   }
   const completeness = checkCompletenessRun(root, invocation, continuationRoute);

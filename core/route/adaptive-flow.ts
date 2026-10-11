@@ -22,7 +22,7 @@ import { routeDesignAxes } from './design-axis-routing.ts';
 import { routeReferenceDiscovery } from '../ref/reference-discovery-routing.ts';
 import { routeTaskOutcome } from './task-outcome-routing.ts';
 import { adaptiveSourceContract, adaptiveSourceContractSha256 } from './adaptive-source-contract.ts';
-import { ADAPTIVE_STAGE_OWNERS, validateAdaptiveStageOrder } from './adaptive-stage-graph.ts';
+import { adaptiveStageOwners, validateAdaptiveStageOrder } from './adaptive-stage-graph.ts';
 import { validateAdaptiveExecutionWaves } from './adaptive-execution-waves.ts';
 import { parseAdaptiveExecutionWaves } from './adaptive-execution-wave-boundary.ts';
 import { adaptiveBehaviorContract } from './adaptive-behavior-contract.ts';
@@ -30,13 +30,16 @@ import { adaptiveMotionContract } from './adaptive-motion-ambition.ts';
 import { validateAdaptiveAiAssetSelection } from './adaptive-ai-assets.ts';
 import { requiredAttributionCategories, validateAttributionCoverage } from './adaptive-attribution.ts';
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
-import { hasLocaleMarketAuthority } from './locale-market-authority.ts';
+import { hasLocaleMarketAuthority, requirePersistedMarketAuthority } from './locale-market-authority.ts';
 import { diagnoseUxPolicy } from '../ux/policy.ts';
 import { parseTaskOutcomeContract } from '../brief/task-outcome.ts';
 import { parseEvidenceClaimPublication } from '../brief/evidence-claims.ts';
 import { parseDesignAxisInput } from './design-axis-routing.ts';
 import { parseAdaptiveBrowserContext, parseAdaptiveLearningContext } from './adaptive-flow-boundary.ts';
-import { isVerifiedJudgment, type VerifiedJudgment } from '../judgment/index.ts';
+import { isVerifiedJudgment, verifiedJudgmentReceipt, type VerifiedJudgment } from '../judgment/index.ts';
+import { publishedRouteLearning } from './adaptive-learning.ts';
+import { verifyDirectionAutonomyGrant } from '../brief/candidate-authority.ts';
+import { verifyReviewPurposeAuthority } from './review-purpose-authority.ts';
 
 function validateRecommendation(strategy: AdaptiveStrategyDecision, value: RecommendedMethodDecision): void {
   const skipped = strategy.skips.some((entry) => entry.id === value.id);
@@ -47,7 +50,15 @@ function validateRecommendation(strategy: AdaptiveStrategyDecision, value: Recom
   if (!skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `skipped recommendation ${value.id} needs a non-empty strategyDecision.skips reason`);
 }
 
-export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
+export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only', currentProcess = false): void {
+  if (currentProcess) {
+    if (strategy.stages.includes('candidate-generation') !== strategy.methods.includes('concept-exploration')) {
+      return failAdaptiveRoute('REQUIRED_METHOD_MISSING', 'candidate-generation and concept-exploration must be selected together');
+    }
+    if (strategy.stages.includes('candidate-generation') && !strategy.roles.includes('omd-sketch')) return failAdaptiveRoute('MODEL_OWNER_REQUIRED', 'Sketch exclusively owns each candidate source');
+  } else if (strategy.methods.includes('concept-exploration') || strategy.roles.includes('omd-art-director')) {
+    return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'early concepts require processPolicy human-design-process-v1; migrate using the unchanged original request');
+  }
   for (const role of strategy.roles) {
     if (!ADAPTIVE_ROLE_IDS.includes(role as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_ROLE', `unknown role ${role}; allowed: ${ADAPTIVE_ROLE_IDS.join(', ')}`);
   }
@@ -86,24 +97,37 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
     return failAdaptiveRoute('INDEPENDENT_REVIEW_REQUIRED');
   }
   if (!designOnly && !strategy.stages.includes('browser-evidence')) return failAdaptiveRoute('FINAL_EVIDENCE_REQUIRED');
+  if (currentProcess) {
+    const evidence = strategy.stages.indexOf('browser-evidence');
+    const review = strategy.stages.indexOf('independent-review');
+    const production = strategy.stages.indexOf('production');
+    if (review !== strategy.stages.length - 1 || (!designOnly && (evidence < 0 || evidence !== strategy.stages.length - 2 || production >= evidence))) {
+      return failAdaptiveRoute('FINAL_EVIDENCE_REQUIRED', designOnly
+        ? 'independent-review must be the final strategyDecision.stages entry'
+        : 'strategyDecision.stages must end with browser-evidence, independent-review, after production; final-evidence-v2 is a gate, not a stage');
+    }
+  }
   for (const stage of strategy.stages) {
     const known = ADAPTIVE_STAGE_IDS.find((candidate) => candidate === stage);
     if (known === undefined) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
-    const owner = ADAPTIVE_STAGE_OWNERS[known];
+    const owner = adaptiveStageOwners(currentProcess)[known];
     if (owner.startsWith('omd-') && !strategy.roles.includes(owner)) requiredRoles.add(owner);
   }
   if (requiredRoles.size > 0) throw new AdaptiveRouteError('MODEL_OWNER_REQUIRED',
     `Add the missing selected-stage owners to strategyDecision.roles and executionWaves: ${[...requiredRoles].join(', ')}. Preserve selected stages; removing them is not this repair.`,
     [...requiredRoles]);
+  validateAdaptiveStageOrder(strategy, deliveryMode, currentProcess);
+  validateAdaptiveExecutionWaves(strategy, deliveryMode, currentProcess);
 }
 
-export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecision): void {
+export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecision, currentProcess = false): void {
   for (const stage of OPTIONAL_STAGE_IDS) {
     const included = strategy.stages.includes(stage);
     const skipped = strategy.skips.some((entry) => entry.id === stage);
     if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', `stage ${stage} is both selected and skipped; remove its contradictory strategyDecision.skips entry`);
   }
   for (const method of OPTIONAL_METHOD_IDS) {
+    if (method === 'concept-exploration' && !currentProcess) continue;
     const included = strategy.methods.includes(method);
     const skipped = strategy.skips.some((entry) => entry.id === method);
     if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', `method ${method} is both selected and skipped; remove its contradictory strategyDecision.skips entry`);
@@ -112,18 +136,17 @@ export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecisi
 
 function validateReferenceWork(input: ValidatedAdaptiveRouteInput): void {
   const strategy = input.strategyDecision;
-  validateRecommendation(strategy, input.referenceDiscovery.recommendation);
   if (input.referenceDiscovery.decision === 'discover') {
     const missing = [
       ...(!strategy.roles.includes('omd-scout') ? ['roles: omd-scout'] : []),
       ...(!strategy.stages.includes('scout') ? ['stages: scout'] : []),
-      ...['reference-discovery', 'parallel-reference-acquisition'].filter(id => !strategy.methods.includes(id)).map(id => `methods: ${id}`),
+      ...['reference-discovery'].filter(id => !strategy.methods.includes(id)).map(id => `methods: ${id}`),
     ];
     if (missing.length) {
       return failAdaptiveRoute('REFERENCE_WORK_MISMATCH', `referenceDiscovery requires ${missing.join('; ')} in strategyDecision. Keep discovery selected; parallel-reference-acquisition also requires selected Scout and Writer in the same execution wave. Adding moodboard, acquisition, reference-selection or reference-assembly does not replace this method`);
     }
-  } else if (strategy.methods.includes('reference-discovery') || strategy.methods.includes('reference-distance')) {
-    return failAdaptiveRoute('REFERENCE_WORK_MISMATCH', 'referenceDiscovery is skipped but strategyDecision.methods selects reference-discovery or reference-distance; reconcile with actual evidence, not a fabricated discovery skip');
+  } else if (strategy.methods.includes('reference-discovery')) {
+    return failAdaptiveRoute('REFERENCE_WORK_MISMATCH', 'referenceDiscovery is skipped but strategyDecision.methods selects reference-discovery; reconcile with actual evidence, not a fabricated discovery skip');
   }
 }
 
@@ -144,18 +167,7 @@ function validateContextMethods(input: ValidatedAdaptiveRouteInput): void {
     && (!strategy.roles.includes('omd-composer') || !strategy.stages.includes('composition'))) {
     return failAdaptiveRoute('REQUIRED_METHOD_MISSING');
   }
-  const required = ['evidence-claim-accounting'];
-  if (input.evidenceClaims.claims.some((claim) => claim.status === 'hypothesis')) {
-    required.push('hypothesis-validation');
-  }
-  required.push(input.deliveryMode === 'design-only' ? 'design-handoff-review' : input.browserDecisionContext.status === 'pending'
-    ? 'decision-linked-browser-observation'
-    : 'reuse-linked-browser-evidence');
-  if (input.validatedLearningContext.status === 'promoted') {
-    for (const learningId of input.validatedLearningContext.learningIds) required.push(`validated-learning:${learningId}`);
-  }
-  const missing = required.filter(id => !strategy.methods.includes(id));
-  if (missing.length) return failAdaptiveRoute('REQUIRED_METHOD_MISSING', `strategyDecision.methods must include ${missing.join(', ')}; these follow from the current claims, delivery mode, browser and learning contexts`);
+
 }
 
 function requiresTaskFlowBenchmark(
@@ -171,6 +183,9 @@ function validateTaskFlowBenchmarkRoute(
   input: ValidatedAdaptiveRouteInput,
 ): void {
   if (!requiresTaskFlowBenchmark(input)) return;
+  // Selection assigns owners, not an infinite acquisition prerequisite. Entry keeps a current
+  // minimal composition; Scout/selection/candidate evidence can yield as typed confidence debt.
+  // Terminal product/browser/review gates remain selected and cannot be paid with that debt.
   for (const stage of [
     'scout',
     'reference-board',
@@ -209,17 +224,17 @@ function validated(value: unknown, localeDesign?: LocaleDesignRoute): ValidatedA
   });
 }
 
-function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput, marketJudgment?: VerifiedJudgment): void {
+function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput, marketJudgment?: VerifiedJudgment, requireMarketAuthority = false): void {
   const locale = input.localeDesign;
   if (locale === undefined) return;
   if (locale.decision === 'ask') return failAdaptiveRoute('LOCALE_DESIGN_CLARIFICATION_REQUIRED');
   const strategy = input.strategyDecision;
-  if (locale.decision === 'research') {
-    // Missing interpretation is an unspecified market, not a reason to refuse a build.
-    // A submitted judgment, however, must genuinely authorize the asserted region.
-    if (marketJudgment !== undefined && (!isVerifiedJudgment(marketJudgment)
-      || !hasLocaleMarketAuthority(locale, input.evidenceClaims, marketJudgment)))
-      return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
+  if (locale.decision === 'research' && (requireMarketAuthority || marketJudgment !== undefined)) {
+    if (!isVerifiedJudgment(marketJudgment)
+      || !hasLocaleMarketAuthority(locale, input.evidenceClaims, marketJudgment)) {
+      return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED',
+        'Publish a current target-market judgment from the authenticated request, or select mechanics-only grounding and withhold market-fit claims; no design interview is required.');
+    }
     return;
   }
 
@@ -232,17 +247,41 @@ function checkAdaptiveInput(
   input: ValidatedAdaptiveRouteInput,
   check: RouteCheck,
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation; marketJudgment?: VerifiedJudgment }>,
+  replay = false,
 ): void {
   const strategy = input.strategyDecision;
-  check('strategyDecision', () => validateAdaptiveStrategyRails(strategy, input.deliveryMode));
+  check('strategyDecision', () => validateOptionalStageAccounting(strategy, input.processPolicy !== undefined));
+  check('referenceDiscovery', () => validateReferenceWork(input));
+  check('uxPolicy', () => validateSafety(input));
+  check('strategyDecision.methods', () => validateContextMethods(input));
+  if (authority && input.processPolicy?.interactionMode === 'autonomous') check('processPolicy.autonomyGrant', () => {
+    try { verifyDirectionAutonomyGrant(authority.root, input.processPolicy!.autonomyGrant!, input.request); }
+    catch (error) { failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', error instanceof Error ? error.message : String(error)); }
+  });
+  const reviewPurpose = input.reviewPurpose;
+  if (reviewPurpose !== undefined) check('reviewPurposeAuthority', () => {
+    const receipt = input.reviewPurposeAuthority ?? null;
+    if (receipt === null && authority !== undefined) {
+      failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', `${reviewPurpose} review requires an actual host/user purpose origin receipt`);
+    }
+    if ((reviewPurpose === 'benchmark' || reviewPurpose === 'release') && receipt === null) {
+      failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', `${reviewPurpose} review requires an actual host/user purpose origin receipt`);
+    }
+    // Read-only ordinary-purpose validation may inspect an unmaterialized starter. Publication and
+    // persisted replay always supply project authority and therefore require and verify the origin.
+    if (receipt !== null && authority !== undefined) {
+      verifyReviewPurposeAuthority(authority.root, receipt, reviewPurpose, input.request);
+    }
+  });
   check('strategyDecision.stages', () => {
     if (strategy.stages.includes('reference-board')) {
       validateAdaptiveStageOrder({
         ...strategy,
         stages: strategy.stages.filter(stage => ['frame', 'acquisition', 'scout', 'reference-board'].includes(stage)),
-      }, input.deliveryMode);
+      }, input.deliveryMode, input.processPolicy !== undefined);
     }
   });
+  check('strategyDecision', () => validateAdaptiveStrategyRails(strategy, input.deliveryMode, input.processPolicy !== undefined));
   check('deliveryMode', () => { if (input.deliveryMode === 'design-only') {
     if (input.allowedPaths.length !== 1 || input.allowedPaths[0] !== '.omd/**' || input.namedDependencies.length > 0 || strategy.aiAssets.length > 0) {
       failAdaptiveRoute('DESIGN_ONLY_SCOPE_REQUIRED', 'design-only allows only .omd/** and no application dependencies or shipped assets');
@@ -253,14 +292,14 @@ function checkAdaptiveInput(
     }
   } });
   check('uxPolicy', () => validateSafety(input));
-  check('strategyDecision.skips', () => validateOptionalStageAccounting(strategy));
+  check('strategyDecision.skips', () => validateOptionalStageAccounting(strategy, input.processPolicy !== undefined));
   check('strategyDecision.aiAssets', () => validateAdaptiveAiAssetSelection(strategy, authority));
 
 
 
 
 
-  check('localeDesign', () => validateLocaleDesignRoute(input, authority?.marketJudgment));
+  check('localeDesign', () => validateLocaleDesignRoute(input, authority?.marketJudgment, authority !== undefined && !replay));
 }
 
 export type AdaptiveRouteDiagnostic = Readonly<{ path: string; code: string; message: string; requiredRoles?: readonly string[] }>;
@@ -328,10 +367,20 @@ export function routeAdaptiveFlow(
   value: unknown,
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation; marketJudgment?: VerifiedJudgment }>,
   localeDesign?: LocaleDesignRoute,
+  options: Readonly<{ replay?: boolean }> = {},
 ): AdaptiveRouteRecord {
   const input = validated(value, localeDesign);
   const strategy = input.strategyDecision;
-  checkAdaptiveInput(input, (_path, check) => check(), authority);
+  checkAdaptiveInput(input, (_path, check) => check(), authority, options.replay ?? false);
+  const marketAuthority = input.localeDesign?.decision === 'research' && authority?.marketJudgment
+    ? verifiedJudgmentReceipt(authority.marketJudgment) : undefined;
+  if (authority && !options.replay && input.localeDesign?.decision === 'research' && !marketAuthority) {
+    return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED', 'Publish the verified market judgment before binding the route.');
+  }
+  if (authority && !options.replay && input.localeDesign?.decision === 'research') {
+    requirePersistedMarketAuthority(authority.root, marketAuthority, input.request,
+      input.localeDesign, input.sourceContract.evidenceClaims);
+  }
 
   const policyGates = [
     ...(input.referenceDiscovery.decision === 'discover'
@@ -348,6 +397,7 @@ export function routeAdaptiveFlow(
   ];
   return Object.freeze({
     schema: ADAPTIVE_ROUTE_RECORD_SCHEMA,
+    ...(marketAuthority === undefined ? {} : { marketAuthority }),
     ...(input.deliveryMode === undefined ? {} : { deliveryMode: input.deliveryMode }),
     route: 'adaptive',
     request: input.request,
@@ -359,11 +409,13 @@ export function routeAdaptiveFlow(
     sourceContract: input.sourceContract,
     sourceContractSha256: adaptiveSourceContractSha256(input.sourceContract),
     strategy,
-    behavior: adaptiveBehaviorContract(strategy, input.designAxes.axes.expressiveDesignNeed),
+    behavior: adaptiveBehaviorContract(strategy, input.designAxes.axes.expressiveDesignNeed,
+      input.reviewPurpose === undefined ? 'legacy' : 'recorded-browse'),
     references: Object.freeze({ decision: input.referenceDiscovery.decision, ...input.referenceDiscovery.references }),
     claims: Object.freeze({ userFacts: input.evidenceClaims.userFacts, workingContext: input.evidenceClaims.workingContext }),
     browserDecisions: input.browserDecisionContext,
-    validatedLearning: input.validatedLearningContext,
+    validatedLearning: authority !== undefined && !options.replay
+      ? publishedRouteLearning(authority.root, input.sourceContract.learningScope) : input.validatedLearningContext,
     gates: Object.freeze([...(input.deliveryMode === 'design-only'
       ? [...MANDATORY_ADAPTIVE_GATES.filter((gate) => gate !== 'source-seal' && gate !== 'final-evidence-v2'), 'design-handoff']
       : MANDATORY_ADAPTIVE_GATES), ...policyGates]),

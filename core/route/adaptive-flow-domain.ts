@@ -48,14 +48,14 @@ export const MANDATORY_STAGE_IDS = Object.freeze([] as const);
 export const OPTIONAL_METHOD_IDS = Object.freeze([
   'reflection-in-action', 'reference-distance', 'image-first-draft',
   'evidence-driven-refinement', 'copy-repair-workflow', 'motion-one',
-  'ai-shipped-asset', 'provisional-source-study',
+  'ai-shipped-asset', 'provisional-source-study', 'concept-exploration',
 ] as const);
 export const ADAPTIVE_STAGE_IDS = Object.freeze([
   ...MANDATORY_STAGE_IDS, ...OPTIONAL_STAGE_IDS, 'production', 'browser-evidence', 'independent-review',
 ] as const);
 export const ADAPTIVE_ROLE_IDS = Object.freeze([
   'omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer',
-  'omd-sketch', 'omd-hand', 'omd-eye', 'omd-glance', 'omd-study',
+  'omd-sketch', 'omd-hand', 'omd-eye', 'omd-glance', 'omd-study', 'omd-art-director',
 ] as const);
 
 export type AdaptiveRouteErrorCode =
@@ -137,7 +137,11 @@ export type AdaptiveLearningContext = Readonly<{
 }>;
 export type ModelCapabilityRouteInput = Readonly<{ now: number; routingInput: unknown }>;
 export type AdaptiveRouteInput = Readonly<{
+  processPolicy?: import('./process-policy.ts').ProcessPolicy;
+  reviewPurpose?: import('./review-purpose-authority.ts').ReviewPurpose;
+  reviewPurposeAuthority?: import('./review-purpose-authority.ts').ReviewPurposeAuthorityReceipt | null;
   deliveryMode?: 'design-only';
+  learningScope?: import('./adaptive-learning.ts').RouteLearningScope;
   schema: typeof ADAPTIVE_ROUTE_INPUT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';
@@ -154,7 +158,11 @@ export type AdaptiveRouteInput = Readonly<{
   strategyDecision: AdaptiveStrategyDecision;
 }>;
 export type AdaptiveSourceContract = Readonly<{
+  processPolicy?: import('./process-policy.ts').ProcessPolicy;
+  reviewPurpose?: import('./review-purpose-authority.ts').ReviewPurpose;
+  reviewPurposeAuthority?: import('./review-purpose-authority.ts').ReviewPurposeAuthorityReceipt | null;
   deliveryMode?: 'design-only';
+  learningScope: import('./adaptive-learning.ts').RouteLearningScope;
   schema: typeof ADAPTIVE_SOURCE_CONTRACT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';
@@ -187,6 +195,7 @@ export type AdaptiveRouteRecord = Readonly<{
   deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_ROUTE_RECORD_SCHEMA;
   route: 'adaptive';
+  marketAuthority?: import('../judgment/index.ts').JudgmentReceipt;
   request: string;
   projectMode: 'greenfield' | 'existing';
   requiredOutcomes: readonly string[];

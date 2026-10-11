@@ -444,24 +444,36 @@ test('completion repair state cannot cross a replaced route', async t => {
   writeFileSync(join(cwd, '.omd/route.json'), '{"route":"first"}');
   const hooks = new Map<string, PortablePiHook>();
   const sent: unknown[] = [];
+  let tool: PortablePiTool | undefined;
   omdExtension({
-    on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool() {},
+    on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {},
+    registerTool(value) { if (value.name === 'omd_cli') tool = value; },
     sendMessage: message => { sent.push(message); },
     execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args) {
       if (args[1] === 'stage') return { stdout: '{}', stderr: '', code: 0, killed: false };
       if (args[1] === 'guard' && args[2] === 'production') return { stdout: '{"ok":true}', stderr: '', code: 0, killed: false };
+      if (args[1] === 'maker' && args[2] === 'run') {
+        writeFileSync(join(cwd, 'src/main.jsx'), 'source');
+        return { stdout: '{}', stderr: '', code: 0, killed: false };
+      }
       return { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false };
     },
   });
   const emit = (name: string, event: Parameters<PortablePiHook>[0]) => hooks.get(name)!(event, { cwd });
-  await emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  const request = '/skill:omd-ultradesign Build the requested local interface.';
+  await emit('input', { text: request, source: 'interactive' });
+  await emit('before_agent_start', { prompt: request });
   mkdirSync(join(cwd, 'src'), { recursive: true });
-  await emit('tool_call', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' } });
-  writeFileSync(join(cwd, 'src/main.jsx'), 'source');
-  await emit('tool_result', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' }, isError: false });
+  const refused = await emit('tool_call', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' } });
+  assert.ok(refused && typeof refused === 'object' && Reflect.get(refused, 'block') === true);
+  assert.equal(existsSync(join(cwd, 'src/main.jsx')), false);
+  assert.ok(tool);
+  await tool.execute('maker', { args: ['maker', 'run', '--input', '.omd/.cache/maker-input.json', '--json'] }, undefined, undefined, { cwd });
+  assert.equal(existsSync(join(cwd, 'src/main.jsx')), true);
   await emit('message_end', { message: final });
   assert.equal(sent.length, 1);
+  assert.equal(Reflect.get(sent[0] as object, 'customType'), 'omd-gate-repair');
   writeFileSync(join(cwd, '.omd/route.json'), '{"route":"replacement"}');
   await emit('message_end', { message: final });
   assert.equal(sent.length, 1, 'route replacement must stall the prior completion loop');

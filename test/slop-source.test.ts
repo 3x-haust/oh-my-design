@@ -97,6 +97,31 @@ for (const fixture of detectorCases) {
   });
 }
 
+test('fake-submit scopes network evidence to each handler and reports every fake handler', () => {
+  const root = temp();
+  write(root, 'surface.tsx', [
+    'async function loadOptions(){ return fetch("/api/options"); }',
+    'const handleContactSubmit=(e)=>{ e.preventDefault(); setTimeout(()=>setSuccess("success"),100); };',
+    'const handleWaitlistSubmit=(e)=>{ e.preventDefault(); setTimeout(()=>setSent("sent"),100); };',
+    'export const View=()=> <><form onSubmit={handleContactSubmit}/><form onSubmit={handleWaitlistSubmit}/></>;',
+  ].join('\n'));
+  const findings = scanSlopSource(root).candidates.filter((item) => item.candidateId === 'fake-submit');
+  assert.equal(findings.length, 2);
+  assert.deepEqual(findings.map((item) => item.line), [2, 3]);
+});
+
+test('fake-submit does not flag a handler whose own scope performs delivery', () => {
+  const root = temp();
+  write(root, 'surface.tsx', [
+    'const handleSubmit=async(e)=>{',
+    '  e.preventDefault();',
+    '  await fetch("/api/contact", { method: "POST" });',
+    '  setTimeout(()=>setSuccess("success"),100);',
+    '};',
+  ].join('\n'));
+  assert.ok(!ids(root).includes('fake-submit'));
+});
+
 test('repeated-kicker-treatment catches a tracked uppercase micro-label cluster', () => {
   const root = temp();
   write(root, 'surface.tsx', [

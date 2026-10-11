@@ -28,6 +28,10 @@ const RECORD_DIRECTORIES: readonly string[] = [
   'motion-resolutions',
   'task-evidence-runs',
   'final-evidence-v2-runs',
+  'visual-measurements',
+  'visual-measurement-ir',
+  'selected-direction-captures',
+  'refinement/checkpoints',
 ];
 
 const DIGEST = /[a-f0-9]{64}/g;
@@ -121,8 +125,20 @@ function citedDerivedPaths(omdRoot: string, files: readonly string[]): ReadonlyS
   const cited = new Set<string>();
   const candidates = files.filter((path) => path.startsWith('.cache/') || /^figma\/(exports|renders)\//.test(path));
   if (candidates.length === 0) return cited;
-  for (const path of files) {
-    if (candidates.includes(path)) continue;
+
+  // Most cache files are disposable, but the current candidate-selection pointer is durable state
+  // in the historical namespace. Its transitive source/preview receipts must survive cleanup too.
+  const selectedSketchPointer = '.cache/sketches/current.json';
+  const roots = files.filter((path) => !candidates.includes(path));
+  if (files.includes(selectedSketchPointer)) {
+    cited.add(selectedSketchPointer);
+    roots.push(selectedSketchPointer);
+  }
+  const inspected = new Set<string>();
+  while (roots.length > 0) {
+    const path = roots.pop()!;
+    if (inspected.has(path)) continue;
+    inspected.add(path);
     let body: string;
     try {
       body = readFileSync(join(omdRoot, path), 'utf8');
@@ -131,7 +147,18 @@ function citedDerivedPaths(omdRoot: string, files: readonly string[]): ReadonlyS
     }
     for (const candidate of candidates) {
       if (cited.has(candidate)) continue;
-      if (body.includes(candidate)) cited.add(candidate);
+      if (body.includes(candidate)) {
+        cited.add(candidate);
+        roots.push(candidate);
+      }
+    }
+    if (path === selectedSketchPointer) {
+      try {
+        const pointer = JSON.parse(body) as { directory?: unknown };
+        if (typeof pointer.directory === 'string' && /^[A-Za-z0-9._-]+$/.test(pointer.directory)) {
+          for (const candidate of candidates) if (candidate.startsWith(`.cache/sketches/${pointer.directory}/`)) cited.add(candidate);
+        }
+      } catch { /* malformed selection is retained for diagnosis, never cleanup authority */ }
     }
   }
   return cited;

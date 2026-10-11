@@ -28,6 +28,7 @@ const applies = (root: string, invocation: ProjectRunInvocation) =>
 
 export function candidateReferenceReviewPacket(root: string, invocation: ProjectRunInvocation, pointer: CandidateSelectionPointer) {
   resolveCandidateSelection(root, pointer);
+  if ('selection' in pointer) return fail('directory candidate required for this review path');
   if (pointer.visual === undefined) return fail('paired candidate renders required');
   const route = readPersistedRoute(root, invocation);
   const originals = collectSelectedReferenceOriginals(root);
@@ -103,6 +104,7 @@ function readReview(root: string, directory: string, prepared: ReturnType<typeof
 
 export function checkCandidateReferenceReview(root: string, invocation: ProjectRunInvocation, pointer: CandidateSelectionPointer): void {
   if (!applies(root, invocation)) return;
+  if ('selection' in pointer) return fail('directory candidate required for this review path');
   const current = readReview(root, pointer.directory, candidateReferenceReviewPacket(root, invocation, pointer));
   if (current?.decision !== 'retain') throw new Error('CANDIDATE_REFERENCE_REVIEW_REQUIRED: select a current visually faithful candidate');
 }
@@ -110,6 +112,7 @@ export function checkCandidateReferenceReview(root: string, invocation: ProjectR
 export async function runCandidateReferenceReview(
   root: string, invocation: ProjectRunInvocation, pointer: CandidateSelectionPointer, signal?: AbortSignal,
 ) {
+  if ('selection' in pointer) return fail('directory candidate required for this review path');
   const run = getNativePiRun(invocation, root);
   const prepared = candidateReferenceReviewPacket(root, invocation, pointer);
   const cached = readReview(root, pointer.directory, prepared);
@@ -156,6 +159,6 @@ export async function selectReviewedCandidate(
     writer.mkdir('.omd/.cache/sketches');
     writer.write(CANDIDATE_SELECTION_POINTER_PATH, `${JSON.stringify(captured, null, 2)}\n`);
   } finally { release(); }
-  return { path: CANDIDATE_SELECTION_POINTER_PATH, directory: pointer.directory,
+  return { path: CANDIDATE_SELECTION_POINTER_PATH, directory: captured.directory,
     ...(review === null ? {} : { referenceReview: { decision: review.decision, sha256: review.sha256 } }) };
 }

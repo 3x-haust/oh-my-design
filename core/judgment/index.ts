@@ -34,6 +34,8 @@ export type JudgmentVerificationContext = Readonly<{ requestSha256: string; sour
   resolve: (ref: SourceRef, field: string, itemId: string | null) => Promise<TrustedJudgmentSource> }>;
 export type VerifiedJudgment = Readonly<{ judgment: JudgmentInput; sources: readonly TrustedJudgmentSource[] }>;
 const verifiedJudgments = new WeakSet<object>();
+const verifiedReceipts = new WeakMap<object, JudgmentReceipt>();
+export const verifiedJudgmentReceipt = (value: VerifiedJudgment): JudgmentReceipt | undefined => verifiedReceipts.get(value);
 export function isVerifiedJudgment(value: unknown): value is VerifiedJudgment {
   return typeof value === 'object' && value !== null && verifiedJudgments.has(value);
 }
@@ -126,19 +128,30 @@ export async function verifyJudgment(judgment: JudgmentInput, policy: JudgmentPo
 export const judgmentSha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 export async function publishJudgment(input: unknown, policy: JudgmentPolicy, context: JudgmentPublicationContext): Promise<JudgmentReceipt> {
   const judgment = parseJudgment(input, policy).value;
-  if (!policy.authorRoles.includes(context.author.role) || !HASH.test(context.author.invocationSha256)) throw new JudgmentError('AI_JUDGMENT_AUTHOR_UNAUTHORIZED');
+  const author = { role: context.author.role, invocationSha256: context.author.invocationSha256 };
+  if (!policy.authorRoles.includes(author.role) || !HASH.test(author.invocationSha256)) throw new JudgmentError('AI_JUDGMENT_AUTHOR_UNAUTHORIZED');
   await verifyJudgment(judgment, policy, context);
-  const body = { schema: AI_JUDGMENT_RECORD_SCHEMA, judgment, author: context.author, publishedAt: context.now() };
+  const publishedAt = context.now();
+  if (typeof publishedAt !== 'string' || !Number.isFinite(Date.parse(publishedAt))) return invalid('publishedAt');
+  const body = { schema: AI_JUDGMENT_RECORD_SCHEMA, judgment, author, publishedAt };
   const signature = context.sign(judgmentSha256(canonicalJson(body)));
+  if (typeof signature !== 'string' || !signature) return invalid('signature');
   const bytes = `${canonicalJson({ ...body, signature })}\n`;
   const sha256 = judgmentSha256(bytes);
   const path = `.omd/judgments/records/sha256-${sha256}.json`;
   await context.write(path, bytes);
   return { path, sha256, schema: AI_JUDGMENT_RECORD_SCHEMA };
 }
-export async function readCurrentJudgment(receipt: JudgmentReceipt, policy: JudgmentPolicy, context: JudgmentReadContext): Promise<VerifiedJudgment> {
-  if (receipt.schema !== AI_JUDGMENT_RECORD_SCHEMA || receipt.path !== `.omd/judgments/records/sha256-${receipt.sha256}.json` || !HASH.test(receipt.sha256)) invalid('receipt path');
-  const bytes = await context.read(receipt.path);
+export function parseJudgmentReceipt(value: unknown): JudgmentReceipt {
+  const receipt = fields(value, ['schema', 'path', 'sha256'], 'receipt', []);
+  if (receipt.schema !== AI_JUDGMENT_RECORD_SCHEMA || typeof receipt.path !== 'string'
+    || typeof receipt.sha256 !== 'string' || !HASH.test(receipt.sha256)
+    || receipt.path !== `.omd/judgments/records/sha256-${receipt.sha256}.json`) return invalid('receipt path');
+  return Object.freeze({ schema: AI_JUDGMENT_RECORD_SCHEMA, path: receipt.path, sha256: receipt.sha256 });
+}
+export function readSignedJudgmentInput(bytes: Uint8Array, inputReceipt: JudgmentReceipt, policy: JudgmentPolicy,
+  verifySignature: JudgmentReadContext['verifySignature']): JudgmentInput {
+  const receipt = parseJudgmentReceipt(inputReceipt);
   if (judgmentSha256(bytes) !== receipt.sha256) throw new JudgmentError('AI_JUDGMENT_SOURCE_UNVERIFIED');
   let raw: unknown;
   try { raw = JSON.parse(Buffer.from(bytes).toString('utf8')); } catch { return invalid('record JSON'); }
@@ -148,7 +161,14 @@ export async function readCurrentJudgment(receipt: JudgmentReceipt, policy: Judg
   if (record.schema !== AI_JUDGMENT_RECORD_SCHEMA || !policy.authorRoles.includes(author.role as string) || !HASH.test(author.invocationSha256 as string)
     || typeof record.publishedAt !== 'string' || !Number.isFinite(Date.parse(record.publishedAt as string)) || typeof record.signature !== 'string') invalid('record authority');
   const judgment = parseJudgment(record.judgment, policy).value;
-  if (!context.verifySignature(judgmentSha256(canonicalJson({ schema: AI_JUDGMENT_RECORD_SCHEMA, judgment, author, publishedAt: record.publishedAt })), record.signature as string))
+  if (!verifySignature(judgmentSha256(canonicalJson({ schema: AI_JUDGMENT_RECORD_SCHEMA, judgment, author, publishedAt: record.publishedAt })), record.signature as string))
     throw new JudgmentError('AI_JUDGMENT_SOURCE_UNVERIFIED');
-  return verifyJudgment(judgment, policy, context);
+  return judgment;
+}
+export async function readCurrentJudgment(inputReceipt: JudgmentReceipt, policy: JudgmentPolicy, context: JudgmentReadContext): Promise<VerifiedJudgment> {
+  const receipt = parseJudgmentReceipt(inputReceipt);
+  const judgment = readSignedJudgmentInput(await context.read(receipt.path), receipt, policy, context.verifySignature);
+  const verified = await verifyJudgment(judgment, policy, context);
+  verifiedReceipts.set(verified, receipt);
+  return verified;
 }

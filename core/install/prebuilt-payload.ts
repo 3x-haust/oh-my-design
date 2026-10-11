@@ -6,6 +6,7 @@ import { emitClaude } from '../../adapters/claude.ts';
 import { emitCodex } from '../../adapters/codex.ts';
 import { substituter } from '../../adapters/tokens.ts';
 import type { AbstractAgent, Host } from '../types.ts';
+import { emittedRoleProfiles } from '../brief/profiles.ts';
 
 const PACK_DIRECTORIES = [
   ['core', 'theory'],
@@ -52,6 +53,9 @@ export function expectedPrebuiltFiles(sourceRoot: string, host: Host): ReadonlyM
     if (host === 'codex') {
       files.set(`skills/${skill.name}/agents/openai.yaml`, { kind: 'text', value: skillOpenaiMetadata(skill.name, skill.description) });
     }
+  }
+  if (existsSync(join(sourceRoot, 'src/agents/profiles/manifest.json'))) {
+    for (const [path, value] of Object.entries(emittedRoleProfiles(sourceRoot))) files.set(path, { kind: 'text', value });
   }
   for (const parts of PACK_DIRECTORIES) addPackFiles(files, sourceRoot, parts);
   return files;

@@ -12,6 +12,10 @@ import {
   type TaskFlowBenchmarkProjection,
 } from '../ref/task-flow-benchmark.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { loadContracts } from '../measure/inputs.ts';
+import { BASELINE_VIEWS } from '../measure/types.ts';
+import { digest } from '../measure/identity.ts';
+import { requiresMeasuredTerminal } from '../measure/review-policy.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
 import {
@@ -205,7 +209,7 @@ export function deriveTrustedEvaluationPlanFromProject(input: Readonly<{
   } catch {
     return fail('TRUSTED_EVALUATION_PLAN_BENCHMARK_INVALID');
   }
-  return deriveTrustedEvaluationPlan({
+  const plan = deriveTrustedEvaluationPlan({
     sourceContractSha256: route.sourceContractSha256,
     taskOutcome: route.sourceContract.taskOutcome,
     evidenceClaims: route.sourceContract.evidenceClaims,
@@ -214,4 +218,13 @@ export function deriveTrustedEvaluationPlanFromProject(input: Readonly<{
     benchmarkProjection,
     benchmarkProjectionSha256: createHash('sha256').update(benchmarkBytes).digest('hex'),
   });
+  if (!requiresMeasuredTerminal(route)) return plan;
+  const { contracts } = loadContracts(input.root);
+  const views = [...BASELINE_VIEWS];
+  for (const required of [...contracts.type?.requiredViews ?? [], ...contracts.composition?.requiredViews ?? []]) {
+    const previous = views.find(v => v.id === required.id);
+    if (previous && digest(previous) !== digest(required)) throw new Error('TRUSTED_EVALUATION_REQUIRED_VIEW_CONFLICT');
+    if (!previous) views.push(required);
+  }
+  return parseTrustedLifecycleManifest({ ...plan, schema: 'trusted-lifecycle-manifest-v2', measurementViews: views });
 }

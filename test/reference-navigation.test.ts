@@ -14,6 +14,7 @@ import { captureReferenceNavigation, readReferenceDiscoveryAttempt, ReferenceNav
 import { readCurrentDiscoveryNavigation } from '../core/ref/discovery-record.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { trustedLifecyclePng } from './helpers/trusted-lifecycle-png.ts';
 import { discoveryBrowser, directoryHtml, GALLERY_DIRECTORY, GALLERY_ITEM } from './helpers/discovery-capture.ts';
 
 test('search input skeleton gives the coordinator a valid exact-query transport', () => {
@@ -45,7 +46,7 @@ test('an image-only gallery item with a loaded visible original is not a blank p
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const source = 'https://dribbble.com/shots/27514201-task-screen';
   const imageUrl = `${source}/original.png`;
-  const bytes = readFileSync(fileURLToPath(new URL('./fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de/1280x900.png', import.meta.url)));
+  const bytes = trustedLifecyclePng('1280x900');
   await withBrowser(async browser => {
     const observed = discoveryBrowser(browser, {
       url: source, html: `<img src="${imageUrl}" alt="" width="1280" height="900">`,
@@ -63,7 +64,7 @@ test('ordinary product navigation exposes a current unique image selector withou
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const source = 'https://personal-work.example.com/';
   const imageUrl = `${source}workspace.png`;
-  const bytes = readFileSync(fileURLToPath(new URL('./fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de/1280x900.png', import.meta.url)));
+  const bytes = trustedLifecyclePng('1280x900');
   const receipt = await withBrowser(async browser => {
     const observed = discoveryBrowser(browser, {
       url: source, html: `${directoryHtml()}<img id="task-view" src="${imageUrl}" width="600" height="422">`,
@@ -83,7 +84,7 @@ test('ordinary product navigation refuses image selectors that change during its
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const source = 'https://personal-work.example.com/';
   const imageUrl = `${source}workspace.png`;
-  const bytes = readFileSync(fileURLToPath(new URL('./fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de/1280x900.png', import.meta.url)));
+  const bytes = trustedLifecyclePng('1280x900');
   await withBrowser(async browser => {
     const observed = discoveryBrowser(browser, {
       url: source, html: `${directoryHtml()}<img id="task-view" src="${imageUrl}" width="600" height="422">`,
@@ -104,7 +105,7 @@ test('ordinary product navigation observes a lazy original and restores its capt
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const source = 'https://personal-work.example.com/';
   const imageUrl = `${source}workspace.png`;
-  const bytes = readFileSync(fileURLToPath(new URL('./fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de/1280x900.png', import.meta.url)));
+  const bytes = trustedLifecyclePng('1280x900');
   const scrollPositions: number[] = [];
   const receipt = await withBrowser(async browser => {
     const observed = discoveryBrowser(browser, {
@@ -129,7 +130,7 @@ for (const [label, source, html, refused] of [
     const root = mkdtempSync(join(tmpdir(), 'omd-image-boundary-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const imageUrl = `${source}image.png`;
-    const bytes = readFileSync(fileURLToPath(new URL('./fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de/1280x900.png', import.meta.url)));
+    const bytes = trustedLifecyclePng('1280x900');
     await withBrowser(async browser => {
       const observed = discoveryBrowser(browser, {
         url: source, html: `${html}<img id="task-view" src="${imageUrl}" width="600" height="422">`,

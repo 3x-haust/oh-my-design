@@ -26,7 +26,7 @@ test('rendered Google organic results in the user browser produce a signed, inte
   const driver = { userBrowserBridgeDoctor: async () => ({ ready: true, cli: { installed: true }, daemon: { running: true },
     identification: { needsChoice: false, candidates: [], defaultBrowser: null }, primary: null, browsers: [] }),
     userBrowserBridgeOnboard: async () => ({ ready: true }), connectUserBrowserSession: async () => ({
-    resize: async () => {}, navigate: async () => { navigated++; },
+    emulate: async () => {}, resize: async () => {}, navigate: async () => { navigated++; },
     evaluate: async (expression: string) => ({ ok: true, value: expression.includes('location.href')
       ? url : { body: 'Search results', results: [{ url: 'https://example.com/benefits', text: 'Benefits finder service' }] } }),
     screenshot: async () => ({ buffer: png, width: 2560, height: 1800, format: 'png' }),
@@ -38,7 +38,7 @@ test('rendered Google organic results in the user browser produce a signed, inte
     const observed = readSearchExecution(root, receipt, 'domain');
     assert.equal(observed.schema, 'reference-search-execution-v4');
     assert.equal(observed.httpStatus, null);
-    assert.equal(observed.status, 'page-observed');
+    assert.equal(observed.status, 'page-observed', observed.error ?? 'expected a page observation');
     assert.deepEqual(observed.results, [{ url: 'https://example.com/benefits', text: 'Benefits finder service' }]);
     assert.equal(navigated, 1); assert.equal(stopped, 1);
     const bytes = readFileSync(join(root, receipt.path), 'utf8');

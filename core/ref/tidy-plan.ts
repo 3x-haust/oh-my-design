@@ -79,6 +79,7 @@ export function referenceTidyCandidates(root: string): readonly TidyCandidate[] 
   }
   for (const { reference, admission, discoveryAdmission } of decisions) {
     if (admission === null || admission.eligible || discoveryAdmission?.eligible) continue;
+    if (reference.researchLane === 'design' && reference.acquisition) continue;
     const path = relative(resolve(root), refRecordPath(root, reference));
     // The physical domain lane is never reclassified through a conflicting JSON label.
     if (path.startsWith('.omd/refs/domain/')) continue;

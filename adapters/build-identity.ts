@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import type { AbstractAgent } from '../core/types.ts';
+import { readRoleProfiles, type RoleProfile } from '../core/brief/profiles.ts';
 
 export type Skill = Readonly<{ name: string; description: string; source: string }>;
 export const BUILD_IDENTITY_SCHEMA_VERSION = 'omd-build-identity-v1' as const;
@@ -17,12 +18,12 @@ export function canonicalSkillSourceBytes(skills: readonly Pick<Skill, 'name' | 
   return JSON.stringify([...skills].sort((left, right) => left.name.localeCompare(right.name)).map(({ name, source }) => ({ name, source })));
 }
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
-export function createBuildIdentity(packageVersion: string, agents: readonly AbstractAgent[], skills: readonly Skill[]): BuildIdentity {
+export function createBuildIdentity(packageVersion: string, agents: readonly AbstractAgent[], skills: readonly Skill[], profiles: readonly RoleProfile[] = []): BuildIdentity {
   const sourceSkillSha256 = sha256(canonicalSkillSourceBytes(skills));
   const buildSha256 = sha256(JSON.stringify({ packageVersion,
     agents: [...agents].sort((left, right) => left.name.localeCompare(right.name)).map(agent => ({
       name: agent.name, description: agent.description, reasoning: agent.reasoning, deny: agent.deny ?? [], instructions: agent.instructions,
-    })), sourceSkillSha256 }));
+    })), sourceSkillSha256, ...(profiles.length ? { profiles: [...profiles].sort((a, b) => a.file.localeCompare(b.file)).map(({ role, mode, file, budget, source }) => ({ role, mode, file, budget, sha256: sha256(source) })) } : {}) }));
   return { schemaVersion: BUILD_IDENTITY_SCHEMA_VERSION, packageVersion, buildSha256, sourceSkillSha256 };
 }
 export function readBuildAgents(sourceRoot: string): AbstractAgent[] {
@@ -47,5 +48,6 @@ export function packageVersion(sourceRoot: string): string {
   return manifest.version;
 }
 export function createBuildIdentityFromSource(sourceRoot: string): BuildIdentity {
-  return createBuildIdentity(packageVersion(sourceRoot), readBuildAgents(sourceRoot), readSkills(sourceRoot));
+  return createBuildIdentity(packageVersion(sourceRoot), readBuildAgents(sourceRoot), readSkills(sourceRoot),
+    existsSync(join(sourceRoot, 'src/agents/profiles/manifest.json')) ? readRoleProfiles(sourceRoot) : []);
 }

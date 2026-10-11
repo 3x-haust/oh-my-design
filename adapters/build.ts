@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { emitCodex } from './codex.ts';
 import { emitClaude, emitClaudePlugin, pluginizeSkill } from './claude.ts';
 import { substituter } from './tokens.ts';
+import { emittedRoleProfiles, readRoleProfiles } from '../core/brief/profiles.ts';
 import type { AbstractAgent, Emitted, Host } from '../core/types.ts';
 import { createBuildIdentity, packageVersion, readBuildAgents, readSkills, type BuildIdentity, type Skill } from './build-identity.ts';
 export { BUILD_IDENTITY_SCHEMA_VERSION, canonicalSkillSourceBytes, createBuildIdentity, createBuildIdentityFromSource, type BuildIdentity, type Skill } from './build-identity.ts';
@@ -38,7 +39,7 @@ export function build(): void {
 
   const pkg = { version: packageVersion(root) };
 
-  const buildIdentity = createBuildIdentity(pkg.version, agents, skills);
+  const buildIdentity = createBuildIdentity(pkg.version, agents, skills, readRoleProfiles(root));
   const emitters: Record<Host, (opts: { agents: AbstractAgent[]; buildIdentity: BuildIdentity }) => Emitted> = {
     codex: (opts) => emitCodex({ ...opts, version: pkg.version }),
     claude: emitClaude,
@@ -47,6 +48,7 @@ export function build(): void {
   for (const host of Object.keys(emitters) as Host[]) {
     const { files } = emitters[host]({ agents, buildIdentity });
     for (const [rel, content] of Object.entries(files)) write(host, rel, content);
+    for (const [rel, content] of Object.entries(emittedRoleProfiles(root))) write(host, rel, content);
 
     const sub = substituter(host);
     for (const skill of skills) {

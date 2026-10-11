@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { lstatSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { MAX_SURFACES, validateDomainBrief } from '../domain/domain-brief.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
@@ -14,6 +15,15 @@ export const REFERENCE_APPLICATION_SCHEMA = 'reference-application-v2' as const;
 export const REFERENCE_APPLICATION_PATH = '.omd/reference-application.json';
 export const REFERENCE_APPLICATION_PROJECTION_PATH = '.omd/reference-application-projection.json';
 export const REFERENCE_APPLICATION_DOC_PATH = '.omd/reference-application.md';
+export function hasReferenceApplicationArtifacts(root: string): boolean {
+  return [REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH].some(path => {
+    try { lstatSync(resolve(root, path)); return true; }
+    catch (error) {
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error;
+      return false;
+    }
+  });
+}
 const DOMAIN_PATH = '.omd/domain-brief.json';
 const fail = (message: string): never => { throw new Error(`REFERENCE_APPLICATION: ${message}`); };
 const hash = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('hex');
@@ -22,7 +32,7 @@ const read = (root: string, path: string): Buffer => readStableProjectFile({
   root: resolve(root), path: resolve(root, path), label: path, fs: nodeStableProjectFileSystem(),
 });
 type Options = Readonly<{ expectedSourceContractSha256: string; benchmarkRequired: boolean; expectedRequest?: string }>;
-type ApplicationLane = Readonly<{
+export type ApplicationLane = Readonly<{
   referenceIds: readonly string[];
   coverage: 'direct' | 'partial' | 'brief-derived';
   gap: string | null;
@@ -82,9 +92,14 @@ function lane(value: unknown, label: string): ApplicationLane {
 export function parseReferenceApplication(value: unknown): ReferenceApplication {
   const item = object(value, ['schema', 'sourceContractSha256', 'researchSha256', 'domainBriefSha256', 'screens'], 'application');
   if (item.schema !== REFERENCE_APPLICATION_SCHEMA) return fail('schema requires v2 destination route/state bindings; inspect apply-plan and republish, do not relabel old evidence');
-  if (!Array.isArray(item.screens) || !item.screens.length || item.screens.length > MAX_SURFACES
-    || Object.keys(item.screens).length !== item.screens.length) return fail(`screens must contain 1–${MAX_SURFACES} surface decisions`);
-  const screens = item.screens.map(value => {
+  return Object.freeze({ schema: REFERENCE_APPLICATION_SCHEMA, sourceContractSha256: sha(item.sourceContractSha256, 'source contract'),
+    researchSha256: sha(item.researchSha256, 'research'), domainBriefSha256: sha(item.domainBriefSha256, 'domain brief'), screens: parseReferenceApplicationScreens(item.screens) });
+}
+/** Shared by pre-production whole-screen analysis and the strict research application publisher. */
+export function parseReferenceApplicationScreens(value: unknown): ReferenceApplication['screens'] {
+  if (!Array.isArray(value) || !value.length || value.length > MAX_SURFACES
+    || Object.keys(value).length !== value.length) return fail(`screens must contain 1–${MAX_SURFACES} surface decisions`);
+  const screens = value.map(value => {
     const row = object(value, ['surface', 'target', 'domain', 'design', 'checks'], 'screen');
     const target = object(row.target, ['route', 'state'], 'screen.target');
     const route = text(target.route, 'target.route');
@@ -95,8 +110,7 @@ export function parseReferenceApplication(value: unknown): ReferenceApplication 
   });
   if (new Set(screens.map(screen => screen.surface)).size !== screens.length) return fail('duplicate surface');
   if (new Set(screens.map(screen => JSON.stringify(screen.target))).size !== screens.length) return fail('distinct surfaces need distinct route/state targets');
-  return Object.freeze({ schema: REFERENCE_APPLICATION_SCHEMA, sourceContractSha256: sha(item.sourceContractSha256, 'source contract'),
-    researchSha256: sha(item.researchSha256, 'research'), domainBriefSha256: sha(item.domainBriefSha256, 'domain brief'), screens: Object.freeze(screens) });
+  return Object.freeze(screens);
 }
 
 function inputs(root: string, options: Options) {

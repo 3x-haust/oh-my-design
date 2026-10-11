@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { diagnoseAdaptiveRouteInput } from '../core/route/adaptive-flow.ts';
 import {
   ADAPTIVE_ROUTE_RECORD_SCHEMA,
-  ADAPTIVE_STAGE_GRAPH,
   ADAPTIVE_STAGE_IDS,
-  ADAPTIVE_STAGE_OWNERS,
   AdaptiveRouteError,
   MANDATORY_ADAPTIVE_GATES,
   parseRouteRecord,
@@ -20,8 +21,44 @@ import {
   type AdaptiveStageId,
   type AdaptiveStageNode,
 } from '../core/route/index.ts';
+import { adaptiveStageGraph, LEGACY_ADAPTIVE_STAGE_GRAPH as ADAPTIVE_STAGE_GRAPH,
+  LEGACY_ADAPTIVE_STAGE_OWNERS as ADAPTIVE_STAGE_OWNERS } from '../core/route/adaptive-stage-graph.ts';
 import { validateAdaptiveStrategyRails } from '../core/route/adaptive-flow.ts';
 import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
+import { routeInput as currentRouteInput } from './helpers/phase6-process.ts';
+
+for (const parallelSelected of [false, true]) {
+  test(`route diagnostics and CLI honor parallel acquisition selection: ${parallelSelected}`, t => {
+    const root = mkdtempSync(join(tmpdir(), 'omd-route-diagnostics-'));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const input = currentRouteInput(), strategy = input.strategyDecision;
+    strategy.methods = strategy.methods.filter((method: string) => method !== 'parallel-reference-acquisition');
+    if (parallelSelected) strategy.methods.push('parallel-reference-acquisition');
+    const index = strategy.executionWaves.findIndex((wave: { roles: string[] }) => wave.roles.includes('omd-scout'));
+    assert.ok(index >= 0);
+    strategy.executionWaves.splice(index, 1,
+      { id: 'research', mode: 'concurrent', roles: ['omd-scout'] },
+      { id: 'copy', mode: 'concurrent', roles: ['omd-writer'] });
+    const before = structuredClone(input);
+    const diagnostics = diagnoseAdaptiveRouteInput(input);
+    if (parallelSelected) {
+      routeError(() => routeAdaptiveFlow(input), 'ADAPTIVE_EXECUTION_WAVE_INVALID');
+      assert.ok(diagnostics.some(item => item.code === 'ADAPTIVE_EXECUTION_WAVE_INVALID'));
+    } else {
+      assert.equal(routeAdaptiveFlow(input).route, 'adaptive');
+      assert.deepEqual(diagnostics, []);
+    }
+    const result = spawnSync(process.execPath,
+      [fileURLToPath(new URL('../bin/omd.mjs', import.meta.url)), 'route', 'validate', '--input', '-', '--json'],
+      { cwd: root, input: JSON.stringify(input), encoding: 'utf8' });
+    assert.equal(result.status, parallelSelected ? 1 : 0, result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.ok, !parallelSelected);
+    assert.equal(report.published, false);
+    assert.equal(existsSync(join(root, '.omd/route.json')), false);
+    assert.deepEqual(input, before);
+  });
+}
 
 const fixturePath = (name: string): string => fileURLToPath(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url));
 const fixture = (name: string): unknown => JSON.parse(readFileSync(fixturePath(name), 'utf8'));
@@ -313,7 +350,7 @@ test('execution waves enforce actual scout-writer concurrency and closed depende
     id: 'parallel-research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'],
   });
 
-  assert.doesNotThrow(() => routeAdaptiveFlow(changed('medical-new-product', (value) => {
+  assert.throws(() => routeAdaptiveFlow(changed('medical-new-product', (value) => {
     const strategy = Reflect.get(value, 'strategyDecision');
     assert.ok(typeof strategy === 'object' && strategy !== null);
     Reflect.set(strategy, 'executionWaves', [
@@ -365,8 +402,7 @@ test('execution waves enforce actual scout-writer concurrency and closed depende
       assert.ok(typeof strategy === 'object' && strategy !== null);
       Reflect.set(strategy, 'executionWaves', executionWaves);
     }));
-    if (label === 'non-concurrent mode' || label === 'duplicate wave id') assert.throws(route);
-    else assert.doesNotThrow(route);
+    assert.throws(route, label);
   }
 });
 
@@ -386,7 +422,7 @@ test('strategy roles and stages are closed, duplicate-free, and dependency order
     assert.ok(typeof strategy === 'object' && strategy !== null);
     Reflect.set(strategy, 'stages', ['domain', 'copy', 'copy', 'production', 'browser-evidence', 'independent-review']);
   })), 'ADAPTIVE_STRATEGY_DUPLICATE');
-  assert.doesNotThrow(() => routeAdaptiveFlow(changed('medical-new-product', (value) => {
+  assert.throws(() => routeAdaptiveFlow(changed('medical-new-product', (value) => {
     const strategy = Reflect.get(value, 'strategyDecision');
     assert.ok(typeof strategy === 'object' && strategy !== null);
     Reflect.set(strategy, 'stages', [
@@ -417,53 +453,57 @@ test('every topological permutation passes and every dependency inversion fails'
       Reflect.set(strategy, 'stages', ['domain', ...expanded, 'production', 'browser-evidence', 'independent-review']);
     });
     const topological = order.indexOf('content-grain') > order.indexOf('frame')
+      && order.indexOf('scout') > order.indexOf('frame')
       && order.indexOf('composition') > order.indexOf('content-grain')
       && order.indexOf('composition') > order.indexOf('frame')
       && order.indexOf('composition') > order.indexOf('scout')
       && order.indexOf('composition') > order.indexOf('copy');
     if (topological) valid += 1;
-    if (order.indexOf('frame') < order.indexOf('scout')) {
+    if (topological) {
       assert.doesNotThrow(() => routeAdaptiveFlow(value), order.join(' -> '));
     } else {
       routeError(() => routeAdaptiveFlow(value), 'ADAPTIVE_STAGE_ORDER_INVALID');
     }
   }
-  assert.equal(valid, 72);
+  assert.equal(valid, 48);
 });
 
 test('every graph edge accepts dependency order and rejects its inversion', () => {
-  const base = routeAdaptiveFlow(fixture('copy-only')).strategy;
-  const requiredClosure = (targets: readonly AdaptiveStageId[]): readonly AdaptiveStageId[] => {
-    const ordered: AdaptiveStageId[] = [];
-    const add = (stage: AdaptiveStageId): void => {
-      for (const prerequisite of ADAPTIVE_STAGE_GRAPH[stage].prerequisites) add(prerequisite);
-      if (!ordered.includes(stage)) ordered.push(stage);
-    };
-    for (const target of targets) add(target);
-    return ordered;
-  };
-  for (const stage of ADAPTIVE_STAGE_IDS) {
-    const node = ADAPTIVE_STAGE_GRAPH[stage];
-    for (const dependency of [...node.prerequisites, ...node.afterIfSelected]) {
-      const selected = requiredClosure([stage, dependency]);
+  for (const currentProcess of [false, true]) {
+    const ADAPTIVE_STAGE_GRAPH = adaptiveStageGraph(currentProcess);
+    const base = routeAdaptiveFlow(fixture('copy-only')).strategy;
+    const requiredClosure = (targets: readonly AdaptiveStageId[]): readonly AdaptiveStageId[] => {
       const ordered: AdaptiveStageId[] = [];
-      while (ordered.length < selected.length) {
-        const next = selected.find((candidate) => !ordered.includes(candidate)
-          && [...ADAPTIVE_STAGE_GRAPH[candidate].prerequisites,
-            ...ADAPTIVE_STAGE_GRAPH[candidate].afterIfSelected]
-            .every((edge) => !selected.includes(edge) || ordered.includes(edge)));
-        assert.ok(next, `${dependency} -> ${stage} must have a topological order`);
-        ordered.push(next);
+      const add = (stage: AdaptiveStageId): void => {
+        for (const prerequisite of ADAPTIVE_STAGE_GRAPH[stage].prerequisites) add(prerequisite);
+        if (!ordered.includes(stage)) ordered.push(stage);
+      };
+      for (const target of targets) add(target);
+      return ordered;
+    };
+    for (const stage of ADAPTIVE_STAGE_IDS) {
+      const node = ADAPTIVE_STAGE_GRAPH[stage];
+      for (const dependency of [...node.prerequisites, ...node.afterIfSelected]) {
+        const selected = requiredClosure([stage, dependency]);
+        const ordered: AdaptiveStageId[] = [];
+        while (ordered.length < selected.length) {
+          const next = selected.find((candidate) => !ordered.includes(candidate)
+            && [...ADAPTIVE_STAGE_GRAPH[candidate].prerequisites,
+              ...ADAPTIVE_STAGE_GRAPH[candidate].afterIfSelected]
+              .every((edge) => !selected.includes(edge) || ordered.includes(edge)));
+          assert.ok(next, `${dependency} -> ${stage} must have a topological order`);
+          ordered.push(next);
+        }
+        const valid = structuredClone(base);
+        Reflect.set(valid, 'stages', ordered);
+        assert.doesNotThrow(() => validateAdaptiveStageOrder(valid, undefined, currentProcess), `${dependency} -> ${stage}`);
+        const invertedOrder = ordered.filter((item) => item !== stage && item !== dependency);
+        const dependencyIndex = ordered.indexOf(dependency);
+        invertedOrder.splice(dependencyIndex, 0, stage, dependency);
+        const inverted = structuredClone(base);
+        Reflect.set(inverted, 'stages', invertedOrder);
+        routeError(() => validateAdaptiveStageOrder(inverted, undefined, currentProcess), 'ADAPTIVE_STAGE_ORDER_INVALID');
       }
-      const valid = structuredClone(base);
-      Reflect.set(valid, 'stages', ordered);
-      assert.doesNotThrow(() => validateAdaptiveStageOrder(valid), `${dependency} -> ${stage}`);
-      const invertedOrder = ordered.filter((item) => item !== stage && item !== dependency);
-      const dependencyIndex = ordered.indexOf(dependency);
-      invertedOrder.splice(dependencyIndex, 0, stage, dependency);
-      const inverted = structuredClone(base);
-      Reflect.set(inverted, 'stages', invertedOrder);
-      routeError(() => validateAdaptiveStageOrder(inverted), 'ADAPTIVE_STAGE_ORDER_INVALID');
     }
   }
 });
@@ -474,7 +514,7 @@ test('every required graph edge rejects its missing prerequisite', () => {
     for (const prerequisite of ADAPTIVE_STAGE_GRAPH[stage].prerequisites) {
       const missing = structuredClone(base);
       Reflect.set(missing, 'stages', [stage]);
-      routeError(() => validateAdaptiveStageOrder(missing), 'ADAPTIVE_STAGE_ORDER_INVALID');
+      routeError(() => validateAdaptiveStageOrder(missing, undefined, true), 'ADAPTIVE_STAGE_ORDER_INVALID');
       assert.notEqual(prerequisite, stage);
     }
   }
@@ -494,7 +534,7 @@ test('every artifact-producing stage rejects a missing required prerequisite', (
     const strategy = structuredClone(base);
     if (owner !== '') Reflect.set(strategy, 'roles', [...strategy.roles, owner]);
     Reflect.set(strategy, 'stages', ['domain', stage, 'production', 'browser-evidence', 'independent-review']);
-    assert.doesNotThrow(() => validateAdaptiveStrategyRails(strategy));
+    assert.throws(() => validateAdaptiveStrategyRails(strategy));
   }
 });
 

@@ -9,10 +9,11 @@ import { loadRefs, refRecordPath } from './store.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
 import { observedDomainServiceUrls } from './observed-domain-services.ts';
 import { userBrowserAcquisition } from './user-browser-provenance.ts';
+import { browseRetentionOf, verifyBrowseRetention } from './browse/retention.ts';
 
 export type DesignReferenceAdmission = Readonly<{
   eligible: boolean;
-  code: 'gallery' | 'gallery-image' | 'observed-original' | 'user-provided' | 'direct-source' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
+  code: 'recorded-browse' | 'gallery' | 'gallery-image' | 'observed-original' | 'user-provided' | 'direct-source' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
   reason: string;
   discoverySource?: string;
 }>;
@@ -132,7 +133,13 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   if (options.purpose === 'visual-direction'
     && (isDocumentationReferenceOrigin(reference.source) || isDocumentationReferenceOrigin(acquisition.finalUrl)))
     return rejected('purpose', 'This known design-system documentation origin belongs to accessibility/component support, not finished-product visual direction. Inspect an actual released site or app instead.');
-  // Shared service families are lawful evidence, but never independent corroboration.
+  if (domainConflict(root, reference, references)) return rejected('domain-reuse', 'Domain source or image evidence cannot be retained as independent design evidence.');
+  const browse = browseRetentionOf(reference);
+  if (browse) {
+    try { verifyBrowseRetention(root, { ...reference, browse }); }
+    catch (error) { return rejected('capture', error instanceof Error ? error.message : 'Invalid browse retention'); }
+    return { eligible: true, code: 'recorded-browse', reason: 'Final native keep binds the exact source, state and pixels; provider identity is not admission authority.', discoverySource: reference.source };
+  }
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
   const sourceProvider = provider(reference.source);
   const finalProvider = provider(acquisition.finalUrl);

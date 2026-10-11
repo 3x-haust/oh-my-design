@@ -55,7 +55,7 @@ test('packed reviewer evidence proxy rejects caller-forged launch configuration'
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 });
 
-test('packed harness v2 ships an authoritative runner bin rather than a test launcher', () => {
+test('packed harness v2 stays available to npm scripts without installing a public bin', () => {
   const temporary = mkdtempSync(join(tmpdir(), 'omd-installed-harness-v2-'));
   const packs = join(temporary, 'packs');
   const consumer = join(temporary, 'consumer');
@@ -69,16 +69,12 @@ test('packed harness v2 ships an authoritative runner bin rather than a test lau
     assert.equal(installed.status, 0, installed.stderr);
     const packageRoot = join(consumer, 'node_modules', '@3xhaust', 'oh-my-design');
     const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as { bin: Record<string, string>; scripts: Record<string, string> };
-    const entry = manifest.bin['omd-harness-v2'];
-    if (entry === undefined) throw new Error('packed manifest has no harness v2 bin');
-    assert.match(entry, /^\.\/bin\/.*\.mjs$/);
-    assert.equal(existsSync(join(packageRoot, entry)), true);
+    assert.equal(manifest.bin['omd-harness-v2'], undefined);
+    assert.equal(manifest.bin['omd-benchmark-harness'], undefined);
+    assert.equal(existsSync(join(packageRoot, 'bin', 'omd-harness-v2.mjs')), true);
     assert.equal(existsSync(join(packageRoot, 'scripts', 'benchmark', 'run-harness-v2.ts')), true);
-    assert.doesNotMatch(manifest.scripts['benchmark:harness-v2'] ?? '', /--test|test\//);
-    const executable = process.platform === 'win32' ? join(packageRoot, entry) : join(consumer, 'node_modules', '.bin', 'omd-harness-v2');
-    const started = process.platform === 'win32'
-      ? run(process.execPath, [executable], temporary)
-      : run(executable, [], temporary);
+    assert.equal(manifest.scripts['benchmark:harness-v2'], 'node bin/omd-harness-v2.mjs');
+    const started = run(process.execPath, [join(packageRoot, 'bin', 'omd-harness-v2.mjs')], temporary);
     assert.notEqual(started.status, 0);
     assert.match(started.stderr, /usage: run-harness-v2 <input\.json>/);
   } finally { rmSync(temporary, { recursive: true, force: true }); }

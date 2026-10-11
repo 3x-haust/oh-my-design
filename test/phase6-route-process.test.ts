@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { routeAdaptiveFlow, parseRouteRecord, publishAdaptiveRoute } from '../core/route/index.ts';
+import { ADAPTIVE_STAGE_IDS, OPTIONAL_METHOD_IDS } from '../core/route/adaptive-flow-domain.ts';
+import { ADAPTIVE_STAGE_GRAPH, ADAPTIVE_STAGE_OWNERS, validateAdaptiveStageGraph } from '../core/route/adaptive-stage-graph.ts';
+import { STAGES, contractSha256, deliveryReceipt, adaptivePrerequisiteStages } from '../core/stage/contract.ts';
+import { MINIMAL_COMPOSITION_SECTIONS } from '../core/brief/minimal-composition.ts';
+import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
+import { checkBriefEntry } from '../core/brief/entry.ts';
+import { candidateCopyProjection } from '../core/brief/candidate-plan.ts';
+import { publishCandidatePacket, publishCandidateSelection } from '../core/brief/candidate-choice.ts';
+import { nextStageWork } from '../core/stage/next.ts';
+import { withBrowser } from '../core/render/index.ts';
+import { withLocalView } from '../core/render/stateful.ts';
+import { hash } from '../core/brief/candidate-data.ts';
+import { fixture, routeInput, renderedSet, snapshot, userChoice, write, repo, pack, type Fixture } from './helpers/phase6-process.ts';
+function ready(f: Fixture) {
+  const evidence = [{ status: 'user-provided', reference: 'request' }], statement = (text: string) => ({ text, userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'request', excerpt: f.route.request }] });
+  write(f.root, '.omd/domain-brief.json', JSON.stringify({ schema: 'domain-brief-v1', request: f.route.request, domain: 'Instrument launch', summary: 'Explain patching without invented terms.', surfaces: [{ name: 'Main', purpose: 'Explain patching', evidence }, { name: 'Details', purpose: 'Disclose known terms', evidence }], coreObjects: [{ name: 'Patch', evidence }], audience: { description: 'Instrument players', evidence }, referenceQueries: { component: ['patch panel'], craft: ['readable type'], mood: ['workspace'] }, planning: { businessGoal: statement('Explain patching'), successSignal: statement('Reach details'), nonGoals: [statement('No invented commercial terms')] } }));
+  write(f.root, '.omd/composition.md', `## Input fingerprint\n- Frame SHA-256: ${hash(readFileSync(join(f.root, '.omd/frame.md')))}\n- Source contract SHA-256: ${f.route.sourceContractSha256}\n\n${MINIMAL_COMPOSITION_SECTIONS.map(s => `## ${s}\nKeep the supplied relationship and disclose unknown terms.\n`).join('\n')}`);
+  write(f.root, '.omd/delivery.jsonl', STAGES.filter(s => f.route.strategy.stages.includes(s.id)).flatMap(s => s.requiredContracts.map(c => JSON.stringify(deliveryReceipt(s.id, c, contractSha256(pack, c, s.id), '2026-09-26T00:00:00Z')))).join('\n') + '\n');
+}
+test('process version moves concepts before type/composition with Art Director/Sketch team; legacy replay stays exact', t => {
+  const f = fixture(t), invalid = routeInput();
+  invalid.strategyDecision.stages = [...invalid.strategyDecision.stages].filter((s: string) => s !== 'candidate-generation');
+  invalid.strategyDecision.stages.splice(invalid.strategyDecision.stages.indexOf('production'), 0, 'candidate-generation');
+  const before = snapshot(f.root);
+  assert.throws(() => publishAdaptiveRoute(f.root, invalid, f.writer, f.invocation), /ORDER_INVALID/);
+  assert.deepEqual(snapshot(f.root), before);
+  publishAdaptiveRoute(f.root, routeInput(), f.writer, f.invocation);
+  validateAdaptiveStageGraph(ADAPTIVE_STAGE_GRAPH);
+  assert.equal(ADAPTIVE_STAGE_OWNERS['candidate-generation'], 'omd-art-director');
+  assert.ok(OPTIONAL_METHOD_IDS.includes('concept-exploration'));
+  assert.ok(!(ADAPTIVE_STAGE_IDS as readonly string[]).includes('concept-exploration'));
+  const prerequisites = adaptivePrerequisiteStages(f.root, f.invocation, 'candidate-generation')!;
+  assert.ok(!prerequisites.includes('composition') && !prerequisites.includes('type-proof'));
+  assert.ok(adaptivePrerequisiteStages(f.root, f.invocation, 'type-proof')!.includes('candidate-generation'));
+  const legacy = routeAdaptiveFlow(JSON.parse(readFileSync(join(repo, 'test/fixtures/adaptive-flow/synth-marketing.json'), 'utf8')));
+  assert.deepEqual(parseRouteRecord(legacy), legacy);
+  assert.equal(legacy.sourceContract.processPolicy, undefined);
+  const md = '## Surface copy\nActual text.\n## Sources and fact ledger\nSupplied fact.\n## Truth contract\nDemo only.\n';
+  assert.equal(candidateCopyProjection(md), candidateCopyProjection(md + '## Art direction contract\nDirection metadata closure.\n'));
+  assert.notEqual(candidateCopyProjection(md), candidateCopyProjection(md.replace('Actual text.', 'Revised text.')));
+});
+
+test('missing concepts remain debt and permit first render; ready user choice blocks commitment but not representative work', async t => {
+  const f = fixture(t); ready(f);
+  assert.equal(checkProductionReadiness(f.root, f.invocation, pack, 'index.html').ok, true);
+  f.writer.write('index.html', '<!doctype html><title>Provisional render</title><main>Patch the instrument</main>');
+  const png = await withBrowser(b => withLocalView(b, f.root, { page: 'index.html', viewport: { width: 390, height: 844 } }, page => page.screenshot()));
+  assert.equal(png[0], 137);
+  const set = await renderedSet(f), packet = publishCandidatePacket(f.root, set, f.writer, f.invocation);
+  const before = snapshot(f.root), work = nextStageWork(f.root, pack, f.invocation);
+  assert.equal(work.schema, 'stage-next-v2'); assert.equal(work.action, 'await-user');
+  assert.equal(checkProductionReadiness(f.root, f.invocation, pack, 'index.html').ok, false);
+  assert.ok(checkBriefEntry(f.root, 'type-proof', pack, f.invocation).blockers.some(b => b.includes('NEEDS_USER_DIRECTION')));
+  assert.deepEqual(snapshot(f.root), before);
+  assert.ok(!checkBriefEntry(f.root, 'candidate-generation', pack, f.invocation).blockers.some(b => b.includes('NEEDS_USER_DIRECTION')));
+  publishCandidateSelection(f.root, userChoice(f, packet), f.writer, f.invocation);
+  assert.equal(checkProductionReadiness(f.root, f.invocation, pack, 'index.html').ok, true);
+});

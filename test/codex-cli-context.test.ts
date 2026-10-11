@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { codexCliContext } from '../adapters/codex-cli-context.ts';
+import { brokeredBrowserOperationNames, isBrokeredBrowserCliOperation } from '../core/runtime/codex-browser-operation.ts';
+import { loadRoleProfile } from '../core/brief/profiles.ts';
 
 test('issuing CLI prefix survives shell metacharacters without consulting PATH', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-cli-context-'));
@@ -39,19 +41,16 @@ test('missing issuing CLI fails instead of falling back to an installed package'
 
 test('research and type roles discover their brokered browser path without receiving production permissions', () => {
   const cli = new URL('../bin/omd.ts', import.meta.url).pathname;
-  const scout = codexCliContext(cli, process.execPath, 'omd-scout');
-  assert.match(scout, /host-brokered OMD browser CLI/);
-  assert.match(scout, /ir, render, ref add, ref add-batch, craft-capture/);
-  assert.match(scout, /ref search, ref navigate/);
-  assert.match(scout, /absence of an interactive browser MCP tool does not mean these commands are unavailable/);
-  assert.match(scout, /reference-capture-preparation/);
-  assert.match(scout, /not arbitrary typing, submission, navigation, or a logged-in session/);
-  assert.match(scout, /no install, provider launch, or authority changes/);
-  const type = codexCliContext(cli, process.execPath, 'omd-typesetter');
-  assert.match(type, /host-brokered OMD browser CLI/);
-  assert.match(type, /Allowed browser operations: ir, render\./);
-  assert.doesNotMatch(type, /ref add|reference-capture-preparation/);
-  for (const role of ['omd-writer', 'omd-framer', 'omd-hand', 'omd-study', 'omd-eye']) {
-    assert.doesNotMatch(codexCliContext(cli, process.execPath, role), /host-brokered OMD browser CLI/);
-  }
+  assert.ok(brokeredBrowserOperationNames('omd-scout').includes('ref browse'));
+  assert.deepEqual(brokeredBrowserOperationNames('omd-typesetter'), ['ir', 'render', 'measure']);
+  assert.deepEqual(brokeredBrowserOperationNames('omd-hand', 'source'), []);
+  assert.equal(isBrokeredBrowserCliOperation('omd-hand', ['measure'], 'observer'), true);
+  assert.equal(isBrokeredBrowserCliOperation('omd-sketch', ['render'], 'visual-study'), true);
+  assert.equal(isBrokeredBrowserCliOperation('omd-sketch', ['render'], 'unknown'), false);
+  const profile = loadRoleProfile('omd-hand', 'observer');
+  const context = codexCliContext(cli, process.execPath, 'omd-hand', 'observer');
+  assert.ok(context.includes(profile.source));
+  assert.ok(context.includes(profile.sha256));
+  assert.ok(!context.includes(loadRoleProfile('omd-hand', 'source').source));
+  assert.throws(() => codexCliContext(cli, process.execPath, 'omd-hand', 'unknown'));
 });

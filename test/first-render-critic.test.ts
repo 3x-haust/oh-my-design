@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { critiqueFirstRender, FIRST_RENDER_CRITIC_SCHEMA, parseFirstRenderSurface } from '../core/design/first-render-critic.ts';
+import { critiqueLegacyFirstRender as critiqueFirstRender, FIRST_RENDER_CRITIC_SCHEMA, parseFirstRenderSurface } from '../core/design/first-render-critic.ts';
 import type { DesignHypothesis } from '../core/design/judgment.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 

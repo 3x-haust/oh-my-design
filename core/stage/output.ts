@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { validateDomainBrief } from '../domain/domain-brief.ts';
 import { validateFrameUxBytes } from '../frame/check-ux.ts';
@@ -7,10 +8,11 @@ import { readFrame } from '../frame/index.ts';
 import { readPersistedRoute } from '../route/index.ts';
 import { readReferenceBoardArtifacts } from '../ref/board-artifacts.ts';
 import { checkReferenceApplication } from '../ref/reference-application.ts';
-import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
+import { compositionEntry } from '../brief/minimal-composition.ts';
 import { resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { stageDefinition, type StageId } from './contract.ts';
+import { selectedDirectionCopyClosureProblems } from '../art-direction/copy-closure.ts';
 
 /** Early structural checks, not render/review acceptance. Never equate a file with completed work. */
 export function stageArtifactProblems(root: string, stage: StageId, invocation?: ProjectRunInvocation): string[] {
@@ -23,6 +25,8 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
       return paths.filter(candidatePath => !readContainedRegularFile(root, join(root, candidatePath), candidatePath).toString('utf8').trim())
         .map(candidatePath => `${candidatePath} is empty`);
     }
+    if (stage === 'art-direction' && invocation && readPersistedRoute(root, invocation).sourceContract.processPolicy
+      && readPersistedRoute(root, invocation).strategy.methods.includes('concept-exploration')) return selectedDirectionCopyClosureProblems(root);
     if (stage === 'domain') {
       const domain = validateDomainBrief(JSON.parse(bytes.toString('utf8')));
       if (invocation && domain.request !== readPersistedRoute(root, invocation).request) {
@@ -40,7 +44,8 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
     }
     if (stage === 'copy') {
       const problems = validateCopyDeck(bytes.toString('utf8')).map(f => f.message);
-      if (invocation && readPersistedRoute(root, invocation).behavior.active.copyRepairWorkflow.status === 'selected') {
+      if (invocation && readPersistedRoute(root, invocation).behavior.active.copyRepairWorkflow.status === 'selected'
+        && (existsSync(join(root, '.omd/.cache/copy-eye.md')) || readPersistedRoute(root, invocation).strategy.stages.includes('safety-validation'))) {
         try {
           const review = readContainedRegularFile(root, join(root, '.omd/.cache/copy-eye.md'), 'current copy review');
           problems.push(...validateCurrentCopyReview(review.toString('utf8'), bytes).map(f => f.message));
@@ -62,7 +67,7 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
         }
       }
     }
-    if (stage === 'composition' && invocation) return validateCurrentCompositionContract(root, invocation).map(f => f.message);
+    if (stage === 'composition' && invocation) return compositionEntry(root, invocation).blockers;
     return [];
   } catch (error) { return [error instanceof Error ? error.message : String(error)]; }
 }

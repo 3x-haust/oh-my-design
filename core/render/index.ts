@@ -16,6 +16,7 @@ import { resolve, dirname, basename, isAbsolute, join, normalize, relative } fro
 import { extractInPage } from '../ir/dom.ts';
 import { resolveRenderTarget as resolveTarget } from './serve.ts';
 import { computeEnergy } from '../motion/energy.ts';
+import { disableUnproxiedRealtimeTransports } from '../ref/browser-security.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
 import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
@@ -304,11 +305,21 @@ export async function onPage<T>(
   fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string, loadTimestampMs: number) => Promise<T>,
   deadlineMs?: number,
   referenceSafety = false,
+  localOrigin?: string,
 ): Promise<T> {
-  const page = await browser.newPage({ viewport, ...(referenceSafety ? { deviceScaleFactor: 2, serviceWorkers: 'block' as const } : {}) });
-  if (referenceSafety) {
-    await page.context().routeWebSocket('**/*', socket => socket.close());
-    await page.context().route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
+  const page = await browser.newPage({ viewport, ...(referenceSafety ? { deviceScaleFactor: 2 } : {}),
+    ...(referenceSafety || localOrigin ? { serviceWorkers: 'block' as const } : {}), ...(localOrigin ? { acceptDownloads: false } : {}) });
+  const blocked: string[] = [];
+  if (referenceSafety || localOrigin) {
+    if (localOrigin) await disableUnproxiedRealtimeTransports(page.context());
+    await page.context().routeWebSocket('**/*', socket => { if (localOrigin) blocked.push(socket.url()); socket.close(); });
+    await page.context().route('**/*', route => {
+      const request = route.request();
+      if (!['GET', 'HEAD'].includes(request.method()) || localOrigin && new URL(request.url()).origin !== localOrigin) {
+        if (localOrigin) blocked.push(request.url()); return route.abort();
+      }
+      return route.continue();
+    });
   }
   let resolved: Awaited<ReturnType<typeof resolveTarget>> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -316,6 +327,7 @@ export async function onPage<T>(
   try {
     resolved = await resolveTarget(target);
     const targetUrl = resolved.url;
+    if (localOrigin && new URL(targetUrl).origin !== localOrigin) throw new Error('native production capture escaped its owned origin');
     const work = async (): Promise<T> => {
       const observedLoad = deadlineMs === undefined ? page.waitForEvent('load') : null;
       const response = await page.goto(targetUrl, deadlineMs === undefined
@@ -323,7 +335,9 @@ export async function onPage<T>(
       if (observedLoad !== null) await observedLoad;
       const loadTimestampMs = Date.now();
       await waitForDocumentFonts(page);
-      return fn(page, response?.status() ?? null, targetUrl, loadTimestampMs);
+      const result = await fn(page, response?.status() ?? null, targetUrl, loadTimestampMs);
+      if (localOrigin && (response?.status() !== 200 || page.url() !== targetUrl || blocked.length)) throw new Error('native production capture used an unowned resource, write, or navigation');
+      return result;
     };
     if (deadlineMs === undefined) return await work();
     return await Promise.race([work(), new Promise<never>((_resolve, reject) => {
@@ -748,6 +762,7 @@ async function extractIrCore(
   resolvedUrl: string,
   selector: string | null,
   probe = true,
+  detail: import('../ir/detail.ts').IrExtractionOptions = {},
 ): Promise<RawIr> {
   // Fail fast on blocked/challenge pages before attempting DOM extraction.
   try {
@@ -762,16 +777,16 @@ async function extractIrCore(
   }
   await assertSelectorIsMeasurableDom(page, selector);
   const raw = await page.evaluate(
-    browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector ?? null)}`),
+    browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector ?? null)}, ${JSON.stringify(detail)}`),
   ) as RawIr;
   const interaction = probe ? await probeInteraction(page) : null;
   const motion = probe ? await probeMotion(page) : null;
   return { ...raw, meta: { ...(raw.meta ?? {}), interaction, motion, ...(!probe ? { measurementCoverage: { ...PREPARED_MEASUREMENT_COVERAGE } } : {}) } };
 }
 
-export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null }): Promise<RawIr> {
+export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null } & import('../ir/detail.ts').IrExtractionOptions): Promise<RawIr> {
   return withPage(target, opts.viewport, (page, httpStatus, resolvedUrl) =>
-    extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null));
+    extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, true, opts));
 }
 
 /**
@@ -1048,7 +1063,7 @@ export async function captureMotionEvidenceV2(
     viewport: Viewport; outDir: string; runId: string; buildHash: string; artDirectionHash: string;
     route?: string; taskId?: string; invocation?: ProjectRunInvocation;
     referenceSlotId?: string; sourceInfluence?: MotionSourceInfluence; selector: string; adapter: ProjectWriteAdapter;
-    trigger: MotionTrigger; intervalMs?: number;
+    trigger: MotionTrigger; intervalMs?: number; localOrigin?: string;
   },
 ): Promise<MotionEvidenceV2> {
   const interval = opts.intervalMs ?? 150;
@@ -1198,7 +1213,7 @@ export async function captureMotionEvidenceV2(
         reducedMotion: { capture: reduced, behavior: reducedMotionBehavior },
       }],
     };
-  }));
+  }, undefined, false, opts.localOrigin));
 }
 export const MOTION_EVIDENCE_V2_SCHEMA = 'motion-evidence-v2' as const;
 
@@ -1447,7 +1462,7 @@ export function validateRenderedBeatResultAuthority(
 
 export async function captureRenderedBeatReceipt(
   target: string,
-  opts: { readonly adapter: ProjectWriteAdapter; readonly out: string; readonly artDirectionHash: string; readonly copyDeckSha256: string; readonly beatIds: readonly string[]; readonly buildSha256: string; readonly route: string; readonly taskId: string; readonly invocation: ProjectRunInvocation },
+  opts: { readonly adapter: ProjectWriteAdapter; readonly out: string; readonly artDirectionHash: string; readonly copyDeckSha256: string; readonly beatIds: readonly string[]; readonly buildSha256: string; readonly route: string; readonly taskId: string; readonly invocation: ProjectRunInvocation; readonly localOrigin?: string },
 ): Promise<RenderedBeatResult> {
   const adapter = requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter);
   if (!opts.buildSha256 || !opts.route || !opts.taskId) throw new Error('rendered Beat collection requires build, route, and task bindings');
@@ -1480,7 +1495,7 @@ export async function captureRenderedBeatReceipt(
         const path = projectOutputPath(adapter, join(dirname(opts.out), `${basename(opts.out, '.json')}-${viewport.width}x${viewport.height}.png`));
         adapter.write(path, bytes);
         captures.push({ path, sha256: createHash('sha256').update(bytes).digest('hex'), viewport: { ...viewport } });
-      });
+      }, undefined, false, opts.localOrigin);
     }
   });
   const proof: RenderedBeatResult = {

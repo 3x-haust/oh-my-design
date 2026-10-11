@@ -19,6 +19,7 @@ import { readStrictDiscoveryNavigation } from '../core/ref/discovery-record.ts';
 import { stageDesignCandidate } from '../core/ref/reference-candidate.ts';
 import { refImagePath } from '../core/ref/store.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
+import { legacyReferenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 
 const pack = fileURLToPath(new URL('../core', import.meta.url));
 
@@ -32,13 +33,14 @@ function project(t: TestContext) {
     uncertainty: 'unresolved' as const, existingEvidence: 'none' as const,
     intendedUse: 'Inspect confirmation work surfaces.', existingEvidenceUse: null, skipReason: null,
   }, strategyDecision: { ...base.strategyDecision, stages,
+    methods: [...base.strategyDecision.methods, 'reference-discovery'],
     roles: ['omd-framer', 'omd-scout', ...base.strategyDecision.roles] as const,
     executionWaves: [
       { id: 'frame', mode: 'concurrent' as const, roles: ['omd-framer'] as const },
       { id: 'reference', mode: 'concurrent' as const, roles: ['omd-scout'] as const },
       ...base.strategyDecision.executionWaves,
     ],
-    skips: base.strategyDecision.skips.filter(s => !stages.some(stage => stage === s.id)),
+    skips: base.strategyDecision.skips.filter(s => s.id !== 'reference-discovery' && !stages.some(stage => stage === s.id)),
   } };
   const invocation = publishTestAdaptiveRoute(root, input);
   mkdirSync(join(root, '.omd/.cache'), { recursive: true });
@@ -96,12 +98,14 @@ T1 | goal: Read confirmation | start: confirmation | actions: open record | succ
   return { root, invocation, source };
 }
 
-test('reference transport remains acquisition, but observed image retention needs its own owner action', t => {
+test('browse is the default while explicit legacy inspection preserves retention and review actions', t => {
   const { root, invocation, source } = project(t);
   const transport = nextStageWork(root, pack, invocation);
   assert.equal(transport.stage, 'reference-board');
-  assert.equal(transport.referenceWork?.action?.kind, 'follow-link');
+  assert.equal(transport.referenceWork?.action?.kind, 'start-browse');
   assert.equal(transport.action, 'acquire-reference');
+  const route = readPersistedRoute(root, invocation);
+  assert.equal(legacyReferenceDiscoveryWork(root, route).action?.kind, 'follow-link');
   const directory = join(root, '.omd/discovery/design/navigation');
   mkdirSync(directory, { recursive: true });
   const image = testPng(1280, 900);
@@ -121,9 +125,8 @@ test('reference transport remains acquisition, but observed image retention need
   assert.equal(readStrictDiscoveryNavigation(root, { url: source,
     evidence: { path: imagePath, sha256: sha256(image) },
     capture: { path: capturePath, sha256: sha256(bytes) } }).url, source);
-  const retention = nextStageWork(root, pack, invocation);
-  assert.equal(retention.referenceWork?.action?.kind, 'retain-reference');
-  assert.equal(retention.action, 'retain-reference');
+  const retention = legacyReferenceDiscoveryWork(root, route);
+  assert.equal(retention.action?.kind, 'retain-reference');
   assert.notEqual(retention.next, 'omd ref advance --json');
   const baseline = designAdmissionFixture(t).source.ref;
   const candidate: Reference = { ...baseline, source, component: 'confirmation', selector: '#screen',
@@ -134,8 +137,7 @@ test('reference transport remains acquisition, but observed image retention need
   };
   stageDesignCandidate(root, { ...candidate,
     imagePath: relative(root, refImagePath(root, candidate)) }, image, createTestProjectWriteAdapter(root));
-  const review = nextStageWork(root, pack, invocation);
-  assert.equal(review.referenceWork?.action?.kind, 'review-candidates');
-  assert.equal(review.action, 'review-candidates');
+  const review = legacyReferenceDiscoveryWork(root, route);
+  assert.equal(review.action?.kind, 'review-candidates');
   assert.equal(review.next, 'omd ref direction-review --json');
 });

@@ -1,4 +1,4 @@
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { readPiRequest, readPiUserTurn, requestDigest } from '../extensions/omd-request-source.ts';
@@ -10,25 +10,24 @@ import { REFERENCE_JUDGMENT_DECISIONS, referenceJudgmentPolicy, type ReferenceJu
 import { signNativeObservation, verifyNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { readContainedRegularFile, projectRunInvocationSha256 } from '../core/ref/reference-selection.ts';
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
-import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
+import { createProjectWriteAdapter, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
+import { TARGET_MARKET_POLICY } from '../core/route/locale-market-authority.ts';
 
 const SIGNING_KIND = 'ai-judgment-record-v1';
 const REQUEST_POLICIES: Record<string, JudgmentPolicy> = Object.fromEntries(([
   ['workflow-intent', ['implement', 'inspect', 'skill-only', 'other']],
   ['workflow-continuation', ['resume', 'pause', 'cancel', 'unrelated']],
   ['target-market', ['explicit', 'unspecified', 'excluded']],
-] as const).map(([purpose, decisions]) => [purpose, {
+] as const).map(([purpose, decisions]) => [purpose, purpose === 'target-market' ? TARGET_MARKET_POLICY : {
   purpose, decisions, authorRoles: ['coordinator'],
   sourceKinds: purpose === 'workflow-continuation' ? ['user-turn'] : ['route-request'],
   fields: purpose === 'workflow-continuation' ? ['text'] : ['request'],
   requiredSourceKinds: purpose === 'workflow-continuation' ? ['user-turn'] : ['route-request'], mode: 'advisory',
   wholeUserTurn: purpose === 'workflow-continuation',
   parsePayload: (value: unknown) => {
-    const { value: fields } = knownFields(value, purpose === 'workflow-continuation' ? ['routeSha256'] : [], purpose === 'target-market' ? ['region'] : [], purpose);
+    const { value: fields } = knownFields(value, purpose === 'workflow-continuation' ? ['routeSha256'] : [], [], purpose);
     if (purpose === 'workflow-continuation' && (typeof fields.routeSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(fields.routeSha256)))
       throw new Error('AI_JUDGMENT_INVALID: routeSha256');
-    if (purpose === 'target-market' && fields.region !== undefined
-      && (typeof fields.region !== 'string' || !fields.region.trim())) throw new Error('AI_JUDGMENT_INVALID: region');
     return fields;
   },
 } satisfies JudgmentPolicy]));
@@ -99,6 +98,7 @@ export function judgmentStarter(root: string, purpose: string, invocation: Proje
   if (!policy) throw new Error(`AI_JUDGMENT_INVALID: unsupported starter purpose ${purpose}; choose ${[...Object.keys(REQUEST_POLICIES), 'design-language-reading'].join('|')}`);
   const request = readPiRequest(root);
   if (!request) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: current signed request required');
+  const writer = createProjectWriteAdapter(root, invocation);
   if (purpose === 'design-language-reading') {
     if (!inputPath) throw new Error('AI_JUDGMENT_INVALID: design-language-reading starter requires --input <design-language-input.json>');
     const route = readPersistedRoute(root, invocation);
@@ -117,8 +117,8 @@ export function judgmentStarter(root: string, purpose: string, invocation: Proje
         requestSha256: request.requestSha256 }, field: 'request', itemId: null, text: request.request }],
       evidence: [], payload: { kind: translation.kind, textSha256: translation.textSha256,
         chosenId: translation.chosenId } };
-    mkdirSync(join(root, '.omd/.cache'), { recursive: true });
-    writeFileSync(join(root, path), `${JSON.stringify(skeleton, null, 2)}\n`);
+    writer.mkdir('.omd/.cache');
+    writer.write(path, `${JSON.stringify(skeleton, null, 2)}\n`);
     return { name: 'ai-judgment', purpose, path, command: `omd ai-judgment publish --input ${path} --json`,
       decisions: policy.decisions, skeleton };
   }
@@ -133,8 +133,8 @@ export function judgmentStarter(root: string, purpose: string, invocation: Proje
       : { kind: 'route-request', requestSourceSha256: request.recordSha256, requestSha256: request.requestSha256 },
       field: turn ? 'text' : 'request', itemId: null, text: turn?.text ?? request.request }], evidence: [],
     payload: turn ? { routeSha256: turn.routeSha256 } : {} };
-  mkdirSync(join(root, '.omd/.cache'), { recursive: true });
-  writeFileSync(join(root, path), `${JSON.stringify(skeleton, null, 2)}\n`);
+  writer.mkdir('.omd/.cache');
+  writer.write(path, `${JSON.stringify(skeleton, null, 2)}\n`);
   return { name: 'ai-judgment', purpose, path, command: `omd ai-judgment publish --input ${path} --json`,
     decisions: policy.decisions, skeleton };
 }

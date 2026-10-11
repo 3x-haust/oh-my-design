@@ -12,7 +12,7 @@ import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { directoryHtml, GALLERY_DIRECTORY, GALLERY_ITEM } from './helpers/discovery-capture.ts';
 import { advanceReferenceDiscoveryWork } from '../core/ref/discovery-advance.ts';
-import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
+import { legacyReferenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { publishSearchLeads } from '../core/ref/search-leads.ts';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { routeInput } from './helpers/discovery-work.ts';
@@ -23,11 +23,11 @@ const search = { kind: 'search', input: { lane: 'design', query: 'task panels',
 const navigate = { kind: 'navigate', source: GALLERY_DIRECTORY, lane: 'design', entry: 'free-gallery' } as const;
 
 for (const failedIndices of [[0], [1], [0, 1, 2]]) {
-test(`default advance preserves failures ${failedIndices.join(',')} and binds the representative receipt`, async t => {
+test(`explicit legacy advance preserves failures ${failedIndices.join(',')} and binds the representative receipt`, async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-advance-batch-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const route = routeAdaptiveFlow(routeInput());
-  const initial = referenceDiscoveryWork(root, route);
+  const initial = legacyReferenceDiscoveryWork(root, route);
   assert.ok(initial.action?.input);
   const urls = ['https://www.bokjiro.go.kr/service/', 'https://www.gov.kr/benefits/', 'https://wis.seoul.go.kr/services/'];
   const writer = createTestProjectWriteAdapter(root);

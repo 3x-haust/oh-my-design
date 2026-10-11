@@ -3,6 +3,8 @@
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
 > against the current composition contract; do not transfer this page recipe unchanged.
 
+Marketing/showpiece only. Do not use this recipe on a product work surface, operational dashboard, settings screen, admin flow, checkout, or repeated task loop. If the surface exists to help a user finish work, choose a product composition recipe instead.
+
 A grid where one or more elements break from the column structure — rotated, offset, or
 overlapping — to create tension and signal editorial intent. The effect reads as deliberate
 when the deviation is singular; a page full of diagonal elements is not tension, it is noise.

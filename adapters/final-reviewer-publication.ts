@@ -30,6 +30,9 @@ import { getNativePiRun } from '../core/runtime/native-pi-run.ts';
 import { nativeFinalLanePacket, nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
 import { nativeOutcomeExecutionEvidence, validateNativeOutcomeAssessments } from '../core/runtime/native-outcome-review.ts';
 import { validateCurrentReferenceFidelityAssessments } from '../core/runtime/native-reference-fidelity.ts';
+import { buildMeasuredReviewerPublication } from './measured-reviewer-publication.ts';
+import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { requiresMeasuredTerminal } from '../core/measure/review-policy.ts';
 const SHA256 = /^[a-f0-9]{64}$/;
 const LANE_CONTRACTS = {
   'blind-review-v2': {
@@ -89,6 +92,7 @@ type Artifact = Readonly<{ path: string; sha256: string; bytes: Buffer }>;
 export type FinalReviewerPublication = Readonly<{
   lane: Artifact;
   executions: readonly Artifact[];
+  artifacts?: readonly Artifact[];
 }>;
 
 export class FinalReviewPublicationError extends Error {
@@ -283,6 +287,8 @@ export function buildFinalReviewerPublication(
     return fail('FINAL_REVIEW_PUBLICATION_INVALID:schema');
   }
   const laneSchema = text(publication.laneSchema, 'laneSchema');
+  if (laneSchema.startsWith('measured-')) return buildMeasuredReviewerPublication({ laneSchema, roleResults: publication.roleResults as unknown[] }, context);
+  if (existsSync(join(context.projectRoot, '.omd/route.json')) && requiresMeasuredTerminal(readPersistedRoute(context.projectRoot, context.invocation))) fail('FINAL_REVIEW_PUBLICATION_INVALID:current process requires measured v2 review');
   const contract = laneSchema === 'blind-review-v2'
     ? LANE_CONTRACTS[laneSchema]
     : laneSchema === 'adaptive-blind-review-v3'
@@ -306,6 +312,7 @@ export function buildFinalReviewerPublication(
   }
   const roles = publication.roleResults.map((value) =>
     verifySignedEyeRoleResult(value, context.projectRoot, context.publicKeyPath));
+  if (roles.some(({ receipt }) => receipt.schema === 'omd-pi-role-exec-result-v2')) fail('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED:measured Pi receipt requires measured publication');
   const piRoles = roles.filter(({ receipt }) => receipt.schema === 'omd-pi-role-exec-result-v1');
   if (roles.some(({ receipt }) => receipt.buildSha256 !== context.buildSha256
     || receipt.briefSha256 !== context.briefSha256)) fail('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED:stale run');

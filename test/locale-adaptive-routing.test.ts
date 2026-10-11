@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -9,11 +9,14 @@ import {
   adaptiveRouteAuthorityBytes,
   adaptiveRouteRecordSha256,
   publishAdaptiveRoute,
+  parseRouteRecord,
   readPersistedRoute,
   routeAdaptiveFlow,
 } from '../core/route/index.ts';
-import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
+import { adaptiveSourceContractSha256, canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 import { routeLocaleDesignContext } from '../core/locale/design-context.ts';
+import { capturePiRequest } from '../extensions/omd-request-source.ts';
+import { judgmentStarter, readVerifiedCliJudgment, runJudgmentCommand } from '../bin/judgment-command.ts';
 import {
   authorizeTestProjectRunPayloads,
   createTestProjectRunInvocation,
@@ -23,6 +26,7 @@ import {
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url), 'utf8'));
 const marketFixture = (name: string): Record<string, unknown> => {
   const value = fixture(name) as Record<string, unknown>;
+  value.request = `${String(value.request)} Build this for users in Japan.`;
   const publication = value.evidenceClaims as { claims: unknown[]; userFacts: string[] };
   publication.claims.push({ id: 'market-authority', text: 'The product targets Japan.', status: 'confirmed',
     userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: 'Build this for users in Japan.' }] });
@@ -49,9 +53,10 @@ test('no-context routes retain canonical bytes without injecting locale context'
   // Re-snapshotted when `moodboard` joined the optional stages: every route now selects it or
   // records a skip reason, so each canonical record gained one skip entry.
   // Re-snapshotted when discovery routes gained the explicit dual-reference-research gate.
+  // Re-snapshotted when the source contract gained the explicit learning-scope projection.
   for (const [name, expectedHash, expectedBytes] of [
-    ['copy-only', 'd42ebf8debddf7528f9b0561473bea976ac12e60c8d8883cb9430e01ae303329', 16346],
-    ['synth-marketing', 'a3b8b62308c25b377a7e3512a20eda1f250192af3c2f8bbc5b5517c7608ce813', 16974],
+    ['copy-only', '6bbc39b65fff0f2be911aeb1a66551f5263b826e0f7568404b7c9bdd9808a9ea', 16445],
+    ['synth-marketing', '2d17cb8ce22815267cde4596b3c57d94ee637a43c219bfdb27b8920fc2f72a91', 16834],
   ] as const) {
     const bytes = `${canonicalRouteJson(routeAdaptiveFlow(fixture(name)))}\n`;
     assert.equal(Buffer.byteLength(bytes), expectedBytes);
@@ -123,8 +128,30 @@ test('mechanics-only requires type proof only when an actual design stage is sel
   assert.doesNotThrow(() => routeAdaptiveFlow(designed, undefined, mechanics));
 });
 
-test('persisted locale route is replayable and rejects changed or missing companion context', () => {
+test('a real advisory judgment cannot authenticate a fabricated market claim excerpt', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-market-claim-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '.omd'), { recursive: true });
+  const rawContext = context(), locale = routeLocaleDesignContext(rawContext);
+  writeFileSync(join(root, '.omd/locale-design-context.json'), JSON.stringify(rawContext));
+  const invocation = createTestProjectRunInvocation(root, 'market-claim');
+  const writer = createTestProjectWriteAdapter(root, invocation);
+  const input = { ...marketFixture('synth-marketing'), request: 'Build a generic status dashboard.' };
+  capturePiRequest(root, input.request);
+  const starter = judgmentStarter(root, 'target-market', invocation);
+  writer.write(starter.path, JSON.stringify({ ...starter.skeleton, payload: { region: 'JP' } }));
+  const published = await runJudgmentCommand(root, invocation, 'publish', join(root, starter.path), writer);
+  const judgment = await readVerifiedCliJudgment(root, invocation, published.receipt.path);
+  assert.throws(() => routeAdaptiveFlow(input, { root, invocation, marketJudgment: judgment }, locale),
+    /LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED/);
+  assert.throws(() => publishAdaptiveRoute(root, input, writer, invocation, locale, judgment),
+    /LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED/);
+  assert.equal(existsSync(join(root, '.omd/route.json')), false);
+});
+
+test('locale publication requires a real judgment and rejects changed companion context on replay', async t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-locale-route-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, '.omd'), { recursive: true });
   const rawContext = context();
   writeFileSync(join(root, '.omd', 'locale-design-context.json'), `${JSON.stringify(rawContext)}\n`);
@@ -134,8 +161,44 @@ test('persisted locale route is replayable and rejects changed or missing compan
   const record = routeAdaptiveFlow(input, undefined, locale);
   const authority = adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation);
   authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority', payload: authority }]);
-  publishAdaptiveRoute(root, input, createTestProjectWriteAdapter(root, invocation), invocation, locale);
+  const writer = createTestProjectWriteAdapter(root, invocation);
+  assert.throws(() => publishAdaptiveRoute(root, input, writer, invocation, locale), /LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED/);
+  assert.equal(existsSync(join(root, '.omd/route.json')), false);
+  capturePiRequest(root, String(input.request));
+  const starter = judgmentStarter(root, 'target-market', invocation);
+  const draft = { ...starter.skeleton, payload: { region: 'JP' } };
+  const quotes = Reflect.get(draft, 'quotes');
+  assert.ok(Array.isArray(quotes) && quotes.length > 0);
+  const quote = quotes[0];
+  assert.ok(typeof quote === 'object' && quote !== null && typeof Reflect.get(quote, 'text') === 'string');
+  Reflect.set(quote, 'text', String(Reflect.get(quote, 'text')).replace(' ', '\n'));
+  writer.write(starter.path, JSON.stringify({ ...draft, subjectId: 'another-request' }));
+  const unrelatedPublication = await runJudgmentCommand(root, invocation, 'publish', join(root, starter.path), writer);
+  const unrelated = await readVerifiedCliJudgment(root, invocation, unrelatedPublication.receipt.path);
+  assert.throws(() => routeAdaptiveFlow(input, { root, invocation, marketJudgment: unrelated }, locale), /LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED/);
+  assert.equal(existsSync(join(root, '.omd/route.json')), false);
+  writer.write(starter.path, JSON.stringify(draft));
+  const published = await runJudgmentCommand(root, invocation, 'publish', join(root, starter.path), writer);
+  const judgment = await readVerifiedCliJudgment(root, invocation, published.receipt.path);
+  const approved = routeAdaptiveFlow(input, { root, invocation, marketJudgment: judgment }, locale);
+  authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority',
+    payload: adaptiveRouteAuthorityBytes(approved, adaptiveRouteRecordSha256(approved), invocation) }]);
+  publishAdaptiveRoute(root, input, writer, invocation, locale, judgment);
   assert.equal(readPersistedRoute(root, invocation).sourceContract.localeDesign?.contextSha256, locale.contextSha256);
+  const judgmentPath = join(root, published.receipt.path), original = readFileSync(judgmentPath);
+  const pointer = readFileSync(join(root, '.omd/route.json'));
+  const forged = structuredClone(approved);
+  const claim = forged.sourceContract.evidenceClaims.claims.find(item => item.id === 'market-authority');
+  assert.ok(claim?.status === 'confirmed' && claim.userEvidence[0]);
+  Reflect.set(claim.userEvidence[0], 'excerpt', 'An invented statement absent from the authenticated request.');
+  Reflect.set(forged, 'sourceContractSha256', adaptiveSourceContractSha256(forged.sourceContract));
+  assert.throws(() => parseRouteRecord(forged, { root, invocation }), /LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED/);
+  assert.deepEqual(readFileSync(join(root, '.omd/route.json')), pointer);
+  writeFileSync(judgmentPath, Buffer.concat([original, Buffer.from('\n')]));
+  assert.throws(() => readPersistedRoute(root, invocation), /MALFORMED_ADAPTIVE_ROUTE/);
+  assert.throws(() => publishAdaptiveRoute(root, input, writer, invocation, locale, judgment), /AI_JUDGMENT_SOURCE_UNVERIFIED/);
+  assert.deepEqual(readFileSync(join(root, '.omd/route.json')), pointer);
+  writeFileSync(judgmentPath, original);
 
   writeFileSync(join(root, '.omd', 'locale-design-context.json'), `${JSON.stringify(context({ marketRegion: 'US' }))}\n`);
   assert.throws(

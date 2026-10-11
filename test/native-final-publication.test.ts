@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test, { type TestContext } from 'node:test';
 import { buildFinalReviewerPublication } from '../adapters/final-reviewer-publication.ts';
-import { runNativeFinalReview, finalizeNativeEvidence, checkNativeFinalReview } from '../core/runtime/native-final-publication.ts';
+import { runNativeFinalReview, finalizeNativeEvidence, checkNativeFinalReview, NativeFinalPublicationError } from '../core/runtime/native-final-publication.ts';
 import { authorizeNativePiPayload, createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
 import { requireFinalReviewerLaneAuthorization } from '../core/runtime/invocation.ts';
 import { prepareFinalRenderReviewFixture } from './helpers/final-render-review.ts';
@@ -152,7 +152,7 @@ test('Given failed reviewer execution When native review runs Then diagnostics p
   const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
   process.env.PI_REVIEWER_FIXTURE_MODE = 'failed-final';
   t.after(() => { if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE; else process.env.PI_REVIEWER_FIXTURE_MODE = previous; });
-  await assert.rejects(runNativeFinalReview({ ...input, signal: t.signal }), /review process failed; inspect/);
+  await assert.rejects(runNativeFinalReview({ ...input, signal: t.signal }), NativeFinalPublicationError);
   assert.throws(() => checkNativeFinalReview(input), /review in progress or rejected/);
   assert.equal(readdirSync(join(input.root, '.omd/final-review/attempts')).length, 1);
 });

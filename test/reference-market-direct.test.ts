@@ -95,6 +95,21 @@ test('market search and direct provenance refuse malformed scope, attempts, root
         url: globalSource.source, evidence: globalSource.evidence, capture: globalSource.capture }],
       discoveryRoots: [domainRoot, fallbackRoot] },
   }), options.expectedRequest));
+  for (const gap of [
+    fallbackGap([], ['https://never-observed.example/local']),
+    fallbackGap(['a query that was never executed']),
+    fallbackGap([]),
+  ]) {
+    assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch({
+      ...scoped,
+      marketCoverage: { ...selfFallbackCoverage, domain: { ...selfFallbackCoverage.domain,
+        globalFallback: { ...selfFallbackCoverage.domain.globalFallback, gap } } },
+      domainReference: { ...scoped.domainReference,
+        sources: [...scoped.domainReference.sources, { ...scoped.domainReference.sources[0]!, id: 'domain-4',
+          url: globalSource.source, evidence: globalSource.evidence, capture: globalSource.capture }],
+        discoveryRoots: [domainRoot, fallbackRoot] },
+    }), options.expectedRequest), /FALLBACK_ATTEMPTS/);
+  }
   for (const text of [
     'Global music streaming service for residents.',
     'Global public restaurant service for residents.',
@@ -140,8 +155,8 @@ test('market search and direct provenance refuse malformed scope, attempts, root
     [fixture.domainTwo.source, fixture.domainThree.source]));
   const directWithStaleSearch = { ...scoped, domainReference: { ...scoped.domainReference,
     queries: domainQueries, searches: [staleCoexistingSearch, ...currentCoexistingSearches] } };
-  assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root,
-    parseReferenceResearch(directWithStaleSearch), options.expectedRequest));
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root,
+    parseReferenceResearch(directWithStaleSearch), options.expectedRequest), /MARKET_DOMAIN_ATTEMPT_STALE/);
   const mixedSearches = domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
     [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source]));
   const mixedCoverage = { ...directCoverage,
@@ -175,7 +190,7 @@ test('market search and direct provenance refuse malformed scope, attempts, root
     domainReference: { ...scoped.domainReference, discoveryRoots: [domainRoot, staleAttemptRoot] },
     marketCoverage: directCoverage };
   assert.throws(() => validateMarketReferenceCoverage(fixture.root,
-    parseReferenceResearch(staleFallback), options.expectedRequest), /native discovery capture is stale/);
+    parseReferenceResearch(staleFallback), options.expectedRequest), /MARKET_DOMAIN_ATTEMPT_STALE/);
   const genericRoot = directRootAt(fixture.root, 'domain', 'https://attacker.kr/tasks?note=South%20Korea',
     fixture.research.domainReference.sources.map(source => source.url), 'Global directory for Canadian services.');
   const linkScoped = { ...scoped,
@@ -202,12 +217,12 @@ test('market search and direct provenance refuse malformed scope, attempts, root
         localDirectSource(`domain-${index + 1}`, source.evidence.sha256, 'service', staleRoot.capture.sha256)),
       globalFallback: null } } };
   assert.throws(() => validateMarketReferenceCoverage(fixture.root,
-    parseReferenceResearch(stale), options.expectedRequest), /native discovery capture is stale/);
+    parseReferenceResearch(stale), options.expectedRequest), /MARKET_DOMAIN_ATTEMPT_STALE/);
   const excluded = { ...scoped, domainReference: { ...scoped.domainReference,
     discoveryRoots: [{ ...domainRoot, reason: 'South Korea was excluded; this service serves Canadian users.' }] } };
   assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(excluded), options.expectedRequest));
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request: 'Another task' }));
-  assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest));
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest), /MARKET_DESIGN_PLAN_STALE/);
   unlinkSync(join(fixture.root, '.omd/domain-brief.json'));
-  assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest));
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest), /MARKET_DESIGN_PLAN_REQUIRED/);
 });

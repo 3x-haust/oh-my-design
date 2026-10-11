@@ -36,12 +36,12 @@ test('Pi activation captures the runtime before the first command', t => {
     '--import', 'tsx', '--input-type=module', '-e', [
       'const { readdirSync } = await import("node:fs");',
       'await import(process.argv[1]);',
-      'console.log(readdirSync(process.env.TMPDIR).filter(name => name.startsWith("omd-runtime-")).length);',
+      'process.stdout.write(String(readdirSync(process.env.TMPDIR).filter(name => name.startsWith("omd-runtime-")).length));',
     ].join('\n'), runtimeUrl,
-  ], { encoding: 'utf8', env: { ...process.env, TMPDIR: runtimeTemp } });
+  ], { encoding: 'buffer', env: { ...process.env, TMPDIR: runtimeTemp }, timeout: 20_000 });
 
-  assert.equal(imported.status, 0, imported.stderr);
-  assert.equal(imported.stdout.trim(), '1');
+  assert.equal(imported.status, 0, imported.stderr.toString('utf8'));
+  assert.deepEqual(imported.stdout, Buffer.from('1'));
 });
 
 test('first OMD command survives checkout removal after Pi activation', t => {

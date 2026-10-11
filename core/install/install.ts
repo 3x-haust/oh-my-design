@@ -70,6 +70,7 @@ const OMD_ALLOW = [
   'Bash(omd route:*)', 'Bash(omd workflow:*)', 'Bash(omd status:*)', 'Bash(omd clean:*)', 'Bash(omd schema:*)',
   'Bash(omd stage:*)', 'Bash(omd cue:*)', 'Bash(omd brief:*)',
   'Bash(omd source:*)', 'Bash(omd pack:*)', 'Bash(shasum:*)',
+  'Bash(omd candidate:*)', 'Bash(omd tokens:*)', 'Bash(omd measure:*)',
 ];
 
 // Pre-namespace skill directory names that predate the `omd-` prefix. Pruned on install so a
@@ -536,6 +537,17 @@ function doctorCodex(d: Detected): DoctorCheck[] {
   const composerRegistered = config?.agents?.['omd-composer']?.config_file === './agents/omd-composer.toml'
     && existsSync(join(d.home, 'agents', 'omd-composer.toml'));
   checks.push(check('composer agent registered', composerRegistered));
+  const artDirectorPath = config?.agents?.['omd-art-director']?.config_file;
+  const artDirectorRegistered = typeof artDirectorPath === 'string' && existsSync(join(d.home, artDirectorPath));
+  checks.push(check('art-director agent registered', artDirectorRegistered));
+  if (artDirectorRegistered) {
+    try {
+      const profile = parseToml(readFileSync(join(d.home, artDirectorPath!), 'utf8'));
+      checks.push(check('art-director agent configuration valid', profile.name === 'omd-art-director'
+        && typeof profile.developer_instructions === 'string'
+        && typeof profile.model_reasoning_effort === 'string'));
+    } catch (error) { checks.push(check('art-director agent configuration valid', false, error instanceof Error ? error.message : String(error))); }
+  }
 
   const skillsPresent = shippedSkillNames().some((name) => existsSync(join(d.home, 'skills', name)));
   checks.push(check('skills present', skillsPresent));

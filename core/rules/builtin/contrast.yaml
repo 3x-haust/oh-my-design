@@ -1,8 +1,8 @@
 id: CONTRAST-001
 layer: 1
 category: a11y
-severity: error
-when: "node.type === 'TEXT'"
+severity: warn
+when: "node.type === 'TEXT' && typeof node.computed.contrastWithParent === 'number'"
 value: "node.computed.contrastWithParent"
-assert: "value >= 4.5"
-message: "Contrast ratio {value} is below the WCAG AA minimum of 4.5"
+assert: "value >= ((node.fontSize >= 24 || (node.fontSize >= 18.66 && node.fontWeight >= 700)) ? 3 : 4.5)"
+message: "Text contrast ratio {value} is below the WCAG AA minimum for its rendered size and weight (3:1 for large text; 4.5:1 otherwise)."

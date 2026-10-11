@@ -6,10 +6,9 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { extractPackSections, PackSectionError } from '../core/pack-sections.ts';
 
-// Reading the whole pack is what made a run expensive: the loop protocol alone is ~16k tokens and
-// every role reloaded it, some in overlapping slices after truncation. Roles now cite the sections
-// they need. A renamed heading would silently send them back to reading everything, so every cited
-// section is checked against the file it names.
+// Reading the whole pack made runs expensive: roles reloaded overlapping protocol slices after
+// truncation. Dieted prompts now receive current contracts through role briefs and carry no static
+// pack-section citations; the scoped pack CLI remains available for explicit coordinator inspection.
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -17,7 +16,9 @@ const PACK = join(ROOT, 'core');
 const run = (args: string[]) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', cwd: ROOT });
 
 const SOURCES = [
-  ...readdirSync(join(ROOT, 'src', 'agents')).map((file) => join('src', 'agents', file)),
+  ...readdirSync(join(ROOT, 'src', 'agents'))
+    .filter((file) => file.endsWith('.agent.yaml'))
+    .map((file) => join('src', 'agents', file)),
   join('src', 'skills', 'omd-ultradesign', 'SKILL.md'),
 ];
 
@@ -45,20 +46,13 @@ test('a whole-pack read cannot steal sections from a later named pack', () => {
   assert.deepEqual(citedSections('Read `omd pack protocol/design-practice.md`.'), []);
 });
 
-test('every pack section a role cites exists in the file it names', () => {
-  const checked: string[] = [];
-  for (const source of SOURCES) {
-    for (const { file, section } of citedSections(readFileSync(join(ROOT, source), 'utf8'))) {
-      const body = readFileSync(join(PACK, file), 'utf8');
-      const headings = body.match(/^##\s+.+$/gm) ?? [];
-      assert.ok(
-        headings.some((heading) => heading.replace(/^##\s+/, '').trim() === section),
-        `${source} cites "${section}" which is not a heading in ${file}: ${headings.join(' | ')}`,
-      );
-      checked.push(`${file}#${section}`);
-    }
-  }
-  assert.ok(checked.length >= 12, `expected the roles to cite scoped sections, found ${checked.length}`);
+test('dieted source prompts rely on delivered contracts instead of static pack-section citations', () => {
+  const cited = SOURCES.flatMap((source) => citedSections(readFileSync(join(ROOT, source), 'utf8'))
+    .map(({ file, section }) => `${source}: ${file}#${section}`));
+  assert.deepEqual(cited, []);
+  const coordinator = readFileSync(join(ROOT, 'src', 'skills', 'omd-ultradesign', 'SKILL.md'), 'utf8');
+  assert.match(coordinator, /Deliver current contracts/);
+  assert.match(coordinator, /omd brief <stage> --role <role>/);
 });
 
 test('a scoped read returns one section and costs a fraction of the whole file', () => {
@@ -79,14 +73,9 @@ test('an unknown section names the available headings instead of printing the fi
 });
 
 test('no spawned role is told to read the coordinator skill', () => {
-  for (const file of readdirSync(join(ROOT, 'src', 'agents'))) {
+  for (const file of readdirSync(join(ROOT, 'src', 'agents')).filter((name) => name.endsWith('.agent.yaml'))) {
     const body = readFileSync(join(ROOT, 'src', 'agents', file), 'utf8').replace(/\s+/g, ' ');
-    assert.doesNotMatch(body, /Read [^.]*omd-ultradesign/, `${file} sends a role into the coordinator skill`);
-  }
-  const scoped = ['composer', 'eye', 'framer', 'hand', 'scout', 'sketch', 'typesetter'];
-  for (const role of scoped) {
-    const body = readFileSync(join(ROOT, 'src', 'agents', `${role}.agent.yaml`), 'utf8').replace(/\s+/g, ' ');
-    assert.match(body, /Never read the coordinator's `omd-ultradesign` skill/, `${role} may still reload the coordinator skill`);
+    assert.doesNotMatch(body, /omd-ultradesign/, `${file} sends a role into the coordinator skill`);
   }
 });
 

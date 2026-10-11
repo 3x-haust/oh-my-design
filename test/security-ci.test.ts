@@ -1,24 +1,25 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { parse } from 'yaml';
 
 test('Figma credential preflight distinguishes missing/present without exposing the value', () => {
-  const skill = readFileSync(new URL('../src/skills/omd-figma/SKILL.md', import.meta.url), 'utf8');
-  const preflight = /```bash\nnode -e '([^']+)'\n```/.exec(skill);
-  assert.ok(preflight, 'the documented presence check must be executable without shell expansion');
+  const cli = new URL('../bin/omd.mjs', import.meta.url);
+  const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'FIGMA_TOKEN'));
   for (const value of [undefined, '', '   ', randomUUID()]) {
-    const result: SpawnSyncReturns<string> = spawnSync(process.execPath, ['-e', preflight[1]!], {
-      env: value === undefined ? {} : { FIGMA_TOKEN: value },
+    const result = spawnSync(process.execPath, [cli.pathname, 'doctor'], {
+      env: value === undefined ? baseEnv : { ...baseEnv, FIGMA_TOKEN: value },
       encoding: 'utf8',
-      timeout: 5000,
+      timeout: 20_000,
     });
     assert.ifError(result.error);
-    assert.equal(result.status, value?.trim() ? 0 : 1);
-    assert.equal(result.stdout, '');
-    assert.equal(result.stderr, '');
+    assert.equal(result.status, 0, result.stderr);
+    const line = result.stdout.split('\n').find(candidate => candidate.includes('FIGMA_TOKEN'));
+    assert.ok(line, 'omd doctor must report Figma credential presence');
+    assert.match(line, value?.trim() ? /\(set\)$/ : /\(not set /);
+    if (value?.trim()) assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 });
 

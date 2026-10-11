@@ -3,6 +3,8 @@
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
 > against the current composition contract; do not transfer this page recipe unchanged.
 
+Marketing/showpiece only. Do not use this recipe on a product work surface, operational dashboard, settings screen, admin flow, checkout, or repeated task loop. If the surface exists to help a user finish work, choose a product composition recipe instead.
+
 A section inversion switches the page from a light surface to a dark one — or the
 reverse — at a specific point in the scroll narrative. The colour change is not
 decoration; it marks a conceptual pivot, a moment where what was light becomes weighty,
@@ -13,6 +15,8 @@ inversions become a rhythm. Three become a pattern with no meaning.
 inversion per page is usually correct; more than one is a rhythm, not a pivot."
 
 ## When it earns its place / When it does not
+
+Beige, cream, sepia, and warm-paper styling is not an unearned premium default. Use true white or a neutral role unless the brand, subject, or user provides evidence for a tint.
 
 Condition: the scroll narrative has a genuine turn — a moment where the conceptual
 register shifts. Before the inversion, the user is in the exposition; after it, they are
@@ -37,11 +41,11 @@ documentation) where sections are parallel containers, not sequential scenes.
   /* Light surface tokens */
   --surface-light: #ffffff;
   --on-surface-light: #0f0f0f;
-  --surface-light-subtle: #f5f5f3;
+  --surface-light-subtle: #F4F5F7;
 
   /* Dark surface tokens — the inverted register */
   --surface-dark: #0f0f0f;
-  --on-surface-dark: #f5f5f3;
+  --on-surface-dark: #FFFFFF;
   --surface-dark-subtle: #1a1a1a;
 
   /* Transition between sections.

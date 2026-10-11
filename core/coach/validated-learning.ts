@@ -118,6 +118,58 @@ function parseProposition(value: unknown): LearningProposition {
   const statement = text(item.get('statement'), 'proposition.statement');
   return Object.freeze({ id: id(item.get('id'), 'proposition.id'), statement, scope: parseScope(item.get('scope')) });
 }
+
+/** Canonical proposition parser shared by prediction capture and promotion. */
+export function validateLearningProposition(value: unknown): LearningProposition {
+  try { return parseProposition(value); } catch (error) {
+    if (error instanceof LearningPromotionError) throw error;
+    return fail('MALFORMED_INPUT', 'learning proposition could not be inspected safely');
+  }
+}
+export function validateReusableScopedRule(value: unknown): ReusableScopedRule {
+  immutableJson(value, 'reusable learning rule');
+  const item = ownFields(value, ['schema', 'id', 'statement', 'scope', 'applicability', 'authority', 'cannotOverride', 'provenance', 'promotedAt'], 'reusable learning rule');
+  if (item.get('schema') !== REUSABLE_SCOPED_RULE_SCHEMA || item.get('applicability') !== 'advisory'
+    || item.get('authority') !== 'browser-validated-design-learning'
+    || canonicalJson(item.get('cannotOverride')) !== canonicalJson(['hard-safety-rails', 'model-or-system-instructions', 'user-facts'])) {
+    fail('UNSAFE_PROPOSITION', 'only a scoped advisory learning rule may be consumed');
+  }
+  const promotedAt = timestamp(item.get('promotedAt'), 'rule.promotedAt');
+  const raw = item.get('provenance');
+  if (!Array.isArray(raw) || raw.length < 2) fail('INVALID_BROWSER_EVIDENCE', 'rule needs independent provenance');
+  const digest = (value: unknown): string => {
+    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) fail('INVALID_BROWSER_EVIDENCE', 'invalid provenance digest');
+    return value;
+  };
+  const provenance = raw.map((value: unknown) => {
+    const row = ownFields(value, ['runId', 'contextId', 'outcome', 'observedAt', 'decisionGraphPath', 'decisionGraphSha256', 'observationSha256', 'capture', 'decisionRefs'], 'rule.provenance');
+    if (row.get('outcome') !== 'validated') fail('INVALID_BROWSER_EVIDENCE', 'promoted rule has contradictory evidence');
+    const observedAt = timestamp(row.get('observedAt'), 'rule.observedAt');
+    const age = Date.parse(promotedAt) - Date.parse(observedAt);
+    if (age < 0 || age > MAX_AGE_MS) fail('INVALID_BROWSER_EVIDENCE', 'rule evidence was stale at promotion');
+    const capture = ownFields(row.get('capture'), ['path', 'sha256'], 'rule.capture');
+    const refs = row.get('decisionRefs');
+    if (!Array.isArray(refs) || refs.length === 0) fail('INVALID_BROWSER_EVIDENCE', 'rule decision bindings are missing');
+    const decisionRefs = refs.map((value: unknown) => {
+      const ref = ownFields(value, ['decisionId', 'decisionSha256'], 'rule.decisionRef');
+      return Object.freeze({ decisionId: text(ref.get('decisionId'), 'rule.decisionId'), decisionSha256: digest(ref.get('decisionSha256')) });
+    });
+    if (new Set(decisionRefs.map(ref => ref.decisionId)).size !== decisionRefs.length) fail('DUPLICATE_EVIDENCE', 'duplicate rule decision binding');
+    return Object.freeze({ runId: id(row.get('runId'), 'rule.runId'), contextId: id(row.get('contextId'), 'rule.contextId'),
+      outcome: 'validated' as const, observedAt, decisionGraphPath: projectPath(row.get('decisionGraphPath'), 'rule.decisionGraphPath'),
+      decisionGraphSha256: digest(row.get('decisionGraphSha256')), observationSha256: digest(row.get('observationSha256')),
+      capture: Object.freeze({ path: projectPath(capture.get('path'), 'rule.capture.path'), sha256: digest(capture.get('sha256')) }),
+      decisionRefs: Object.freeze(decisionRefs) });
+  });
+  for (const identities of [provenance.map(row => row.runId), provenance.map(row => row.contextId), provenance.map(row => row.capture.sha256)]) {
+    if (new Set(identities).size !== identities.length) fail('DUPLICATE_EVIDENCE', 'rule provenance is not independent');
+  }
+  return Object.freeze({ schema: REUSABLE_SCOPED_RULE_SCHEMA, id: id(item.get('id'), 'rule.id'),
+    statement: text(item.get('statement'), 'rule.statement'), scope: parseScope(item.get('scope')),
+    applicability: 'advisory', authority: 'browser-validated-design-learning',
+    cannotOverride: Object.freeze(['hard-safety-rails', 'model-or-system-instructions', 'user-facts'] as const),
+    provenance: Object.freeze(provenance), promotedAt });
+}
 function parseValidation(value: unknown, index: number): LearningValidation {
   const label = `validations[${index}]`;
   const item = ownFields(value, ['runId', 'contextId', 'outcome', 'observedAt', 'decisionGraphPath', 'browserEvidence'], label);
@@ -128,7 +180,7 @@ function parseValidation(value: unknown, index: number): LearningValidation {
   return Object.freeze({ runId: id(item.get('runId'), `${label}.runId`), contextId: id(item.get('contextId'), `${label}.contextId`), outcome, observedAt: timestamp(item.get('observedAt'), `${label}.observedAt`), decisionGraphPath, browserEvidence });
 }
 /** Verify an agent's meaning decision against the current proposition, never against keywords. */
-function verifyLearningAuthority(proposition: LearningProposition, judgment: LearningAuthorityJudgment | undefined): LearningAuthorityJudgment {
+export function validateLearningAuthorityJudgment(proposition: LearningProposition, judgment: LearningAuthorityJudgment | undefined): LearningAuthorityJudgment {
   if (judgment === undefined) fail('UNSAFE_PROPOSITION', 'a current learning-authority judgment is required before promotion');
   immutableJson(judgment, 'learning-authority judgment');
   const item = ownFields(judgment, ['schema', 'propositionSha256', 'decision', 'reason', 'quote', 'target'], 'learning-authority judgment');
@@ -188,7 +240,7 @@ function evaluate(value: unknown, dependencies: LearningPromotionDependencies): 
     const candidate: CandidateLearningResult = { schema: LEARNING_RESULT_SCHEMA, ...base, status: 'candidate' };
     deepFreeze(candidate); trustedResults.set(candidate, resolve(dependencies.projectRoot)); return candidate;
   }
-  const learningAuthorityJudgment = verifyLearningAuthority(proposition, dependencies.learningAuthorityJudgment);
+  const learningAuthorityJudgment = validateLearningAuthorityJudgment(proposition, dependencies.learningAuthorityJudgment);
   const rule = deepFreeze<ReusableScopedRule>({ schema: REUSABLE_SCOPED_RULE_SCHEMA, id: learningId, statement: proposition.statement, scope: proposition.scope, applicability: 'advisory', authority: 'browser-validated-design-learning', cannotOverride: ['hard-safety-rails', 'model-or-system-instructions', 'user-facts'], provenance, promotedAt: dependencies.now });
   const promoted: PromotedLearningResult = { schema: LEARNING_RESULT_SCHEMA, ...base, status: 'promoted', learningAuthorityJudgment, rule };
   deepFreeze(promoted); trustedResults.set(promoted, resolve(dependencies.projectRoot)); return promoted;
@@ -217,6 +269,7 @@ export function publishValidatedLearning(root: string, result: LearningPromotion
     fail('UNSAFE_PROPOSITION', 'only the scoped advisory learning record may be published');
   }
   const ruleBytes = canonicalJson(result.rule); const rulePath = `.omd/coach/rules/sha256-${sha(ruleBytes)}.json`;
+  validateReusableScopedRule(result.rule);
   const target = resolve(root, rulePath);
   if (existsSync(target)) {
     let existing: Buffer;

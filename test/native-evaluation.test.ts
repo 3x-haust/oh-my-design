@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -9,10 +9,12 @@ import { createBuildIdentityFromSource } from '../adapters/build.ts';
 import { parseEntrySurfaceContract } from '../core/frame/entry-surface-contract.ts';
 import { writeFrame } from '../core/frame/write.ts';
 import { publishAdaptiveRoute, readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { runNativeEvaluation } from '../core/runtime/native-evaluation.ts';
 import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
 import { readCurrentObservationV2, observationV2Sha256 } from '../core/runtime/observation.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { parseTrustedBrowserReceipt } from '../core/runtime/trusted-browser-receipt.ts';
 import { deriveTrustedEvaluationIdentity } from '../core/runtime/trusted-evaluation-contract.ts';
 import { deriveTrustedEvaluationPlanFromProject } from '../core/runtime/trusted-evaluation-plan.ts';
@@ -63,13 +65,36 @@ function fixture(t: TestContext, options: Readonly<{
     const roles = Reflect.get(strategy, 'roles') as string[];
     const executionWaves = Reflect.get(strategy, 'executionWaves') as { id: string; mode: string; roles: string[] }[];
     const attributionCategories = Reflect.get(strategy, 'attributionCategories') as string[];
-    if (!stages.includes('composition')) stages.push('composition');
+    const production = stages.indexOf('production');
+    if (!stages.includes('copy')) {
+      stages.splice(production < 0 ? stages.length : production, 0, 'copy');
+    }
+    if (!stages.includes('composition')) {
+      stages.splice(stages.indexOf('production'), 0, 'composition');
+    }
+    if (!roles.includes('omd-writer')) roles.push('omd-writer');
     if (!roles.includes('omd-composer')) roles.push('omd-composer');
-    executionWaves.push({ id: 'composition', mode: 'concurrent', roles: ['omd-composer'] });
+    const productionWave = executionWaves.findIndex((wave) => wave.id === 'production');
+    executionWaves.splice(productionWave < 0 ? executionWaves.length : productionWave, 0,
+      { id: 'copy', mode: 'concurrent', roles: ['omd-writer'] },
+      { id: 'composition', mode: 'concurrent', roles: ['omd-composer'] });
     if (!attributionCategories.includes('composition')) attributionCategories.push('composition');
-    strategy.skips = strategy.skips.filter(skip => skip.id !== 'composition');
+    strategy.skips = strategy.skips.filter(skip => skip.id !== 'copy' && skip.id !== 'composition');
   }
-  publishAdaptiveRoute(root, { ...skeleton, request,
+  const purposePayload = {
+    schema: 'review-purpose-origin-v1' as const, projectRoot: root, purpose: 'ordinary' as const,
+    requestSha256: hash(request), source: 'host-user-input' as const, observedAt: '2026-09-27T00:00:00.000Z',
+  };
+  const purposeOrigin = { ...purposePayload,
+    signature: signNativeObservation(root, purposePayload.schema, hash(canonicalRouteJson(purposePayload))) };
+  const purposeBytes = Buffer.from(`${canonicalRouteJson(purposeOrigin)}\n`);
+  const purposeSha256 = hash(purposeBytes);
+  const reviewPurposeAuthority = {
+    path: `.omd/review-purpose-authorities/sha256-${purposeSha256}.json`, sha256: purposeSha256,
+  };
+  mkdirSync(join(root, '.omd/review-purpose-authorities'), { recursive: true });
+  writeFileSync(join(root, reviewPurposeAuthority.path), purposeBytes);
+  publishAdaptiveRoute(root, { ...skeleton, request, reviewPurpose: 'ordinary', reviewPurposeAuthority,
     taskOutcome: { schema: 'task-outcome-contract-v1', goal: 'Review shipment evidence',
       mustHave: [options.unrelatedOutcome ? 'Revoke helper access and retain the applicant record'
         : options.mixedPhases ? 'Evidence reviewed' : 'Review shipment evidence'], mustNotHave: ['Invented approval'],
@@ -145,11 +170,7 @@ test('composition-selected native evaluation accepts a current authentic retaine
       adopt: ['Evidence-local action'], reject: ['Source branding'],
       interpretation: 'Keep shipment evidence dominant.', scope: 'surface' }],
   }, value.writer);
-  await publishFirstRenderCheck(value.root, 'index.html', {
-    heading: 'Review shipment evidence', landmarks: ['main shipment evidence'], repeatedObjects: [],
-    trustSignals: ['Awaiting evidence'], visibleText: ['Review shipment evidence', 'Shipment CX-204'],
-    dominantAreaShare: 0.8,
-  }, value.writer);
+  await publishFirstRenderCheck(value.root, 'index.html', undefined, value.writer, value.invocation);
   assert.equal((await runFirstRenderReview(value.root, value.invocation, t.signal)).decision, 'retain');
 
   const result = await runNativeEvaluation(value);
@@ -178,7 +199,9 @@ test('native evaluation executes the project-derived plan and publishes source-b
   assert.deepEqual(new Set(receipt.captures.map(row => `${row.width}x${row.height}`)), new Set(['1280x900', '390x844']));
   assert.ok(receipt.transcript.some(row => row.startsWith('action-click:')));
   assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
-  assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'run-independent-review');
+  const next = nativeCompletionWork(value.root, value.invocation);
+  assert.equal(next.action, 'evaluate-production');
+  assert.match(next.problems.join('\n'), /DIRECTION_CONTRACT: current selected Frame requires native surface coverage/);
 });
 
 test('blind reviewer consumes pinned developer calibration after real browser evaluation', async t => {
@@ -230,6 +253,11 @@ test('native evaluation binds the executed outcome plan to its receipt', async t
   const result = await runNativeEvaluation(value);
   const planSha256 = Reflect.get(result.receipt, 'executionPlanSha256');
   assert.equal(typeof planSha256, 'string');
+  const unbound = structuredClone(result.receipt);
+  Reflect.deleteProperty(unbound, 'executionPlanSha256');
+  for (const capture of unbound.captures) Reflect.deleteProperty(capture, 'measurement');
+  assert.throws(() => parseTrustedBrowserReceipt(unbound), /MALFORMED_TRUSTED_BROWSER_RECEIPT/);
+  assert.doesNotThrow(() => parseTrustedBrowserReceipt({ ...unbound, schema: 'trusted-browser-receipt-v1' }));
   const bytes = readFileSync(join(value.root, `.omd/evaluation-plans/sha256-${String(planSha256)}.json`));
   assert.equal(hash(bytes), planSha256);
   const executed = JSON.parse(bytes.toString('utf8'));

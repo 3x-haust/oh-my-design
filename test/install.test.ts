@@ -7,7 +7,7 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readF
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
+import { parse as parseRawToml, stringify as stringifyToml } from 'smol-toml';
 import { patchConfigToml, unpatchConfigToml, trustedHashKey } from '../core/install/patch-codex.ts';
 import { patchSettings, unpatchSettings, patchAllow, unpatchHooks } from '../core/install/patch-claude.ts';
 import type { Settings } from '../core/install/patch-claude.ts';
@@ -17,6 +17,8 @@ import { doctor, install, type DoctorOptions, type InstallOptions } from '../cor
 import { browserRsTestDependencies, browserRsTestInstallDependencies, unavailableBrowserRsDownload } from './browser-rs-test-support.ts';
 import { must, asRecord } from './helpers.ts';
 
+// Parser 1.9 returns null-prototype tables; assertions concern values, not table prototypes.
+const parseToml = (text: string) => structuredClone(parseRawToml(text));
 const AGENTS = ['omd-framer', 'omd-eye', 'omd-writer', 'omd-typesetter', 'omd-composer'];
 const TEST_BROWSER_HOME = '/omd-test-browser-rs-home';
 const UNSUPPORTED_BROWSER = {

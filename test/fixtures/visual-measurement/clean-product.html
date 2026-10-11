@@ -1,0 +1,21 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>Application preparation</title>
+<style>
+@font-face{font-family:"OMD Geometry Fixture";src:url(assets/geometry-hangul.ttf)}
+:root{--canvas:#fff;--ink:#17211e;--accent:#176b5b}*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);font:400 15px/1.55 Arial,"OMD Geometry Fixture",sans-serif}
+header,main{max-width:1100px;margin:auto;padding:24px}header{font-size:12px;line-height:1.4}
+h1{font-size:32px;line-height:1.2;font-weight:700;margin:0 0 24px;overflow-wrap:anywhere}
+h2{font-size:20px;line-height:1.35;font-weight:700;margin:0 0 12px}
+.layout{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:24px}section,aside{min-width:0}
+p{margin:0 0 12px}ul{margin:0 0 24px;padding-inline-start:24px}li{margin-block-end:12px}
+.metadata{font-size:12px;line-height:1.4;color:#44534b}
+button{font:inherit;font-weight:700;max-width:100%;padding:12px 24px;border:0;border-radius:4px;background:var(--accent);color:white;word-break:keep-all}
+button:focus-visible{outline:2px solid #17211e;outline-offset:4px}
+@media(max-width:700px){header,main{padding:12px}.layout{grid-template-columns:minmax(0,1fr)}}
+</style>
+<header>Local application workspace</header><main><h1>Prepare your application</h1><div class="layout">
+<section aria-label="Application work object"><h2>Required documents</h2><ul><li>Proof of residence</li><li>Income statement</li><li>Application form</li></ul>
+<p>Review these documents before opening the official application service.</p><button type="button">신청서 확인하기</button>
+<p class="metadata">Draft only. This demonstration does not submit an application.</p></section>
+<aside aria-label="Evidence"><h2>Source and status</h2><p>Eligibility remains unconfirmed until the official service checks your record.</p><p class="metadata">Source: local demonstration record</p></aside>
+</div></main></html>

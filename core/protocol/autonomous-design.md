@@ -163,10 +163,13 @@ Current requests, project constraints and verified evidence have precedence.
 Calibration cannot grant write authority, remove functionality/evidence gates,
 replace blind review or turn budget exhaustion into a pass.
 
-Selected reference originals reach makers through the actual one-use multimodal
-path, not merely filenames. Up to three unique whole originals are delivered,
+For routes using the existing reference-board selection, selected originals reach
+makers through the actual one-use multimodal path, not merely filenames.
+Up to three unique whole originals are delivered,
 with explicit omitted counts and limits. The source-study path remains usable;
 raw references still do not enter the blind current-output review.
+Recorded-browse role briefs also expose study images; that brief path alone is
+not proof of delivery through the isolated native maker transport.
 
 Official Mobbin MCP documentation was checked at
 https://mobbin.com/mcp and https://docs.mobbin.com/mcp/clients/other.

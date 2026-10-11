@@ -278,10 +278,11 @@ test('a missing reference board points to discovery work instead of repeating en
 
   const work = nextStageWork(root, pack, invocation);
   assert.equal(work.stage, 'reference-board');
-  assert.equal(work.action, 'browser-consent');
+  assert.equal(work.action, 'acquire-reference');
   assert.equal(work.referenceWork?.status, 'action');
-  assert.equal(work.referenceWork?.action?.kind, 'browser-consent');
-  assert.ok(work.next.length > 0);
+  assert.equal(work.referenceWork?.action?.kind, 'start-browse');
+  assert.deepEqual(work.referenceWork?.action?.args, ['ref', 'browse', 'start', '--lane', 'design', '--mode', 'headless', '--json']);
+  assert.ok(work.next !== null && work.next.length > 0);
   assert.match(work.referenceWork?.workSha256 ?? '', /^[a-f0-9]{64}$/);
 
   writeUserBrowserConsent('consented', home);
@@ -289,8 +290,8 @@ test('a missing reference board points to discovery work instead of repeating en
   assert.equal(authorized.stage, 'reference-board');
   assert.equal(authorized.action, 'acquire-reference');
   assert.equal(authorized.referenceWork?.status, 'action');
-  assert.equal(authorized.referenceWork?.action?.kind, 'search');
-  assert.equal(authorized.referenceWork?.action?.engine, 'user-browser');
+  assert.equal(authorized.referenceWork?.action?.kind, 'start-browse');
+  assert.deepEqual(authorized.referenceWork?.action?.args, work.referenceWork?.action?.args);
 });
 
 test('board work recommends research but stale retained receipts cannot substantiate research', t => {
@@ -323,6 +324,7 @@ test('board work recommends research but stale retained receipts cannot substant
   assert.equal(researchWork.stage, 'reference-board');
   assert.equal(researchWork.action, 'author-research');
   assert.equal(researchWork.next, 'omd schema reference-research');
+  assert.ok('evidenceAvailable' in researchWork);
   assert.ok(!researchWork.evidenceAvailable.includes('reference-board'));
   assert.deepEqual(readFileSync(f.boardPath), boardBefore);
 

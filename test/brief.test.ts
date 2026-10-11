@@ -1,11 +1,14 @@
 import { test } from 'node:test';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_BRIEF_REFERENCES, briefMarkdownPath, briefPath, buildBrief, formatBrief, readBrief, writeBrief } from '../core/brief/index.ts';
+import { MAX_BRIEF_REFERENCES, buildBrief, formatBrief } from '../core/brief/index.ts';
+import { scanProject } from '../core/layout/scan.ts';
+import { classifyArtifact } from '../core/layout/index.ts';
 import { publishContentGrain } from '../core/content-grain/files.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
@@ -62,14 +65,16 @@ test('an adaptive route supplies bounded measured evidence without a route quota
   assert.match(brief.route?.references ?? '', /^skip/);
 });
 
-test('greenfield composition blocks a run with captures but no visual reference evidence', () => {
+test('greenfield composition records debt for captures without visual reference evidence', () => {
   const dir = project();
   const input = JSON.parse(read('test/fixtures/adaptive-flow/medical-new-product.json'));
   const invocation = publishTestAdaptiveRoute(dir, input);
   mkdirSync(join(dir, '.omd', 'captures'), { recursive: true });
   writeFileSync(join(dir, '.omd', 'captures', 'home.png'), 'capture only\n');
   const brief = buildBrief(dir, 'composition', undefined, invocation);
-  assert.ok(brief.blockers.some((blocker) => blocker.includes('visual reference evidence')));
+  // Phase 1: missing research is debt, not permission to fabricate reference evidence.
+  assert.ok(brief.confidenceDebt.some(item => item.reason.includes('visual reference evidence')));
+  assert.equal(brief.blockers.some(blocker => blocker.includes('visual reference evidence')), false);
 });
 
 test('greenfield composition does not demand visual evidence when the board is skipped', () => {
@@ -89,7 +94,7 @@ test('greenfield composition does not demand visual evidence when the board is s
 });
 
 // A capture with a measured principle is usable evidence; one without it is a file path.
-test('selected content grain reaches downstream briefs and stale bytes block them', () => {
+test('selected content grain reaches downstream briefs and stale bytes become explicit debt', () => {
   const dir = project();
   const content = '{"services":[{"description":"짧음"},{"description":"대표 설명"},{"description":"보호해야 할 긴 예외 설명"}]}';
   mkdirSync(join(dir, 'content'), { recursive: true });
@@ -133,7 +138,8 @@ test('selected content grain reaches downstream briefs and stale bytes block the
   writeFileSync(join(dir, 'content', 'catalog.json'), '{"services":[]}');
   const stale = buildBrief(dir, 'composition', undefined, invocation);
   assert.equal(stale.contentGrain, null);
-  assert.ok(stale.blockers.some((entry) => entry.includes('STALE_CONTENT_GRAIN_SOURCE')));
+  // A stale evidence projection is withheld; it no longer prevents first implementation.
+  assert.ok(stale.confidenceDebt.some(item => item.reason.includes('STALE_CONTENT_GRAIN_SOURCE')));
 });
 
 test('skipped content grain is omitted from downstream judgedBy checks', () => {
@@ -197,9 +203,8 @@ test('production brief blocks missing selected inputs and supplies every present
   assert.ok(missing.blockers.some((blocker) =>
     blocker === 'selected production input missing: .omd/composition.md'
   ));
-  assert.ok(missing.blockers.some((blocker) =>
-    blocker === 'selected production input missing: candidate-generation'
-  ));
+  // Candidate evidence stays selected but may yield to first render.
+  assert.ok(missing.confidenceDebt.some(item => item.stage === 'candidate-generation'));
   assert.ok(missing.blockers.some((blocker) =>
     blocker === 'selected production input missing: .omd/.cache/copy-eye.md'
   ));
@@ -394,40 +399,41 @@ test('every command a brief names as a judge is a real CLI command', () => {
   }
 });
 
-test('a brief is persisted per stage, so the run keeps what each owner was handed', () => {
-  const dir = project();
-  const invocation = createTestProjectRunInvocation(dir);
-  const brief = buildBrief(dir, 'composition', join(dir, 'core'), invocation);
-  const written = writeBrief(dir, brief, createTestProjectWriteAdapter(dir, invocation));
-
-  // The adapter reports the absolute canonical path it wrote; `dir` may be a symlinked path
-  // (`/tmp` resolves to `/private/tmp` on macOS), so compare against the resolved root.
-  assert.equal(written.json, join(realpathSync(dir), briefPath('composition')));
-  assert.equal(written.markdown, join(realpathSync(dir), briefMarkdownPath('composition')));
-  assert.ok(existsSync(written.json));
-  assert.ok(existsSync(written.markdown));
-
-  const readBack = readBrief(dir, 'composition');
-  assert.deepEqual(readBack, brief, 'the persisted brief round-trips exactly');
-  assert.match(readFileSync(written.markdown, 'utf8'), /stage\s+composition/);
+test('current provenance families are classified instead of being offered for cleanup', () => {
+  for (const path of ['final-review/executions/sha256-test.json', 'route-source.json', 'workflow-plan.json', 'learning/rules-index.json']) {
+    assert.equal(classifyArtifact(path)?.cls, 'state', path);
+  }
 });
 
-test('each stage keeps its own brief, and a re-entry overwrites rather than accumulates', () => {
+test('declared probe plans stay in the design record while probe output is disposable', () => {
   const dir = project();
-  const invocation = createTestProjectRunInvocation(dir);
-  const adapter = createTestProjectWriteAdapter(dir, invocation);
-  writeBrief(dir, buildBrief(dir, 'domain', join(dir, 'core'), invocation), adapter);
-  writeBrief(dir, buildBrief(dir, 'composition', join(dir, 'core'), invocation), adapter);
-  assert.deepEqual(readdirSync(join(dir, '.omd', 'briefs')).sort(), [
-    'composition.json', 'composition.md', 'domain.json', 'domain.md',
-  ]);
-
-  // A second write describes the CURRENT inputs; a stale copy would be worse than none.
-  writeBrief(dir, buildBrief(dir, 'domain', join(dir, 'core'), invocation), adapter);
-  assert.equal(readdirSync(join(dir, '.omd', 'briefs')).length, 4);
+  mkdirSync(join(dir, '.omd', 'probes'));
+  mkdirSync(join(dir, '.omd', '.cache', 'probes'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'probes', 'primary.json'), '{}');
+  writeFileSync(join(dir, '.omd', '.cache', 'probes', 'primary.json'), '{}');
+  const scan = scanProject(dir);
+  assert.equal(scan.byClass.human.files, 1);
+  assert.deepEqual(scan.cleanable.map(entry => entry.path), ['.cache/probes/primary.json']);
 });
 
-test('a stage that has never run reads as absent rather than as an empty brief', () => {
+test('legacy persisted briefs are retired scratch, not design records', () => {
   const dir = project();
-  assert.equal(readBrief(dir, 'copy'), null);
+  mkdirSync(join(dir, '.omd', 'briefs'));
+  writeFileSync(join(dir, '.omd', 'briefs', 'domain.json'), '{}');
+  writeFileSync(join(dir, '.omd', 'briefs', 'domain.md'), '# duplicate');
+  const scan = scanProject(dir);
+  assert.deepEqual(scan.retired.map(entry => entry.path).sort(), ['briefs/domain.json', 'briefs/domain.md']);
+  assert.equal(scan.unclassified.length, 0);
+});
+
+test('stage briefs stay inspectable without persisting duplicate JSON or markdown', () => {
+  const dir = project();
+  const cli = join(root, 'bin', 'omd.mjs');
+  for (const args of [['brief', 'composition', '--json'], ['brief', 'domain'], ['brief', 'composition', '--json']]) {
+    const result = spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    if (args.includes('--json')) assert.equal(JSON.parse(result.stdout).stage, 'composition');
+    else assert.match(result.stdout, /domain/);
+    assert.equal(existsSync(join(dir, '.omd', 'briefs')), false);
+  }
 });

@@ -1,6 +1,8 @@
 import { isAbsolute } from 'node:path';
 import { knownFields, type SchemaWarning } from '../judgment/schema.ts';
 import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { supportsBrowseEvidence } from './reference-research-types.ts';
+import { parseBrowseSourceProvenance, parseBrowseDesignDiscovery, parseBrowseSessionReceipt } from './reference-research-browse.ts';
 import { parseMarketReferenceCoverage } from './market-reference-coverage.ts';
 import {
   REFERENCE_RESEARCH_DESIGN_KEYS, REFERENCE_RESEARCH_DOMAIN_KEYS, REFERENCE_RESEARCH_EVIDENCE_KEYS,
@@ -18,7 +20,6 @@ export function record(value: unknown, code: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(code);
   return value as Record<string, unknown>;
 }
-
 function exactKeys(value: Record<string, unknown>, keys: readonly string[], code: string, fieldPath?: string): void {
   const actual = Object.keys(value);
   const missing = keys.filter(key => !actual.includes(key));
@@ -28,7 +29,6 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[], code
   for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
   // Callers project validated fields; never mutate agent input or signed source bytes.
 }
-
 function text(value: unknown, code: string): string {
   if (typeof value !== 'string' || value.trim() === '') fail(code);
   return value.trim();
@@ -78,12 +78,13 @@ function evidence(value: unknown, diagnostic: boolean | 'gallery-visit' = false,
   return Object.freeze({ path, sha256: digest(input.sha256, shaError) });
 }
 
-function source(value: unknown, design: boolean, index: number, current: boolean): ResearchSource {
+function source(value: unknown, design: boolean, index: number, current: boolean, browse: boolean): ResearchSource {
   const fieldPath = `${design ? 'designReference' : 'domainReference'}.sources[${index}]`;
   const input = record(value, `REFERENCE_RESEARCH_SOURCE_INVALID: ${fieldPath}`);
+  const provenance = browse && Object.hasOwn(input, 'provenance') ? parseBrowseSourceProvenance(input.provenance) : undefined;
   exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS,
-    ...(Object.hasOwn(input, 'discovery') ? ['discovery'] : []), 'visualRole', 'visualAssessment']
-    : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS', fieldPath);
+    ...(Object.hasOwn(input, 'discovery') ? ['discovery'] : []), 'visualRole', 'visualAssessment', ...(provenance ? ['provenance'] : [])]
+    : [...REFERENCE_RESEARCH_SOURCE_KEYS, ...(provenance ? ['provenance'] : [])], 'REFERENCE_RESEARCH_SOURCE_KEYS', fieldPath);
   const observedAt = text(input.observedAt, 'REFERENCE_RESEARCH_OBSERVED_AT');
   if (!DATE.test(observedAt)) fail('REFERENCE_RESEARCH_OBSERVED_AT');
   let discovery: ResearchSource['discovery'];
@@ -96,7 +97,7 @@ function source(value: unknown, design: boolean, index: number, current: boolean
     if (selected && input.discovery === undefined) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
     exactKeys(assessment, [...axes, ...(selected || Object.hasOwn(assessment, 'selection') ? ['selection'] : [])], 'REFERENCE_RESEARCH_VISUAL_ASSESSMENT_KEYS');
     let selection: NonNullable<ResearchSource['visualAssessment']>['selection'];
-    if (selected) {
+    if (selected || Object.hasOwn(assessment, 'selection')) {
       const choice = record(assessment.selection, 'REFERENCE_VISUAL_SELECTION_REQUIRED');
       exactKeys(choice, ['presentation', 'verdict', 'appearanceIntent', 'reason', 'flowCaptures'], 'REFERENCE_VISUAL_SELECTION_KEYS');
       if (!['finished-product-website', 'finished-app-flow'].includes(choice.presentation as string) || choice.verdict !== 'emulate'
@@ -110,14 +111,16 @@ function source(value: unknown, design: boolean, index: number, current: boolean
     }
     visualAssessment = Object.freeze({ ...Object.fromEntries(axes.map(axis => [axis, text(assessment[axis], `REFERENCE_RESEARCH_VISUAL_${axis.toUpperCase()}`)])),
       ...(selection ? { selection } : {}) }) as ResearchSource['visualAssessment'];
-    if (input.discovery !== undefined) {
+    if (provenance) {
+      discovery = parseBrowseDesignDiscovery(input.discovery);
+    } else if (input.discovery !== undefined) {
       const entry = record(input.discovery, 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
       exactKeys(entry, ['url', 'kind', 'access', 'qualityReason', 'evidence', 'capture'], 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_KEYS');
       if (!['direct-product', 'app-gallery', 'web-gallery', 'visual-bookmark', 'user-provided'].includes(entry.kind as string)
         || (entry.kind === 'direct-product' && !current)) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_KIND');
       if (entry.access !== 'free') fail('REFERENCE_RESEARCH_DESIGN_FREE_ACCESS_REQUIRED');
       discovery = Object.freeze({
-        url: httpsUrl(entry.url), kind: entry.kind as NonNullable<ResearchSource['discovery']>['kind'],
+        url: httpsUrl(entry.url), kind: entry.kind as 'direct-product' | 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided',
         access: 'free', qualityReason: text(entry.qualityReason, 'REFERENCE_RESEARCH_DESIGN_QUALITY_REASON'),
         evidence: evidence(entry.evidence, 'gallery-visit', `${fieldPath}.discovery.evidence`),
         capture: evidence(entry.capture, 'gallery-visit', `${fieldPath}.discovery.capture`),
@@ -130,6 +133,7 @@ function source(value: unknown, design: boolean, index: number, current: boolean
     evidence: evidence(input.evidence, false, `${fieldPath}.evidence`),
     capture: evidence(input.capture, false, `${fieldPath}.capture`),
     ...(discovery ? { discovery } : {}),
+    ...(provenance ? { provenance } : {}),
     ...(design ? {
       visualRole: input.visualRole as NonNullable<ResearchSource['visualRole']>,
       visualAssessment: requiredVisualAssessment(visualAssessment),
@@ -178,22 +182,28 @@ function leadReceipts(value: unknown, lane: 'domain' | 'design'): readonly Resea
     return { path: row.path, sha256 };
   });
 }
-function lane(value: unknown, options: Readonly<{ keys: readonly string[]; code: string; design: boolean; direct: boolean; current?: boolean }>): ResearchLane & Record<string, unknown> {
+function lane(value: unknown, options: Readonly<{ keys: readonly string[]; code: string; design: boolean; direct: boolean; current?: boolean; browse?: boolean }>): ResearchLane & Record<string, unknown> {
   const { keys, code, design, direct } = options;
   const input = record(value, code);
   if (!direct && Object.hasOwn(input, 'discoveryRoots')) fail(`${code}_KEYS`);
   exactKeys(input, [...keys, ...(options.current && Object.hasOwn(input, 'leads') ? ['leads'] : []), ...(Object.hasOwn(input, 'navigation') ? ['navigation'] : []),
-    ...(direct && Object.hasOwn(input, 'discoveryRoots') ? ['discoveryRoots'] : [])], `${code}_KEYS`);
+    ...(direct && Object.hasOwn(input, 'discoveryRoots') ? ['discoveryRoots'] : []),
+    ...(options.browse && Object.hasOwn(input, 'browseSessions') ? ['browseSessions'] : [])], `${code}_KEYS`);
+  const sessions = input.browseSessions === undefined ? undefined : (() => {
+    if (!Array.isArray(input.browseSessions) || input.browseSessions.length > 100) fail('REFERENCE_RESEARCH_BROWSE_SESSIONS');
+    return input.browseSessions.map(parseBrowseSessionReceipt);
+  })();
   const roots = Object.hasOwn(input, 'discoveryRoots') ? discoveryRoots(input.discoveryRoots, design) : undefined;
   if (!Array.isArray(input.sources)) fail(`${code}_SOURCE_COVERAGE`);
-  const sources = input.sources.map((value, index) => source(value, design, index, options.current === true));
+  const sources = input.sources.map((value, index) => source(value, design, index, options.current === true, options.browse === true));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
-  if (!Array.isArray(input.searches) || (!input.searches.length && !roots?.length && !Object.hasOwn(input, 'leads')) || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
+  if (!Array.isArray(input.searches) || (!input.searches.length && !roots?.length && !sessions?.length && !Object.hasOwn(input, 'leads')) || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
   const navigation = input.navigation;
   if (navigation !== undefined && (!Array.isArray(navigation) || navigation.length > 100 || Object.keys(navigation).length !== navigation.length)) fail('REFERENCE_RESEARCH_NAVIGATION_INVALID');
   return { ...(design ? { boardSha256: input.boardSha256 } : { benchmarkSha256: input.benchmarkSha256 }),
-    queries: texts(input.queries, `${code}_QUERY`, Boolean(roots?.length) || Object.hasOwn(input, 'leads')), searches: input.searches.map(item => evidence(item, true)),
+    queries: texts(input.queries, `${code}_QUERY`, Boolean(roots?.length || sessions?.length) || Object.hasOwn(input, 'leads')), searches: input.searches.map(item => evidence(item, true)),
     ...(options.current && Object.hasOwn(input, 'leads') ? { leads: leadReceipts(input.leads, design ? 'design' : 'domain') } : {}), sources,
+    ...(sessions === undefined ? {} : { browseSessions: sessions }),
     ...(roots === undefined ? {} : { discoveryRoots: roots }),
     ...(navigation === undefined ? {} : { navigation: (navigation as unknown[]).map(value => {
       const hop = record(value, 'REFERENCE_RESEARCH_NAVIGATION_INVALID');
@@ -255,7 +265,7 @@ export function referenceResearchUnknownFieldWarnings(value: unknown): SchemaWar
     const source = input[lane];
     if (typeof source !== 'object' || source === null || Array.isArray(source)) continue;
     const keys = lane === 'domainReference' ? REFERENCE_RESEARCH_DOMAIN_KEYS : REFERENCE_RESEARCH_DESIGN_KEYS;
-    warnings.push(...knownFields(source, keys, ['leads', 'navigation', 'discoveryRoots'], `research.${lane}`).warnings);
+    warnings.push(...knownFields(source, keys, ['leads', 'navigation', 'discoveryRoots', 'browseSessions'], `research.${lane}`).warnings);
   }
   return warnings;
 }
@@ -264,6 +274,7 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const input = record(value, 'REFERENCE_RESEARCH_INVALID');
   if (['reference-research-v1', 'reference-research-v2', 'reference-research-v3', 'reference-research-v4'].includes(input.schema as string)) fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; retain valid captures, run omd ref search or omd ref navigate --entry for native discovery evidence, and republish with omd ref research-set');
   const current = input.schema === REFERENCE_RESEARCH_SCHEMA;
+  const browse = supportsBrowseEvidence(String(input.schema));
   const marketSchema = current || input.schema === 'reference-research-v7';
   exactKeys(input, [...(marketSchema ? REFERENCE_RESEARCH_KEYS : REFERENCE_RESEARCH_LEGACY_KEYS),
     ...(current && Object.hasOwn(input, 'judgments') ? ['judgments'] : [])], 'REFERENCE_RESEARCH_KEYS');
@@ -272,17 +283,26 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const direct = input.schema !== 'reference-research-v5';
   const domain = current ? (() => {
     const row = record(input.domainReference, 'REFERENCE_RESEARCH_DOMAIN');
-    exactKeys(row, [...REFERENCE_RESEARCH_DOMAIN_KEYS, ...(Object.hasOwn(row, 'leads') ? ['leads'] : [])], 'REFERENCE_RESEARCH_DOMAIN_KEYS');
-    const parsed: Omit<ResearchLane, 'sources'> & { sources: readonly FunctionalSource[]; benchmarkSha256: string | null } = {
-      sources: Array.isArray(row.sources) ? row.sources.map((item, index) => functionalSource(item, index)) : fail('REFERENCE_DOMAIN_FEATURE_EVIDENCE_REQUIRED'),
+    exactKeys(row, [...REFERENCE_RESEARCH_DOMAIN_KEYS, ...(Object.hasOwn(row, 'leads') ? ['leads'] : []),
+      ...(Object.hasOwn(row, 'browseSessions') ? ['browseSessions'] : [])], 'REFERENCE_RESEARCH_DOMAIN_KEYS');
+    const sessions = row.browseSessions === undefined ? undefined : (() => {
+      if (!Array.isArray(row.browseSessions) || row.browseSessions.length > 100) fail('REFERENCE_RESEARCH_BROWSE_SESSIONS');
+      return row.browseSessions.map(parseBrowseSessionReceipt);
+    })();
+    const parsed: Omit<ResearchLane, 'sources'> & { sources: readonly (FunctionalSource | ResearchSource)[]; benchmarkSha256: string | null } = {
+      sources: Array.isArray(row.sources) ? row.sources.map((item, index) => {
+        const candidate = record(item, 'REFERENCE_RESEARCH_SOURCE_INVALID');
+        return Object.hasOwn(candidate, 'observations') ? functionalSource(item, index) : source(item, false, index, current, browse);
+      }) : fail('REFERENCE_DOMAIN_FEATURE_EVIDENCE_REQUIRED'),
       queries: texts(row.queries, 'REFERENCE_RESEARCH_DOMAIN_QUERY', true),
       searches: Array.isArray(row.searches) ? row.searches.map(item => evidence(item, true)) : fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED'),
       ...(Object.hasOwn(row, 'leads') ? { leads: leadReceipts(row.leads, 'domain') } : {}),
+      ...(sessions === undefined ? {} : { browseSessions: sessions }),
       benchmarkSha256: row.benchmarkSha256 === null ? null : digest(row.benchmarkSha256, 'REFERENCE_RESEARCH_BENCHMARK_SHA'),
     };
     return parsed;
   })() : lane(input.domainReference, { keys: REFERENCE_RESEARCH_DOMAIN_KEYS, code: 'REFERENCE_RESEARCH_DOMAIN', design: false, direct });
-  const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct, current });
+  const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct, current, browse });
   // Source counts and family diversity are measurements for the research review, not refusal criteria.
   const serviceIdentity = direct ? referenceServiceFamily : referenceServiceHost;
   const domainHosts = new Set([...domain.sources, ...domain.discoveryRoots ?? []].map(entry => serviceIdentity(entry.url)));
@@ -294,11 +314,15 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const domainEvidence = [...domain.sources, ...domain.discoveryRoots ?? []].flatMap(entry => 'evidence' in entry ? [entry.evidence] : []);
   const domainPaths = new Set(domainEvidence.map(entry => entry.path));
   const domainHashes = new Set(domainEvidence.map(entry => entry.sha256));
-  const designEvidence = [...design.sources.flatMap(entry => entry.discovery ? [entry.evidence, entry.discovery.evidence] : [entry.evidence]), ...design.discoveryRoots?.map(entry => entry.evidence) ?? []];
+  const designEvidence = [...design.sources.flatMap(entry =>
+    !entry.discovery || entry.discovery.kind === 'recorded-browse'
+      ? [entry.evidence] : [entry.evidence, entry.discovery.evidence]),
+  ...design.discoveryRoots?.map(entry => entry.evidence) ?? []];
   // Reuse across lanes is allowed, but cannot be counted as independent evidence.
   void designEvidence; void domainPaths; void domainHashes;
   const coverage = marketSchema ? parseMarketReferenceCoverage(input.marketCoverage,
-    current ? domain.sources.map(item => ({ id: item.id, url: item.url, evidence: { sha256: (item as FunctionalSource).marketObservationSha256 } }))
+    current ? domain.sources.map(item => ({ id: item.id, url: item.url,
+      evidence: { sha256: 'marketObservationSha256' in item ? item.marketObservationSha256 : item.evidence.sha256 } }))
       : domain.sources as ResearchSource[], design.sources, current) : null;
   const judgments = Object.hasOwn(input, 'judgments') ? (() => {
     if (!current || !Array.isArray(input.judgments) || input.judgments.length > 100) fail('AI_JUDGMENT_INVALID');
@@ -315,7 +339,7 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
     schema: input.schema as ReferenceResearch['schema'], sourceContractSha256,
     ...(judgments === undefined ? {} : { judgments }),
     ...(marketSchema ? { marketCoverage: coverage } : {}),
-    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, ...(domain.leads === undefined ? {} : { leads: domain.leads }), sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), ...(domain.discoveryRoots === undefined ? {} : { discoveryRoots: domain.discoveryRoots }), benchmarkSha256 }),
-    designReference: Object.freeze({ queries: design.queries, searches: design.searches, ...(design.leads === undefined ? {} : { leads: design.leads }), sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), ...(design.discoveryRoots === undefined ? {} : { discoveryRoots: design.discoveryRoots }), boardSha256 }),
+    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, ...(domain.leads === undefined ? {} : { leads: domain.leads }), sources: domain.sources, ...(domain.browseSessions === undefined ? {} : { browseSessions: domain.browseSessions }), ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), ...(domain.discoveryRoots === undefined ? {} : { discoveryRoots: domain.discoveryRoots }), benchmarkSha256 }),
+    designReference: Object.freeze({ queries: design.queries, searches: design.searches, ...(design.leads === undefined ? {} : { leads: design.leads }), sources: design.sources, ...(design.browseSessions === undefined ? {} : { browseSessions: design.browseSessions }), ...(design.navigation === undefined ? {} : { navigation: design.navigation }), ...(design.discoveryRoots === undefined ? {} : { discoveryRoots: design.discoveryRoots }), boardSha256 }),
   });
 }

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { makerFail } from '../../adapters/pi-maker-contract.ts';
 import { piRecord, piText } from '../../adapters/pi-reviewer-contract.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
+import { readCurrentCandidateSelection } from '../brief/candidate-choice.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
 import { readFrame } from '../frame/index.ts';
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
@@ -35,7 +36,10 @@ export function nativeReframeWork(root: string, invocation: ProjectRunInvocation
   const read = (path: string) => readContainedRegularFile(root, path, 'native reframe lineage');
   const pointer = validateCandidateSelectionPointer(JSON.parse(read(CANDIDATE_SELECTION_POINTER_PATH).toString('utf8')));
   resolveCandidateSelection(root, pointer);
-  const candidate = currentMakerSource(root, invocation, `sketch-${pointer.directory}`);
+  const candidateId = 'selection' in pointer
+    ? readCurrentCandidateSelection(root).selectedId
+    : pointer.directory;
+  const candidate = currentMakerSource(root, invocation, `sketch-${candidateId}`);
   const compositionSha256 = existsSync(join(root, '.omd/composition.md')) ? sha256(read('.omd/composition.md')) : null;
   if (candidate?.firstRenderReviewSha256 !== review.sha256 || candidate.compositionSha256 !== compositionSha256) return candidateWork;
   const hand = currentMakerSource(root, invocation, 'hand');

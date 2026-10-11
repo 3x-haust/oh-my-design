@@ -38,7 +38,7 @@ import {
   validateReferenceLocaleBindingCurrentness,
 } from '../ref/reference-locale-binding.ts';
 import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
-import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
+import { readWholeScreenReferenceHandoff, type ReferenceHandoffRole } from '../ref/reference-handoff.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 import { checkReferenceApplication, type ReferenceApplicationProjection } from '../ref/reference-application.ts';
 import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH } from '../tokens/inventory.ts';
@@ -48,6 +48,10 @@ import { inspectDesignReferenceAdmission, requiresDesignReferenceAdmission } fro
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { nativeCompletionBrief, type NativeCompletionProcedure } from '../stage/native-completion-brief.ts';
 import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
+import { briefDebtStage, confidenceDebt, mergeConfidenceDebt, readConfidenceDebt, type ConfidenceDebt } from './confidence-debt.ts';
+import { parseReferenceApplication } from '../ref/reference-application.ts';
+import { adaptiveStageOwners, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
+import { candidateDirectionState, type DirectionState } from './candidate-choice.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -78,23 +82,6 @@ export const EXTRA_BRIEF_STAGES = ['candidate-generation', 'safety-validation', 
 export type BriefStage = StageId | (typeof EXTRA_BRIEF_STAGES)[number];
 
 /**
- * Where a stage brief is kept.
- *
- * A brief is what one owner was actually handed: its permitted inputs, the contracts it must obey,
- * and the checks that will judge it. It used to exist only for the length of one command, so a run
- * left no record of what any stage received — a gap when the question later is "what did Composer
- * have when it made that choice?".
- *
- * It lives under `.omd/briefs/` rather than at the record root because it is a derived view of a
- * stage, not a design artifact in its own right. One file per stage, overwritten as the stage is
- * re-entered, because the brief describes the CURRENT inputs and a stale copy would be worse than
- * none.
- */
-export const BRIEF_DIRECTORY = '.omd/briefs';
-export const briefPath = (stage: BriefStage): string => `${BRIEF_DIRECTORY}/${stage}.json`;
-export const briefMarkdownPath = (stage: BriefStage): string => `${BRIEF_DIRECTORY}/${stage}.md`;
-
-/**
  * A brief is evidence, not a reading list. A mature run holds a hundred captures; printing all of
  * them recreates the wall of text this command exists to replace, so the brief carries the ones
  * that actually carry a measured principle and reports the rest as a count.
@@ -117,6 +104,8 @@ export type BriefCheck = {
 
 export type Brief = {
   readonly developerCalibration?: ReturnType<typeof currentDeveloperCalibration>;
+  readonly direction?: DirectionState;
+  readonly conceptProcedure?: Readonly<{ seedOwner: 'omd-art-director'; planOwner: 'omd-art-director'; sourceOwner: 'omd-sketch'; sourceDirectory: '.omd/.cache/sketches/<id>/'; planBeforeSource: true; chooser: 'user' | 'isolated-eye'; steps: readonly string[] }>;
   /** Coordinator-owned entry procedure, not a cached grant or a blind-review input packet. */
   readonly entryGate: Readonly<{
     command: string;
@@ -171,10 +160,13 @@ export type Brief = {
     motionEvidenceRequired: boolean;
   }> | null;
   readonly references: readonly BriefReference[];
+  readonly referencePages: readonly (readonly BriefReference[])[];
+  readonly referenceTruncation: string | null;
+  readonly confidenceDebt: readonly ConfidenceDebt[];
   /** Coordinator export command; the raw inventory above is not the role-facing payload. */
   readonly referenceHandoff: Readonly<{
     command: string;
-    role: ReferenceHandoffRole;
+    role: ReferenceHandoffRole | 'concept';
     sha256: string;
     pieces: number;
   }> | null;
@@ -311,6 +303,28 @@ export function briefReferences(root: string): readonly BriefReference[] {
   })).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
 
+/** One relevant decision per covered surface before cross-cutting evidence; overflow is explicit. */
+export function allocateBriefReferences(gathered: readonly BriefReference[], coverage: readonly { surface: string; paths: readonly string[] }[]) {
+  const selected = new Map<string, BriefReference>();
+  const usable = [...gathered].sort((a, b) => Number(b.take.length > 0) - Number(a.take.length > 0));
+  for (const surface of coverage) {
+    const reference = usable.find(ref => surface.paths.includes(ref.path));
+    if (reference) selected.set(reference.path, reference);
+  }
+  const minimum = Math.max(MAX_BRIEF_REFERENCES, selected.size);
+  for (const reference of usable) {
+    if (selected.size >= minimum) break;
+    selected.set(reference.path, reference);
+  }
+  const entries = [...selected.values()];
+  const pages: BriefReference[][] = [];
+  for (let index = 0; index < entries.length; index += MAX_BRIEF_REFERENCES) pages.push(entries.slice(index, index + MAX_BRIEF_REFERENCES));
+  const omitted = gathered.length - entries.length;
+  return { pages, omitted, truncation: omitted > 0
+    ? `${omitted} captures omitted after per-surface allocation; omd ref list shows the complete inventory.`
+    : pages.length > 1 ? `Surface coverage spans ${pages.length} referencePages; no covered surface was dropped.` : null };
+}
+
 function selectedCandidateEvidence(root: string): readonly string[] {
   const sketches = join(root, '.omd', '.cache', 'sketches');
   const pointerPath = join(root, CANDIDATE_SELECTION_POINTER_PATH);
@@ -398,15 +412,13 @@ export function buildBrief(
   ).includes(qualityStage);
   const designQuality = route !== null
     && designQualityConsumer
+    && !(stage === 'candidate-generation' && route.sourceContract.processPolicy)
     && (route.strategy.stages as readonly string[]).includes(qualityStage)
     ? route.behavior.active.designQuality
     : null;
   const shell: AppShell = detectAppShell(root);
-  const routeReferenceLimit = MAX_BRIEF_REFERENCES;
   const gathered = briefReferences(root);
-  // A capture that recorded a measured principle is usable evidence; one that did not is a file path.
-  const ranked = [...gathered].sort((left, right) => right.take.length - left.take.length);
-  const references = ranked.slice(0, routeReferenceLimit);
+  const coverage: Array<{ surface: string; paths: string[] }> = [];
   const contracts = definition === undefined
     ? []
     : (() => {
@@ -442,7 +454,7 @@ export function buildBrief(
   const existingDesignSystem = inventoryStatus.status === 'missing' ? null : inventoryStatus;
   const runtimeStatus = runtimeInventoryStatus(root);
   const runtimeDesignSystem = runtimeStatus.status === 'missing' ? null : runtimeStatus;
-  const inventoryConsumer = ['art-direction', 'composition', 'candidate-generation', 'production'].includes(stage);
+  const inventoryConsumer = ['art-direction', 'type-proof', 'composition', 'candidate-generation', 'production'].includes(stage);
   if (inventoryConsumer && existingDesignSystem && existingDesignSystem.status !== 'current') {
     blockers.push(`existing design inventory ${existingDesignSystem.status}: inspect source changes and run omd init --refresh`);
   }
@@ -451,9 +463,17 @@ export function buildBrief(
   const handoffRole: ReferenceHandoffRole | undefined = stage === 'art-direction' ? 'art-direction'
     : stage === 'composition' || stage === 'candidate-generation' ? 'composer'
       : stage === 'production' ? 'hand' : undefined;
+  if (inventoryConsumer && route && existsSync(join(root, '.omd/reference-analysis.json'))) {
+    const role = stage === 'production' ? 'hand' : stage === 'composition' ? 'composer' : 'concept';
+    try {
+      const payload = readWholeScreenReferenceHandoff(root, role, { sourceContractSha256: route.sourceContractSha256, request: route.request });
+      referenceHandoff = { command: `omd ref browse handoff --for ${role} --json`, role,
+        sha256: payload.sha256, pieces: 'images' in payload ? payload.images.length : 0 };
+    } catch (error) { blockers.push(`selected reference handoff unavailable: ${error instanceof Error ? error.message : String(error)}`); }
+  }
   const selectedArtDirection = route === null ? existsSync(join(root, '.omd/art-direction.json'))
     : route.strategy.stages.includes('art-direction');
-  if (handoffRole !== undefined && (handoffRole === 'art-direction' || selectedArtDirection)
+  if (referenceHandoff === null && !existsSync(join(root, '.omd/reference-analysis.json')) && handoffRole !== undefined && (handoffRole === 'art-direction' || selectedArtDirection)
     && existsSync(join(root, '.omd/reference-pre-selection-v2.json'))) {
     try {
       const payload = readSelectedReferenceHandoff(root, handoffRole, route === null ? undefined : {
@@ -482,7 +502,7 @@ export function buildBrief(
       if (!contract.delivered) blockers.push(`contract not delivered: omd stage deliver --stage ${definition.id} --contract ${contract.path}`);
     }
   }
-  if (stage === 'production' && route?.references.decision === 'discover' && references.length === 0) {
+  if (stage === 'production' && route?.references.decision === 'discover' && gathered.length === 0) {
     blockers.push('selected reference discovery has no gathered evidence');
   }
   const selectedInputs = (stage === 'candidate-generation' || stage === 'production') && route !== null
@@ -509,6 +529,12 @@ export function buildBrief(
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request,
       });
+      const application = parseReferenceApplication(JSON.parse(readFileSync(join(root, '.omd/reference-application.json'), 'utf8')));
+      const refs = loadRefs(root);
+      for (const screen of application.screens) {
+        const urls = research.designReference.sources.filter(source => screen.design.referenceIds.includes(source.id)).map(source => source.url);
+        coverage.push({ surface: screen.surface, paths: refs.filter(ref => urls.includes(ref.source)).map(ref => relative(root, refRecordPath(root, ref))) });
+      }
     } catch (error) {
       blockers.push(`selected ${stage} input missing or stale: reference research/application — run omd ref research-check and omd ref apply-check; both lanes and every destination surface need current decisions (${error instanceof Error ? error.message : String(error)})`);
     }
@@ -522,12 +548,16 @@ export function buildBrief(
   if (greenfieldReferenceConsumer && !hasReferenceEvidence) {
     blockers.push(`selected ${stage} input missing: visual reference evidence under .omd/refs/ and .omd/reference-board.json — discover and interpret references before composition`);
   }
-  const judgmentPresent = judgmentConsumer && hasReferenceBoard && existsSync(join(root, judgmentPath));
-  if (judgmentConsumer && hasReferenceBoard && !judgmentPresent) {
+  const wholeScreenAnalysis = route?.sourceContract.reviewPurpose !== undefined;
+  const judgmentPresent = !wholeScreenAnalysis && judgmentConsumer && hasReferenceBoard && existsSync(join(root, judgmentPath));
+  if (wholeScreenAnalysis && judgmentConsumer && hasReferenceBoard && !existsSync(join(root, '.omd/reference-analysis.json'))) {
+    blockers.push('reference interpretation: whole-screen analysis is missing; Scout inspects actual images and publishes ref browse analysis-set');
+  }
+  if (!wholeScreenAnalysis && judgmentConsumer && hasReferenceBoard && !judgmentPresent) {
     blockers.push(`selected ${stage} input missing: ${judgmentPath} — interpret the observations before applying them`);
   }
   if (judgmentPresent) {
-    try { blockers.push(...checkCurrentDesignJudgment(root).findings); }
+    try { blockers.push(...checkCurrentDesignJudgment(root).findings.map(finding => `reference interpretation: ${finding}`)); }
     catch (error) { blockers.push(`reference interpretation: ${error instanceof Error ? error.message : String(error)}`); }
   }
   const copyReviewPath = '.omd/.cache/copy-eye.md';
@@ -605,7 +635,10 @@ export function buildBrief(
     ? nativeCompletionBrief(stage, route?.references.decision === 'discover') : undefined;
   const judgedBy = (designReview
     ? [{ command: 'omd completion design-check --input .omd/design-handoff.json --json', fails: 'design artifacts, reference evidence or write scope are missing or stale; this check does not attest review independence or application behavior' }]
-    : native?.judgedBy ?? JUDGED_BY[stage] ?? []).filter((check) =>
+    : stage === 'candidate-generation' && route?.sourceContract.processPolicy ? [
+      { command: 'omd candidate check --current --json', fails: 'current selected candidate inputs/previews or choice authority are missing or stale' },
+      { command: 'omd tokens check --json', fails: 'minimal seed or selected effective token system is invalid' },
+    ] : native?.judgedBy ?? JUDGED_BY[stage] ?? []).filter((check) =>
     (
       check.command !== 'omd grain check --json'
       || route === null
@@ -635,11 +668,24 @@ export function buildBrief(
     }]
     : [];
 
-  const schemaNames = designReview ? ['design-handoff'] : stage === 'candidate-generation' ? ['candidate-selection'] : [...SCHEMAS[stage] ?? []];
+  const currentProcess = route?.sourceContract.processPolicy !== undefined;
+  const schemaNames = designReview ? ['design-handoff'] : stage === 'candidate-generation' ? currentProcess ? ['candidate-plan', 'candidate-content', 'candidate-set', 'candidate-selection-v2', 'minimal-tokens'] : ['candidate-selection'] : [...SCHEMAS[stage] ?? []];
   if (stage === 'reference-board' && route?.references.decision === 'discover') {
     schemaNames.push('reference-search', 'reference-research');
     if (route.gates.includes('greenfield-task-flow-benchmark')) schemaNames.push('reference-flow-input', 'task-flow-benchmark');
   }
+  const debt: ConfidenceDebt[] = [];
+  const entryBlockers = blockers.filter(reason => {
+    // Debt changes entry policy only under authenticated route authority, not ad-hoc handoffs.
+    if (route === null) return true;
+    const origin = briefDebtStage(reason)
+      ?? (route?.projectMode === 'greenfield' && !route.strategy.stages.includes('safety-validation')
+        && reason.endsWith('.omd/copy-deck.md') ? 'copy' : undefined);
+    if (origin === undefined || (origin === 'copy' && route?.strategy.stages.includes('safety-validation'))) return true;
+    debt.push(confidenceDebt(origin, reason));
+    return false;
+  });
+  const allocated = allocateBriefReferences(gathered, coverage);
   return {
     stage,
     developerCalibration: currentDeveloperCalibration(root, invocation),
@@ -654,8 +700,17 @@ export function buildBrief(
     ...(sourceStudy === undefined || stage === 'production' ? {} : { sourceStudy }),
     existingDesignSystem,
     ...(runtimeDesignSystem === null ? {} : { runtimeDesignSystem }),
-    owner: native?.owner ?? definition?.owner ?? OWNER[stage] ?? 'coordinator',
-    owns: [...(native?.owns ?? (designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact])),
+    owner: native?.owner ?? (route !== null ? adaptiveStageOwners(currentProcess)[qualityStage as AdaptiveStageId] : undefined) ?? definition?.owner ?? OWNER[stage] ?? 'coordinator',
+    ...(currentProcess ? { direction: candidateDirectionState(root) } : {}),
+    ...(currentProcess && stage === 'candidate-generation' ? { conceptProcedure: {
+      seedOwner: 'omd-art-director' as const, planOwner: 'omd-art-director' as const, sourceOwner: 'omd-sketch' as const,
+      sourceDirectory: '.omd/.cache/sketches/<id>/' as const, planBeforeSource: true as const,
+      chooser: route!.sourceContract.processPolicy!.interactionMode === 'interactive' ? 'user' as const : 'isolated-eye' as const,
+      steps: ['minimal seed and shared real content', 'candidate plan before source', 'independent Sketch sources against the committed plan', 'native same-surface/state/view previews', 'candidate packet', 'one current authenticated direction choice'],
+    } } : {}),
+    owns: [...(native?.owns ?? (currentProcess && stage === 'candidate-generation'
+      ? ['.omd/tokens.json', 'assigned plan/content inputs under .omd/.cache/sketches/; candidate source belongs exclusively to Sketch; current pointers are CLI-owned']
+      : designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact])),
       ...(stage === 'copy' && (language?.copyTone || feedbackCopyTone) ? ['Reopen Writer copy for the current translated tone, then obtain a fresh CLEAN copy review; Hand never rewrites this text.'] : [])],
     ...(native === undefined ? {} : { procedure: native.procedure }),
     route: route === null ? null : {
@@ -677,9 +732,12 @@ export function buildBrief(
       userUrlsRequired: false,
       motionEvidenceRequired: discoveryPlan.motionEvidenceRequired,
     },
-    references,
+    references: allocated.pages[0] ?? [],
+    referencePages: allocated.pages,
+    referenceTruncation: allocated.truncation,
+    confidenceDebt: mergeConfidenceDebt(route === null ? [] : readConfidenceDebt(root, route.sourceContractSha256), debt),
     referenceHandoff,
-    referencesOmitted: gathered.length - references.length,
+    referencesOmitted: allocated.omitted,
     contracts,
     schemas: schemaNames.map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
@@ -700,34 +758,6 @@ export function buildBrief(
       ...(stage === 'production' && existsSync(join(root, '.omd/first-render/review.json'))
         ? ['.omd/first-render/review.json'] : []),
     ]),
-    blockers,
+    blockers: entryBlockers,
   };
-}
-
-/**
- * Persists the brief a stage was handed, so the run keeps a record of what each owner received.
- * Written through the project-write adapter like every other project mutation.
- *
- * Both forms are written: the JSON is what a later command reads, and the markdown is what a human
- * reads when asking why a stage made the choice it did.
- */
-export function writeBrief(
-  root: string,
-  brief: Brief,
-  adapter: ProjectWriteAdapter,
-): Readonly<{ json: string; markdown: string }> {
-  const json = adapter.write(briefPath(brief.stage), `${JSON.stringify(brief, null, 2)}\n`);
-  const markdown = adapter.write(briefMarkdownPath(brief.stage), formatBrief(brief));
-  return Object.freeze({ json, markdown });
-}
-
-/** Reads a persisted brief back. Returns null when the stage has never run in this project. */
-export function readBrief(root: string, stage: BriefStage): Brief | null {
-  const path = join(root, briefPath(stage));
-  if (!existsSync(path)) return null;
-  try {
-    return JSON.parse(readFileSync(path, 'utf8')) as Brief;
-  } catch {
-    return null;
-  }
 }

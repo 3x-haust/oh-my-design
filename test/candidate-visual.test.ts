@@ -13,6 +13,13 @@ import { readCandidateSourceHistory } from '../core/brief/candidate-source-histo
 
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
+test('receipt-backed v2 pointers parse without directory fields and reject mixed formats', () => {
+  const selection = { path: `.omd/.cache/sketches/selections/sha256-${'a'.repeat(64)}.json`, sha256: 'a'.repeat(64) };
+  const pointer = { schema: 'candidate-selection-pointer-v2', selection };
+  assert.deepEqual(validateCandidateSelectionPointer(pointer), pointer);
+  assert.throws(() => validateCandidateSelectionPointer({ ...pointer, directory: 'chosen' }));
+});
+
 test('selected visual handoff binds both viewport captures and refuses source or pixel drift', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-candidate-visual-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -35,6 +42,8 @@ test('selected visual handoff binds both viewport captures and refuses source or
     { width: 1280, height: 900 }, { width: 390, height: 844 },
   ]);
   assert.deepEqual(validateCandidateSelectionPointer(pointer), pointer);
+  assert.throws(() => validateCandidateSelectionPointer({ ...pointer,
+    selection: { path: `.omd/.cache/sketches/selections/sha256-${'a'.repeat(64)}.json`, sha256: 'a'.repeat(64) } }));
   assert.ok(pointer.visual.sourceHistory);
   const history = readCandidateSourceHistory(root, pointer.visual.sourceHistory);
   assert.equal(history.record.treeSha256, pointer.visual.treeSha256);

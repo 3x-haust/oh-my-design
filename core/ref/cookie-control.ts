@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { browserProfilePath, readBrowserConsent } from './browser-consent.ts';
 import { publicDiscoveryUrl } from './discovery-record.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
+import { browserCallback } from './browser-evaluation.ts';
 
 export type CookieControlInput = Readonly<{ url: string; selector: string; text: string; contentSelector?: string }>;
 const fail = (reason: string): never => { throw new Error(`REFERENCE_COOKIE_CONTROL_${reason}`); };
@@ -45,7 +46,7 @@ export async function runReferenceCookieControl(browser: Browser, input: CookieC
       throw error;
     }
     if (await target.count() !== 1 || !await target.isVisible()) fail('TARGET_INVALID');
-    const before = await target.evaluate((element, expected) => {
+    const before = await target.evaluate(browserCallback((element: Element, expected: string) => {
       const dialog = element.closest('[role="dialog"], [role="alertdialog"], dialog[open]');
       const rect = element.getBoundingClientRect();
       const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -63,7 +64,7 @@ export async function runReferenceCookieControl(browser: Browser, input: CookieC
           && box.left < innerWidth && box.top < innerHeight && box.right > 0 && box.bottom > 0,
         dialog: dialog ? Array.from(document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open]')).indexOf(dialog) : -1,
       };
-    }, input.text);
+    }), input.text);
     if (!before.safe || before.dialog < 0) fail('TARGET_INVALID');
     const documentSha256 = createHash('sha256').update(await page.content()).digest('hex');
     // No second document or destination is authorized, even a same-origin GET navigation.
@@ -75,7 +76,7 @@ export async function runReferenceCookieControl(browser: Browser, input: CookieC
     if (page.url() !== url || blocked.length) fail('DOCUMENT_CHANGED');
     try { await page.locator(contentSelector).waitFor({ state: 'visible', timeout: 4_000 }); }
     catch { fail('NOT_CLEARED'); }
-    const confirmed = await page.evaluate(({ index, contentSelector }) => {
+    const confirmed = await page.evaluate(browserCallback(({ index, contentSelector }: { index: number; contentSelector: string }) => {
       const dialogs = document.querySelectorAll('[role="dialog"], [role="alertdialog"], dialog[open]');
       const dialog = dialogs[index];
       const contents = document.querySelectorAll(contentSelector);
@@ -96,7 +97,7 @@ export async function runReferenceCookieControl(browser: Browser, input: CookieC
       const y = (Math.max(0, box.top) + Math.min(innerHeight, box.bottom)) / 2;
       const top = document.elementFromPoint(x, y);
       return top !== null && content.contains(top);
-    }, { index: before.dialog, contentSelector }).catch(() => fail('DOCUMENT_CHANGED'));
+    }), { index: before.dialog, contentSelector }).catch(() => fail('DOCUMENT_CHANGED'));
     if (blocked.length || page.url() !== url) fail('DOCUMENT_CHANGED');
     if (!confirmed) fail('NOT_CLEARED');
     return { schema: 'reference-cookie-control-v1' as const, status: 'cleared' as const, url, selector: input.selector, text: input.text,

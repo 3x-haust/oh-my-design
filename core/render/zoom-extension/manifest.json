@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"OMD disposable capture zoom","version":"1.0","permissions":["tabs"],"background":{"service_worker":"worker.js"}}

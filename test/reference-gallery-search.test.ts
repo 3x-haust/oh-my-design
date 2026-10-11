@@ -47,7 +47,7 @@ test('installed CLI flushes the complete discovery plan for automation consumers
   const discovered = run(['ref', 'discover-plan', '--json']);
   assert.equal(discovered.status, 0, discovered.stderr);
   const plan = JSON.parse(discovered.stdout);
-  assert.deepEqual(plan.galleryDirectories, ['WWIT', 'SaaSUI', 'Mobbin', 'Page Flows', 'Pinterest', 'Dribbble', 'Behance', 'UI Bowl']);
+  assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Mobbin', 'Page Flows', 'Pinterest', 'Behance']);
 });
 
 test('product-screen providers accept concrete screens but reject their directory pages', () => {
@@ -86,7 +86,9 @@ test('product discovery does not auto-open gallery roots while skipped discovery
     routeAdaptiveFlow(JSON.parse(readFileSync(new URL(`fixtures/adaptive-flow/${fixture}.json`, import.meta.url), 'utf8'))));
   const plan = makePlan('medical-new-product');
   assert.deepEqual(Reflect.get(plan.designSourcePolicy, 'nativeEntryInputs'), []);
-  assert.equal(plan.sourcePolicy, 'current-search-or-direct-public-then-live-inspection');
+  // Browse is now the default; legacy catalogue roots remain optional seeds rather than automatic navigation.
+  assert.equal(plan.sourcePolicy, 'recorded-browse-or-legacy-native-discovery');
+  assert.equal(plan.browse.referenceUnit, 'whole-screen');
   assert.deepEqual(Reflect.get(makePlan('copy-only').designSourcePolicy, 'nativeEntryInputs'), []);
   assert.equal(Reflect.get(makePlan('copy-only').designSourcePolicy, 'domainEntryCommand'), null);
 });

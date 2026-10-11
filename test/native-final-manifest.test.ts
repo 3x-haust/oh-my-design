@@ -77,6 +77,7 @@ test('assembles current adaptive evidence without authoring verdicts or writing 
     assert.equal(result.graph.schema, 'final-evidence-v2-adaptive-omission-graph');
     assert.equal(result.graph.buildIdentity.path, '.omd/builds/current.json');
     assert.deepEqual(result.graph.observations.map(item => item.sha256), value.observations.map(observationV2Sha256));
+    assert.ok(result.graph.blindLane);
     assert.equal(result.graph.blindLane.schema, 'adaptive-blind-review-v3');
     assert.deepEqual(readFileSync(join(value.root, '.omd/source-seal.json')), before);
     assert.equal(result.motionDecision, 'none');

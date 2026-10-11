@@ -10,13 +10,14 @@ import { readCurrentDiscoveryNavigation } from '../core/ref/discovery-record.ts'
 import { loadRefs } from '../core/ref/store.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { directoryHtml } from './helpers/discovery-capture.ts';
+import { trustedLifecyclePng } from './helpers/trusted-lifecycle-png.ts';
 
 test('product navigation captures eager originals that finish loading during preparation', async t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-eager-original-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const source = 'https://personal-work.example.com/';
   const imageUrl = `${source}workspace.png`;
-  const bytes = readFileSync(new URL('./fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de/1280x900.png', import.meta.url));
+  const bytes = trustedLifecyclePng('1280x900');
   let releaseResponse: (() => void) | undefined;
   const responseReady = new Promise<void>(resolve => { releaseResponse = resolve; });
   assert.ok(releaseResponse);
@@ -84,7 +85,7 @@ test('product navigation prepares late high-ranked images beyond eight pending e
   const root = mkdtempSync(join(tmpdir(), 'omd-ninth-original-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const source = 'https://personal-work.example.com/';
-  const bytes = readFileSync(new URL('./fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de/1280x900.png', import.meta.url));
+  const bytes = trustedLifecyclePng('1280x900');
   const pending = Array.from({ length: 9 }, (_, index) => {
     let release: (() => void) | undefined;
     const ready = new Promise<void>(resolve => { release = resolve; });

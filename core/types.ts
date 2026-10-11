@@ -313,6 +313,9 @@ export interface Frame {
   uxSurface?: string;
   reality?: RealityLedger;
   entrySurface?: import('./frame/entry-surface-contract.ts').EntrySurfaceContract;
+  surfacePlan?: import('./frame/process-plan.ts').SurfacePlan;
+  validationPlan?: import('./frame/process-plan.ts').ValidationPlan;
+  accessibilityPlan?: import('./frame/process-plan.ts').AccessibilityPlan;
 
   [key: string]: unknown;
 }

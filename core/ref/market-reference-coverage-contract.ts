@@ -5,8 +5,10 @@ export type MarketLaneCoverage = Readonly<{
     sourceId: string;
     evidenceSha256: string;
     scope: 'service' | 'product' | 'gallery' | 'audience';
-    basis: 'market-search-result' | 'market-direct-result' | 'market-observed-page';
+    basis: 'market-search-result' | 'market-direct-result' | 'market-observed-page' | 'market-browse-observation';
     provenanceReceiptSha256: string;
+    browseEvent?: Readonly<{ seq: number; hash: string }>;
+    claim?: Readonly<{ kind: 'source-task-text' | 'link-label'; textSha256: string; linkUrl: string | null }>;
   }>[];
   globalFallback: Readonly<{
     sourceIds: readonly string[];
@@ -67,19 +69,29 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
     || Object.keys(input.localSources).length !== input.localSources.length) return marketReject(`${code}_LOCAL`);
   const localSources = Object.freeze(input.localSources.map(value => {
     const source = marketObject(value, `${code}_LOCAL`);
-    exact(source, ['sourceId', 'evidenceSha256', 'scope', 'basis', 'provenanceReceiptSha256'], `${code}_LOCAL_KEYS`);
+    const native = allowObserved && source.basis === 'market-browse-observation';
+    exact(source, ['sourceId', 'evidenceSha256', 'scope', 'basis', 'provenanceReceiptSha256', ...(native ? ['browseEvent', 'claim'] : [])], `${code}_LOCAL_KEYS`);
+    let binding: Pick<MarketLaneCoverage['localSources'][number], 'browseEvent' | 'claim'> = {};
+    if (native) {
+      const event = marketObject(source.browseEvent, `${code}_BROWSE_EVENT`), claim = marketObject(source.claim, `${code}_BROWSE_CLAIM`);
+      exact(event, ['seq', 'hash'], `${code}_BROWSE_EVENT`); exact(claim, ['kind', 'textSha256', 'linkUrl'], `${code}_BROWSE_CLAIM`);
+      if (!Number.isInteger(event.seq) || Number(event.seq) < 0 || !/^[a-f0-9]{64}$/.test(String(event.hash))
+        || !['source-task-text', 'link-label'].includes(String(claim.kind)) || !/^[a-f0-9]{64}$/.test(String(claim.textSha256))
+        || (claim.linkUrl !== null && (typeof claim.linkUrl !== 'string' || !claim.linkUrl.startsWith('https://')))) return marketReject(`${code}_BROWSE_CLAIM`);
+      binding = { browseEvent: { seq: Number(event.seq), hash: String(event.hash) }, claim: { kind: claim.kind as 'source-task-text' | 'link-label', textSha256: String(claim.textSha256), linkUrl: claim.linkUrl as string | null } };
+    }
     const sourceId = marketText(source.sourceId, `${code}_LOCAL_ID`);
     const retained = sources.find(candidate => candidate.id === sourceId);
     if (retained === undefined || source.evidenceSha256 !== retained.evidence.sha256) return marketReject(`${code}_LOCAL_EVIDENCE`);
     const scopes = label === 'domain' ? ['service', 'audience'] : ['product', 'gallery', 'audience'];
     if (!scopes.includes(source.scope as string)) return marketReject(`${code}_LOCAL_SCOPE`);
     if (source.basis !== 'market-search-result' && source.basis !== 'market-direct-result'
-      && !(allowObserved && source.basis === 'market-observed-page')) return marketReject(`${code}_LOCAL_BASIS`);
+      && !(allowObserved && source.basis === 'market-observed-page') && !native) return marketReject(`${code}_LOCAL_BASIS`);
     const provenanceReceiptSha256 = marketText(source.provenanceReceiptSha256, `${code}_LOCAL_RECEIPT`);
     if (!/^[a-f0-9]{64}$/.test(provenanceReceiptSha256)) return marketReject(`${code}_LOCAL_RECEIPT`);
     return Object.freeze({ sourceId, evidenceSha256: retained.evidence.sha256,
       scope: source.scope as MarketLaneCoverage['localSources'][number]['scope'],
-      basis: source.basis, provenanceReceiptSha256 });
+      basis: source.basis as MarketLaneCoverage['localSources'][number]['basis'], provenanceReceiptSha256, ...binding });
   }));
   let globalFallback: MarketLaneCoverage['globalFallback'] = null;
   if (input.globalFallback !== null) {

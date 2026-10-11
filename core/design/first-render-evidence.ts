@@ -1,103 +1,93 @@
-import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { isDeepStrictEqual } from 'node:util';
-import { critiqueFirstRender, parseFirstRenderSurface } from './first-render-critic.ts';
 import { readDesignJudgment } from './judgment-files.ts';
-import { withBrowser } from '../render/index.ts';
-import { withLocalView } from '../render/stateful.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
-import { servedProjectTreeSha256 } from '../render/serve.ts';
-import { listProductionSourceFiles } from '../source-seal/index.ts';
-import { parseSlopScope } from '../slop/review.ts';
-import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
-import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import { decodePng } from '../motion/energy.ts';
-import { PNG } from 'pngjs';
-import { canonicalJson } from '../ref/board-artifacts.ts';
+import { acquireProjectMutationLock, replaceProjectFileAtomically, requireProjectWriteAdapterForInvocation, type ProjectWriteAdapter } from '../runtime/project-write.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { measureProject } from '../measure/index.ts';
+import { loadMeasurement } from '../measure/files.ts';
+import { canonicalBytes, digest, sha256 } from '../measure/identity.ts';
+import { readArtifact } from '../measure/inputs.ts';
+import type { VisualMeasurement } from '../measure/types.ts';
+import { critiqueMeasuredFirstRender } from './first-render-measurement.ts';
 
 const PATH = '.omd/first-render-critic.json';
-const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
-const fail = (message: string): never => { throw new Error(`FIRST_RENDER_REQUIRED: ${message}; rerun first-render check --page <local-build.html> --input <surface.json>`); };
-const read = (root: string, path: string) => readStableProjectFile({ root: resolve(root), path: resolve(root, path), label: path, fs: nodeStableProjectFileSystem() });
-const sources = (root: string) => hash(canonicalJson(listProductionSourceFiles(root).map(path => ({ path, sha256: hash(read(root, path)) }))));
-const pageScope = (page: unknown) => parseSlopScope({ schema: 'slop-scope-v1', views: [{ id: 'first-render', page, viewport: { width: 1280, height: 900 } }] })[0]!;
+const fail = (message: string): never => { throw new Error(`FIRST_RENDER_REQUIRED: ${message}; rerun first-render check --page <local-build.html>`); };
+const REVIEW_VIEWS = Object.freeze([
+  Object.freeze({ viewport: { width: 1280, height: 900 }, label: 'desktop' }),
+  Object.freeze({ viewport: { width: 390, height: 844 }, label: 'mobile' }),
+]);
 
-/** Captures the local build natively. The supplied visual interpretation is agent-authored,
- * not automatically verified from pixels; its exact bytes and target are nevertheless bound. */
-export async function publishFirstRenderCheck(root: string, page: string, input: unknown, writer: ProjectWriteAdapter) {
-  const scope = pageScope(page);
-  const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('current design hypothesis is missing');
-  const surface = parseFirstRenderSurface(input);
-  const sourceSha256 = sources(root);
-  const buildSha256 = servedProjectTreeSha256(root, scope.page);
-  const captures = await withBrowser(async browser => {
-    const results = [];
-    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
-      const bytes = await withLocalView(browser, root, { ...scope, viewport }, async page => {
-        await page.evaluate(async () => {
-          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-          await Promise.all(document.getAnimations().filter(animation =>
-            animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished));
-        });
-        return page.screenshot({ fullPage: false, timeout: 5000 });
-      });
-      const path = `.omd/first-render/captures/${hash(bytes)}.png`;
-      writer.writeContentAddressed(path, bytes);
-      results.push({ path, sha256: hash(bytes), viewport, fullPage: false as const });
+function measuredReviewCaptures(packet: VisualMeasurement) {
+  return REVIEW_VIEWS.map(({ viewport, label }) => {
+    const view = packet.scope.find((item) => item.state === 'initial' && item.browserZoom === 1
+      && item.viewport.width === viewport.width && item.viewport.height === viewport.height)
+      ?? fail(`${label} measurement view is missing`);
+    const binding = packet.captures.find((item) => item.viewId === view.id)
+      ?? fail(`${label} measurement capture is missing`);
+    if (binding.image.width !== viewport.width || binding.image.height !== viewport.height) {
+      return fail(`${label} measurement dimensions changed`);
     }
-    return results;
+    return {
+      sourcePath: binding.capture.path,
+      record: Object.freeze({
+        path: `.omd/first-render/captures/${binding.capture.sha256}.png`,
+        sha256: binding.capture.sha256,
+        viewport,
+        fullPage: false as const,
+      }),
+    };
   });
-  const capture = captures[0] ?? fail('desktop capture missing');
-  if (sourceSha256 !== sources(root) || buildSha256 !== servedProjectTreeSha256(root, scope.page)
-    || !isDeepStrictEqual(hypothesis, readDesignJudgment(root)?.hypothesis)) return fail('inputs changed during capture');
-  const native = { schema: 'first-render-check-v3', page: scope.page, sourceSha256, buildSha256, capture, captures,
-    surface, report: critiqueFirstRender(hypothesis, surface), interpretation: 'agent-authored-not-attested' };
-  const record = { ...native, signature: signNativeObservation(root, 'first-render-v3', hash(canonicalJson(native))) };
-  const reportSha256 = hash(canonicalJson(record));
-  const body = `${JSON.stringify({ ...record, reportSha256 }, null, 2)}\n`;
-  writer.writeContentAddressed(`.omd/first-render/reports/${reportSha256}.json`, body);
-  writer.write(PATH, body);
-  return { ...record, reportSha256 };
 }
 
-/** A retained old report is not a certificate for a new hypothesis, source or build. */
-export function checkFirstRenderEvidence(root: string) {
+/** The old surface argument is retained only to issue an explicit migration refusal. */
+export async function publishFirstRenderCheck(root: string, page: string, input: unknown, writer: ProjectWriteAdapter, invocation?: ProjectRunInvocation) {
+  if (input !== undefined) return fail('agent-authored surfaces cannot publish measurement-derived evidence; remove --input');
+  if (!invocation) return fail('current invocation is required');
+  requireProjectWriteAdapterForInvocation(root, writer, invocation);
+  const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('current design hypothesis is missing');
+  const result = await measureProject({ root, entry: page, writer, invocation });
+  const packet = loadMeasurement(root, result.packet);
+  const reviewCaptures = measuredReviewCaptures(packet);
+  const native = { schema: 'first-render-check-v3' as const, page, measurements: [result.packet],
+    captures: reviewCaptures.map(({ record }) => record),
+    sourceSha256: packet.binding.sourceSha256, buildSha256: packet.binding.production[0]!.servedTreeSha256,
+    hypothesisSha256: digest(hypothesis), report: critiqueMeasuredFirstRender(hypothesis, packet, result.packet), interpretation: 'native-measurement-derived' as const };
+  const record = { ...native, signature: signNativeObservation(realpathSync(root), 'first-render-v3', digest(native)) };
+  const reportSha256 = digest(record), body = canonicalBytes({ ...record, reportSha256 });
+  const unlock = acquireProjectMutationLock(root, invocation);
+  try {
+    loadMeasurement(root, result.packet);
+    if (digest(readDesignJudgment(root)?.hypothesis) !== digest(hypothesis)) return fail('hypothesis changed during capture');
+    for (const capture of reviewCaptures) {
+      writer.writeContentAddressed(capture.record.path, readArtifact(root, capture.sourcePath));
+    }
+    writer.writeContentAddressed(`.omd/first-render/reports/${reportSha256}.json`, body);
+    replaceProjectFileAtomically({ projectRoot: root, relativePath: PATH, content: body, invocation });
+  } finally { unlock(); }
+  return { ...record, reportSha256 };
+}
+/** Historical v2 is inspectable as JSON, but cannot authorize a new measured completion. */
+export function checkFirstRenderEvidence(root: string, purpose: 'review' | 'acceptance' = 'acceptance') {
   if (!existsSync(resolve(root, PATH))) {
     if (existsSync(resolve(root, '.omd/design-judgment.json'))) return fail('report is missing');
     return null;
   }
-  const bytes = read(root, PATH);
-  const { reportSha256, ...record } = JSON.parse(bytes.toString('utf8'));
-  if (!['first-render-check-v2', 'first-render-check-v3'].includes(record.schema) || typeof reportSha256 !== 'string'
-    || !/^[a-f0-9]{64}$/.test(reportSha256) || hash(canonicalJson(record)) !== reportSha256) return fail('report schema or digest is invalid');
-  if (!bytes.equals(read(root, `.omd/first-render/reports/${reportSha256}.json`))) return fail('immutable report differs');
+  const bytes = readArtifact(root, PATH), { reportSha256, ...record } = JSON.parse(bytes.toString('utf8'));
+  if (record.schema !== 'first-render-check-v3' || typeof reportSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(reportSha256) || digest(record) !== reportSha256) return fail('legacy-unmeasured or invalid report');
+  if (!bytes.equals(readArtifact(root, `.omd/first-render/reports/${reportSha256}.json`))) return fail('immutable report differs');
   const { signature, ...native } = record;
-  if (typeof signature !== 'string' || !verifyNativeObservation(root,
-    record.schema === 'first-render-check-v3' ? 'first-render-v3' : 'first-render-v2', hash(canonicalJson(native)), signature)) return fail('native capture signature invalid');
-  const scope = pageScope(record.page);
-  if (record.sourceSha256 !== sources(root) || record.buildSha256 !== servedProjectTreeSha256(root, scope.page)) return fail('source/build changed');
-  const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('hypothesis is missing');
-  if (!isDeepStrictEqual(record.report, critiqueFirstRender(hypothesis, record.surface))) return fail('hypothesis or critic result changed');
-  if (!record.capture || typeof record.capture.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(record.capture.sha256)
-    || record.capture.path !== `.omd/first-render/captures/${record.capture.sha256}.png`) return fail('capture binding is invalid');
-  const capture = read(root, record.capture.path);
-  if (hash(capture) !== record.capture.sha256) return fail('capture bytes changed');
-  decodePng(capture);
-  if (record.schema === 'first-render-check-v3') {
-    if (!Array.isArray(record.captures) || record.captures.length !== 2
-      || !isDeepStrictEqual(record.capture, record.captures[0])) return fail('desktop/mobile capture set invalid');
-    for (const [index, item] of record.captures.entries()) {
-      const viewport = index === 0 ? { width: 1280, height: 900 } : { width: 390, height: 844 };
-      if (!item || !isDeepStrictEqual(item.viewport, viewport) || item.fullPage !== false
-        || typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256)
-        || item.path !== `.omd/first-render/captures/${item.sha256}.png`) return fail('viewport capture binding invalid');
-      const bytes = read(root, item.path);
-      if (hash(bytes) !== item.sha256) return fail('capture bytes changed');
-      const image = PNG.sync.read(bytes);
-      if (image.width !== viewport.width || image.height !== viewport.height) return fail('fixed viewport dimensions invalid');
-    }
+  if (typeof signature !== 'string' || !verifyNativeObservation(realpathSync(root), 'first-render-v3', digest(native), signature)) return fail('native report signature invalid');
+  if (!Array.isArray(record.measurements) || record.measurements.length !== 1) return fail('measurement receipt required');
+  const packet = loadMeasurement(root, record.measurements[0]);
+  const expectedCaptures = measuredReviewCaptures(packet).map(({ record }) => record);
+  if (digest(record.captures) !== digest(expectedCaptures)) return fail('independent review capture bindings changed');
+  for (const capture of expectedCaptures) {
+    if (sha256(readArtifact(root, capture.path)) !== capture.sha256) return fail('independent review capture bytes changed');
   }
-  if (record.report.verdict !== 'retain') return fail('critical findings remain');
+  const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('hypothesis is missing');
+  if (record.hypothesisSha256 !== digest(hypothesis) || digest(record.report) !== digest(critiqueMeasuredFirstRender(hypothesis, packet, record.measurements[0]))) return fail('hypothesis or measured critic result changed');
+  if (record.sourceSha256 !== packet.binding.sourceSha256 || record.buildSha256 !== packet.binding.production[0]?.servedTreeSha256) return fail('stale source/build remain');
+  if (purpose === 'acceptance' && record.report.verdict !== 'retain') return fail('critical findings remain');
   return { ...record, reportSha256 };
 }

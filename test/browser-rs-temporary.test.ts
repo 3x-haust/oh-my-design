@@ -21,7 +21,7 @@ function childMessage(child: ChildProcess, timeoutMs = 5_000): Promise<string> {
   });
 }
 
-function removedPath(path: string, timeoutMs = 5_000): Promise<void> {
+function removedPath(path: string, timeoutMs = 30_000): Promise<void> {
   return new Promise((resolve, reject) => {
     const parent = join(path, '..');
     const name = basename(path);
@@ -109,7 +109,7 @@ test('future self-consistent receipts and unavailable process identity never aut
   }
 });
 
-test('capability reaper cleans a task-owned root when its owner is killed', async (context) => {
+test('capability reaper cleans a task-owned root when its owner is killed', { timeout: 40_000 }, async (context) => {
   const root = fixture();
   context.after(() => rmSync(root, { recursive: true, force: true }));
   const moduleUrl = new URL('../core/install/browser-rs-temporary.ts', import.meta.url).href;

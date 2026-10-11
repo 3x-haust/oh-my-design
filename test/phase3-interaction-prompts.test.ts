@@ -1,96 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { parseCandidateStudy, parseSketchBrief } from '../core/brief/candidate-study.ts';
+import { readBuildAgents } from '../adapters/build-identity.ts';
+import { promptRoot, assertRoleDelivery } from './helpers/prompt-delivery.ts';
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
+const receipt = { path: '.omd/study.json', sha256: 'a'.repeat(64) };
+const study = { schema: 'structural-study-v1', plan: receipt, content: receipt, tokens: receipt, candidateId: 'A', views: [], testedRelationship: 'Cause before consequence', findings: [], limitations: ['No live interaction observation.'] };
 
-test('composer names the three autonomous signature-interaction mechanisms and keeps them gated', () => {
-  const composer = read('src/agents/composer.agent.yaml');
-
-  // The three mechanisms: recipe pack, generative ideation, reference signal board.
-  assert.match(composer, /core\/interaction\/recipes\/`? recipe pack/);
-  assert.match(composer, /generative ideation/i);
-  assert.match(composer, /core\/interaction\/`? scout\s+signal board/);
-
-  // Signal board is separated from the distance gate; copying a reference screenshot is now allowed.
-  assert.match(composer, /separate collection surface from `core\/ref\/distance\.ts`/);
-  assert.match(composer, /You may imitate a reference\s+screenshot/i);
-
-  // Lanes in order: CSS scroll-driven, then React animation libraries (GSAP/ScrollTrigger, Framer Motion), WebGL escalation-only.
-  assert.match(composer, /interaction lanes are, in order: CSS scroll-driven/i);
-  assert.match(composer, /GSAP with ScrollTrigger[\s\S]*Framer Motion \(`motion`\)/i);
-  assert.match(composer, /first-class lane preferred over hand-rolled rAF/i);
-  assert.match(composer, /escalating to WebGL is an escalation, not a default/i);
-
-  // Autonomy never bypasses the existing gates.
-  assert.match(
-    composer,
-    /autonomous ideation never bypasses\s+register-fit, the performance budget, the slop gates, hand precedence/i
-  );
-
-  // Register-fit and the one-signature-moment restraint still apply to interactions.
-  assert.match(composer, /Fit the interaction to register/i);
-  assert.match(composer, /one-signature-moment restraint/i);
+test('structural studies cannot carry motion or final beauty, while visual-study is explicitly selected', () => {
+  for (const extra of [{ motion: 'one' }, { beauty: 4 }, { animation: {} }]) assert.throws(() => parseCandidateStudy({ ...study, ...extra }));
+  assert.equal(parseCandidateStudy(study).schema, 'structural-study-v1');
+  assert.equal(parseSketchBrief({ schema: 'sketch-brief-v1', mode: 'visual-study', plan: receipt, candidateId: 'A', sourceDirectory: '.omd/.cache/sketches/A' }).mode, 'visual-study');
+  assert.throws(() => parseSketchBrief({ schema: 'sketch-brief-v1', mode: 'showpiece', plan: receipt, candidateId: 'A', sourceDirectory: '.omd/.cache/sketches/A' }));
 });
 
-test('composer additive does not weaken the pre-existing one-signature-moment and carrier lock text', () => {
-  const composer = read('src/agents/composer.agent.yaml');
-  assert.match(
-    composer,
-    /On a `marketing` surface with a selected showpiece register, assign exactly one signature/i
-  );
-  assert.match(composer, /never overrides the media-role or restraint rules above/i);
-});
-
-test('sketch keeps assigned interactions structural unless an exact host-evidence-only scene is routed', () => {
-  const sketch = read('src/agents/sketch.agent.yaml');
-  const loop = read('core/protocol/human-design-loop.md');
-
-  assert.match(sketch, /interaction-based signature moment/i);
-  assert.match(sketch, /core\/interaction\/recipes\/`? pack/);
-  assert.match(sketch, /core\/interaction\/`? reference signal board/);
-  assert.match(sketch, /structural footprint/i);
-  assert.match(sketch, /Do not implement the interaction, its motion, timing, or any WebGL canvas/i);
-  assert.match(sketch, /CSS scroll-driven default vs\. WebGL escalation/i);
-  assert.match(sketch, /both\s+`\[host-evidence-only:candidate\]`\s+and an exact `\[candidate-motion-scene:v1\]`/i);
-  assert.match(sketch, /implement exactly the named\s+preproduction scene/i);
-  assert.match(sketch, /do not invoke `omd render` or any browser\/capture\/probe command/i);
-  assert.match(loop, /Without both markers[\s\S]*ordinary no-motion and proof-rendering rules remain in force/i);
-
-  // Must not relax the pre-existing no-motion / no-colour-direction constraint.
-  assert.match(
-    sketch,
-    /No production edits, colour\s+direction, motion, polished or decorative graphics, or persuasive rationale\./
-  );
-});
-
-test('phase-1/phase-2 restraint and dependency locks on composer/sketch remain intact', () => {
-  const composer = read('src/agents/composer.agent.yaml');
-  const sketch = read('src/agents/sketch.agent.yaml');
-
-  assert.match(composer, /never mandate a photo or invent facts\/assets/);
-  assert.match(composer, /Never invent the asset or fact the carrier depends\s+on/i);
-  assert.match(
-    sketch,
-    /approved typography and\s+composition contracts[\s\S]*one axis assigned/i
-  );
-  assert.match(
-    sketch,
-    /four structural proofs[\s\S]*1280x900[\s\S]*390x844[\s\S]*full-page desktop[\s\S]*full-page mobile/i
-  );
-});
-test('composer permits only an evidence-gated showpiece scroll-position-scrubbed journey', () => {
-  const composer = read('src/agents/composer.agent.yaml');
-  // A scroll journey is a showpiece-only escalation atop the one load scene, gated on scroll-scene-evidence-v1.
-  assert.match(composer, /scroll-position-scrubbed\s+journey/i);
-  assert.match(composer, /carries validated `scroll-scene-evidence-v1`/i);
-  assert.match(composer, /`final-evidence-v2` gates it/i);
-  // Time-triggered scroll and non-showpiece registers stay rejected; other trigger kinds stay unsettleable.
-  assert.match(composer, /nor a TIME-triggered scroll\s+animation/i);
-  assert.match(composer, /on any non-`showpiece` register, or with a time-triggered scene is rejected/i);
-  assert.match(composer, /default observable trigger contract is one load scene/i);
-  assert.match(composer, /pointer-, hover-, focus-, click-, or state-triggered choreography/i);
+test('paired host-only candidate motion sentinels remain available without creating another agent', () => {
+  const agents = readBuildAgents(promptRoot), sketch = agents.find(a => a.name === 'omd-sketch')!;
+  assert.ok(sketch.instructions.includes('[host-evidence-only:candidate]'));
+  assert.ok(sketch.instructions.includes('[candidate-motion-scene:v1]'));
+  assertRoleDelivery('sketch'); assertRoleDelivery('composer');
 });

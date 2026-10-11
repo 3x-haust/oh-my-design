@@ -1,5 +1,6 @@
 import { parseRealityFact, parseRealityLedger } from './index.ts';
 import { diagnoseEntrySurfaceContract, parseEntrySurfaceContract } from './entry-surface-contract.ts';
+import { parseSurfacePlan, parseValidationPlan, parseAccessibilityPlan, validateFrameProcessPlans } from './process-plan.ts';
 import type { writeFrameRecord } from './write.ts';
 import { normalizeUxSurface, validateTaskCoverageMatrix } from './check-ux.ts';
 
@@ -20,8 +21,10 @@ export function diagnoseFrameInput(value: unknown): readonly { path: string; cod
     return diagnostics;
   }
   const v = value as Record<string, unknown>;
-  check('schema', () => { if (v.schema !== 'frame-input-v1') throw new Error('expected frame-input-v1'); });
-  for (const key of Object.keys(v).filter(key => !(FRAME_INPUT_KEYS as readonly string[]).includes(key)))
+  const current = v.schema === 'frame-input-v2';
+  const allowed = [...FRAME_INPUT_KEYS, ...(current ? ['surfacePlan', 'validationPlan', 'accessibilityPlan'] : [])];
+  check('schema', () => { if (!current && v.schema !== 'frame-input-v1') throw new Error('expected frame-input-v1 or frame-input-v2'); });
+  for (const key of Object.keys(v).filter(key => !allowed.includes(key)))
     diagnostics.push({ path: key, code: 'FRAME_INPUT_INVALID', message: `unknown field ${key}` });
   for (const key of ['problem', 'reframe', 'why', 'uxTask', 'uxFrequentAction', 'uxCostliestError', 'uxSurface'] as const)
     check(key, () => { if (typeof v[key] !== 'string' || !v[key].trim()) throw new Error(`${key} must be nonempty`); });
@@ -52,6 +55,12 @@ export function diagnoseFrameInput(value: unknown): readonly { path: string; cod
     } else check('reality', () => parseRealityLedger(v.reality));
   }
   if (v.entrySurface !== undefined) diagnostics.push(...diagnoseEntrySurfaceContract(v.entrySurface));
+  if (current) {
+    check('surfacePlan', () => parseSurfacePlan(v.surfacePlan));
+    check('accessibilityPlan', () => parseAccessibilityPlan(v.accessibilityPlan));
+    if (v.validationPlan !== undefined) check('validationPlan', () => parseValidationPlan(v.validationPlan));
+    if (diagnostics.length === 0) check('input', () => parseFrameInput(value));
+  }
   return diagnostics;
 }
 
@@ -60,13 +69,20 @@ export function diagnoseFrameInput(value: unknown): readonly { path: string; cod
 export function parseFrameInput(value: unknown): FrameInput {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('FRAME_INPUT_INVALID: expected an object; run omd schema frame');
   const v = value as Record<string, unknown>;
-  const extra = Object.keys(v).filter(key => !(FRAME_INPUT_KEYS as readonly string[]).includes(key));
-  if (extra.length || v.schema !== 'frame-input-v1') throw new Error(`FRAME_INPUT_INVALID: expected frame-input-v1, unknown fields: ${extra.join(', ')}; run omd schema frame`);
+  const current = v.schema === 'frame-input-v2';
+  const allowed = [...FRAME_INPUT_KEYS, ...(current ? ['surfacePlan', 'validationPlan', 'accessibilityPlan'] : [])];
+  const extra = Object.keys(v).filter(key => !(allowed as readonly string[]).includes(key));
+  if (extra.length || (!current && v.schema !== 'frame-input-v1')) throw new Error(`FRAME_INPUT_INVALID: expected frame-input-v1 or frame-input-v2, unknown fields: ${extra.join(', ')}; run omd schema frame`);
   const text = (key: string): string => {
     if (typeof v[key] !== 'string' || !v[key].trim()) throw new Error(`FRAME_INPUT_INVALID: ${key} must be nonempty; run omd schema frame`);
     return v[key] as string;
   };
+  const plans = current ? { surfacePlan: parseSurfacePlan(v.surfacePlan),
+    ...(v.validationPlan === undefined ? {} : { validationPlan: parseValidationPlan(v.validationPlan) }),
+    accessibilityPlan: parseAccessibilityPlan(v.accessibilityPlan) } : {};
+  validateFrameProcessPlans(plans, typeof v.taskCoverageMatrix === 'string' ? v.taskCoverageMatrix : '');
   return {
+    ...plans,
     problem: text('problem'), reframe: text('reframe'), why: text('why'), uxTask: text('uxTask'),
     uxFrequentAction: text('uxFrequentAction'), uxCostliestError: text('uxCostliestError'), uxSurface: text('uxSurface'),
     ...(v.taskCoverageMatrix === undefined ? {} : { taskCoverageMatrix: text('taskCoverageMatrix') }),

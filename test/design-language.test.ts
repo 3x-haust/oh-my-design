@@ -14,6 +14,7 @@ import type { Reference } from '../core/types.ts';
 import { moodQueries } from '../core/ref/mood-query.ts';
 import { validateCurrentCompositionContractSource } from '../core/composition-contract/index.ts';
 import { publishReadingJudgment } from './design-language-judgment-cli.ts';
+import { trustedLifecyclePng } from './helpers/trusted-lifecycle-png.ts';
 const SHA = 'a'.repeat(64);
 const reading = { id: 'space', labelKo: '간격 넓히기', origin: { kind: 'lexicon', entryId: 'cramped', readingId: 'space', revision: lexicon.revision, sha256: lexiconSha256 }, targets: [{ id: 'group', metric: 'group-gap', role: 'form', route: '/', selector: 'form', viewport: 'desktop', state: 'initial', range: [16, 24], unit: 'px', direction: 'increase', minDelta: 4 }], referenceKeywordsEn: ['grouped settings rows'], counterSignals: ['touching'], mustNotMean: ['delete information'] };
 const input = { schema: 'design-language-input-v1', kind: 'intake', text: '답답해', request: '답답해', sourceContractSha256: SHA, readings: [reading], chosenId: 'space', decision: 'form rows collide' };
@@ -80,8 +81,7 @@ test('picture-backed meaning question accepts only its current bound answer', ()
     const writer = createTestProjectWriteAdapter(root, invocation);
     mkdirSync(join(root, '.omd/refs/design'), { recursive: true });
     writeFileSync(join(root, 'index.html'), '<main>unchanged</main>');
-    const pngs = ['1280x900.png', '390x844.png'].map(file => readFileSync(join(import.meta.dirname,
-      'fixtures/trusted-lifecycle-project/.omd/evaluation-runs/sha256-7ed1e6c5732c6c42e5be64be04ced2d264d25c1c3220582e16f1f636c24906de', file)));
+    const pngs = (['1280x900', '390x844'] as const).map(trustedLifecyclePng);
     const options = ['one', 'two'].map((id, index) => {
       const thumbnailPath = `.omd/refs/design/${id}.png`;
       const bytes = pngs[index]!;

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { checkTerminalCompletion } from '../completion/preflight.ts';
 import { checkFinalEvidenceV2 } from '../evidence/final-v2.ts';
 import { readFrame } from '../frame/index.ts';
-import { checkReferenceApplication } from '../ref/reference-application.ts';
+import { completionLimitations } from '../completion/limitations.ts';
 import { checkReferenceApplicationReview, referenceApplicationReviewContext } from '../ref/reference-application-review.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
@@ -14,6 +14,7 @@ import { checkNativeFinalReview } from '../runtime/native-final-review-state.ts'
 import { getNativePiRun } from '../runtime/native-pi-run.ts';
 import { checkSlopFinalGraph } from '../slop/review.ts';
 import { nativeReframeWork, requireResolvedNativeReframe } from '../runtime/native-reframe.ts';
+import { refinementEscalation } from './refinement-work.ts';
 
 const reason = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
@@ -50,6 +51,13 @@ export function nativeCompletionWork(root: string, invocation: ProjectRunInvocat
   const reframe = nativeReframeWork(root, invocation);
   if (reframe !== null) return reframe;
   const route = readPersistedRoute(root, invocation);
+  const escalation = route.sourceContract.processPolicy ? refinementEscalation(root, route.sourceContractSha256) : null;
+  if (escalation) {
+    const { defects, ...pending } = escalation;
+    return { schema: 'stage-next-v2', stage: 'production', owner: 'coordinator', action: 'await-user',
+      reason: 'repeated-defect', pending, escalationEvidence: defects, resumeAuthority: null, next: null, problems: [],
+      instruction: 'The same required defect survived three distinct repairs. Stop automatic recovery and await real human authority; do not waive the failed requirement.' } as const;
+  }
   const entry = readFrame(root)?.entrySurface?.entryPath;
   if (entry !== undefined) {
     try { readContainedRegularFile(root, join(root, entry), 'production entry'); }
@@ -65,8 +73,13 @@ export function nativeCompletionWork(root: string, invocation: ProjectRunInvocat
   let final: ReturnType<typeof checkFinalEvidenceV2>;
   try { final = checkFinalEvidenceV2(root, invocation); }
   catch (error) { return { ...WORK.finalize, problems: [reason(error)] }; }
+  const { application, limitations } = completionLimitations(root, route);
+  if (application) {
+    try { checkReferenceApplicationReview(root, referenceApplicationReviewContext(root, application, final.graph)); }
+    catch (error) { return { ...WORK.application, problems: [reason(error)], limitations }; }
+  }
   try { checkTerminalCompletion(root, invocation); }
   catch (error) { return { ...WORK.completion, problems: [reason(error)] }; }
   return { stage: null, owner: 'coordinator', action: 'validate-selected-gates', next: 'omd guard completion --json',
-    instruction: 'Current terminal evidence passed read-only validation. Use the completion guard for the final handoff.', problems: [] };
+    instruction: 'Current terminal evidence passed read-only validation. Include every limitation in the final handoff; no reference-grounding or cultural-fit claim is implied.', problems: [], limitations };
 }

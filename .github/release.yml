@@ -1,0 +1,15 @@
+changelog:
+  exclude:
+    labels:
+      - status/skip-changelog
+  categories:
+    - title: Features
+      labels: [type/feature]
+    - title: Fixes
+      labels: [type/bug]
+    - title: Documentation
+      labels: [type/docs]
+    - title: Maintenance
+      labels: [type/chore, dependencies]
+    - title: Other changes
+      labels: ['*']

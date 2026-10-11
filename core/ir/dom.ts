@@ -1,11 +1,12 @@
 import type { RawIr } from '../types.ts';
+import type { IrExtractionOptions } from './detail.ts';
 
 /**
  * Runs inside the page. Stringified and injected, so it must stay self-contained:
  * no imports, no closure over module scope, and nothing that survives type stripping
  * as a runtime construct.
  */
-export function extractInPage(maxNodes: number, selector?: string | null): RawIr {
+export function extractInPage(maxNodes: number, selector?: string | null, options: IrExtractionOptions = {}): RawIr {
   const toHex = (css: string): string | null => {
     const m = /^rgba?\(([^)]+)\)$/.exec(css);
     if (!m || !m[1]) return null;
@@ -283,6 +284,7 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
   });
 
   const nodes: RawIr['nodes'] = [];
+  const nodeElements = new Map<Element, string>();
   const walk = (el: Element, parentId: string | null): void => {
     if (nodes.length >= maxNodes) return;
     const rect = el.getBoundingClientRect();
@@ -364,6 +366,11 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       paintColors.push({ property: 'border', value, token: nameOf(value), semanticRole });
     }
     if (paintColors.length > 0) node.paintColors = paintColors;
+    node.borderWidths = [
+      et ? parseFloat(cs.borderTopWidth) : 0, er ? parseFloat(cs.borderRightWidth) : 0,
+      eb ? parseFloat(cs.borderBottomWidth) : 0, el2 ? parseFloat(cs.borderLeftWidth) : 0,
+    ];
+    nodeElements.set(el, id);
     if (isInteractive(el)) node.interactive = true;
     if (cs.display === 'inline') node.inline = true;
 
@@ -403,7 +410,15 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
         node.displayText = true;
         const koreanWrap = koreanWrapOf(el);
         if (koreanWrap) node.koreanWrap = koreanWrap;
+      }
+      const context = el.closest('button,a[href],[role="button"],[role="tab"],input,select,textarea,summary');
+      node.textContext = context ? 'control' : el.closest('nav,[role="navigation"]') ? 'navigation'
+        : el.closest('label') ? 'label' : node.displayText ? 'display' : 'body';
+      // Korean body/control wrapping is measured, not inferred from word-break declarations.
+      // The opt-in mode also measures all Latin text without changing its display semantics.
+      if (node.displayText || /[가-힣]/.test(el.textContent ?? '') || options.measurementDetails) {
         const textLines = directTextLines(el);
+        node.lineCount = textLines.length;
         if (textLines.length > 0) node.textLines = textLines;
       }
     }
@@ -567,8 +582,18 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     glyphIdentity: null,
   }));
 
+  let frequentAction: NonNullable<RawIr['meta']>['frequentAction'];
+  if (options.frequentAction) {
+    const matches = Array.from(document.querySelectorAll(options.frequentAction.selector));
+    const element = matches.length === 1 ? matches[0]! : null;
+    const nodeId = element ? nodeElements.get(element) ?? null : null;
+    const node = nodes.find(n => n.id === nodeId);
+    frequentAction = { ...options.frequentAction, matchCount: matches.length,
+      status: matches.length === 0 ? 'missing' : matches.length > 1 ? 'ambiguous' : node ? 'matched' : 'not-rendered',
+      nodeId, box: node?.box ?? null, viewportHeight };
+  }
   return {
-    meta: { source: 'dom', url: location.href, scrollHeight, viewportHeight, fontFaces, renderedBeats },
+    meta: { source: 'dom', url: location.href, scrollHeight, viewportHeight, fontFaces, renderedBeats, ...(frequentAction ? { frequentAction } : {}) },
     tokens: tokenByValue,
     nodes,
   };

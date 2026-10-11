@@ -2,10 +2,15 @@ import { checkCurrentDesignJudgment } from '../design/current-judgment.ts';
 import { readReferenceBoardArtifacts } from '../ref/board-artifacts.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 import { checkReferenceApplication } from '../ref/reference-application.ts';
+import { readReferenceAnalysis } from '../ref/reference-analysis.ts';
 
 export function referenceResearchWork(root: string, options: Readonly<{
-  expectedSourceContractSha256: string; benchmarkRequired: boolean; expectedRequest: string;
+  expectedSourceContractSha256: string; benchmarkRequired: boolean; expectedRequest: string; wholeScreen?: boolean;
 }>) {
+  if (options.wholeScreen) {
+    const work = referenceInterpretationWork(root, { sourceContractSha256: options.expectedSourceContractSha256, request: options.expectedRequest });
+    if (work) return work;
+  }
   try { readReferenceBoardArtifacts(root); } catch { return null; }
   try { validateReferenceResearch(root, readPublishedReferenceResearch(root), options); }
   catch (error) {
@@ -26,7 +31,17 @@ export function referenceResearchWork(root: string, options: Readonly<{
   return null;
 }
 
-export function referenceInterpretationWork(root: string) {
+export function referenceInterpretationWork(root: string, current?: { sourceContractSha256: string; request: string }) {
+  if (current) {
+    try { readReferenceAnalysis(root, current); return null; }
+    catch (error) { return {
+      stage: 'reference-interpretation', owner: 'omd-scout', action: 'analyze-whole-screen-references',
+      problems: [error instanceof Error ? error.message : String(error)], entryBlockers: [],
+      next: 'omd schema reference-analysis --json', schemas: [{ name: 'reference-analysis', command: 'omd schema reference-analysis' }], contracts: [],
+      judgedBy: [{ command: 'omd ref browse analysis-check --json', fails: 'actual whole-screen analysis is missing or stale' }],
+      instruction: 'Scout inspects the actual retained whole-screen images and publishes reference-analysis through ref browse analysis-set. Preserve patterns, exceptions, per-surface application and honest gaps. A native budget/unavailable seal remains confidence debt; do not fabricate a board or analysis to erase it.',
+    }; }
+  }
   let problems: readonly string[];
   try { problems = checkCurrentDesignJudgment(root).findings; }
   catch (error) { problems = [error instanceof Error ? error.message : String(error)]; }

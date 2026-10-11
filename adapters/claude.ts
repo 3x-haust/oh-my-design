@@ -149,14 +149,14 @@ export function emitClaude({
 // of their "omd-" prefix and cross-references rewritten to the "oh-my-design:" plugin form.
 
 // Marketplace references use the plugin namespace, but executable `--agent omd-hand`
-// arguments remain host CLI identifiers rather than Claude plugin references.
-const AGENT_REF = /\bomd-(composer|framer|eye|glance|hand|scout|sketch|typesetter|writer|ultradesign|humanize|critique|coach|figma)\b/g;
+// and `--role omd-typesetter` arguments remain CLI identifiers rather than plugin references.
+const AGENT_REF = /\bomd-(art-director|composer|framer|eye|glance|hand|scout|sketch|study|typesetter|writer|ultradesign|humanize|critique|coach|figma|concepts|system|expand|audit)\b/g;
 
 const pluginizeRefs = (text: string): string => text.replace(
   AGENT_REF,
   (match, name: string, offset: number) => {
     const linePrefix = text.slice(text.lastIndexOf('\n', offset) + 1, offset);
-    const machineIdentity = /(?:--agent(?:=|\s+)|(?:owner|moderator)(?:`|"|')?(?:\s+is|\s*[:=])\s*(?:`|"|')?)$/.test(linePrefix);
+    const machineIdentity = /(?:--(?:agent|role)(?:=|\s+)|(?:owner|moderator)(?:`|"|')?(?:\s+is|\s*[:=])\s*(?:`|"|')?)$/.test(linePrefix);
     return machineIdentity ? match : `oh-my-design:${name}`;
   },
 );

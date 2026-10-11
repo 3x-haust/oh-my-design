@@ -23,11 +23,12 @@ test('visual phases retain independent machine-owned artifacts and dependency or
   assert.equal(ADAPTIVE_STAGE_OWNERS.copy, 'omd-writer');
   assert.equal(ADAPTIVE_STAGE_OWNERS['type-proof'], 'omd-typesetter');
   assert.equal(ADAPTIVE_STAGE_OWNERS.composition, 'omd-composer');
-  assert.equal(ADAPTIVE_STAGE_OWNERS['candidate-generation'], 'omd-sketch');
+  assert.equal(ADAPTIVE_STAGE_OWNERS['candidate-generation'], 'omd-art-director');
   assert.equal(ADAPTIVE_STAGE_OWNERS.production, 'omd-hand');
   assert.deepEqual(ADAPTIVE_STAGE_GRAPH.composition.prerequisites, ['frame', 'copy']);
   assert.deepEqual(ADAPTIVE_STAGE_GRAPH['type-proof'].prerequisites, ['copy']);
-  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['candidate-generation'].prerequisites, ['composition']);
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['candidate-generation'].prerequisites, ['frame']);
+  assert.ok(ADAPTIVE_STAGE_GRAPH.composition.afterIfSelected.includes('candidate-generation'));
   assert.ok(route.strategy.stages.indexOf('composition') < route.strategy.stages.indexOf('production'));
 });
 

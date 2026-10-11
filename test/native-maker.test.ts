@@ -7,7 +7,8 @@ import { publishAdaptiveRoute } from '../core/route/adaptive-route-persistence.t
 import { prepareNativeMaker } from '../core/runtime/native-maker-packet.ts';
 import { runPiMaker } from '../adapters/pi-maker-runtime.ts';
 import { publishNativeMaker, makeNativeSource } from '../core/runtime/native-maker.ts';
-import { contractSha256, deliveryReceipt } from '../core/stage/contract.ts';
+import { STAGES, contractSha256, deliveryReceipt } from '../core/stage/contract.ts';
+import { CURRENT_COMPOSITION_SECTIONS } from '../core/composition-contract/index.ts';
 import { selectReviewedCandidate } from '../core/brief/candidate-reference-review.ts';
 import { CANDIDATE_EVIDENCE_FILES, validateCandidateSelectionPointer } from '../core/brief/candidate-selection.ts';
 import { candidateStateHtml, candidateCaptureStates } from './helpers/candidate-states.ts';
@@ -58,9 +59,9 @@ function selectedReferenceRoute(context: ReturnType<typeof fixture>) {
   const routeInput = context.routeInput;
   routeInput.strategyDecision.stages.splice(1, 0, 'frame', 'acquisition', 'scout', 'reference-board');
   routeInput.strategyDecision.roles.push('omd-framer', 'omd-scout');
-  routeInput.strategyDecision.executionWaves.splice(1, 0, {
-    id: 'references', mode: 'concurrent', roles: ['omd-framer', 'omd-scout'],
-  });
+  routeInput.strategyDecision.executionWaves.splice(1, 0,
+    { id: 'acquisition', mode: 'concurrent', roles: ['omd-framer'] },
+    { id: 'references', mode: 'concurrent', roles: ['omd-scout'] });
   routeInput.strategyDecision.skips = routeInput.strategyDecision.skips.filter(
     (skip: { id: string }) => !['frame', 'acquisition', 'scout', 'reference-board', 'reference-selection'].includes(skip.id));
   publishAdaptiveRoute(context.root, routeInput, context.writer, context.invocation);
@@ -180,18 +181,47 @@ for (const paths of [
   });
 }
 
+function candidateComposition(context: ReturnType<typeof fixture>, axis: string) {
+  context.writer.write('.omd/type-proof.md',
+    '## Approved type contract\nUse system-ui at 16px, weight 400 and 1.5 line height for the confirmation.\n');
+  const content: Record<string, string> = {
+    'Input fingerprint': ([['Frame', 'frame.md'], ['Copy deck', 'copy-deck.md'], ['Type proof', 'type-proof.md']] as const)
+      .map(([label, path]) => `- ${label} SHA-256: ${sha256(readFileSync(join(context.root, '.omd', path)))}`)
+      .join('\n') + '\n- Scout SHA-256: N/A — Existing confirmation copy needs no reference acquisition.',
+    'Candidate axes': `- ${axis}`,
+    'Colour roles': '| Dominant | #ffffff | Canvas |\n| Secondary | #111111 | Confirmation text |\n| Accent | #1744cc | Action |\n| Semantic success | #176539 | Status |\n| Semantic error | #a32020 | Error |',
+  };
+  context.writer.write('.omd/composition.md', CURRENT_COMPOSITION_SECTIONS
+    .map(section => `## ${section}\n${content[section] ?? 'Keep confirmation before metadata, preserve the approved copy, and reflow in task order.'}\n`).join('\n'));
+}
+
 function candidateRoute(context: ReturnType<typeof fixture>) {
   const routeInput = context.routeInput;
-  routeInput.strategyDecision.stages.splice(2, 0, 'candidate-generation');
-  routeInput.strategyDecision.roles.push('omd-sketch');
-  routeInput.strategyDecision.executionWaves.splice(1, 0, { id: 'candidates', mode: 'concurrent', roles: ['omd-sketch'] });
-  routeInput.strategyDecision.skips = routeInput.strategyDecision.skips.filter((skip: { id: string }) => skip.id !== 'candidate-generation');
+  routeInput.strategyDecision.stages.splice(1, 0, 'frame');
+  routeInput.strategyDecision.stages.splice(3, 0, 'composition', 'candidate-generation');
+  routeInput.strategyDecision.roles.push('omd-framer', 'omd-composer', 'omd-sketch');
+  routeInput.strategyDecision.executionWaves.splice(0, 0,
+    { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] });
+  routeInput.strategyDecision.executionWaves.splice(2, 0,
+    { id: 'composition', mode: 'concurrent', roles: ['omd-composer'] },
+    { id: 'candidates', mode: 'concurrent', roles: ['omd-sketch'] });
+  routeInput.strategyDecision.skips = routeInput.strategyDecision.skips.filter(
+    (skip: { id: string }) => !['frame', 'composition', 'candidate-generation'].includes(skip.id));
   publishAdaptiveRoute(context.root, routeInput, context.writer, context.invocation);
-  context.writer.write('.omd/composition.md', '## Candidate axes\n- Task before metadata\n');
-  const delivered = readFileSync(join(context.root, '.omd/delivery.jsonl'), 'utf8');
-  context.writer.write('.omd/delivery.jsonl', delivered + ['protocol/composition-contract.md', 'theory/layout.md']
-    .map(contract => JSON.stringify(deliveryReceipt('candidate-generation', contract,
-      contractSha256(packRoot, contract), '2026-09-20T00:00:00Z'))).join('\n') + '\n');
+  context.writer.write('.omd/frame.md', `---
+uxTask: Read the confirmation
+uxFrequentAction: View the confirmation
+uxCostliestError: Change the confirmation behavior
+uxSurface: product
+---
+## Task coverage matrix
+T1 | goal: Read the confirmation | start: Open the confirmation | actions: View the message | success: Approved confirmation is visible | recovery: N/A: Reading does not change data | viewports: desktop,mobile | requirements: none
+`);
+  const route = readPersistedRoute(context.root, context.invocation);
+  candidateComposition(context, 'Task before metadata');
+  context.writer.write('.omd/delivery.jsonl', STAGES.filter(stage => route.strategy.stages.includes(stage.id))
+    .flatMap(stage => stage.requiredContracts.map(contract => JSON.stringify(deliveryReceipt(stage.id, contract,
+      contractSha256(packRoot, contract, stage.id), '2026-09-20T00:00:00Z')))).join('\n') + '\n');
 }
 
 for (const missing of CANDIDATE_EVIDENCE_FILES) {
@@ -292,10 +322,7 @@ test('reframe preserves evaluator lineage through a revised candidate and fresh 
       whyItWorksThere: 'Progress acts on a selected book.', relevance: 'high', adopt: ['Book-local progress'],
       reject: ['Source branding'], interpretation: 'Keep progress with its book.', scope: 'surface' }],
   }, context.writer);
-  await publishFirstRenderCheck(context.root, 'src/copy/index.html', {
-    heading: 'Reading now', landmarks: ['main'], repeatedObjects: [], trustSignals: [],
-    visibleText: ['Reading now', 'Update progress'], dominantAreaShare: 0.7,
-  }, context.writer);
+  await publishFirstRenderCheck(context.root, 'src/copy/index.html', undefined, context.writer, context.invocation);
   const reviewerCli = join(repo, 'test/fixtures/pi-reviewer-rpc.mjs');
   const reviewer = createTestNativePiInvocation({ root: context.root, current: context.invocation.current,
     host: { ...getNativePiRun(context.invocation, context.root).host,
@@ -312,7 +339,7 @@ test('reframe preserves evaluator lineage through a revised candidate and fresh 
   const baseline = readFirstRenderReview(context.root);
   publishAdaptiveRoute(context.root, { ...context.routeInput,
     allowedPaths: [...context.routeInput.allowedPaths, 'public/build/**'] }, context.writer, context.invocation);
-  context.writer.write('.omd/composition.md', '## Candidate axes\n- Action before metadata\n');
+  candidateComposition(context, 'Action before metadata');
   assert.equal(nativeCompletionWork(context.root, context.invocation).action, 'author-reframe-candidate');
   await assert.rejects(makeNativeSource(context), /NATIVE_REFRAME_CANDIDATE_REQUIRED/);
   const directory = '.omd/.cache/sketches/reframed';
@@ -340,6 +367,7 @@ test('reframe preserves evaluator lineage through a revised candidate and fresh 
   assert.equal(nativeCompletionWork(context.root, context.invocation).action, 'recapture-reframe');
   const routed = nextStageWork(context.root, packRoot, context.invocation);
   assert.equal(routed.stage, 'production');
+  assert.ok('procedure' in routed);
   assert.ok(routed.procedure?.steps[0]?.startsWith('omd first-render check --page '));
   assert.equal(routed.procedure?.steps.some(step => step.startsWith('omd lifecycle')), false);
   await assert.rejects(runNativeEvaluation(context), /NATIVE_REFRAME_UNRESOLVED/);

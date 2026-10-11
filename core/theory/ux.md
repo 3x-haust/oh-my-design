@@ -24,12 +24,11 @@ what has happened, and what can happen next. A user who cannot identify the prim
 within three seconds of arriving has been failed by the design before they began.
 
 Condition → choice → reason: before choosing any visual direction, name the primary task
-in one sentence. If the task cannot be named, the frame is not done. The single most
-important action on any screen should be visually singular — one primary button per view,
-as specified by Material Design and Carbon Design System not as a preference but as an
-explicit structural constraint. Two filled buttons of equal visual weight cancel each other;
-the user cannot determine which path the system wants them to take, which is equivalent to
-offering no direction at all.
+in one sentence. If the task cannot be named, the frame is not done. Action hierarchy follows
+the current decision and its consequence, not a quota of one filled button per page. Within one
+task region, make the expected advancing action singular unless choices are genuinely equal;
+separate independent task regions, peer tools, and equal-choice dialogs may need equal or repeated
+treatments. See `components.md` §Action hierarchy by consequence.
 
 **Three brief questions anchor the frame:**
 
@@ -123,10 +122,10 @@ system — what appears at the top level, what is nested, what is hidden behind 
 is an argument about what matters most to the user.
 
 The misapplication of Miller's Law to navigation is documented in `components.md` and not
-repeated here. The correct constraint is visual, not mnemonic: navigation items compete
-with content for attention. The practical ceiling for top-level navigation is five to seven
-items, limited not by working memory capacity but by the visual threshold below which
-labels compress too much to scan reliably.
+repeated here. Navigation breadth is constrained by label length, grouping, task frequency,
+switching cost, permissions, viewport, and the cost of a wrong destination, not a fixed item
+count. Build the object model first, then use the card-sort and tree-testing methods in
+`ia-methods.md` to test labels and first clicks.
 
 Jakob's Law (Jakob Nielsen, 2000) provides the underlying principle: users spend most of
 their time on other websites. They arrive with a mental model built from everything they
@@ -200,24 +199,19 @@ something the designer never saw and therefore never fixed.
 
 ## Forms: what this file adds
 
-The core form guidance lives in `components.md` — validation timing (blur not keystroke),
-the single-column layout research, and the Baymard inline-validation findings. This section
-adds what is missing there: the multi-step versus single-page decision and error recovery.
+This section explains why form structure matters. `forms.md` owns the operational field-state
+table, validation timing, formatting, async checks, dependencies, save and resume, review,
+submission, and error-summary focus behavior. `components.md` owns input anatomy.
 
-**Multi-step versus single-page forms.** The decision is not aesthetic. A single-page form
-shows the user the full cost upfront — every field visible, every requirement readable
-before the first character is typed. This is appropriate when the form is short (under
-eight fields) and the relationship between fields is visible. A multi-step form reveals
-the cost progressively — each step introduces its own subset of fields, with a visible
-progress indicator. This is appropriate when the total field count is high (8+), when
-later fields depend on earlier answers, or when the user's mental load at any single step
-would otherwise be too high to complete.
+**Multi-step versus single-page forms.** The decision is not aesthetic or a field-count rule.
+Use one page when the whole form is easy to review. Split it when decisions form meaningful
+stages, later questions depend on earlier answers, sensitive commitments need review, or
+save-and-resume is needed. A stable sequence should expose progress and preserve entered data.
 
-The Baymard research on checkout usability found that the median checkout flow at
-5.1 steps performs better for abandonment than single-page long forms, specifically because
-users can see their progress — a visible progress indicator reduces perceived effort even
-when actual effort is identical. The measurement is not the number of clicks; it is
-whether the user understands, at every step, how far they have come and how far remains.
+Step count alone does not predict checkout quality. A reported median describes a dataset; it
+does not prove that multi-step checkout outperforms one page or that progress causes lower
+abandonment. Group fields when stages clarify decisions, then measure completion, correction,
+and return behavior in the actual flow.
 
 **Error recovery, not error prevention alone.** Nielsen's fifth heuristic, Error
 Prevention, is often implemented as disabling submit buttons until all fields are valid.
@@ -402,6 +396,7 @@ Condition → choice → reason: accessibility requirements are UX requirements 
 documentation. When a design decision would fail WCAG 2.2 AA, it would also fail a
 usability review. Use WCAG criteria as test conditions against which to evaluate UX
 decisions, not as a separate compliance checklist applied after the design is complete.
+`accessibility.md` owns the applicability matrix, real-browser procedures, and failure signals.
 
 ---
 

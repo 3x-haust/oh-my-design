@@ -1,21 +1,21 @@
 # Three-layer enforcement
 
 Applies to the current user-authorized OMD route, not unrelated repository work. A selected
-stage is mandatory; an explicit route skip remains a skip. Repetition alone is not enforcement.
-Missing, stale, malformed, or rejected selected prerequisites remain production blockers, never
-advisory warnings. `brief` inspection remains available; `brief --check` and `guard production`
-return a failing exit code when their selected prerequisite checks fail. Explicitly skipped stages
-and advisory visual warnings do not create mandatory inputs.
+stage retains its owner and selection; an explicit route skip remains a skip. Missing, stale, malformed, or rejected selected hard prerequisites remain blockers, while selected evidence work may yield only as explicit confidence debt, never fabricated success. Entry permission is not completion permission. brief inspection remains available; brief --check and guard production fail on applicable hard prerequisites. Advisory warnings and explicitly skipped stages do not create mandatory inputs.
 
 ## Layer 1 — declaration
 
 | Rule | Required outcome | Executable boundary |
 | --- | --- | --- |
+| Direction authority | Explicit interactive process routes use a representative direction checkpoint; autonomous selection requires actual signed user/host origin. A mode flag never substitutes for that origin or converts a harness choice into a human choice. A ready/stale interactive choice pauses expansion, not representative inspection. | candidate plan/set/select currentness; stage-next-v2 await-user; Pi original-input binding |
+| Role delivery | Makers get current whole-screen images, actual analysis and system material; blind profiles get no raw brief or references. | buildRoleBrief; closed profile manifest/digest; native isolated packet transport |
+| Full scope | Every surface's own required states x views and every declared stress case needs actual capture/review. | requiredSurfaceCells; native surface/content coverage joins; final publisher integration |
+| Repeated defect | Three distinct failed repairs of one stable issue pause; initial discovery/rechecks do not count. Budget cannot waive failures. | signed refinement observation chain; stage-next-v2 repeated-defect |
 | Route setup | Use the task-appropriate starter; preserve user facts, risk, scope and selected work while repairing input errors. Input validity is not publication or task completion. | `omd route validate --input <json> --json`; `route classify`; Pi setup recovery |
 | Original request | Bind the complete host intake, not a model summary, to route validation/publication. Preserve all requested screens and tasks through domain authoring. A source digest does not prove semantic coverage. | Pi native request binding; authenticated route source; `omd domain set`; current domain request equality |
 | Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
-| Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects. Current design research compares at least two independent visual-direction source families, distinct gallery items and distinct PNG evidence, and carries both into the board. Repeated pages, crops, aliases or captures from one product count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
+| Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. Fewer than three domain operator families or two visual-direction source families produces an advisory research limitation, not an admission quota. Repeated pages, crops, aliases or captures from one product count once. Exact source binding and applicable admission remain mandatory. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
 | Visual candidate admission | A selected design capture begins as an unapproved complete-original candidate. Independently signed Eye `direction` must precede byte-identical publication under refs/design and any accepted-family count; support/reject remain diagnostics. Preserve signed prior verdicts, bound task/capture/image and the 8 MiB serialized packet limit across incremental reviews; never crop or silently re-review the same pixels. | `ref add`/`add-batch` candidate-only publication; `ref direction-review --json` signed promotion; `ref work-next` counts only current direction families; board/research/application/handoff refusal |
 | Reference capture quality | Every declared public feature screen is captured in a signed native flow at a viewport that visibly contains its asserted state. A fixed full-viewport app container needs a selected visible feature, not inferred safety from its navigation or recovery controls. Informational notices are visually suppressed without invoking their close controls before retained pixels; consent, unknown, or unclosable obstructions are gaps, not visual evidence. Interaction probes cannot change the saved initial-state image. | `omd benchmark record`/`check`; `ref add`/`add-batch` capture refusal; current v3 evidence validation |
 | Korean reference scope | A Korean-language task brief starts Korean-service reference discovery without asserting a Korean cultural style. Predominantly Korean-language source UI can qualify regardless of domain suffix. Foreign-only domain captures require validated published local-domain research; editable captures and `--from-user` alone do not unlock fallback. Design-gallery pixels remain judged by the research provenance gate. A blocked Korean provider redirects discovery to another Korean operator and public transport. | `omd ref discover-plan --json`; `ref add`/`add-batch` market admission; v7 market coverage |
@@ -32,7 +32,90 @@ and advisory visual warnings do not create mandatory inputs.
 | Behavioral acceptance | Browser assertion execution is not semantic outcome acceptance. Existing independent protocol reviewers assess each original requirement against its actual executed plan and captures; shared evidence never substitutes for an unsupported behavior. | Native v2 executed-plan receipts; protocol `outcomeAssessments` publication; current adaptive final execution validation |
 | Zone-scoped visual evidence | Independent excellent, compatible evidence may authorize only its current named acquisition zone and static axes. It never upgrades global support or grants overall appearance intent, motion, behavior, or a direction-family count. All required zones remain required. | `ref direction-review --input <zone-input.json>`; signed zone lineage; exact board authoring/resolution scope checks; global admission predicates remain unchanged |
 
+| Entry-hard inputs | Authenticated route/scope, domain user facts, frame outcomes/reality, explicit locale/market authority, high-risk safety validation, and selected minimal composition remain mandatory. Existing-copy repair cannot omit its actual deck; a stale or REVISE copy verdict is not debt. | Production readiness; refused entry does not publish debt or mutate source |
+| Confidence debt | Bounded missing reference/candidate/type evidence may be recorded as not verified and disclosed; it never authorizes a success claim or waives task, access, safety, source ownership, independent review, slop closure, or known failed application criteria. | .omd/confidence-debt.json; guarded writer; terminal limitations |
+
 ## Layer 2 — procedure
+
+For human-design-process-v1, Art Director commits minimal tokens and the representative candidate
+plan before Sketch source. Writer base copy precedes choice; type proof and full composition follow
+it. The coordinator presents every actual preview and records only genuine choice bytes. No second
+register tournament or routine reference/type/component approval. Missing exploratory evidence stays
+debt; pending user authority is not research debt. Config defaults interactive and cannot mint autonomy.
+
+Current browse uses the recorded whole-screen procedure in reference-assembly.md. Scout chooses the
+next action; ref advance returns needs-model-action. Await exact command completion, preserve actual
+keep/drop/session receipts, inspect images and publish analysis/application. Native stopped-with-debt
+advances missing reference work without fabricated completion. The catalogue/batch instructions below
+remain explicit historical API procedures, not the current default. Never apply their overlay
+suppression or crop-only handoff rules to recorded browse.
+
+Hand source and observer profiles are permissions only when a genuine host role-mode grant is attached.
+The project writer refuses observer production writes and candidate source without a committed plan.
+Unattached hosts retain coherent legacy capabilities and disclose the limitation; prose is not a sandbox.
+
+Before first source work, Composer may author a minimal `.omd/composition.md`: `Input fingerprint`
+contains current `Frame SHA-256` and `Source contract SHA-256`; substantive `Experience spine`,
+`Grid and alignment`, `Focal hierarchy`, `Responsive recomposition`, and `Transfer boundary`
+sections name the task sequence, layout, priority, mobile behavior and factual/transfer limits.
+These are entry requirements, not a full-composition approval. Full composition extras become debt.
+No references, candidate renders, type proof or final review authority are needed for first entry.
+High-risk safety/recovery still requires valid copy and its current CLEAN review.
+
+A preliminary source seal may bind absent selected art-direction, copy or type-proof artifacts to
+current, same-stage confidence-debt IDs and the exact ledger digest. The stage stays `selected`,
+with empty `artifacts` and a `confidenceDebt` binding whose claim is `not-verified`; it is not a
+route skip or terminal approval. An existing artifact always takes normal integrity/currentness
+checks, even if old debt exists. Missing composition, missing debt, mismatched scope, malformed
+records and unsafe files refuse sealing before mutation. New artifacts or changed ledger bytes
+invalidate the preliminary seal. Source-bound proofs that exist still need their production
+revision binding. The coordinator uses `source --seal`/`source --check`; debt does not grant write scope.
+
+Route input may specify `learningScope: { surface }`. Without it, new-product/new-marketing use
+`product`/`marketing`; other work uses `unspecified`, never an inferred audience or market.
+Legacy `validatedLearningContext` descriptors are readable but their IDs/status confer no authority.
+Publication selects applicable rules from the local user/project store and snapshots advisory IDs in
+`validatedLearning`; replay retains that snapshot and does not reload the mutable store. Learned rules
+never add required methods or gates. An unavailable advisory index is reported, not a route blocker.
+Before `omd learn promote`, the coordinator publishes its scoped meaning judgment through
+`omd learn judge --input <judgment.json> --json`. The input contains `predictionId`,
+`decision: "scoped-observation"`, `reason`, and the exact proposition statement as `quote`.
+The publisher binds the current proposition digest and limits the target to rule statement/scope.
+Missing, mismatched or unsafe judgments cannot promote a rule; this is model judgment, not human
+approval, and it does not replace the independent outcome evidence required for promotion.
+
+Locale research publication binds the actual published target-market judgment receipt into the
+signed route. Publication and replay recheck its bytes, native signature, current request source
+and region. A matching claim label alone is not authority; missing or changed judgment evidence
+cannot authorize a route. Read-only historical inspection never grants publication authority.
+
+Completion and design handoffs include `hostCapabilities`. Only a native Pi invocation attests Pi
+hooks; local CLI and prose-only restrictions never become host-wide enforcement. Both text reports
+and the Pi final-message boundary disclose the matrix, including unenforced guarantees.
+
+The coordinator records bounded evidence reconsiderations in `.omd/discovery/stage-budget.json`.
+`stage next` shares one reference budget across Scout, acquisition, board, selection, moodboard and
+interpretation; other evidence stages receive their own budget. Budget exhaustion records origin,
+reason and `not-verified` in the guarded debt ledger, returns `deferredStages`, and advances without
+crediting those stages as validated. Never reset the budget to prolong discovery. Build and render
+from the authorized frame and minimal composition; the debt is visible in every downstream brief.
+
+Completion returns debt as `limitations`, never as verified research, cultural fit or candidate
+comparison. Historical entry gaps remain disclosed even after later evidence is collected; they are
+not terminal waivers. Current copy/type applicability, task behavior, completeness, authenticated
+browser evidence, independent review and slop closure cannot be replaced by debt. Once a current
+reference-application plan asserts rendered criteria, missing/stale/REVISE reviews still refuse
+completion: claiming those criteria passed would be false. Missing research instead withholds all
+reference-grounding claims. Design handoffs with debt report artifact integrity with limitations,
+not reference verification or application implementation.
+
+New delivery receipts hash only the declared consumed H2 sections of shared packs (including their
+nested content); dedicated contracts remain whole-document inputs. Redeliver legacy whole-file
+receipts once to migrate. Slop freshness hashes applicable rendered slop rules and recomputes the
+complete source/render finding inventory; unrelated scanner bytes or other rule categories do not
+invalidate reviewed pixels. Consumed rule changes, source/build changes and evidence tampering do.
+Reference briefs reserve one relevant capture per covered application surface before cross-cutting
+items. More than 12 reserved items use `referencePages`; omitted remainder has an explicit note.
 
 The coordinator reads this contract once at OMD intake. Before stage entry, inspect `stack` and use
 `schema product-route-input` for a new product implementation, `schema design-route-input` for a
@@ -66,18 +149,16 @@ directs `apply-references` to `ref apply-plan --json` for current per-surface de
 the pointer after native publication. Do not repeatedly run a passing board entry check or author
 application decisions before their research exists. These actions do not add route stages or
 validated-progress credits; stale research takes precedence over a missing application file.
-When the board itself is missing, use `omd ref work-next --json` to read the current evidence-derived
-action. For `collect-leads`, use the host web search tool and register caller-reported URLs with
-`omd ref leads add --input <json>`; these unsigned leads cannot satisfy evidence. `omd ref advance
---json` executes one eligible destination navigation and records its signed observation or failure
-before the pointer is recomputed. A visited gallery item is still only discovery:
- Scout inspects its actual UI image or observed original, stages a full-size candidate with `ref add`,
- follows `review-candidates` to run independent Eye admission, and only then authors a board
- from approved directions with `ref board --input`. An unsuitable inspected item receives a CLI-owned
+For the explicit historical catalogue path, when the board is missing, use its legacy work pointer.
+Historical `omd ref advance` consumers execute exactly one native public search or navigation action and
+records its outcome before the pointer is recomputed. A visited gallery item is still only discovery:
+Scout inspects its actual UI image or observed original, retains useful evidence with `ref add`, and
+authors the board with `ref board --input`. An unsuitable inspected item receives a CLI-owned
+
 `ref exclude` decision bound to its exact current native visit and a specific observed reason;
 an exclusion is judgment, not proof that a provider was unavailable. If every planned public path
 has current signed unavailable attempts or explicitly excluded observed candidates, keep the board
-missing and execute `replan-reference-discovery`: Scout authors a new batch from the gaps and runs
+missing and, while the budget remains, execute `replan-reference-discovery`: Scout authors a new batch from the gaps and runs
 `ref discover-batch --input .omd/.cache/reference-recovery-batch.json --recovery --json`.
 The gate refuses repeated current requests before browser work; query/provider changes and newly
 observed destinations can collect new evidence without lowering admission rules. Do not repeat
@@ -163,13 +244,12 @@ inspection and research repair remain available while production is blocked.
   Its production mode uses the same readiness validator as `guard production`.
 - Research v6/v7 permit actual search or explicit native direct-public roots; v5 keeps its original
   search requirements unchanged. Both refuse missing/mismatched declared search receipts or retained
-  links, and current v6/v7 domain research requires at least three retained comparable services from three
-  independent operator families. For v7 target-market work, all three are current local-market sources;
-  a global fallback cannot replace local comparison coverage. Multiple pages or subdomains under one operator such as GOV.UK
-  count once; historical v5 remains readable but cannot be relabelled as new research. Current v7
-  additionally refuses fewer than two independent visual-direction source families, reused gallery
-  items, identical retained design pixels, or a board that uses fewer than two of those directions.
-  Both refuse
+  links. Fewer than three domain operator families or two visual-direction source families yields
+  advisory diversity findings; it is not automatic admission failure. Market claims still require
+  authentic source-bound evidence, and global fallback cannot pretend to be local coverage.
+  Multiple pages or subdomains under one operator such as GOV.UK count once; historical v5
+  remains readable but cannot be relabelled as new research. Reused gallery items or identical
+  pixels never increase independent evidence. Both refuse
   links unreachable from observed discovery. Current v7 market coverage additionally requires signed
   search-v2 or direct-entry-v3 provenance tied to exact observed links and the explicit market. Search
   provenance binds visible result text to its link; a localized query alone is insufficient. A ccTLD
@@ -240,7 +320,7 @@ inspection and research repair remain available while production is blocked.
 - Pi checks native write/edit and non-allowlisted shell calls at the source boundary and checks
   final messages after OMD mutations. CLI-owned evidence cannot be directly authored. Failed
   completion triggers a progress-driven repair/recheck loop for an actual source-writing task. It has
-  no fixed total pass ceiling while owned artifacts or the current work pointer advance; the same
+  a finite current-process repair allowance and a typed third-repeat stop; explicit historical recovery used no fixed total pass ceiling while owned artifacts or the work pointer advanced. The same
   verified state without successful repair activity stops after two recovery turns. Aborts,
   missing authority and research-only turns do not authorize automatic implementation.
 - For a selected missing reference board, Pi executes one bounded `ref advance` native acquisition
@@ -252,8 +332,8 @@ inspection and research repair remain available while production is blocked.
   mutation cannot clear the refusal; only a successful changed work digest, stage, or published
   board can. The reference work digest, not an unrelated global write revision, identifies progress.
   Manual image selection and board publication
-  remain Scout-owned. Depleted initial leads route to Scout's novel recovery batch rather than
-  terminal exhaustion. The batch refuses duplicate requests, including equivalent query encoding
+  remain Scout-owned. Within the budget, depleted initial leads route to Scout's novel recovery
+  batch; exhausted evidence work yields with recorded debt rather than preventing first render. The batch refuses duplicate requests, including equivalent query encoding
   and relabeled entry/navigation attempts, before browser work or source mutation.
 - Pi keeps automatic work visible at meaningful phase boundaries without narrating every tool call.
   Before each queued route, stage or completion repair, the visible assistant message names the

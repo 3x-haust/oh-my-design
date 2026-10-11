@@ -5,6 +5,7 @@ import { makerFail, type MakerInput } from '../../adapters/pi-maker-contract.ts'
 import { piRecord, piText } from '../../adapters/pi-reviewer-contract.ts';
 import { readSelectedSourceStudy } from '../art-direction/source-study-records.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
+import { readCurrentCandidateSelection } from '../brief/candidate-choice.ts';
 import { readCandidateReferenceHistory } from '../brief/candidate-reference-history.ts';
 import { baselineRenders, readFirstRenderReview } from '../design/first-render-review.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
@@ -52,19 +53,30 @@ export function makerVisuals(input: Readonly<{
     const pointer = validateCandidateSelectionPointer(JSON.parse(bytesAt(CANDIDATE_SELECTION_POINTER_PATH).toString('utf8')));
     candidateSelectionSha256 = sha256(canonicalJson(pointer));
     resolveCandidateSelection(root, pointer);
-    if (pointer.visual === undefined) makerFail('selected-candidate-images-required');
-    const directory = `.omd/.cache/sketches/${pointer.directory}`;
-    const tree = materializeProjectTree(root, `${directory}/index.html`);
+    const selected = 'selection' in pointer ? readCurrentCandidateSelection(root) : undefined;
+    if (!('selection' in pointer) && pointer.visual === undefined) makerFail('selected-candidate-images-required');
+    const directory = 'selection' in pointer
+      ? `.omd/.cache/sketches/${selected!.selectedId}`
+      : `.omd/.cache/sketches/${pointer.directory}`;
+    const entry = 'selection' in pointer ? selected!.selectedSource.path : `${directory}/index.html`;
+    const tree = materializeProjectTree(root, entry);
     for (const [path, bytes] of tree.files) {
       if (/\.(?:html|css|[cm]?[jt]sx?|svg)$/.test(path)) {
         documents.push({ path: `${directory}/${path}`, content: bytes.toString('utf8') });
       }
     }
-    for (const render of pointer.visual.renders) image(render, 'selected-first-party-candidate');
-    const review = readCandidateReferenceHistory(root, pointer.directory);
-    if (review !== null) lineage.push({ kind: 'selected-candidate-review', sha256: review.sha256,
-      bindings: review.bindings, repairCriteria: review.repairCriteria, continuity: review.continuity,
-      previousReviewSha256: review.priorReview?.sha256 ?? null });
+    if ('selection' in pointer) {
+      for (const preview of selected!.previews) image(preview.png, 'selected-first-party-candidate');
+      lineage.push({ kind: 'selected-direction', selectionSha256: pointer.selection.sha256,
+        selectedId: selected!.selectedId, decidedBy: selected!.decision.decidedBy,
+        inputDigest: selected!.inputDigest });
+    } else {
+      for (const render of pointer.visual!.renders) image(render, 'selected-first-party-candidate');
+      const review = readCandidateReferenceHistory(root, pointer.directory);
+      if (review !== null) lineage.push({ kind: 'selected-candidate-review', sha256: review.sha256,
+        bindings: review.bindings, repairCriteria: review.repairCriteria, continuity: review.continuity,
+        previousReviewSha256: review.priorReview?.sha256 ?? null });
+    }
   }
   if (maker.candidateId !== null) {
     const review = readCandidateReferenceHistory(root, maker.candidateId);

@@ -391,7 +391,7 @@ test('an adaptive route that selects art direction still requires its current va
   for (const [name, value] of Object.entries(missingValues)) writeFileSync(join(missing, '.omd', name), value);
   writeFileSync(join(missing, '.omd', 'composition.md'), artSkippedArtifact(missingValues));
   const missingInvocation = publishTestAdaptiveRoute(missing, adaptiveCompositionRoute(true), 'adaptive-composition-art-selected-missing');
-  assert.ok(!validateCompositionContract(missing, missingInvocation).some((finding) => finding.id === 'COMPOSITION-STALE'));
+  assert.ok(validateCompositionContract(missing, missingInvocation).some((finding) => finding.id === 'COMPOSITION-STALE'));
 
   const current = setup();
   writeFileSync(join(current.root, '.omd', 'composition.md'), artifact(current.values));

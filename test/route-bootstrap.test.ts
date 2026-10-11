@@ -1,12 +1,19 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { routeAdaptiveFlow, diagnoseAdaptiveRouteInput } from '../core/route/adaptive-flow.ts';
+import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
+import { adaptiveRouteAuthorityBytes } from '../core/route/adaptive-route-authority.ts';
+import { adaptiveRouteRecordSha256, publishAdaptiveRoute } from '../core/route/adaptive-route-persistence.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
+import { capturePiRequest } from '../extensions/omd-request-source.ts';
+import { authorizeTestProjectRunPayloads, createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import omdExtension, { type PortablePiApi, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
 import { classificationAllowsInputRepair, routeInputFailure, routeValidationArgs } from '../extensions/omd-route-bootstrap.ts';
 
@@ -23,6 +30,37 @@ function repair(value: ReturnType<typeof fixture>) {
   value.strategyDecision.methods.push('parallel-reference-acquisition', 'hypothesis-validation');
   value.strategyDecision.executionWaves.find((w: { roles: string[] }) => w.roles.includes('omd-scout')).roles.push('omd-writer');
   value.strategyDecision.executionWaves = value.strategyDecision.executionWaves.filter((w: { id: string }) => w.id !== 'writer');
+}
+
+function projectSnapshot(root: string, relative = '', rows: string[] = []): readonly string[] {
+  for (const name of readdirSync(join(root, relative)).sort()) {
+    const path = relative ? `${relative}/${name}` : name;
+    const absolute = join(root, path);
+    if (lstatSync(absolute).isDirectory()) {
+      rows.push(`directory:${path}`);
+      projectSnapshot(root, path, rows);
+    } else rows.push(`file:${path}:${readFileSync(absolute).toString('base64')}`);
+  }
+  return rows;
+}
+
+function signedReviewPurpose(root: string, input: ReturnType<typeof fixture>, purpose: 'ordinary' | 'benchmark' | 'release' = 'ordinary') {
+  const sha256 = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+  const projectRoot = realpathSync(root);
+  const payload = {
+    schema: 'review-purpose-origin-v1' as const,
+    projectRoot,
+    purpose,
+    requestSha256: sha256(input.request),
+    source: 'host-user-input' as const,
+    observedAt: '2026-09-27T00:00:00.000Z',
+  };
+  const origin = { ...payload, signature: signNativeObservation(projectRoot, payload.schema, sha256(canonicalRouteJson(payload))) };
+  const bytes = Buffer.from(`${canonicalRouteJson(origin)}\n`), digest = sha256(bytes);
+  const receipt = { path: `.omd/review-purpose-authorities/sha256-${digest}.json`, sha256: digest };
+  mkdirSync(join(projectRoot, '.omd/review-purpose-authorities'), { recursive: true });
+  writeFileSync(join(projectRoot, receipt.path), bytes);
+  return { reviewPurpose: purpose, reviewPurposeAuthority: receipt };
 }
 
 function harness(cwd: string, exec?: PortablePiApi['exec']) {
@@ -94,11 +132,38 @@ test('every route starter has consistent prerequisites; examples do not waive re
   }
 });
 
+test('direct current route publication refuses ordinary without origin and accepts a signed host origin', t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-route-purpose-publication-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '.omd'), { recursive: true });
+  const input = structuredClone(inputSkeleton('design-route-input').skeleton) as ReturnType<typeof fixture>;
+  assert.equal(input.reviewPurpose, 'ordinary');
+  assert.equal(input.reviewPurposeAuthority, null);
+  const invocation = createTestProjectRunInvocation(root, 'route-purpose-publication');
+  const writer = createTestProjectWriteAdapter(root, invocation);
+  const before = projectSnapshot(root);
+
+  assert.throws(() => publishAdaptiveRoute(root, input, writer, invocation), /ROUTE_AUTHORITY_REQUIRED/);
+  assert.deepEqual(projectSnapshot(root), before);
+  assert.equal(existsSync(join(root, '.omd/route.json')), false);
+
+  const purpose = signedReviewPurpose(root, input);
+  Object.assign(input, purpose);
+
+  const record = routeAdaptiveFlow(input, { root, invocation });
+  authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority',
+    payload: adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation) }]);
+  const published = publishAdaptiveRoute(root, input, writer, invocation);
+  assert.deepEqual(published.record.sourceContract.reviewPurposeAuthority, purpose.reviewPurposeAuthority);
+  assert.equal(existsSync(join(root, '.omd/route.json')), true);
+});
+
 test('a fresh explicit Korean market reaches target-market-first discovery through the CLI', t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-fresh-market-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, '.omd/.cache'), { recursive: true });
   const input = fixture(); repair(input);
+  input.request = `${String(input.request)} 한국 사용자를 위한 서비스`;
   input.evidenceClaims.claims.push({ id: 'market-authority', text: 'The product targets South Korea.', status: 'confirmed',
     userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: '한국 사용자를 위한 서비스' }] });
   input.evidenceClaims.userFacts.push('market-authority');
@@ -109,16 +174,25 @@ test('a fresh explicit Korean market reaches target-market-first discovery throu
   };
   writeFileSync(join(root, inputPath), JSON.stringify(input));
   writeFileSync(join(root, '.omd/locale-design-context.json'), JSON.stringify(context));
+  capturePiRequest(root, input.request);
   const run = (args: string[]) => spawnSync(process.execPath, [cliPath, ...args], {
     cwd: root, encoding: 'utf8', env, timeout: 20000,
   });
+  const starterResult = run(['schema', 'ai-judgment', '--purpose', 'target-market', '--json']);
+  assert.equal(starterResult.status, 0, starterResult.stderr);
+  const starter = JSON.parse(starterResult.stdout);
+  assert.equal(starter.skeleton.subjectId, 'request');
+  writeFileSync(join(root, starter.path), JSON.stringify({ ...starter.skeleton, payload: { region: 'KR' } }));
+  const judgmentResult = run(['ai-judgment', 'publish', '--input', starter.path, '--json']);
+  assert.equal(judgmentResult.status, 0, judgmentResult.stderr);
+  const judgment = JSON.parse(judgmentResult.stdout);
   const locale = run(['locale', 'plan', '--input', '.omd/locale-design-context.json', '--json']);
   assert.equal(locale.status, 0, locale.stderr);
   assert.equal(JSON.parse(locale.stdout).route.decision, 'research');
   const routeArgs = ['--input', inputPath, '--locale-context', '.omd/locale-design-context.json', '--json'];
   const validated = run(['route', 'validate', ...routeArgs]);
   assert.equal(validated.status, 0, `${validated.stderr}\n${validated.stdout}`);
-  const classified = run(['route', 'classify', ...routeArgs]);
+  const classified = run(['route', 'classify', ...routeArgs, '--judgment', judgment.receipt.path]);
   assert.equal(classified.status, 0, `${classified.stderr}\n${classified.stdout}`);
   const discovered = run(['ref', 'discover-plan', '--json']);
   assert.equal(discovered.status, 0, discovered.stderr);
@@ -439,8 +513,10 @@ test('design-only route omits advisory method but retains hard application write
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const h = harness(cwd);
   const input = structuredClone(inputSkeleton('design-route-input').skeleton) as ReturnType<typeof fixture>;
+  Object.assign(input, signedReviewPurpose(cwd, input));
   input.strategyDecision.methods = input.strategyDecision.methods.filter((m: string) => m !== 'hypothesis-validation');
   await h.author(input);
+
   await h.run(['route', 'validate', '--input', inputPath, '--json']);
   const route = JSON.parse((await h.run(['route', 'classify', '--input', inputPath, '--json'])).content[0]!.text);
   assert.equal(route.deliveryMode, 'design-only');

@@ -565,14 +565,22 @@ test('quarantined full-resolution candidates promote authenticated Eye direction
   assert.deepEqual(readFileSync(join(f.root, REFERENCE_DIRECTION_ADMISSION_POINTER)), pointerBefore);
   assert.equal(existsSync(approved.finalRecord), false);
   writeFileSync(join(f.root, approved.candidate.path), originalRecord);
-  assert.equal(referenceDiscoveryWork(f.root, readPersistedRoute(f.root, f.invocation)).progress.designFamilies, 0);
+  const beforePromotion = referenceDiscoveryWork(f.root, readPersistedRoute(f.root, f.invocation));
+  assert.equal(beforePromotion.progress.designFamilies, 0);
   publishReferenceDirectionAdmission(f.root, signed.packet, signed.result, f.invocation, f.writer);
   assert.deepEqual(readFileSync(approved.finalRecord), originalRecord);
   assert.deepEqual(readFileSync(approved.finalImage), approved.image);
   assert.equal(requireReferenceDirectionAdmission(f.root, approved.reference, f.sourceContractSha256).verdict, 'direction');
-  assert.equal(referenceDiscoveryWork(f.root, readPersistedRoute(f.root, f.invocation)).progress.designFamilies, 1);
+  const afterPromotion = referenceDiscoveryWork(f.root, readPersistedRoute(f.root, f.invocation));
+  assert.equal(afterPromotion.progress.designFamilies, 1);
+  assert.notEqual(afterPromotion.workSha256, beforePromotion.workSha256);
   assert.equal(existsSync(rejected.finalRecord), false);
   assert.equal(readAuthenticatedAdmissionHistory(f.root, f.sourceContractSha256).length, 2);
+  writeFileSync(approved.finalImage, testPng(2560, 1800, 24));
+  try {
+    assert.throws(() => referenceDiscoveryWork(f.root, readPersistedRoute(f.root, f.invocation)),
+      /BROWSE_RETAINED_IMAGE_CHANGED/);
+  } finally { writeFileSync(approved.finalImage, approved.image); }
 });
 
 test('Eye packet batches count serialized bytes and refuse oversized originals', t => {

@@ -6,7 +6,7 @@ import { servedProjectTreeSha256 } from '../render/serve.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import { resolveCandidateSelection, validateCandidateSelectionPointer, type CandidateSelectionPointer } from './candidate-selection.ts';
+import { resolveCandidateSelection, validateCandidateSelectionPointer, type CandidateSelectionPointer, type LegacyCandidateSelectionPointer } from './candidate-selection.ts';
 import {
   candidateSourceInputDigests, captureCandidateSourceTree, parseCandidateSourceHistoryReference,
   persistCandidateSourceHistory, readCandidateSourceHistory, type CandidateSourceHistoryReference,
@@ -30,7 +30,7 @@ export type CandidateVisualEvidence = Readonly<{
   planSha256?: string;
   renders: readonly Render[];
 }>;
-export type VisualCandidateSelection = Omit<CandidateSelectionPointer, 'schema' | 'visual'> & Readonly<{
+export type VisualCandidateSelection = Omit<LegacyCandidateSelectionPointer, 'schema' | 'visual'> & Readonly<{
   schema: 'candidate-selection-pointer-v2';
   visual: CandidateVisualEvidence;
 }>;
@@ -93,6 +93,7 @@ export async function captureCandidateSelection(
   root: string, pointer: CandidateSelectionPointer, writer: ProjectWriteAdapter,
 ): Promise<VisualCandidateSelection> {
   pointer = validateCandidateSelectionPointer(pointer);
+  if ('selection' in pointer) return fail();
   resolveCandidateSelection(root, pointer);
   const page = `.omd/.cache/sketches/${pointer.directory}/index.html`;
   const sourceCapture = captureCandidateSourceTree(root, page);

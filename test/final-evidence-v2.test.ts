@@ -855,14 +855,14 @@ test('finalization rejects forged over-budget Beat authority and accepts the exa
   } finally { clean(directory); }
 });
 
-test('new final publication accepts optional composition wording with fresh source-sealed bytes', () => {
+test('a fresh source seal cannot authorize composition missing required colour roles', () => {
   const directory = root(); try {
     let input = manifest(directory);
     const compositionPath = join(directory, '.omd', 'composition.md');
     const legacy = readFileSync(compositionPath, 'utf8').replace(/\n\n## Colour roles[\s\S]*?(?=\n\n## Transfer boundary)/, '');
     writeFileSync(compositionPath, legacy);
     input = refreshSourceSeal(directory, input);
-    publishFinalEvidenceV2(directory, input);
+    assert.throws(() => publishFinalEvidenceV2(directory, input), /COMPOSITION-SECTION .*Colour roles/);
     assert.deepEqual(readFileSync(compositionPath), Buffer.from(legacy));
   } finally { clean(directory); }
 });

@@ -1,12 +1,12 @@
 # Oh My Design
 
-**AI that designs like a human.** Give OMD one request. It researches, chooses a direction,
-builds, renders and repairs internally rather than asking you to select references or approve
-each draft. Account access and external-action permissions remain separate.
+[![CI](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg)](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Native Pi now shares one production engine between autonomous execution and explicitly enabled
-developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md).
-Technical integration is tested; better first-output satisfaction still requires real held-out ratings.
+**AI that designs like a human.** Give OMD one request. It researches, compares real material, chooses a direction, builds, renders, and repairs internally. The model adapts its methods to observed evidence rather than requiring routine reference or draft approval; account access and external-action permissions remain separate.
+
+Native Pi uses the same production engine for normal autonomous execution and explicitly enabled private developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md). Technical integration is tested; human-level quality claims still require real held-out blind ratings.
 
 [한국어](README.ko.md)
 
@@ -597,7 +597,7 @@ omd figma pull <file-url>  |  omd figma system  |  omd figma diff <frame-id> <pa
 omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
 ```
 
-## Architecture and contributing
+## Architecture
 
 Prompt source of truth:
 
@@ -610,15 +610,20 @@ Generated outputs — **do not edit directly**; `npm run build` regenerates them
 
 Edited directly: `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`, and the theory and recipe packs under `core/`.
 
-Before submitting a change:
+## Testing
+
+Tests are classified as unit, integration, browser, native, or packaging. `npm test` builds stale generated output when needed and runs every tier with safe concurrency; use `npm run test:unit` or another `test:<tier>` command for focused work. Coverage uses the deterministic unit and integration tiers.
 
 ```bash
 npm test
-npx tsc --noEmit
+npm run test:coverage
+npm run typecheck
 npm run build
 ```
 
-New linter rules must remain narrow, include positive and negative tests, and always use warning severity.
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test classification, three-layer enforcement, generated artifacts, and the branch-to-PR workflow. New linter rules must remain narrow, include positive and negative tests, and always use warning severity.
 
 ## Limits and trust
 

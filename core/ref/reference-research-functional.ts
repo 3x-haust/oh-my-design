@@ -10,7 +10,7 @@ const collapse = (text: string): string => text.replace(/\s+/gu, ' ').trim();
 
 export function validateFunctionalResearch(root: string, research: ReferenceResearch, options: ValidationOptions): void {
   if (research.schema !== 'reference-research-v8') return;
-  const sources = research.domainReference.sources as readonly FunctionalSource[];
+  const sources = research.domainReference.sources.filter((source): source is FunctionalSource => 'observations' in source);
   const families = new Set<string>();
   const market = research.marketCoverage;
   const localIds = new Set(market?.domain.localSources.map(item => item.sourceId) ?? []);
@@ -89,7 +89,10 @@ export function validateFunctionalResearch(root: string, research: ReferenceRese
     // Prescribed attempt inventory and order are advisory; signed queries stay unchanged.
     for (const binding of fallback.provenance) {
       const source = sources.find(item => item.id === binding.sourceId);
-      if (!source) throw new Error('REFERENCE_RESEARCH_MARKET_DOMAIN_FALLBACK_PROVENANCE');
+      if (!source) {
+        if (research.domainReference.sources.some(item => item.id === binding.sourceId && 'provenance' in item)) continue;
+        throw new Error('REFERENCE_RESEARCH_MARKET_DOMAIN_FALLBACK_PROVENANCE');
+      }
       const receipt = research.domainReference.searches.find(item => item.sha256 === binding.provenanceReceiptSha256);
       if (receipt) {
         const execution = readSearchExecution(root, receipt, 'domain');
