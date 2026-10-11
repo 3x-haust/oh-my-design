@@ -124,6 +124,7 @@ export const validateReferencePng = (bytes: Buffer): void => {
     if (filter === undefined || filter > 4) fail('has an invalid PNG row filter');
   }
 };
+export const assertValidReferencePngBytes = validateReferencePng;
 
 export function trustedReferenceImage(root: string, imagePath: string): string {
   if (extname(imagePath).toLowerCase() !== '.png') fail('path must be a PNG beneath .omd/refs');

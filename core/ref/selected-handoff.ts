@@ -16,6 +16,8 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { checkReferenceApplication, type ReferenceApplicationProjection } from './reference-application.ts';
 import { readPublishedReferenceResearch } from './reference-research.ts';
+import { loadRefs } from './store.ts';
+import { currentReferenceDirectionSourceContract, readApprovedReferenceAppearanceIntent } from './reference-direction-admission.ts';
 
 export type SelectedReferenceHandoff = Readonly<{
   schemaVersion: 'selected-reference-handoff-v1';
@@ -27,6 +29,7 @@ export type SelectedReferenceHandoff = Readonly<{
   selectionSha256: string;
   artDirectionSha256?: string;
   screenApplication?: ReferenceApplicationProjection;
+  visualCharacter?: readonly string[];
   candidateId: string;
   route: string;
   pieces: readonly (ReferenceAssemblyPiece & Readonly<{
@@ -36,6 +39,14 @@ export type SelectedReferenceHandoff = Readonly<{
   sha256: string;
 }>;
 export type SelectedReferenceCurrentRoute = Readonly<{ sourceContractSha256: string; request: string }>;
+
+export function projectSelectedVisualCharacter(sources: readonly Readonly<{ url: string; visualRole?: string;
+  visualAssessment?: { selection?: { appearanceIntent: string } } }>[], selectedSources: ReadonlySet<string>): readonly string[] {
+  const descriptions = sources.filter(source => source.visualRole === 'visual-direction' && selectedSources.has(source.url))
+    .flatMap(source => source.visualAssessment?.selection?.appearanceIntent ? [source.visualAssessment.selection.appearanceIntent] : []);
+  if (descriptions.some(value => /https?:\/\/|www\.|\.omd\//i.test(value))) throw new Error('selected visual character must not expose reference identities');
+  return descriptions;
+}
 
 /** Read the selected canonical content, not just its lineage receipt. No project writes. */
 export function readSelectedReferenceHandoff(
@@ -77,6 +88,18 @@ export function readSelectedReferenceHandoff(
   });
   const research = existsSync(resolve(root, '.omd/reference-research.json')) ? readPublishedReferenceResearch(root) : null;
   if (research !== null && currentRoute === undefined) throw new Error('current route binding is required for reference handoff');
+  const selectedSources = new Set(artifacts.raw.candidates.find(entry => entry.id === candidate.id)?.pieces
+    .filter(piece => pieces.some(selected => selected.slotId === piece.slotId))
+    .map(piece => piece.evidence.kind === 'image-fragment' ? piece.evidence.sourcePage : piece.evidence.source) ?? []);
+  const directionSourceContract = research === null ? null : currentReferenceDirectionSourceContract(root);
+  const visualCharacter = research ? directionSourceContract !== null && research.schema === 'reference-research-v8'
+    ? [...selectedSources].filter(source => research.designReference.sources.some(item =>
+      item.url === source && item.visualRole === 'visual-direction')).flatMap(source => {
+      const reference = loadRefs(root, { includeDomain: true }).find(item => item.researchLane === 'design' && item.source === source);
+      if (reference === undefined) throw new Error('REFERENCE_DIRECTION_ADMISSION_MISSING');
+      return readApprovedReferenceAppearanceIntent(root, reference, directionSourceContract);
+    })
+    : projectSelectedVisualCharacter(research.designReference.sources, selectedSources) : [];
   const screenApplication = research === null ? undefined : checkReferenceApplication(root, {
     expectedSourceContractSha256: currentRoute!.sourceContractSha256,
     expectedRequest: currentRoute!.request,
@@ -92,6 +115,7 @@ export function readSelectedReferenceHandoff(
     selectionSha256,
     ...(receipt.artDirectionSha256 === undefined ? {} : { artDirectionSha256: receipt.artDirectionSha256 }),
     ...(screenApplication === undefined ? {} : { screenApplication }),
+    ...(visualCharacter.length ? { visualCharacter } : {}),
     candidateId: candidate.id,
     route: candidate.route,
     pieces,

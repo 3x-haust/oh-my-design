@@ -47,11 +47,12 @@ test('declared spacing measures actual role edges, not component-height-normaliz
   assert.deepEqual(compareReferenceFeatures(a, b, spacing()).map(row => row.similarity), [1, .333333, 0]);
 });
 
-test('declared feature syntax rejects axis laundering, duplicated endpoints and unknown fields', () => {
+test('declared feature syntax rejects axis laundering and duplicated endpoints but ignores ordinary extras', () => {
   assert.deepEqual(parseReferenceFeatureMeasurements([scale()], 'proportion'), [scale()]);
   assert.throws(() => parseReferenceFeatureMeasurements([scale()], 'structure'), /does not measure/);
   assert.throws(() => parseReferenceFeatureMeasurements([{ ...scale(), sourceNodes: [1, 1] }], 'proportion'), /distinct source/);
   assert.throws(() => parseReferenceFeatureMeasurements([{ ...scale(), targetAnchors: ['display', 'display'] }], 'proportion'), /distinct target/);
+  assert.equal(Object.hasOwn(parseReferenceFeatureMeasurements([{ ...scale(), note: true }], 'proportion')[0]!, 'note'), false);
   assert.throws(() => parseReferenceFeatureMeasurements([{ ...scale(), approved: true }], 'proportion'), /unknown or missing/);
   assert.throws(() => parseReferenceFeatureMeasurements([scale(), scale()], 'proportion'), /unique/);
   assert.throws(() => parseReferenceFeatureMeasurements([{ ...scale(), targetAnchors: ['https://example.com', 'body'] }], 'proportion'), /target anchors/);

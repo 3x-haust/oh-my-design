@@ -20,6 +20,15 @@ Work in this order:
 Do not start from a generic font-name default. A familiar family can still be wrong for the
 copy, language coverage, voice, or production constraints.
 
+## Native Pi maker handoff
+
+When native Pi will use the selected type proof, Typesetter writes exactly one
+`## Approved type contract` section in `.omd/type-proof.md`. Include only committed
+role/family/size/weight/measure/wrapping and responsive constraints. Keep rejected
+alternatives and source rationale outside that section. This exports the existing type
+decision; it is not a new aesthetic approval. `approved-type-contract-required` identifies
+this missing document section, not a CLI command or schema name.
+
 ## Role map
 
 Separate two jobs:

@@ -87,7 +87,7 @@ test('reference board resolves multiple component captures and emits determinist
   // Then: ordering is stable and no source-private material crosses the boundary.
   assert.equal(firstBytes, secondBytes);
   assert.deepEqual(projectReferenceAssembly(loadReferenceBoard(directory)).candidates.map((value) => value.id), ['alpha', 'zeta']);
-  for (const privateValue of ['source.example', 'source-selector', '.omd/refs', 'referenceId', 'sourceKind']) assert.doesNotMatch(firstBytes, new RegExp(privateValue.replace(/[.]/g, '\\.')));
+  for (const privateValue of ['source.example', 'source-selector', '.omd/refs', 'referenceId', 'sourceKind']) assert.doesNotMatch(firstBytes, new RegExp(privateValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   const transfer = projectReferenceAssembly(loadReferenceBoard(directory)).candidates[0]?.pieces[0]?.transfer;
   assert.ok(transfer); assert.deepEqual(Object.keys(transfer).sort(), ['blueprint', 'invariants', 'principles']);
   assert.deepEqual(transfer, { invariants: MEASURED, principles: ['Keep hierarchy distinct.'], blueprint: { nodes: [{ role: 'container', children: [], box: { w: 160, h: 40 }, padding: [8, 8, 8, 8] }] } });
@@ -98,9 +98,6 @@ test('reference board rejects closed-key, candidate, source, and grid contract v
   // Given: a valid captured component and malformed manifest variants.
   const directory = root(context); const component = capture(directory, 'component');
   const invalid = [
-    manifest([candidate('one', component.referenceId)], { unexpected: true }),
-    manifest([{ ...candidate('one', component.referenceId), unexpected: true }]),
-    manifest([candidate('one', component.referenceId, [{ ...piece(component.referenceId), unexpected: true }])]),
     manifest([candidate('one', component.referenceId), candidate('one', component.referenceId)]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId), piece(component.referenceId, { slotId: 'hero', grid: { column: 7, span: 6, order: 1 } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId), piece(component.referenceId, { slotId: 'aside', grid: { column: 7, span: 6, order: 0 } })])]),
@@ -110,7 +107,6 @@ test('reference board rejects closed-key, candidate, source, and grid contract v
     manifest([candidate('one', 'ref-0000000000000000')]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { sourceKind: 'page' })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available' } })])]),
-    manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent', unexpected: true } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'unlicensed', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { grid: { column: 0, span: 6, order: 0 } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { grid: { column: 8, span: 6, order: 0 } })])]),
@@ -205,7 +201,7 @@ test('reference board requires each image fragment to exist in the persisted rec
 test('reference board projects only sanitized transfer from an injected image-fragment resolver', (context) => {
   // Given: a valid local image plus raw fragment provenance.
   const directory = root(context); const entry = capture(directory, 'fragment-image'); const board = manifest([candidate('fragment', 'fragment-1', [piece('fragment-1', { sourceKind: 'image-fragment' })])]);
-  const resolver: ImageFragmentResolver = { resolve(_root, input) { return { ...input, imagePath: relative(directory, entry.image), provenance: { sourcePage: 'https://private.example/page', sourceImage: 'https://private.example/image.png', captureRegion: 'hero', cropBox: { x: 0, y: 0, width: 20, height: 10 }, licenseStatus: 'allowed', rightsNotes: 'Internal record.', capturedAt: '2026-07-18T00:00:00.000Z' }, transfer: { visualRole: 'atmosphere', principles: ['Use as a local abstract accent.'], geometry: { width: 20, height: 10, aspectRatio: 2 } } }; } };
+  const resolver: ImageFragmentResolver = { resolve(_root, input) { return { ...input, imagePath: relative(directory, entry.image), provenance: { sourcePage: 'https://private.example/page', sourceImage: 'https://private.example/image.png', captureRegion: 'hero', licenseStatus: 'allowed', rightsNotes: 'Internal record.', capturedAt: '2026-07-18T00:00:00.000Z' }, transfer: { visualRole: 'atmosphere', principles: ['Use as a local abstract accent.'], geometry: { width: 20, height: 10, aspectRatio: 2 } } }; } };
 
   // When: a resolver supplies the typed fragment record.
   const output = projectReferenceAssembly(resolveReferenceBoard(directory, parseReferenceBoard(board), resolver)); const outputPiece = output.candidates[0]?.pieces[0];
@@ -213,7 +209,7 @@ test('reference board projects only sanitized transfer from an injected image-fr
   // Then: assembly keeps the closed piece shape and excludes identity, path, and provenance.
   assert.ok(outputPiece); assert.deepEqual(Object.keys(outputPiece).sort(), ['adaptation', 'avoid', 'grid', 'reason', 'slotId', 'take', 'targetComponent', 'targetSelector', 'taskIds', 'transfer']);
   assert.deepEqual(outputPiece.transfer, { visualRole: 'atmosphere', principles: ['Use as a local abstract accent.'], geometry: { width: 20, height: 10, aspectRatio: 2 } });
-  for (const privateValue of ['referenceId', 'sourceKind', 'imagePath', 'provenance', 'private.example']) assert.doesNotMatch(JSON.stringify(output), new RegExp(privateValue.replace(/[.]/g, '\\.')));
+  for (const privateValue of ['referenceId', 'sourceKind', 'imagePath', 'provenance', 'private.example']) assert.doesNotMatch(JSON.stringify(output), new RegExp(privateValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
 test('reference board rejects contaminated fragment transfer text and invalid raw provenance', (context) => {

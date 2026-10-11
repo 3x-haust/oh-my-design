@@ -14,7 +14,9 @@ export function expandedDiscoveryInputs(plan: ReferenceDiscoveryPlan, lane: Lane
     ['site:pinterest.com/pin/', 'site:dribbble.com/shots/', 'site:behance.net/gallery/'].map(site => `${site} ${query}`));
   const seeds = lane === 'domain'
     ? plan.lanes.find(item => item.id === 'domain-reference')?.querySeeds ?? []
-    : [...patternSearches, ...plan.designSourcePolicy.searchQueries];
+    : patternQueries.length > 1
+      ? [...patternSearches, ...plan.designSourcePolicy.searchQueries]
+      : [...plan.designSourcePolicy.searchQueries, ...patternSearches];
   const labels = plan.marketReferencePolicy.marketSearchLabels;
   const queries = [...new Set(seeds.map(seed => labels.length > 0 && !isMarketQualifiedQuery(seed, labels)
     ? `${labels[0]} ${seed}` : seed))].slice(0, 6);

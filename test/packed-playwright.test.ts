@@ -17,7 +17,7 @@ const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const PLAYWRIGHT_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).dependencies.playwright as string;
 const PROBE_FIXTURE = fileURLToPath(new URL('./fixtures/probe.html', import.meta.url));
 const RENDER_FIXTURE = fileURLToPath(new URL('./fixtures/slop.html', import.meta.url));
-const WORKSPACE_DEPENDENCIES = ['playwright', 'playwright-core', 'smol-toml', 'tldts', 'tldts-core', 'yaml'] as const;
+const WORKSPACE_DEPENDENCIES = ['playwright', 'playwright-core', 'smol-toml', 'tldts', 'tldts-core', 'yaml', 'parse5', 'entities', 'pngjs', 'undici'] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

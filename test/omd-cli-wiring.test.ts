@@ -184,11 +184,40 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(directionHelp, /both approvedMotionRecipe and approvedMotionRecipeReceipt/);
   assert.match(directionHelp, /exact receipt-bound evaluatorAssessment and evaluatorResult payload serialization/);
   assert.match(directionHelp, /not permission to reconstruct unseen judgments/);
-  assert.equal(INPUT_SKELETONS.length, 47);
-  for (const name of ['design-judgment', 'candidate-selection']) {
+  assert.equal(new Set(INPUT_SKELETONS.map(input => input.name)).size, INPUT_SKELETONS.length);
+  for (const name of ['reference-search-leads', 'design-language-input', 'design-feedback-input']) {
     const input = inputSkeleton(name);
     assert.deepEqual(Object.keys(input.skeleton as object), [...input.keys]);
   }
+  const judgment = inputSkeleton('design-judgment');
+  assert.deepEqual(Object.keys(judgment.skeleton as object), [...judgment.keys]);
+  const candidateSelection = inputSkeleton('candidate-selection');
+  const {
+    CANDIDATE_SELECTION_ALLOWED_KEYS,
+    CANDIDATE_SELECTION_OPTIONAL_KEYS,
+    CANDIDATE_SELECTION_REQUIRED_KEYS,
+  } = await import('../core/schema/candidate-selection.ts');
+  const { validateCandidateSelectionPointer } = await import('../core/brief/candidate-selection.ts');
+  assert.deepEqual(candidateSelection.keys, CANDIDATE_SELECTION_ALLOWED_KEYS);
+  assert.deepEqual(Object.keys(candidateSelection.skeleton as object), [...CANDIDATE_SELECTION_REQUIRED_KEYS]);
+  assert.deepEqual(CANDIDATE_SELECTION_OPTIONAL_KEYS, ['captureStates']);
+  const legacyCandidateSelection = {
+    ...candidateSelection.skeleton as object,
+    directory: 'selected',
+    indexSha256: '0'.repeat(64),
+    selectionSha256: '1'.repeat(64),
+  };
+  assert.doesNotThrow(() => validateCandidateSelectionPointer(legacyCandidateSelection));
+  assert.doesNotThrow(() => validateCandidateSelectionPointer({
+    ...legacyCandidateSelection,
+    captureStates: [{
+      name: 'details',
+      startRoute: '/',
+      route: '/details',
+      actions: [{ kind: 'click', selector: '#details' }],
+      assertions: [{ selector: '#details-panel', state: 'visible' }],
+    }],
+  }));
   const { parseSearchInput } = await import('../core/ref/search-execution.ts');
   assert.doesNotThrow(() => parseSearchInput(inputSkeleton('reference-search').skeleton));
   const { parseDiscoveryBatchInput } = await import('../core/ref/discovery-batch.ts');
@@ -271,12 +300,18 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const printed = run(['schema', 'depth-input', '--json'], dir);
   assert.equal(printed.status, 0, printed.stderr);
   assert.deepEqual(JSON.parse(printed.stdout).skeleton, depth.skeleton);
+  const printedCandidateSelection = run(['schema', 'candidate-selection', '--json'], dir);
+  assert.equal(printedCandidateSelection.status, 0, printedCandidateSelection.stderr);
+  const publicCandidateSelection = JSON.parse(printedCandidateSelection.stdout);
+  assert.deepEqual(publicCandidateSelection.keys, [...CANDIDATE_SELECTION_ALLOWED_KEYS]);
+  assert.deepEqual(Object.keys(publicCandidateSelection.skeleton), [...CANDIDATE_SELECTION_REQUIRED_KEYS]);
   const printedBoard = run(['schema', 'reference-board'], dir);
   assert.equal(printedBoard.status, 0, printedBoard.stderr);
   assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);
   assert.match(printedBoard.stdout, /"grid": \{\s+"column": 1,\s+"span": 12,\s+"order": 0/s);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['design-judgment', 'candidate-selection', 'minimal-tokens', 'token-extensions', 'candidate-content', 'candidate-plan', 'candidate-set', 'candidate-selection-v2', 'frame-v1', 'reference-search', 'reference-discovery-batch', 'first-render-surface', 'slop-scope', 'route-input', 'design-route-input', 'product-route-input', 'design-handoff', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'reference-research', 'reference-analysis', 'art-direction-check', 'art-direction-input-v3', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'frame', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection', 'reference-flow-input', 'runtime-design-inventory-input']);
+  assert.equal(listed.status, 0, listed.stderr);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), INPUT_SKELETONS.map(input => input.name));
 });
 
 test('reality-ledger schema exposes its closed category vocabulary', async () => {

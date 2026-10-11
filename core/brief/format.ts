@@ -15,6 +15,12 @@ export function formatBrief(brief: Brief): string {
     'Nonzero stops entry. Passing proves current prerequisites only, not completion.',
   ]);
   section('owns', brief.owns);
+  if (brief.developerCalibration) section('calibration', [
+    `snapshot: ${brief.developerCalibration.snapshotSha256}`,
+    brief.developerCalibration.precedence,
+    brief.developerCalibration.limitation,
+    ...brief.developerCalibration.cases.map(example => JSON.stringify(example)),
+  ]);
   if (brief.existingDesignSystem) section('existing UI', [
     `${brief.existingDesignSystem.path} — ${brief.existingDesignSystem.status}; ${brief.existingDesignSystem.observations} observations, ${brief.existingDesignSystem.gaps} gaps`,
     'Observed, not approved. Preserve existing tokens/components by default; read .omd/design-system-decisions.md if present and record intentional departures. Inspect coverage gaps before reuse.',
@@ -55,6 +61,18 @@ export function formatBrief(brief: Brief): string {
         : [`reference binding: ${brief.localeDesign.referenceBinding.path} @ ${brief.localeDesign.referenceBinding.sha256.slice(0, 12)}`]),
     ]);
   }
+  if (brief.designLanguage !== undefined && brief.designLanguage !== null) section('language', [
+    `${brief.designLanguage.status} @ ${brief.designLanguage.sha256}`,
+    ...(brief.designLanguage.copyTone ? ['copy-tone: Writer and CLEAN copy review required; no Hand visual targets'] : []),
+    ...brief.designLanguage.targets.map(t => `${t.id}: ${t.role} ${t.route} ${t.selector} ${t.state}/${t.viewport} ${t.metric} ${t.range[0]}..${t.range[1]} ${t.unit}`),
+  ]);
+  if (brief.sourceStudy !== undefined) section('provisional visual study', [
+    `selection: ${brief.sourceStudy.sha256} (not independent approval)`,
+    `source: ${brief.sourceStudy.html.path} @ ${brief.sourceStudy.html.sha256}`,
+    ...brief.sourceStudy.renders.map(render =>
+      `${render.viewport.name} ${render.state} ${render.viewport.width}x${render.viewport.height}: ${render.path} @ ${render.sha256}`),
+    ...brief.sourceStudy.unresolvedConstraints.map(constraint => `unresolved: ${constraint}`),
+  ]);
   if (brief.reality !== null) {
     section('reality', [
       brief.reality.mode,

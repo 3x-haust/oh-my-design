@@ -68,7 +68,11 @@ function dataRecord(value: unknown, label: string): ReadonlyMap<string, unknown>
   return result;
 }
 function exactFields(value: ReadonlyMap<string, unknown>, keys: readonly string[], label: string): void {
-  if (value.size !== keys.length || keys.some((key) => !value.has(key))) functionalRequirementsFailure(`${label} has unknown or missing keys`);
+  if (keys.some((key) => !value.has(key))) functionalRequirementsFailure(`${label} has missing required keys`);
+  for (const key of value.keys()) {
+    if (key === 'authority') functionalRequirementsFailure(`${label} cannot supply host authority`);
+    if (!keys.includes(key)) process.emitWarning(`ignored optional field ${label}.${key}`);
+  }
 }
 function dataArray(value: unknown, label: string): readonly unknown[] {
   if (!Array.isArray(value) || Reflect.getPrototypeOf(value) !== Array.prototype) functionalRequirementsFailure(`${label} must be an array`);
@@ -138,11 +142,11 @@ export function parseFunctionalRequirements(value: unknown): FunctionalRequireme
     const record = dataRecord(value, 'requirements');
     const schema = record.get('schema');
     if (schema === FUNCTIONAL_REQUIREMENTS_SCHEMA) {
-      if (record.size !== 2 || !record.has('schema') || !record.has('requirements')) functionalRequirementsFailure('requirements must contain exactly requirements, schema');
+      exactFields(record, ['schema', 'requirements'], 'requirements');
       return Object.freeze({ schema: FUNCTIONAL_REQUIREMENTS_SCHEMA, requirements: parseRequirementEntries(record.get('requirements')) });
     }
     if (schema === FUNCTIONAL_REQUIREMENTS_V2_SCHEMA) {
-      if (record.size !== 3 || !record.has('schema') || !record.has('requirements') || !record.has('evidence')) functionalRequirementsFailure('requirements must contain exactly evidence, requirements, schema');
+      exactFields(record, ['schema', 'requirements', 'evidence'], 'requirements');
       return Object.freeze({ schema: FUNCTIONAL_REQUIREMENTS_V2_SCHEMA, requirements: parseRequirementEntries(record.get('requirements')), evidence: parseEvidence(record.get('evidence')) });
     }
     return functionalRequirementsFailure(`schema must be ${FUNCTIONAL_REQUIREMENTS_SCHEMA} or ${FUNCTIONAL_REQUIREMENTS_V2_SCHEMA}`);

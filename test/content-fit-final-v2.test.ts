@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { contentGrainDecisionToken, contentGrainSha256, parseContentGrain } from '../core/content-grain/contract.ts';
-import { browserObservationSha256, designDecisionSha256, type BrowserObservationCore } from '../core/runtime/browser-observation.ts';
+import { browserObservationSha256, designDecisionSha256, validateBrowserObservationDecisionLinks, type BrowserObservationCore } from '../core/runtime/browser-observation.ts';
 import type { DesignDecision } from '../core/deliberation/contracts.ts';
 import { validateAdaptiveFinalEvidenceV2Graph } from '../core/evidence/final-v2-adaptive-contract.ts';
 import { adaptiveFinalEvidenceV2RootHash } from '../core/evidence/final-v2-adaptive-files.ts';
@@ -125,4 +125,27 @@ test('content fit changes the final graph root', () => {
   const withoutFit = validateAdaptiveFinalEvidenceV2Graph(graph());
   const withFit = validateAdaptiveFinalEvidenceV2Graph(graph(receipt('.omd/content-fit.json', 'content-fit-receipt-v1')));
   assert.notEqual(adaptiveFinalEvidenceV2RootHash(withoutFit), adaptiveFinalEvidenceV2RootHash(withFit));
+});
+
+test('current content fit tolerates an authenticated historical graph in its observation chain', () => {
+  const value = fitProject();
+  try {
+    const current = readFileSync(join(value.root, '.omd', 'decision-graph.json'));
+    const historical = Buffer.concat([current, Buffer.from('\n')]);
+    const links = validateBrowserObservationDecisionLinks(value.evidence[0], current, true);
+    assert.ok(links);
+    const directory = join(value.root, '.omd', 'decision-graphs');
+    mkdirSync(directory);
+    const path = join(directory, `sha256-${sha(historical)}.json`);
+    writeFileSync(path, historical);
+    const input = {
+      root: value.root, route: selectedRoute(true), contentFit: value.descriptor,
+      observations: [{ browserObservations: { ...links, decisionGraphSha256: sha(historical) } }, ...value.evidence],
+    };
+    assert.equal(validateFinalV2ContentFitCurrentness(input)?.checks.length, 4);
+    rmSync(path);
+    const before = readFileSync(join(value.root, value.descriptor.path));
+    assert.throws(() => validateFinalV2ContentFitCurrentness(input), /historical design decision graph/);
+    assert.deepEqual(readFileSync(join(value.root, value.descriptor.path)), before);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
 });

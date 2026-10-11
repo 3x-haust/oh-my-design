@@ -48,7 +48,6 @@ const input = (inputPath: string, sourcePage = 'https://gallery.example/pin/one'
     sourcePage,
     sourceImage: 'https://cdn.gallery.example/pin/one.png',
     captureRegion: 'caption image',
-    cropBox: { x: 0, y: 0, width: 1, height: 1 },
     licenseStatus: 'unknown',
     rightsNotes: 'Verify rights before publication.',
     capturedAt: '2026-07-18T00:00:00.000Z',
@@ -137,6 +136,7 @@ test('image fragments reject untrusted input before any fragment bytes or metada
     { ...input(goodPath), provenance: { ...input(goodPath).provenance, sourcePage: '/relative' } },
     { ...input(goodPath), provenance: { ...input(goodPath).provenance, licenseStatus: 'inferred' } },
     { ...input(goodPath), provenance: { ...input(goodPath).provenance, cropBox: { x: 0, y: 0, width: 0, height: 1 } } },
+    { ...input(goodPath), provenance: { ...input(goodPath).provenance, cropBox: { x: 0, y: 0, width: 1, height: 1 } } },
     { ...input(goodPath), provenance: { ...input(goodPath).provenance, capturedAt: '2026-07-18T00:00:00Z' } },
     { ...input(goodPath), provenance: { ...input(goodPath).provenance, unexpected: true } },
     { ...input(goodPath), transfer: { ...input(goodPath).transfer, principles: [] } },
@@ -148,7 +148,7 @@ test('image fragments reject untrusted input before any fragment bytes or metada
   ];
 
   // When / Then: every unsafe boundary fails while the closed fragment store remains empty.
-  for (const value of invalid) assert.throws(() => persistImageFragment(directory, value, invocation));
+  for (const [index, value] of invalid.entries()) assert.throws(() => persistImageFragment(directory, value, invocation), `invalid fragment input ${index}`);
   assert.deepEqual(fragmentFiles(directory), []);
   for (const [index, visualRole] of ['background texture', 'hero emphasis', 'editorial rhythm'].entries()) {
     const accepted = input(goodPath, `https://gallery.example/pin/accepted-${index}`);
@@ -240,7 +240,7 @@ test('default board resolution retains fragment provenance while its assembly ex
   assert.equal(rawPiece.provenance.sourcePage, 'https://private.example/pin/one');
   const serialized = JSON.stringify(assembly);
   for (const privateValue of [stored.id, stored.sha256, stored.imagePath, 'private.example', 'cdn.gallery.example', 'capture.png']) {
-    assert.doesNotMatch(serialized, new RegExp(privateValue.replace(/[.]/g, '\\.')));
+    assert.doesNotMatch(serialized, new RegExp(privateValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.deepEqual(assembly.candidates.map((candidate) => {
     const transfer = candidate.pieces[0]?.transfer;

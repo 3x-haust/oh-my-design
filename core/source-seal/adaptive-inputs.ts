@@ -18,7 +18,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { readCurrentCulturalDesignProfile } from '../locale/cultural-profile-files.ts';
 import { readSelectedArtDirection } from '../art-direction/selected.ts';
 import { currentSelectedSystem } from '../measure/selected-system.ts';
-import { checkReferenceApplication, REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH } from '../ref/reference-application.ts';
+import { checkReferenceApplication, hasReferenceApplicationArtifacts, REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH } from '../ref/reference-application.ts';
 import {
   REFERENCE_LOCALE_BINDING_EVIDENCE_PATH,
   REFERENCE_LOCALE_BINDING_PATH,
@@ -43,6 +43,7 @@ export type SourceSealConfidenceDebt = Readonly<{
 type StageBinding = Readonly<
   | { id: string; status: 'selected'; artifacts: readonly Receipt[]; confidenceDebt?: SourceSealConfidenceDebt }
   | { id: string; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string }
+  | { id: string; status: 'not-selected'; routeSha256: string; authoritySha256: string }
 >;
 export type AdaptiveSourceSealRoute = Readonly<{
   schema: typeof ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA;
@@ -153,8 +154,9 @@ function stageBindings(
       return Object.freeze({ id, status: 'selected', artifacts });
     }
     const skipped = record.strategy.skips.find((entry) => entry.id === id);
-    if (skipped === undefined) throw new Error(`ADAPTIVE_SKIP_AUTHORITY_REQUIRED: ${id} has no exact route skip decision`);
-    return Object.freeze({ id, status: 'skipped', reason: skipped.reason, routeSha256, authoritySha256 });
+    return skipped
+      ? Object.freeze({ id, status: 'skipped', reason: skipped.reason, routeSha256, authoritySha256 })
+      : Object.freeze({ id, status: 'not-selected', routeSha256, authoritySha256 });
   }));
 }
 function persistedPointer(
@@ -207,11 +209,14 @@ export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectR
   // Partial pre-production snapshots remain possible. They cannot pass application review/final
   // completion: that gate requires the exact application input digest. Publishing the missing plan
   // changes this route binding and invalidates the preliminary seal rather than blessing it later.
-  const needsApplication = requiresApplication && existsSync(resolve(root, REFERENCE_APPLICATION_PATH));
-  if (needsApplication) checkReferenceApplication(root, {
-    expectedSourceContractSha256: record.sourceContractSha256,
-    benchmarkRequired: record.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: record.request,
-  });
+  let needsApplication = false;
+  if (requiresApplication && hasReferenceApplicationArtifacts(root)) {
+    checkReferenceApplication(root, {
+      expectedSourceContractSha256: record.sourceContractSha256,
+      benchmarkRequired: record.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: record.request,
+    });
+    needsApplication = true;
+  }
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA,
     pointer: receipt(root, '.omd/route.json', 'adaptive route pointer'),
@@ -250,6 +255,9 @@ function isStage(value: unknown): value is StageBinding {
     }
     return Object.keys(value).length === 3 && value.artifacts.length > 0 && value.artifacts.every(isReceipt);
   }
+  if (value.status === 'not-selected') return Object.keys(value).length === 4
+    && typeof value.routeSha256 === 'string' && SHA256.test(value.routeSha256)
+    && typeof value.authoritySha256 === 'string' && SHA256.test(value.authoritySha256);
   return value.status === 'skipped' && Object.keys(value).length === 5 && typeof value.reason === 'string'
     && value.reason.trim().length > 0 && typeof value.routeSha256 === 'string' && SHA256.test(value.routeSha256)
     && typeof value.authoritySha256 === 'string' && SHA256.test(value.authoritySha256);

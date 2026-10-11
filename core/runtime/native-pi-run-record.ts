@@ -7,6 +7,8 @@ import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
 import { signNativeObservation, verifyNativeObservation } from './self-signed-activation.ts';
 import { HOST_PAYLOAD_AUTHORIZATION_PURPOSES } from './activation.ts';
+import { parseDesignExecutionPolicy, type DesignExecutionPolicy } from '../config/design-execution.ts';
+import { parseDeveloperEvaluationSnapshot, type DeveloperEvaluationSnapshot } from '../coach/developer-evaluation-contract.ts';
 
 export type NativePiHost = Readonly<{
   nodePath: string; nodeSha256: string; cliPath: string; cliSha256: string;
@@ -15,10 +17,14 @@ export type NativePiHost = Readonly<{
 export type NativePiRun = Readonly<{
   runId: string; projectRoot: string; buildSha256: string; loadedSkillSha256: string;
   briefSha256: string; runtimeSha256: string; host: NativePiHost;
+  designPolicy?: DesignExecutionPolicy;
+  calibration?: DeveloperEvaluationSnapshot;
 }>;
 export type NativePiRunInput = Readonly<{
   root: string; runtimeRoot: string; loadedSkillPath: string;
   provider: string; model: string; thinkingLevel: string; parentSessionId: string;
+  designPolicy?: DesignExecutionPolicy;
+  calibration?: DeveloperEvaluationSnapshot;
 }>;
 export class NativePiAuthorityError extends Error {
   override readonly name = 'NativePiAuthorityError';
@@ -54,14 +60,20 @@ export function nativePiRunId(run: Omit<NativePiRun, 'runId'>): string {
   const { nodeSha256, cliSha256, provider, model, thinkingLevel } = run.host;
   return nativePiDigest(canonicalRouteJson({ projectRoot: run.projectRoot, buildSha256: run.buildSha256,
     loadedSkillSha256: run.loadedSkillSha256, briefSha256: run.briefSha256, runtimeSha256: run.runtimeSha256,
-    nodeSha256, cliSha256, provider, model, thinkingLevel }));
+    nodeSha256, cliSha256, provider, model, thinkingLevel,
+    ...(run.designPolicy === undefined ? {} : { designPolicy: run.designPolicy }),
+    ...(run.calibration === undefined ? {} : { calibration: run.calibration }) }));
 }
 export function parseNativePiRun(input: unknown): NativePiRun {
   const run = nativePiObject(input);
-  exact(run, ['runId', 'projectRoot', 'buildSha256', 'loadedSkillSha256', 'briefSha256', 'runtimeSha256', 'host']);
+  exact(run, ['runId', 'projectRoot', 'buildSha256', 'loadedSkillSha256', 'briefSha256', 'runtimeSha256', 'host',
+    ...(Object.hasOwn(run, 'designPolicy') ? ['designPolicy'] : []),
+    ...(Object.hasOwn(run, 'calibration') ? ['calibration'] : [])]);
   const result = Object.freeze({ runId: hash(run.runId, 'runId'), projectRoot: text(run.projectRoot, 'projectRoot'),
     buildSha256: hash(run.buildSha256, 'buildSha256'), loadedSkillSha256: hash(run.loadedSkillSha256, 'loadedSkillSha256'),
-    briefSha256: hash(run.briefSha256, 'briefSha256'), runtimeSha256: hash(run.runtimeSha256, 'runtimeSha256'), host: parseNativePiHost(run.host) });
+    briefSha256: hash(run.briefSha256, 'briefSha256'), runtimeSha256: hash(run.runtimeSha256, 'runtimeSha256'), host: parseNativePiHost(run.host),
+    ...(Object.hasOwn(run, 'designPolicy') ? { designPolicy: parseDesignExecutionPolicy(run.designPolicy) } : {}),
+    ...(Object.hasOwn(run, 'calibration') ? { calibration: parseDeveloperEvaluationSnapshot(run.calibration) } : {}) });
   if (nativePiRunId(result) !== result.runId) throw new NativePiAuthorityError('run identity digest mismatch');
   return result;
 }
@@ -104,7 +116,12 @@ export function currentNativePiIdentity(input: NativePiRunInput): Omit<NativePiR
   if (!skill.equals(readFileSync(join(input.runtimeRoot, 'src/skills/omd-ultradesign/SKILL.md')))) throw new NativePiAuthorityError('loaded skill differs from runtime snapshot');
   const build = createBuildIdentityFromSource(input.runtimeRoot);
   return { projectRoot, buildSha256: build.buildSha256,
-    loadedSkillSha256: build.sourceSkillSha256, briefSha256: request.requestSha256, runtimeSha256: nativePiRuntimeSha256(input.runtimeRoot) };
+    loadedSkillSha256: build.sourceSkillSha256, briefSha256: request.requestSha256, runtimeSha256: nativePiRuntimeSha256(input.runtimeRoot),
+    ...(input.designPolicy === undefined ? {} : { designPolicy: parseDesignExecutionPolicy(input.designPolicy) }),
+    ...(input.calibration === undefined ? {} : { calibration: parseDeveloperEvaluationSnapshot(input.calibration) }) };
+}
+export function isNativePiHostPackage(name: unknown): boolean {
+  return name === '@earendil-works/pi-coding-agent' || name === '@mariozechner/pi-coding-agent' || name === '@code-yeongyu/senpi';
 }
 export function observedNativePiHost(input: NativePiRunInput): NativePiHost {
   const cli = process.argv[1];
@@ -113,7 +130,7 @@ export function observedNativePiHost(input: NativePiRunInput): NativePiHost {
   let packageRoot = dirname(cliPath);
   while (!existsSync(join(packageRoot, 'package.json')) && dirname(packageRoot) !== packageRoot) packageRoot = dirname(packageRoot);
   const manifest = nativePiObject(JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')));
-  if (manifest.name !== '@earendil-works/pi-coding-agent' && manifest.name !== '@mariozechner/pi-coding-agent') throw new NativePiAuthorityError('run may only be established by a native Pi host');
+  if (!isNativePiHostPackage(manifest.name)) throw new NativePiAuthorityError('run may only be established by a native Pi host');
   return parseNativePiHost({ nodePath: realpathSync(process.execPath), nodeSha256: nativePiDigest(readFileSync(process.execPath)),
     cliPath, cliSha256: nativePiDigest(readFileSync(cliPath)), provider: input.provider, model: input.model,
     thinkingLevel: input.thinkingLevel, parentSessionId: input.parentSessionId });

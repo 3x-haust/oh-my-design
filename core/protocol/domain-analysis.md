@@ -44,6 +44,19 @@ inventory supports up to 64 surfaces, not a target or a default count.
     top-tier galleries ("dashboard scroll reveal", "data viz motion").
   - **mood** — role ③: felt direction for the whole-page lane ("printed ledger quiet").
 
+These fields seed **visual research**, not the comparable-service lane. Investigate real
+operators, eligibility rules, application requirements and capabilities separately in domain
+research. A functionally relevant institution or service is not thereby an aesthetic reference.
+For component queries, name the populated task state or information relationship that needs a
+visual answer; compare beautiful finished products across domains when their user relationship
+and task posture fit. Do not force the destination industry or institution into every visual query.
+
+Build mood queries from the complete request and authenticated user guidance. Preserve explicit
+palette, material and style exclusions; a calm, trustworthy or readable service does not imply
+warm paper, cream, beige or editorial styling. The examples here are possible research questions,
+not default art direction. Leave unsupported qualities open rather than authoring an invented mood.
+These are authoring judgments, not keyword classifiers or additional publication quotas.
+
 ### Query construction
 
 Rules learned from how these sites and working designers actually behave:
@@ -69,27 +82,37 @@ across many sites rather than hunting the one correct competitor. Three conseque
 - Gathering a **visual direction** is the default path for every route except one that declares
   restrained expression. A route that gathers only similar services produces a product survey rather
   than a direction; that is the failure this default exists to prevent.
-- **Similar services answer a different question** — how the task works, not how it looks — and are
-  gathered only when the work needs structural transfer.
+- **Similar services answer a different question** — how the task works, not how it looks. On a
+  selected domain-reference lane, compare real operators against the requested task and actual
+  users: eligibility and prerequisites, objects and data, online and offline/support steps, error
+  recovery, observable limits, and why a behavior should be adopted or avoided. A feature not
+  visible on an inspected page is *unknown*, not absent across the service or market. Any proposed
+  specialization is a product hypothesis until user/task evidence validates the need.
 - Explore by **similarity**, not by rewriting the query: the next good capture usually comes from a
   capture already kept.
 - **planning** — `{ businessGoal, successSignal, nonGoals[] }`, why this work exists and what would
-  make it succeed. Each statement is `{ text }` alone, or `{ text, userEvidence[] }` when the user
-  actually said it.
+  make it succeed. A user-stated fact is `{ text, userEvidence[] }`. An unprovided statement is
+  `{ text, disposition }`, where `disposition` is `omit-from-production-claims` or
+  `non-factual-working-decision`.
 
-### Planning is asked, not researched
+### Planning continues without invented authority
 
-Search cannot tell you the user's business goal, so planning is either stated by them or explicitly
-left open:
+Search cannot tell you the user's business goal. A normal run does not stop to ask design-planning
+questions; it classifies what was not provided and continues without promoting it into user authority:
 
 - A statement carrying `userEvidence` (the same `ExplicitUserEvidence` shape as
   `protocol/evidence-claims.md`: `kind`, `source`, `reference`, `excerpt`) is confirmed.
-- A statement with no `userEvidence` is a **hypothesis**. It is lawful to record, and it is not a
-  basis for production: while any hypothesis remains, `requireConfirmedPlanning` fails the gate with
-  `UNSOURCED_PLANNING_CLAIM`, so the run asks the user instead of inventing a business goal.
+- `omit-from-production-claims` records an open hypothesis while excluding it from shipped claims.
+- `non-factual-working-decision` records a run-owned planning choice. Downstream work must label it
+  as a working decision, never as something the user said.
+- An unprovided `nonGoals[]` entry may only use `omit-from-production-claims`. A working decision
+  cannot remove an explicit requirement or silently narrow scope.
+- A statement with neither genuine `userEvidence` nor an explicit disposition fails with
+  `UNSOURCED_PLANNING_CLAIM`. Fabricated evidence is never a substitute.
 
 Domain facts come from observation; planning comes from the user. Conflating the two is how a run
-produces a confident answer to a question nobody asked.
+produces a confident answer to a question nobody asked. Classified hypotheses preserve that
+boundary without putting the run into an await state.
 
 ### Every claim carries its source
 
@@ -111,17 +134,17 @@ self-reported `researched` boolean: a flag nobody verifies is not evidence.
 
 This is the step's most misread boundary. Opening a real product tells you **what exists in the
 domain** — which screens it has, which objects it manipulates, what its users are called. It does not
-tell you **how this design should look**, and the two are routinely confused because both produce a
-screenshot.
+tell you **how this design should look**, and the two are routinely confused because both inspect a rendered page. Current domain research signs visible text and links,
+not screenshots or visual tokens.
 
 | | domain observation | design reference |
 | --- | --- | --- |
 | the question | what is in this domain | how should this look |
-| where it lives | `.omd/captures/`, cited by the brief | `.omd/refs/`, gathered by the scout |
+| where it lives | signed task text/links under `.omd/discovery/domain/observations/` (or a cited observed URL in the early brief) | `.omd/refs/design/`, gathered by the scout |
 | what it may support | a domain fact: this screen exists, this object is real | a visual decision |
 | what it may NEVER support | a visual decision | — |
 
-A capture taken to understand the domain is **not** a reference. Citing one as the visual basis of a
+A domain observation taken to understand the task is **not** a design reference. Citing one as the visual basis of a
 section is the failure this boundary exists to prevent: a run that did it produced a survey of existing
 welfare portals instead of a design, and the user's own verdict on the primary one was that it looks
 bad. Observing a screen is not endorsing it.

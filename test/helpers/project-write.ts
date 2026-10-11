@@ -59,12 +59,15 @@ export function publishTestAdaptiveRoute(
   brief = 'adaptive-route',
 ): ProjectRunInvocation {
   const invocation = createTestProjectRunInvocation(root, brief);
-  const record = routeAdaptiveFlow(input);
+  const authored = typeof input === 'object' && input !== null
+    && Reflect.get(input, 'reviewPurpose') === 'ordinary' && Reflect.get(input, 'reviewPurposeAuthority') === null
+    ? withTestReviewPurposeAuthority(root, input) : input;
+  const record = routeAdaptiveFlow(authored);
   authorizeTestPayloads(invocation, root, [{
     purpose: 'adaptive-route-authority',
     payload: adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation),
   }]);
-  publishAdaptiveRoute(root, input, createProjectWriteAdapter(root, invocation), invocation);
+  publishAdaptiveRoute(root, authored, createProjectWriteAdapter(root, invocation), invocation);
   return invocation;
 }
 

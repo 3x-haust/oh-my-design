@@ -19,7 +19,6 @@ type Trigger = 'load' | 'scroll' | 'hover' | 'unknown';
 interface SpecScene {
   name: string;
   trigger: Trigger;
-  hasStagger: boolean;
 }
 
 function parseMotionSpec(md: string): SpecScene[] {
@@ -36,8 +35,7 @@ function parseMotionSpec(md: string): SpecScene[] {
     const m = /(?:^|\s)trigger\s*:\s*(load|scroll|hover)/im.exec(section);
     if (m) trigger = m[1]!.toLowerCase() as 'load' | 'scroll' | 'hover';
 
-    const hasStagger = /stagger/i.test(section);
-    scenes.push({ name, trigger, hasStagger });
+    scenes.push({ name, trigger });
   }
 
   return scenes;
@@ -45,7 +43,7 @@ function parseMotionSpec(md: string): SpecScene[] {
 
 function isShowpiece(frameMd: string | null): boolean {
   if (!frameMd) return false;
-  return /showpiece/i.test(frameMd);
+  return /^\s*-\s*register:\s*showpiece\s*$/im.test(frameMd);
 }
 
 // ── Rule implementations ─────────────────────────────────────────────────────

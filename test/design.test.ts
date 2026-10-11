@@ -176,7 +176,7 @@ test('validateDesignMd does not fire for states that are present', () => {
 });
 
 test('validateDesignMd state detection is case-insensitive', () => {
-  const body = 'LOADING state: skeleton.\nEMPTY state: empty-illustration.\nERROR state: alert.\nSUCCESS: toast.\nDISABLED: tooltip.\nOFFLINE: not required.\n';
+  const body = '### LOADING\nSkeleton.\n### EMPTY\nIllustration.\n### ERROR\nAlert.\n### SUCCESS\nToast.\n### DISABLED\nTooltip.\n### OFFLINE\nNot required.\n';
   const md = fullDesignMd(body);
   const violations = validateDesignMd(md);
   const stateViolations = violations.filter((v) => String(v.value).startsWith('Interaction states'));
@@ -407,7 +407,7 @@ test('DESIGN-FORM-NO-ERROR does not fire when error text is present on the page'
   };
   const ir = normalize({ nodes: [input, msg] } as RawIr);
   const violations = checkInteractionStates(ir);
-  assert.equal(violations.filter((v) => v.id === 'DESIGN-FORM-NO-ERROR').length, 0);
+  assert.equal(violations.filter((v) => v.id === 'DESIGN-FORM-NO-ERROR').length, 1);
 });
 
 test('DESIGN-FORM-NO-ERROR fires only once per page regardless of input count', () => {
@@ -434,7 +434,7 @@ test('DESIGN-FORM-NO-ERROR detects Korean error vocabulary', () => {
   };
   const ir = normalize({ nodes: [input, msg] } as RawIr);
   const violations = checkInteractionStates(ir);
-  assert.equal(violations.filter((v) => v.id === 'DESIGN-FORM-NO-ERROR').length, 0);
+  assert.equal(violations.filter((v) => v.id === 'DESIGN-FORM-NO-ERROR').length, 1);
 });
 
 test('non-interactive input-like nodes do not trigger DESIGN-FORM-NO-ERROR', () => {

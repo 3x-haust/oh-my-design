@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { canonicalJson, sha256 } from '../../core/ref/board-artifacts.ts';
 import { signNativeObservation } from '../../core/runtime/self-signed-activation.ts';
+import { writeBrowserConsent, writeUserBrowserConsent } from '../../core/ref/browser-consent.ts';
 
 export function routeInput() {
   const input = JSON.parse(readFileSync(new URL('../fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8'));
@@ -13,7 +14,14 @@ export function routeInput() {
 
 export function fixture(t: { after(fn: () => void): void }): string {
   const root = mkdtempSync(join(tmpdir(), 'omd-discovery-work-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const previousHome = process.env.HOME;
+  process.env.HOME = root;
+  writeBrowserConsent('skipped-this-run', root);
+  writeUserBrowserConsent('skipped-this-run', root);
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    rmSync(root, { recursive: true, force: true });
+  });
   return root;
 }
 

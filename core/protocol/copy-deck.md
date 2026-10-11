@@ -51,6 +51,13 @@ verify:
 These values govern every action, confirmation, status, and summary line. A later desired
 outcome never upgrades the current boundary.
 
+For mutable counts, statuses and provenance, distinguish the initial example from the current
+fact. In the existing surface/state sections, specify the live value binding and when the
+message is visible or omitted. A seeded collection size is not a constant after deletion or
+user creation; neither the total collection nor a filtered subset may impersonate a different
+count. Review those transitions, not only the initial screenshot. Keep the approved wording
+and its data/visibility conditions together for implementation.
+
 ## Surface copy
 
 Give every page or surface its own H3 block. The parser currently requires exactly one `Main message`,

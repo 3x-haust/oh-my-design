@@ -8,8 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { authorizeDerivedPayload, hasHostBoundLocalProjectWriteAuthority, requireHostPayloadAuthorization, validateActivationContext } from '../core/runtime/activation.ts';
 import { requireProjectWriteInvocation } from '../core/runtime/invocation.ts';
 import { authorizeNativePiPayload, createNativePiInvocation, createTestNativePiInvocation, getNativePiRun, stageNativePiCommand, type NativePiHost } from '../core/runtime/native-pi-run.ts';
-import { nativePiDirectory, parseNativePiRun, publishNativePiRun } from '../core/runtime/native-pi-run-record.ts';
+import { isNativePiHostPackage, nativePiDirectory, parseNativePiRun, publishNativePiRun } from '../core/runtime/native-pi-run-record.ts';
 import { mintSelfSignedReceipt } from '../core/runtime/self-signed-activation.ts';
+import { captureDesignExecutionPolicy } from '../core/config/design-execution.ts';
 
 const digest = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 const runtimeRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -21,6 +22,14 @@ function fixture(t: { after(fn: () => void): void }): string {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return root;
 }
+
+test('the installed Senpi Pi fork is a native host without trusting arbitrary package names', () => {
+  assert.equal(isNativePiHostPackage('@code-yeongyu/senpi'), true);
+  assert.equal(isNativePiHostPackage('@earendil-works/pi-coding-agent'), true);
+  assert.equal(isNativePiHostPackage('@mariozechner/pi-coding-agent'), true);
+  assert.equal(isNativePiHostPackage('@untrusted/pi-coding-agent'), false);
+  assert.equal(isNativePiHostPackage(undefined), false);
+});
 
 test('Pi is a native host shape but parsed Pi JSON carries no project authority', () => {
   const current = { buildSha256: 'a'.repeat(64), loadedSkillSha256: 'b'.repeat(64), briefSha256: 'c'.repeat(64) };
@@ -71,6 +80,18 @@ test('command identity survives a restart and different argv but not request, mo
   }
   const model = createTestNativePiInvocation({ root, host: { ...host, model: 'different-model' } });
   assert.notEqual(getNativePiRun(first, root).runId, getNativePiRun(model, root).runId);
+});
+
+test('host design mode is signed into the run and cannot change in serialized records', t => {
+  const root = fixture(t);
+  const autonomous = captureDesignExecutionPolicy({});
+  const developer = captureDesignExecutionPolicy({ OMD_DESIGN_MODE: 'developer-evaluation' });
+  const first = getNativePiRun(createTestNativePiInvocation({ root, host, designPolicy: autonomous }), root);
+  const second = getNativePiRun(createTestNativePiInvocation({ root, host, designPolicy: developer }), root);
+  assert.equal(first.designPolicy?.mode, 'autonomous');
+  assert.equal(second.designPolicy?.mode, 'developer-evaluation');
+  assert.notEqual(first.runId, second.runId);
+  assert.throws(() => parseNativePiRun({ ...first, designPolicy: developer }), /identity digest/);
 });
 
 test('durable derived payload approval survives a fresh invocation while rejecting wrong purpose and bytes', t => {

@@ -14,7 +14,7 @@ test('IR binds only an unambiguous committed action and measures borders and Kor
     await page.setContent(`<style>@font-face{font-family:Test;src:url(data:font/ttf;base64,${font})}button,p,a,label,[role=tab]{display:block;font:20px/1 Test;width:60px;word-break:break-all;border:0;padding:0;margin:0}#action{margin-top:900px;border-style:solid;border-width:1px 2px 3px 4px}</style><p>본문선택유지</p><button id="action">신청서확인하기</button><a href="#">가나다라마바</a><div role="tab">가나다라마바</div><label>레이블레이블</label>`);
     await page.evaluate(() => document.fonts.ready);
     const contract = { selector: '#action', contract: { path: '.omd/composition.md', sha256: 'a'.repeat(64), field: 'frequentAction' } };
-    const raw = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), `4000,null,${JSON.stringify({ frequentAction: contract })}`)) as RawIr;
+    const raw = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), [4000, null, { frequentAction: contract }])) as RawIr;
     const action = raw.nodes.find(n => n.name === 'button')!;
     assert.deepEqual(action.borderWidths, [1, 2, 3, 4]);
     assert.equal(raw.meta!.frequentAction!.nodeId, action.id);
@@ -29,7 +29,7 @@ test('IR binds only an unambiguous committed action and measures borders and Kor
     assert.equal(action.textContext, 'control');
     assert.equal(raw.nodes.find(n => n.name === 'p')!.textContext, 'body');
     await page.locator('#action').evaluate(el => el.after(el.cloneNode(true)));
-    const ambiguous = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), `4000,null,${JSON.stringify({ frequentAction: contract })}`)) as RawIr;
+    const ambiguous = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), [4000, null, { frequentAction: contract }])) as RawIr;
     assert.equal(ambiguous.meta!.frequentAction!.status, 'ambiguous');
     assert.equal(ambiguous.meta!.frequentAction!.nodeId, null);
   } finally { await browser.close(); }

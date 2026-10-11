@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { knownFields } from '../judgment/schema.ts';
 import { relative, resolve } from 'node:path';
 import type { EvidenceClaimPublication } from '../brief/evidence-claims.ts';
 import type { TaskOutcomeContract } from '../brief/task-outcome.ts';
@@ -108,10 +109,10 @@ function record(value: unknown): Record<string, unknown> {
 }
 
 function exact(value: Record<string, unknown>, keys: ReadonlySet<string>): void {
-  const own = Reflect.ownKeys(value);
-  if (own.length !== keys.size || own.some((key) => typeof key !== 'string' || !keys.has(key))) {
-    return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
-  }
+  try {
+    const projected = knownFields(value, [...keys], [], 'outcome');
+    for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  } catch { return fail('MALFORMED_FINAL_OUTCOME_EVALUATION'); }
 }
 
 function digest(value: unknown): string {
@@ -169,7 +170,8 @@ export function parseTrustedOutcomeProjection(value: unknown): TrustedOutcomePro
   }
   const hardFloors = record(input.hardFloors);
   exact(hardFloors, FLOOR_KEYS);
-  for (const value of Object.values(hardFloors)) {
+  for (const key of FLOOR_KEYS) {
+    const value = hardFloors[key];
     if (value !== 'pass' && value !== 'fail') return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
   }
   const entrySurface = input.entrySurface === undefined

@@ -3,8 +3,10 @@ import { randomBytes } from 'node:crypto';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-snapshot.ts';
+import { runOwnedOmdProcess } from './omd-process.ts';
 import type { PiRequestBindingInfo } from './omd-request-binding.ts';
 import { compactPiRouteOutput } from './omd-route-output.ts';
+import { compactPiDiscoveryOutput } from './omd-discovery-output.ts';
 import type { PiHostContext, PiNativeRuns } from './omd-native-run.ts';
 
 const MAX_OUTPUT_CHARS = 50_000;
@@ -75,7 +77,8 @@ export function formatOmdProgress(args: readonly string[], status: 'queued' | 'r
   const [root, action] = args;
   const lane = optionValue(args, '--lane');
   const prefix = lane === 'design' ? '디자인 ' : lane === 'domain' ? '도메인 ' : '';
-  const task = root === 'ref' && action === 'navigate' ? `${prefix}레퍼런스 사이트 방문·관찰`
+  const task = root === 'ref' && action === 'advance' ? '레퍼런스 다음 소스 방문·관찰'
+    : root === 'ref' && action === 'navigate' ? `${prefix}레퍼런스 사이트 방문·관찰`
     : root === 'ref' && action === 'add' ? `${prefix}레퍼런스 화면 캡처·측정`
       : root === 'ref' && action === 'search' ? '레퍼런스 검색 결과 확인'
         : root === 'ref' && action === 'discover-batch' ? '레퍼런스 검색·사이트 방문 병렬 수집'
@@ -111,6 +114,21 @@ export function monitorOmdProgress(
   return stop;
 }
 
+export const omdCliBudgetMs = (args: readonly string[]): number =>
+  args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '') ? 660_000
+    : args[0] === 'ref' && ['advance', 'navigate', 'add', 'add-batch', 'discover-batch', 'search', 'leads'].includes(args[1] ?? '')
+    ? 300_000 : 600_000;
+
+export class OmdTimeoutError extends Error {
+  override readonly name = 'OmdTimeoutError';
+  readonly code = 'OMD_CLI_TIMEOUT';
+  readonly budgetMs: number;
+  constructor(budgetMs: number, args: readonly string[]) {
+    super(`OMD_CLI_TIMEOUT: omd ${args.slice(0, 2).join(' ')} 명령이 ${Math.floor(budgetMs / 1000)}초를 초과했습니다. ref work-next를 확인하고 다른 소스를 선택하세요.`);
+    this.budgetMs = budgetMs;
+  }
+}
+
 export class OmdCancelledError extends Error {
   override readonly name = 'OmdCancelledError';
   constructor() { super('OMD_CLI_CANCELLED: 요청이 중단되어 이 명령은 완료되지 않았습니다.'); }
@@ -144,11 +162,16 @@ type ExecOptions = Readonly<{
   signal?: AbortSignal;
 }>;
 
-export type PortablePiContext = PiHostContext & Readonly<{ signal?: AbortSignal }>;
+export type PortablePiContext = PiHostContext & Readonly<{ signal?: AbortSignal; browserConsentHome?: string; ui?: {
+  select?(title: string, options: string[]): Promise<string | undefined>;
+  input?(title: string, placeholder?: string): Promise<string | undefined>;
+  notify?(message: string, level?: 'info' | 'warning' | 'error'): void;
+} }>;
 
 export type PortablePiEvent = {
   toolCallId?: string; isError?: boolean;
   prompt?: string; systemPrompt?: string; toolName?: string; input?: Record<string, unknown>; source?: string; text?: string; images?: readonly unknown[];
+  content?: Array<{ type: string; text?: string }>;
   message?: { role: string; content?: Array<{ type: string; text?: string; [key: string]: unknown }>; stopReason?: string; [key: string]: unknown };
 };
 export type PortablePiHook = (event: PortablePiEvent, context: PortablePiContext) => Promise<unknown>;
@@ -186,16 +209,32 @@ export type PortablePiApi = Readonly<{
   registerTool(definition: PortablePiTool): void;
   registerCommand(name: string, definition: PortablePiCommand): void;
   exec(command: string, args: readonly string[], options: ExecOptions): Promise<ExecResult>;
+  /** Test seam for an owned runner; production always uses the process-group supervisor. */
+  execOwned?(command: string, args: readonly string[], options: ExecOptions): Promise<ExecResult>;
   on?(event: 'before_agent_start' | 'tool_call' | 'tool_result' | 'message_start' | 'message_end' | 'session_start' | 'input', handler: PortablePiHook): void;
-  sendMessage?(message: { customType: string; content: string; display: boolean }, options: { triggerTurn: boolean; deliverAs: 'followUp' }): void;
+  sendMessage?(message: { customType: string; content: string | Array<
+    { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; display: boolean },
+    options: { triggerTurn: boolean; deliverAs: 'followUp' }): void | Promise<void>;
 }>;
 
 function boundedOutput(result: ExecResult, args: readonly string[]): string {
   const combined = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n');
+  if (result.code === 0 && !result.killed && result.stderr.trim() === '') {
+    const discovery = compactPiDiscoveryOutput(result.stdout, args);
+    if (discovery !== undefined) return discovery;
+  }
   if (combined.length <= MAX_OUTPUT_CHARS) return combined;
   if (result.code === 0 && !result.killed) {
     const route = compactPiRouteOutput(result.stdout, args);
     if (route !== undefined) return route;
+    if (args.includes('--json') && result.stderr.trim() === '') {
+      try {
+        JSON.parse(combined);
+        return combined;
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+      }
+    }
   }
   return `${combined.slice(0, MAX_OUTPUT_CHARS)}\n[OMD output truncated]`;
 }
@@ -203,11 +242,21 @@ function boundedOutput(result: ExecResult, args: readonly string[]): string {
 export function guardFailure(error: unknown): { summary: string; repairable: boolean } {
   const raw = error instanceof Error ? error.message : String(error);
   const payload = raw.replace(/^OMD_CLI_FAILED \([^)]*\):\s*/, '');
-  let parsed: { blockers?: unknown } | undefined;
+  let parsed: { blockers?: unknown; diagnostics?: unknown } | undefined;
   try {
-    parsed = JSON.parse(payload) as { blockers?: unknown };
+    parsed = JSON.parse(payload) as { blockers?: unknown; diagnostics?: unknown };
   } catch (parseError) {
     if (!(parseError instanceof SyntaxError)) throw parseError;
+  }
+  if (parsed !== undefined && Array.isArray(parsed.diagnostics) && parsed.diagnostics.length) {
+    const diagnostics = parsed.diagnostics.flatMap(item => {
+      if (!item || typeof item !== 'object') return [];
+      const path = Reflect.get(item, 'path'); const code = Reflect.get(item, 'code'); const message = Reflect.get(item, 'message');
+      return typeof path === 'string' && typeof code === 'string' && typeof message === 'string'
+        ? [{ path, code, message }] : [];
+    });
+    if (diagnostics.length) return { summary: diagnostics.slice(0, 24).map(item => `- ${item.path}: ${item.code}: ${item.message}`).join('\n'),
+      repairable: !diagnostics.some(item => /AUTHORITY|ROUTE_UNCLASSIFIED|SCOPE_FORBIDDEN/.test(item.code)) };
   }
   if (parsed !== undefined && Array.isArray(parsed.blockers) && parsed.blockers.length
     && parsed.blockers.every(blocker => typeof blocker === 'string')) {
@@ -227,25 +276,43 @@ export async function runOmd(
   onUpdate?: OmdProgressCallback,
   progressId?: string,
   nativeRuns?: PiNativeRuns,
+  watchdogClock: Pick<typeof globalThis, 'setTimeout' | 'clearTimeout'> = globalThis,
 ): Promise<OmdRunResult> {
   if (signal?.aborted) throw new OmdCancelledError();
   const stopProgress = monitorOmdProgress(args, 'running', signal, onUpdate, progressId);
+  const controller = new AbortController();
+  const budgetMs = omdCliBudgetMs(args);
+  let timedOut = false;
+  let timeoutTeardown: Promise<void> | undefined;
+  let rejectStopped: (error: Error) => void = () => undefined;
+  const stopped = new Promise<never>((_resolve, reject) => { rejectStopped = reject; });
+  const abort = (): void => { controller.abort(); rejectStopped(new OmdCancelledError()); };
+  signal?.addEventListener('abort', abort, { once: true });
+  const timer = watchdogClock.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+    // Keep the project queue occupied until group-wide SIGKILL escalation.
+    timeoutTeardown = new Promise(resolve => { watchdogClock.setTimeout(resolve, 3_000); });
+    void timeoutTeardown.then(() => rejectStopped(new OmdTimeoutError(budgetMs, args)));
+  }, budgetMs);
   let prepared: Readonly<{ args: readonly string[]; dispose(): void }> | undefined;
   try {
     prepared = nativeRuns?.prepare(cwd, args, runtimeSnapshot.root);
-    let result: ExecResult;
-    try { result = await pi.exec(process.execPath, [runtimeSnapshot.entryPath, ...(prepared?.args ?? args)], signal === undefined ? { cwd } : { cwd, signal }); }
-    catch (error) {
-      if (signal?.aborted) throw new OmdCancelledError();
-      throw error;
-    }
+    const result = await Promise.race([(pi.execOwned ?? runOwnedOmdProcess).call(pi, process.execPath, [runtimeSnapshot.entryPath, ...(prepared?.args ?? args)], { cwd, signal: controller.signal }), stopped]);
+    if (timedOut) { await timeoutTeardown; throw new OmdTimeoutError(budgetMs, args); }
     if (signal?.aborted) throw new OmdCancelledError();
     const text = boundedOutput(result, args);
     if (result.code !== 0 || result.killed) {
       throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
     }
     return { text: text || 'OMD completed successfully.', details: { code: result.code, killed: result.killed } };
+  } catch (error) {
+    if (timedOut) { await timeoutTeardown; throw new OmdTimeoutError(budgetMs, args); }
+    if (signal?.aborted) throw new OmdCancelledError();
+    throw error;
   } finally {
+    watchdogClock.clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
     prepared?.dispose();
     stopProgress();
   }

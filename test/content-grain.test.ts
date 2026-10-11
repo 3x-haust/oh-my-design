@@ -121,14 +121,11 @@ test('rejects changed source bytes', (context) => {
   assert.match(result.stderr, /STALE_CONTENT_GRAIN_SOURCE/);
 });
 
-test('rejects unknown and hostile grain fields', async () => {
+test('ignores ordinary extra grain fields but rejects hostile objects', async () => {
   const { parseContentGrain } = await import('../core/content-grain/contract.ts');
   const valid = activeGrain('a'.repeat(64));
 
-  assert.throws(
-    () => parseContentGrain({ ...valid, surprise: true }),
-    /CONTENT_GRAIN_INVALID.*unknown/i,
-  );
+  assert.deepEqual(parseContentGrain({ ...valid, surprise: true }), parseContentGrain(valid));
 
   const hostile = Object.create(null) as Record<string, unknown>;
   Object.assign(hostile, valid);

@@ -15,6 +15,7 @@ import {
 import { parseProcessPolicy } from './process-policy.ts';
 import { parseReviewPurpose, parseReviewPurposeAuthority } from './review-purpose-authority.ts';
 import { parseAdaptiveExecutionWaves } from './adaptive-execution-wave-boundary.ts';
+import { knownFields, type SchemaWarning } from '../judgment/schema.ts';
 import { UNSELECTED_LEARNING, type RouteLearningScope } from './adaptive-learning.ts';
 import { parseAdaptiveAiAssets } from './adaptive-ai-assets.ts';
 import { ADAPTIVE_ATTRIBUTION_CATEGORIES, type AdaptiveAttributionCategory } from './adaptive-attribution.ts';
@@ -33,22 +34,12 @@ function fields(value: unknown, expected: readonly string[], root = false): Fiel
     || Reflect.getPrototypeOf(value) !== Object.prototype) {
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   }
-  const keys = Reflect.ownKeys(value);
-  if (keys.some((key) => typeof key !== 'string' || !expected.includes(key))) {
-    return failAdaptiveRoute(root ? 'UNEXPECTED_ADAPTIVE_ROUTE_FIELD' : 'MALFORMED_ADAPTIVE_ROUTE');
-  }
-  if (keys.length !== expected.length || expected.some((key) => !Object.hasOwn(value, key))) {
-    return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
-  }
-  const result = new Map<string, unknown>();
-  for (const key of expected) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) {
+  try {
+    const projection = knownFields(value, expected, [], root ? 'route' : 'route.field');
+    if (projection.warnings.some(w => /(?:^|\.)(?:signature|author|publishedAt|invocationSha256|authority|hostReceipt)$/u.test(w.field)))
       return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
-    }
-    result.set(key, descriptor.value);
-  }
-  return result;
+    return new Map(expected.map(key => [key, projection.value[key]]));
+  } catch { return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE'); }
 }
 
 function array(value: unknown): readonly unknown[] {
@@ -136,6 +127,35 @@ function skip(value: unknown): AdaptiveSkip {
   return Object.freeze({ id: id(item.get('id')), reason: text(item.get('reason'), true) });
 }
 
+/** Inspect independent strategy fields without constructing a substitute publishable route. */
+export function diagnoseAdaptiveStrategyFields(value: unknown): readonly { path: string; code: string; message: string }[] {
+  const findings: { path: string; code: string; message: string }[] = [];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return findings;
+  const strategy = value as Record<string, unknown>;
+  const checks: readonly [string, () => unknown][] = [
+    ['skips', () => array(strategy.skips).forEach((entry, index) => {
+      try { skip(entry); } catch (error) { record(`skips[${index}]`, error); }
+    })],
+    ['roles', () => ids(strategy.roles, false, true)],
+    ['stages', () => ids(strategy.stages, false, true)],
+    ['methods', () => ids(strategy.methods, false, true)],
+    ['executionWaves', () => parseAdaptiveExecutionWaves(strategy.executionWaves)],
+    ['attributionCategories', () => ids(strategy.attributionCategories, false, true)],
+    ['aiAssets', () => parseAdaptiveAiAssets(strategy.aiAssets)],
+    ['rationale', () => text(strategy.rationale)],
+  ];
+  function record(path: string, error: unknown): void {
+    if (!(error instanceof Error)) throw error;
+    const code = 'code' in error && typeof error.code === 'string' ? error.code : error.message.split(':')[0]!;
+    if (!/^[A-Z][A-Z0-9_]+$/.test(code)) throw error;
+    findings.push({ path: `strategyDecision.${path}`, code, message: error.message });
+  }
+  for (const [path, check] of checks) {
+    try { check(); } catch (error) { record(path, error); }
+  }
+  return findings;
+}
+
 export function parseAdaptiveStrategyDecision(value: unknown): AdaptiveStrategyDecision {
   const item = fields(value, STRATEGY_KEYS);
   if (item.get('schema') !== ADAPTIVE_STRATEGY_DECISION_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
@@ -159,7 +179,7 @@ export function parseAdaptiveBrowserContext(value: unknown): AdaptiveBrowserDeci
   const item = fields(value, CONTEXT_KEYS);
   if (item.get('schema') !== ADAPTIVE_BROWSER_CONTEXT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const status = item.get('status');
-  if (status !== 'pending' && status !== 'validated') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  if (status !== 'pending' && status !== 'validated') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'browserDecisionContext.status must be "pending" or "validated"');
   const decisionIds = ids(item.get('decisionIds'), true);
   if (status === 'validated' && decisionIds.length === 0)
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
@@ -170,7 +190,7 @@ export function parseAdaptiveLearningContext(value: unknown): AdaptiveLearningCo
   const item = fields(value, LEARNING_KEYS);
   if (item.get('schema') !== ADAPTIVE_LEARNING_CONTEXT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const status = item.get('status');
-  if (status !== 'none' && status !== 'candidate' && status !== 'promoted') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  if (status !== 'none' && status !== 'candidate' && status !== 'promoted') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'validatedLearningContext.status must be "none", "candidate", or "promoted"');
   const learningIds = ids(item.get('learningIds'), status === 'none');
   if ((status === 'none' && learningIds.length !== 0) || (status !== 'none' && learningIds.length === 0))
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
@@ -187,6 +207,16 @@ function modelCapability(value: unknown): ModelCapabilityRouteInput {
   const now = item.get('now');
   if (typeof now !== 'number' || !Number.isSafeInteger(now) || now < 0) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   return Object.freeze({ now, routingInput: plainData(item.get('routingInput')) });
+}
+
+export function adaptiveRouteUnknownFieldWarnings(input: unknown): SchemaWarning[] {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return [];
+  const keys = Object.hasOwn(input, 'projectMode') ? ADAPTIVE_ROUTE_INPUT_KEYS : ADAPTIVE_ROUTE_INPUT_KEYS.filter(k => k !== 'projectMode');
+  const withMode = Object.hasOwn(input, 'deliveryMode') ? [...keys, 'deliveryMode'] : keys;
+  const warnings = knownFields(input, withMode, [], 'route').warnings;
+  const strategy = Object.getOwnPropertyDescriptor(input, 'strategyDecision')?.value;
+  if (strategy !== undefined) warnings.push(...knownFields(strategy, STRATEGY_KEYS, [], 'strategyDecision').warnings);
+  return warnings;
 }
 
 export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {

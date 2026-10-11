@@ -10,7 +10,9 @@ import { capturePageForRef, withBrowser, galleryLoginOccludes } from '../core/re
 import { loadRefs, refImagePath, researchLane, saveRef, addPrinciples } from '../core/ref/store.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { addRefsBatch } from '../core/ref/batch.ts';
+import type { BrowserConnector } from '../core/ref/browser-config.ts';
 import { commitCapturedReference } from '../core/ref/capture-commit.ts';
+import { decodePng } from '../core/motion/energy.ts';
 
 test('final URL refusal leaves the reference output tree unchanged', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-refusal-')));
@@ -21,6 +23,23 @@ test('final URL refusal leaves the reference output tree unchanged', async t => 
   await assert.rejects(withBrowser(browser => capturePageForRef(browser, source, { width: 640, height: 480 }, {
     shotOut, adapter: writer, validateFinalUrl: () => { throw new Error('final URL rejected'); },
   })));
+  assert.equal(existsSync(join(root, '.omd/refs')), false);
+});
+
+test('design add-batch selects the configured reference browser without owning a connected user browser', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-browser-profile-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const events: string[] = [];
+  const browser = { newPage: async () => { throw new Error('fixture-stop'); }, close: async () => { events.push('disconnect'); } };
+  const connector = { connectOverCDP: async (url: string) => { events.push(`connect:${url}`); return browser; },
+    launch: async () => { throw new Error('ordinary Chromium must not launch'); } } as unknown as BrowserConnector;
+  const result = await addRefsBatch(root, [{ source: fileURLToPath(new URL('fixtures/considered.html', import.meta.url)),
+    as: 'selected', lane: 'design', fromUser: true, energy: false }], {
+    rulesRoot: fileURLToPath(new URL('../core/rules/builtin', import.meta.url)), concurrency: 1,
+    browserConfig: { mode: 'cdp', cdpUrl: 'http://127.0.0.1:9222' }, browserConnector: connector,
+  }, createTestProjectWriteAdapter(root));
+  assert.deepEqual(events, ['connect:http://127.0.0.1:9222', 'disconnect']);
+  assert.match(result.outcomes[0]?.error ?? '', /fixture-stop/);
   assert.equal(existsSync(join(root, '.omd/refs')), false);
 });
 
@@ -58,6 +77,21 @@ message: stuck
   assert.equal(existsSync(join(root, '.omd/refs')), false);
 });
 
+test('design add-batch retains the whole 2x viewport rather than a long-page screenshot', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-batch-viewport-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const source = join(root, 'tall.html');
+  writeFileSync(source, `<main style="min-height:3200px"><h1>Application workspace</h1><p>${'Review the current request and prepare the next document. '.repeat(8)}</p></main>`);
+  const writer = createTestProjectWriteAdapter(root);
+  const result = await addRefsBatch(root, [{ source, as: 'viewport', lane: 'design', fromUser: true,
+    shot: true, energy: false }], { rulesRoot: fileURLToPath(new URL('../core/rules/builtin', import.meta.url)),
+    concurrency: 1 }, writer);
+  assert.equal(result.outcomes[0]?.ok, true, result.outcomes[0]?.error ?? 'capture failed');
+  const image = refImagePath(root, { source, component: 'viewport', researchLane: 'design' });
+  const pixels = decodePng(readFileSync(image));
+  assert.deepEqual([pixels.width, pixels.height], [2880, 1800]);
+});
+
 test('reference commit failure removes a new image and restores previous evidence', t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-commit-rollback-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -87,13 +121,13 @@ test('reference commit validates containment and real ancestors before probing t
   assert.deepEqual(readdirSync(outside), []);
 });
 
-test('actual full-page captures retain HTTP/link provenance and stay in separate lane directories', async t => {
+test('domain full-page and design 2x viewport captures retain provenance in separate lanes', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-browser-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const writer = createTestProjectWriteAdapter(root);
   const server = createServer((_req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(`<html><head><title>Research fixture</title></head><body><h1>Application workspace</h1><p>${'A person can review the current application and continue preparing documents. '.repeat(8)}</p><a href="https://original.example/screen">Original product screen</a></body></html>`);
+    res.end(`<html><head><title>Research fixture</title><style>body{min-height:3200px}</style></head><body><h1>Application workspace</h1><p>${'A person can review the current application and continue preparing documents. '.repeat(8)}</p><a href="https://original.example/screen">Original product screen</a></body></html>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
@@ -104,12 +138,19 @@ test('actual full-page captures retain HTTP/link provenance and stay in separate
       const identity = { source, component: `${lane}-entry`, researchLane: lane };
       const imagePath = refImagePath(root, identity);
       writer.mkdir(`.omd/refs/${lane}`);
-      const capture = await capturePageForRef(browser, source, { width: 640, height: 480 }, { shotOut: imagePath, adapter: writer });
-      assert.equal(capture.shotSaved, true, 'no selector still saves a whole-page image');
+      const capture = await capturePageForRef(browser, source, { width: 640, height: 480 }, {
+        shotOut: imagePath, adapter: writer, viewportShot: lane === 'design',
+        ...(lane === 'design' ? { selector: 'h1' } : {}),
+      });
+      assert.equal(capture.shotSaved, true, 'the design selector must not crop its screen image');
       assert.equal(capture.acquisition.httpStatus, 200);
       assert.equal(capture.acquisition.finalUrl, source);
       assert.deepEqual(capture.acquisition.links, ['https://original.example/screen']);
       assert.equal(readFileSync(imagePath).subarray(1, 4).toString(), 'PNG');
+      const pixels = decodePng(readFileSync(imagePath));
+      assert.equal(pixels.width, 1280);
+      if (lane === 'design') assert.equal(pixels.height, 960, 'design captures the entire 2x viewport without a selector crop');
+      else assert.ok(pixels.height >= 6400, 'domain keeps its full-page capture');
       assert.equal(capture.acquisition.imageSha256, createHash('sha256').update(readFileSync(imagePath)).digest('hex'));
       saveRef(root, { ...identity, kind: 'page', capturedAt: new Date().toISOString(), imagePath: relative(root, imagePath), acquisition: capture.acquisition, invariants: null, principles: [] }, writer);
     }

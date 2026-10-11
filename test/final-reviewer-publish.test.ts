@@ -151,7 +151,7 @@ test('signed fidelity and protocol lanes retain their authenticated non-visual p
 });
 
 test('distinct signed Eye assessments are preserved and conservatively aggregated', () => {
-  const fixture = prepareFinalRenderReviewFixture();
+  const fixture = prepareFinalRenderReviewFixture('copy-only', { withGraphHistory: true });
   const { root, invocation, observationSha256s } = fixture;
   try {
     const { privateKey, publicKey } = generateKeyPairSync('ed25519');
@@ -307,6 +307,23 @@ test('distinct signed Eye assessments are preserved and conservatively aggregate
     ]);
     assert.match(executions[0]?.designQuality.axes[0]?.evidence[0]?.region ?? '', /reviewer 1/);
     assert.match(executions[1]?.designQuality.axes[0]?.evidence[0]?.region ?? '', /reviewer 2/);
+    const historical = observationSha256s[0];
+    assert.ok(historical);
+    const stale = assessment(2);
+    for (const axis of stale.designQuality.axes) {
+      for (const evidence of axis.evidence) evidence.observationSha256 = historical;
+    }
+    assert.throws(() => buildFinalReviewerPublication({
+      schema: 'adaptive-final-review-publication-v1',
+      laneSchema: packet.outputContract.laneSchema,
+      roleResults: [roleResult(1), roleResult(2, stale)],
+    }, {
+      projectRoot: root,
+      buildSha256: invocation.current.buildSha256,
+      briefSha256: invocation.current.briefSha256,
+      publicKeyPath,
+      invocation,
+    }), /DESIGN_QUALITY_EVIDENCE_INVALID/);
     const red = assessment(2);
     red.verdicts.blindVisual = 'RED';
     assert.throws(() => buildFinalReviewerPublication({

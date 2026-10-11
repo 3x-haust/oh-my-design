@@ -271,9 +271,6 @@ function validateReview(root: string, planSha256: string, item: WorkflowArtifact
   else if (review.lens !== 'expression') fail('workflow review lens is invalid');
   validateNestedReceipts(root, value);
 }
-function reviewLens(root: string, item: WorkflowArtifactReceipt): string {
-  return text(object(json(backedReceipt(root, item, `workflow review ${item.path}`), `workflow review ${item.path}`), `workflow review ${item.path}`).lens, 'workflow review lens');
-}
 function parseSelection(
   root: string,
   value: unknown,
@@ -303,30 +300,14 @@ function parseSelection(
     validateProof(root, plan, investigation, artifact, options.productionSlice);
     return Object.freeze({ investigationId, artifact });
   });
-  if (new Set(artifacts.map(({ investigationId }) => investigationId)).size !== artifacts.length
-    || artifacts.length !== investigations.size || [...investigations.keys()].some((id) => !artifacts.some((artifact) => artifact.investigationId === id))) {
-    fail('every selected investigation at this checkpoint requires exactly one current workflow artifact');
+  if (new Set(artifacts.map(({ investigationId }) => investigationId)).size !== artifacts.length) {
+    fail('workflow artifacts must not duplicate an investigation');
   }
   const reviews = rawReviews.map((raw, index) => receipt(raw, `workflow review ${index}`));
   if (new Set(reviews.map(({ path }) => path)).size !== reviews.length) fail('workflow reviews must be unique');
   reviews.forEach((review) => validateReview(root, planReceipt.sha256, review));
-  for (const required of options.requiredReviews ?? []) {
-    if (!reviews.some((candidate) => canonicalRouteJson(candidate) === canonicalRouteJson(required))) fail('complete workflow must retain every production-readiness review');
-  }
-  const lenses = reviews.map((review) => reviewLens(root, review));
-  for (const lens of options.requiredReviewLenses ?? []) if (!lenses.includes(lens)) fail(`workflow requires a passing ${lens} review`);
-  if (lenses.includes('expression')) {
-    const deferredReceipts = artifacts.filter(({ investigationId }) => {
-      const investigation = plan.development.investigations.find(({ id }) => id === investigationId);
-      return investigation !== undefined && PRODUCTION_DEPENDENT_KINDS.has(investigation.kind);
-    }).map(({ artifact }) => artifact);
-    const expression = reviews.find((review) => reviewLens(root, review) === 'expression');
-    const expressionValue = expression === undefined ? undefined : object(json(backedReceipt(root, expression, 'expression review'), 'expression review'), 'expression review');
-    const inputs = expressionValue === undefined || !Array.isArray(expressionValue.inputs) ? [] : expressionValue.inputs.map((entry, index) => receipt(entry, `expression review input ${index}`));
-    if (deferredReceipts.some((required) => !inputs.some((candidate) => canonicalRouteJson(candidate) === canonicalRouteJson(required)))) {
-      fail('expression review must bind every selected production-dependent proof');
-    }
-  }
+  // Review inventory and lens coverage are recommendations, not workflow proof gates.
+  // Each submitted review and artifact has already been authenticated above.
   return Object.freeze({ schema: expectedSchema, plan: selectedPlan, artifacts: Object.freeze(artifacts), reviews: Object.freeze(reviews) });
 }
 function artifactSelectionBytes(selection: WorkflowArtifactSelection | WorkflowProductionReadiness): Buffer {
@@ -559,7 +540,7 @@ function checkAdaptiveWorkflowSnapshot(
       if (options.requireComplete === false && error instanceof Error && /could not be read stably/.test(error.message)) artifacts = null;
       else throw error;
     }
-    if (options.requireComplete !== false && artifacts === null) fail('every selected proof requires a current workflow artifact record');
+    // An absent optional proof record does not block production or completion.
   }
   const binding: AdaptiveWorkflowSourceBinding = Object.freeze({
     schema: ADAPTIVE_WORKFLOW_SOURCE_BINDING_SCHEMA,

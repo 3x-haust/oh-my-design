@@ -94,5 +94,7 @@ test('new schemas and commands execute through the real CLI; publishers and owne
   const before = snapshot(f.root);
   assert.equal(classifyPiWrite(f.root, '.omd/.cache/sketches/current.json').kind, 'blocked');
   assert.deepEqual(snapshot(f.root), before);
-  assert.equal(classifyPiWrite(f.root, '.omd/.cache/sketches/A/index.html').kind, 'authoring');
+  const sourceWrite = classifyPiWrite(f.root, '.omd/.cache/sketches/A/index.html');
+  assert.equal(sourceWrite.kind, 'blocked');
+  assert.match(sourceWrite.reason ?? '', /NATIVE_MAKER_REQUIRED/);
 });

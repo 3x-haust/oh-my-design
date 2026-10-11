@@ -210,7 +210,8 @@ export function scanTextSlop(text: string): TextSlopCandidate[] {
         line: lineAt(text, index),
         phrase: text.slice(index, index + match[0].length),
         signals: [rule.id],
-        ...REASONS[rule.id],
+        reason: `Literal phrase match: ${text.slice(index, index + match[0].length)}`,
+        reviewQuestion: REASONS[rule.id].reviewQuestion,
         owner: 'writer',
         gating: false,
       });

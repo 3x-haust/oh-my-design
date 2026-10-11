@@ -25,6 +25,7 @@ import {
 } from '../core/completion/preflight.ts';
 import { observationV2Sha256, writeObservationV2 } from '../core/runtime/observation.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { validateDecisionGraph } from '../core/deliberation/contracts.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { checkAdaptiveWorkflow, publishAdaptiveWorkflowPlan } from '../core/design-development/workflow-persistence.ts';
@@ -84,10 +85,7 @@ test('legacy functional-requirements-v1 stays readable while v2 has a distinct s
     () => parseFunctionalRequirements({ ...requirementsV2, evidence: { states: [], viewports: requirementsV2.evidence.viewports } }),
     /at least one evidence state/,
   );
-  assert.throws(
-    () => parseFunctionalRequirements({ ...requirementsV2, extra: true }),
-    /exactly evidence, requirements, schema/,
-  );
+  assert.deepEqual(parseFunctionalRequirements({ ...requirementsV2, extra: true }), parseFunctionalRequirements(requirementsV2));
   const inherited = Object.create(requirementsV2) as object;
   assert.throws(() => parseFunctionalRequirements(inherited), /must not inherit input properties/);
   const accessor = Object.create(null) as Record<string, unknown>;
@@ -279,6 +277,25 @@ test('publishes an immutable content-addressed zero-finding run and guarded curr
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
+test('completeness supporting observations retain their own graph after decision evolution', () => {
+  const value = prepare();
+  try {
+    const path = join(value.root, '.omd', 'decision-graph.json');
+    const original = readFileSync(path);
+    const graph = validateDecisionGraph(JSON.parse(original.toString('utf8'))).value;
+    assert.ok(graph);
+    const snapshot = `.omd/decision-graphs/sha256-${sha256(original)}.json`;
+    createTestProjectWriteAdapter(value.root, value.invocation).writeContentAddressed(snapshot, original);
+    writeFileSync(path, `${canonicalJson({
+      ...graph, decisions: graph.decisions.map(item => ({ ...item, question: 'Which revised layout preserves the action?' })),
+    })}\n`);
+    publishCompletenessRun(value.root, value.input, value.invocation);
+    assert.equal(checkCompletenessRun(value.root, value.invocation).observations.length, 2);
+    rmSync(join(value.root, snapshot));
+    assert.throws(() => checkCompletenessRun(value.root, value.invocation), /historical design decision graph/);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
 test('computed IR findings reject a caller-supplied empty findings array for a missing affordance', () => {
   const value = prepare(false, 'body', false);
   try {
@@ -408,14 +425,13 @@ test('typography applicability is immutable and exact-byte checked', () => {
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test('rendered Korean display text rejects a route-authorized type-proof omission', () => {
+test('rendered Korean display text can omit optional type-proof documentation', () => {
   const value = prepare(false, 'display');
   try {
     publishCompletenessRun(value.root, value.input, value.invocation);
-    assert.throws(
-      () => checkCompletionPublicationPrerequisites(value.root, { graph: value.graph }, value.invocation),
-      /Korean display text.*type proof/i,
-    );
+    const result = checkCompletionPublicationPrerequisites(value.root, { graph: value.graph }, value.invocation);
+    assert.equal(result.typography.status, 'skipped');
+    assert.equal(result.typography.applicability.koreanDisplayText, true);
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 

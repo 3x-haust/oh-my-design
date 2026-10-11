@@ -61,7 +61,7 @@ test('every visual register keeps the six-axis terminal floor', () => {
     floor: 3,
     floors: DESIGN_QUALITY_AXIS_FLOORS,
     aggregation: 'conjunctive',
-    candidateMode: 'structural',
+    candidateMode: 'integrated-visual',
     evidence: 'localized-desktop-mobile',
     fidelityCanSubstitute: false,
   });

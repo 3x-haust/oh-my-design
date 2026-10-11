@@ -1,20 +1,41 @@
 ---
 name: omd-ultradesign
-description: Design and implement the requested scope through real references, representative direction choice and measured review.
+description: Design and implement the requested scope through references, representative direction and measured review.
 ---
 
 # Ultradesign
 
-Preserve the original request and user-selected model. Use native delegation with bounded role tasks; without it, label sequential role passes honestly. They are not independent review. Pi uses omd_cli; ordinary local/Pi work does not need an invented external activation.
+Preserve the original request and user-selected model. Keep scope and allowed paths/dependencies.
+The model chooses stages/methods. Delegate bounded tasks; sequential passes are not independent review.
+Pi uses omd_cli; /ultradesign aliases /skill:omd-ultradesign, not quoted/inline mentions.
 
-Inspect stack/current route. For new work use the applicable route-input, product-route-input or design-route-input schema, validate, then classify the same complete request. Keep every requested surface/outcome, actual authority, allowed paths and dependencies. Current-process runs default interactive; config, child execution and checkpoint:none do not grant autonomy.
+Inspect stack/route. Use the applicable route-input, product-route-input or design-route-input schema;
+validate then classify. Run `omd stage next --json`. Deliver current contracts; check
+`omd brief <stage> --check --json` separately. Obtain `omd brief <stage> --role <role> [--mode <mode>] --json`;
+Sketch needs `--input <sketch-brief.json>`. Eye briefs are profiles, not authority. Let the
+exclusive owner publish, check outputs and recompute.
+Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step.
 
-Run `omd stage next --json`. Deliver current contracts and pass `omd brief <stage> --check --json` separately. Request `omd brief <stage> --role <role> [--mode <mode>] --json`; Sketch also needs `--input <sketch-brief.json>`. Eye's projection is profile-only, not review authority. Let the exclusive owner publish, check outputs and recompute. Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step.
+Explicit interactive concept routes: Frame + Scout/Writer -> minimal seed and 2-3 real concepts of one representative surface -> ONE interactive direction choice.
+The coordinator presents all actual previews and preserves authentic choice bytes.
+Then type/components -> full surface/state/view expansion -> actual audit/stress/repair.
+Samples never reduce scope. Art Director plans; Sketch authors candidates; Hand alone writes production.
+Await-user pauses retries; bare continue chooses nothing. Autonomous selection
+needs authority and isolated Eye, never merely config, child execution or checkpoint:none.
 
-Frame + Scout/Writer -> minimal seed and 2-3 real concepts of one representative surface -> ONE interactive direction choice -> selected type proof -> needed components -> full surface/state/view expansion -> actual audit/stress/repair. The representative sample never narrows delivery. Art Director plans; Sketch owns individual source; coordinator presents all actual previews and preserves authentic choice bytes, not a preferred winner.
-
-Typed await-user stops automatic retries and expansion. A stale choice needs the same checkpoint again; bare continue chooses nothing. Only explicit autonomous authority permits fresh isolated Eye selection. Missing exploratory evidence is honest confidence debt, not a universal first-render block or fabricated approval. Real missing facts/authority and the same defect after three failed repairs are exception questions.
+Pi design decisions are internal, not routine questions. Explicit host developer mode uses the same
+engine after renders, never as a prerequisite. Preserve account/payment/external-action authority.
+Withhold unknown facts; missing evidence is confidence debt, not approval.
 
 [metaphor-contract:typed-router] Visual owners receive the chosen contract; Writer receives only its copy-safe projection.
+Run guard production before source and guard completion before completion claims;
+exact native review/finalization follows the current host contract. Never forge receipts,
+alter user messages, lower risk or waive failures for budget. Design-only delivers its checked handoff.
+Report evidence, debt and limits.
 
-Hand alone writes production. Run guard production before source and guard completion before claiming completion; exact native review/finalization follows the current host contract. Never mint receipts, alter user messages, lower risk or waive required failures for budget. Design-only ends at the checked design handoff, not application claims. Report evidence, unresolved debt and actual verification limits.
+Selected provisional-source-study uses omd study create: an isolated evidence-only author receives
+whole originals; downstream gets source-free selection and first-party source/renders, not aesthetic approval.
+Pi Hand/Sketch uses omd maker run, never same-session fallback. Its fixed packet supplies brief,
+first-party material and validated whole originals privately. Never ship/expose/re-encode reference
+pixels, copy, branding or locators. Capture, publication, selection and independent review retain
+separate owners.

@@ -4,9 +4,9 @@
 [![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**AI that designs like a human.** OMD turns a design request into questions, evidence, alternatives,
-real material, and rendered tests. The model chooses useful methods, then revises, retains, or
-reframes its choices according to what it observes.
+**AI that designs like a human.** Give OMD one request. It researches, compares real material, chooses a direction, builds, renders, and repairs internally. The model adapts its methods to observed evidence rather than requiring routine reference or draft approval; account access and external-action permissions remain separate.
+
+Native Pi uses the same production engine for normal autonomous execution and explicitly enabled private developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md). Technical integration is tested; human-level quality claims still require real held-out blind ratings.
 
 [한국어](README.ko.md)
 

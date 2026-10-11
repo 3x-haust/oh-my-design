@@ -98,7 +98,9 @@ test('public candidate selection schema authors the current pointer accepted by 
   selectedCandidate(root);
   const current = JSON.parse(readFileSync(join(root, CANDIDATE_SELECTION_POINTER_PATH), 'utf8'));
   const schema = inputSkeleton('candidate-selection');
-  assert.deepEqual([...schema.keys].sort(), Object.keys(current).sort());
+  assert.ok(schema.keys.includes('captureStates'));
+  assert.ok(typeof schema.skeleton === 'object' && schema.skeleton !== null && !Array.isArray(schema.skeleton));
+  assert.deepEqual(Object.keys(schema.skeleton).sort(), Object.keys(current).sort());
   writeFileSync(join(root, CANDIDATE_SELECTION_POINTER_PATH), JSON.stringify({ ...schema.skeleton as object, ...current }));
   assert.deepEqual(stageArtifactProblems(root, stageDefinition('candidate-generation').id), []);
 });

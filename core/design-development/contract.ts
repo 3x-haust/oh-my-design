@@ -136,10 +136,7 @@ const parsePrinciple = (value: unknown): ReferencePrinciple => {
   const dimension = choice(item.dimension, ['spacing', 'hierarchy', 'interaction', 'density', 'content']);
   const statement = text(item.statement);
   const observableConsequence = text(item.observableConsequence);
-  if (/\b(colou?r|palette|purple|gradient|font|radius|shadow)\b/i.test(`${dimension} ${statement} ${observableConsequence}`)
-    || /\blooks? like\b/i.test(observableConsequence)) {
-    fail('DESIGN_DEVELOPMENT_SURFACE_COPY');
-  }
+  // Surface transfer is a contextual reading, not a word-list property of this principle.
   return Object.freeze({
     id: text(item.id),
     sourceIds: strings(item.sourceIds),

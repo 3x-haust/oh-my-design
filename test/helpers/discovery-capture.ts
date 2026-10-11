@@ -14,6 +14,8 @@ export type DiscoveryScenario = Readonly<{
   status?: number;
   finalUrl?: string;
   serverAddress?: string;
+  image?: { url: string; bytes: Buffer };
+  loadedImageSelector?: string;
   afterCapture?: (page: Page, count: number) => Promise<void>;
 }>;
 
@@ -30,6 +32,7 @@ export function discoveryBrowser(browser: Browser, scenario: DiscoveryScenario) 
   let closed = 0;
   let detached = 0;
   const preparePage = async (page: Page): Promise<Page> => {
+    if (scenario.image) await page.route(scenario.image.url, route => route.fulfill({ status: 200, contentType: 'image/png', body: scenario.image!.bytes }));
     await page.route(scenario.url, route => scenario.finalUrl
       ? route.fulfill({ status: 200, contentType: 'text/html', body: `<script>location.replace(${JSON.stringify(scenario.finalUrl)})</script>` })
       : route.fulfill({ status: scenario.status ?? 200, contentType: 'text/html', body: scenario.html }));
@@ -53,6 +56,18 @@ export function discoveryBrowser(browser: Browser, scenario: DiscoveryScenario) 
         try { await goto(...args); }
         catch (error) { if (!(error instanceof Error) || !error.message.includes('ERR_ABORTED')) throw error; }
         await page.waitForURL(finalUrl, { waitUntil: 'domcontentloaded' });
+        return response;
+      };
+    }
+    if (scenario.loadedImageSelector !== undefined) {
+      const loadedImageSelector = scenario.loadedImageSelector;
+      const navigate = page.goto.bind(page);
+      page.goto = async (...args: Parameters<Page['goto']>) => {
+        const response = await navigate(...args);
+        await page.locator(loadedImageSelector).evaluate(element => {
+          if (!(element instanceof HTMLImageElement)) throw new Error('expected an image readiness target');
+          return element.decode();
+        });
         return response;
       };
     }

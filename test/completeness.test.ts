@@ -32,6 +32,13 @@ test('a requirement schema rejects duplicate, unlabelled, and unknown-kind entri
   assert.throws(() => validateFunctionalRequirements(requirements({ id: '1', kind: 'action', statement: 'a', label: 'A' })), /id must be R-<number>/);
 });
 
+test('functional requirements ignore ordinary extra fields but preserve required-field validation', () => {
+  const item = { id: 'R-1', kind: 'action', statement: 'open', label: 'Open' };
+  assert.deepEqual(validateFunctionalRequirements({ ...requirements({ ...item, note: 'optional' }), note: 'optional' }),
+    validateFunctionalRequirements(requirements(item)));
+  assert.throws(() => validateFunctionalRequirements(requirements({ id: 'R-1', kind: 'action', statement: 'open' })), /label/);
+});
+
 test('an action is satisfied only when its carrier is operable and keyboard-reachable', () => {
   const declared = validateFunctionalRequirements(requirements({ id: 'R-1', kind: 'action', statement: 'Visitor opens the repository', label: '저장소 열기' }));
 

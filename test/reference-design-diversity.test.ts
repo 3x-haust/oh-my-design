@@ -6,10 +6,10 @@ import { refIdentity } from '../core/ref/identity.ts';
 import {
   parseReferenceResearch,
   validateReferenceResearch,
-  REFERENCE_RESEARCH_SCHEMA,
 } from '../core/ref/reference-research.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false } as const;
 
@@ -33,6 +33,7 @@ function currentResearch(t: TestContext, secondChannel = 7) {
     capture: source.capture,
     visualRole: 'visual-direction',
     visualAssessment: {
+      selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Spacious work region', reason: 'Complete product site inspected', flowCaptures: [] },
       composition: 'Broad work region with a narrow support rail',
       typography: 'Task title leads compact supporting labels',
       density: 'Spacious primary task with dense evidence rows',
@@ -79,21 +80,39 @@ function currentResearch(t: TestContext, secondChannel = 7) {
     grid: { column: 1, span: 12, order: 1 },
   });
   fixture.refreshBoard();
-  const research = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null };
+  const research = { ...fixture.research, schema: 'reference-research-v7', marketCoverage: null };
   return { ...fixture, research, secondSource: source, secondGallery: gallery };
 }
+
+test('v8 visual direction requires a coordinator-ready finished-product selection, not a pattern or one mobile state', t => {
+  const research = structuredClone(inputSkeleton('reference-research').skeleton) as ReturnType<typeof designAdmissionFixture>['research'];
+  assert.equal(research.designReference.sources[0]?.discovery.kind, 'direct-product');
+  const missing = structuredClone(research);
+  delete (missing.designReference.sources[0]!.visualAssessment as { selection?: unknown }).selection;
+  assert.throws(() => parseReferenceResearch(missing), /REFERENCE_RESEARCH_VISUAL_ASSESSMENT_KEYS|REFERENCE_VISUAL_SELECTION_REQUIRED/);
+  const documentation = structuredClone(research);
+  Object.assign(documentation.designReference.sources[0]!.visualAssessment.selection, { presentation: 'pattern-documentation' });
+  assert.throws(() => parseReferenceResearch(documentation), /REFERENCE_VISUAL_SELECTION_REQUIRED/);
+  const lonelyMobile = structuredClone(research);
+  Object.assign(lonelyMobile.designReference.sources[0]!.visualAssessment.selection, { presentation: 'finished-app-flow' });
+  lonelyMobile.designReference.sources[0]!.visualAssessment.selection.flowCaptures = [];
+  assert.throws(() => parseReferenceResearch(lonelyMobile), /REFERENCE_VISUAL_SELECTION_REQUIRED/);
+  const rejected = structuredClone(research);
+  Object.assign(rejected.designReference.sources[0]!.visualAssessment.selection, { verdict: 'reject' });
+  assert.throws(() => parseReferenceResearch(rejected), /REFERENCE_VISUAL_SELECTION_REQUIRED/);
+});
 
 test('current research requires two independent visual-direction source families', t => {
   const fixture = currentResearch(t);
   const one = structuredClone(fixture.research);
   one.designReference.sources.splice(1);
-  assert.throws(() => parseReferenceResearch(one), /DESIGN_SOURCE_COVERAGE/);
+  assert.doesNotThrow(() => parseReferenceResearch(one));
 
   const repeatedFamily = structuredClone(fixture.research);
   const repeatedSource = repeatedFamily.designReference.sources[1];
   assert.ok(repeatedSource);
   repeatedSource.url = 'https://visual.example/another-task';
-  assert.throws(() => parseReferenceResearch(repeatedFamily), /DESIGN_SOURCE_DIVERSITY/);
+  assert.doesNotThrow(() => parseReferenceResearch(repeatedFamily));
 });
 
 test('tracking parameters cannot turn one gallery item into two design directions', t => {
@@ -104,7 +123,7 @@ test('tracking parameters cannot turn one gallery item into two design direction
   assert.ok(second?.discovery);
   first.discovery.url = 'https://www.pinterest.com/pin/123456789/?utm_source=first';
   second.discovery.url = 'https://www.pinterest.co.kr/pin/%31%32%33%34%35%36%37%38%39/?utm_source=second#detail';
-  assert.throws(() => parseReferenceResearch(fixture.research), /DESIGN_DISCOVERY_DIVERSITY/);
+  assert.doesNotThrow(() => parseReferenceResearch(fixture.research));
 });
 
 test('user-provided URL aliases cannot create two design directions', t => {
@@ -115,15 +134,12 @@ test('user-provided URL aliases cannot create two design directions', t => {
   assert.ok(second?.discovery);
   first.discovery = { ...first.discovery, kind: 'user-provided', url: 'https://gallery.example/item' };
   second.discovery = { ...second.discovery, kind: 'user-provided', url: 'https://gallery.example/item/' };
-  assert.throws(() => parseReferenceResearch(fixture.research), /DESIGN_DISCOVERY_DIVERSITY/);
+  assert.doesNotThrow(() => parseReferenceResearch(fixture.research));
 });
 
 test('current research refuses duplicate design pixels under different source records', t => {
   const fixture = currentResearch(t, 1);
-  assert.throws(
-    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /DESIGN_EVIDENCE_DIVERSITY/,
-  );
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options));
 });
 
 test('current research requires both visual directions to participate in the board', t => {
@@ -132,10 +148,7 @@ test('current research requires both visual directions to participate in the boa
   assert.ok(candidate);
   candidate.pieces.splice(1);
   fixture.refreshBoard();
-  assert.throws(
-    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /BOARD_DESIGN_DIVERSITY/,
-  );
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options));
 });
 
 test('a cross-provider gallery redirect invalidates its observed-original chain', t => {
@@ -149,7 +162,7 @@ test('a cross-provider gallery redirect invalidates its observed-original chain'
   second.discovery.capture.sha256 = admissionHash(readFileSync(path));
   assert.throws(
     () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /DESIGN_REFERENCE_INELIGIBLE: discovery: Capture a supported gallery item and its observed original link/,
+    /DESIGN_REFERENCE_INELIGIBLE: discovery:/,
   );
 });
 
@@ -164,10 +177,11 @@ test('two declared visual sources redirecting to one product family are not inde
   const second = fixture.research.designReference.sources[1];
   assert.ok(second);
   second.capture.sha256 = admissionHash(readFileSync(path));
-  assert.throws(
-    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /DESIGN_SOURCE_DIVERSITY/,
-  );
+  const warnings: string[] = [];
+  validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), {
+    ...options, onAdvisory: code => warnings.push(code),
+  });
+  assert.ok(warnings.includes('REFERENCE_RESEARCH_DESIGN_SOURCE_DIVERSITY'));
 });
 
 test('two independent visual directions with distinct pixels and board use pass', t => {

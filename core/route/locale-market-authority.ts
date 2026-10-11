@@ -1,37 +1,61 @@
 import type { EvidenceClaimPublication } from '../brief/evidence-claims.ts';
 import type { LocaleDesignRoute } from '../locale/design-context.ts';
+import { join } from 'node:path';
+import { isVerifiedJudgment, knownFields, normalizeQuoteWhitespace, readSignedJudgmentInput,
+  type JudgmentInput, type JudgmentPolicy, type JudgmentReceipt, type VerifiedJudgment } from '../judgment/index.ts';
+import { readContainedRegularFile } from '../ref/reference-selection.ts';
+import { verifyNativeObservation } from '../runtime/self-signed-activation.ts';
+import { readPiRequest } from '../../extensions/omd-request-source.ts';
+import { failAdaptiveRoute } from './adaptive-flow-domain.ts';
 
-const POSITIVE_MARKET_INTENT = /\b(?:target|targeting|serve|serving|audience|users?|residents?|customers?|for|based|locali[sz](?:e|ed|ing))\b|대상|사용자|거주자|고객|기반|맞춰|현지화|서비스/iu;
-const NEGATED_MARKET_INTENT = /\b(?:do\s+not|don't|does\s+not|doesn't|not|never)\s+(?:(?:our\s+)?target|for|serve|support|(?:our\s+)?(?:target\s+)?market)|\bno\s+longer\s+(?:target|serve|support|market)|\b(?:exclude|excluding|excluded|avoid|without|out\s+of\s+scope)\b|대상(?:으로)?\s*하지\s*마|대상(?:이)?\s*아니|시장(?:은|이)?\s*아니|제외|피해|지원하지\s*않|서비스하지\s*않/iu;
+export const TARGET_MARKET_POLICY: JudgmentPolicy = Object.freeze({
+  purpose: 'target-market', decisions: ['explicit', 'unspecified', 'excluded'], authorRoles: ['coordinator'],
+  sourceKinds: ['route-request'], fields: ['request'], requiredSourceKinds: ['route-request'], mode: 'advisory',
+  parsePayload(value: unknown) {
+    const { value: fields } = knownFields(value, [], ['region'], 'target-market');
+    if (fields.region !== undefined && (typeof fields.region !== 'string' || !fields.region.trim())) {
+      throw new Error('AI_JUDGMENT_INVALID: region');
+    }
+    return fields;
+  },
+} satisfies JudgmentPolicy);
 
-function containsMarketLabel(value: string, label: string): boolean {
-  let offset = value.indexOf(label);
-  while (offset >= 0) {
-    const before = value.slice(0, offset).at(-1);
-    const after = value.slice(offset + label.length).at(0);
-    if ((before === undefined || !/[\p{L}\p{N}]/u.test(before))
-      && (after === undefined || !/[\p{L}\p{N}]/u.test(after))) return true;
-    offset = value.indexOf(label, offset + label.length);
-  }
-  return false;
+function marketClaim(locale: LocaleDesignRoute, publication: EvidenceClaimPublication, judgment: JudgmentInput): boolean {
+  const id = locale.context.marketAuthorityClaimId;
+  const claim = publication.claims.find(claim => claim.id === id);
+  return id !== null && publication.userFacts.includes(id)
+    && claim?.status === 'confirmed'
+    && claim.userEvidence.some(evidence => evidence.source === 'user-message'
+      && judgment.quotes.some(quote => quote.source.kind === 'route-request' && quote.field === 'request'
+        && normalizeQuoteWhitespace(quote.text).includes(normalizeQuoteWhitespace(evidence.excerpt))));
+}
+function marketDecision(locale: LocaleDesignRoute, judgment: JudgmentInput): boolean {
+  return locale.context.marketRegion !== null && judgment.purpose === 'target-market' && judgment.subjectId === 'request'
+    && judgment.decision === 'explicit'
+    && typeof judgment.payload === 'object' && judgment.payload !== null
+    && Reflect.get(judgment.payload, 'region') === locale.context.marketRegion
+    && judgment.quotes.some(quote => quote.source.kind === 'route-request');
 }
 
-export function hasLocaleMarketAuthority(
-  locale: LocaleDesignRoute,
-  publication: EvidenceClaimPublication,
-): boolean {
-  const authorityId = locale.context.marketAuthorityClaimId;
-  const authority = publication.claims.find(claim => claim.id === authorityId);
-  if (authorityId === null || !publication.userFacts.includes(authorityId) || authority?.status !== 'confirmed') return false;
-  const region = locale.context.marketRegion;
-  if (region === null) return false;
-  const labels = [region, new Intl.DisplayNames([locale.context.surfaceLocale], { type: 'region' }).of(region),
-    new Intl.DisplayNames(['en'], { type: 'region' }).of(region), ...(region === 'KR' ? ['한국'] : [])]
-    .filter((label): label is string => typeof label === 'string')
-    .map(label => label.normalize('NFKC').toLocaleLowerCase('und'));
-  return authority.userEvidence.some(evidence => {
-    const excerpt = evidence.excerpt.normalize('NFKC').toLocaleLowerCase('und');
-    return labels.some(label => containsMarketLabel(excerpt, label))
-      && POSITIVE_MARKET_INTENT.test(excerpt) && !NEGATED_MARKET_INTENT.test(excerpt);
-  });
+/** A confirmed claim alone cannot establish what the user meant by a market name. */
+export function hasLocaleMarketAuthority(locale: LocaleDesignRoute, publication: EvidenceClaimPublication,
+  judgment?: VerifiedJudgment): boolean {
+  return isVerifiedJudgment(judgment) && marketClaim(locale, publication, judgment.judgment)
+    && marketDecision(locale, judgment.judgment);
+}
+
+export function requirePersistedMarketAuthority(root: string, receipt: JudgmentReceipt | undefined,
+  requestText: string, locale: LocaleDesignRoute, publication: EvidenceClaimPublication): void {
+  if (!receipt) return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
+  const request = readPiRequest(root);
+  const input = readSignedJudgmentInput(readContainedRegularFile(root, join(root, receipt.path), 'market authority judgment'),
+    receipt, TARGET_MARKET_POLICY, (digest, signature) => verifyNativeObservation(root, 'ai-judgment-record-v1', digest, signature));
+  if (!request || request.request !== requestText || input.context.requestSha256 !== request.requestSha256
+    || input.context.sourceContractSha256 !== null || input.context.questionDigest !== null || input.context.documentSha256 !== null
+    || !marketClaim(locale, publication, input) || !marketDecision(locale, input)
+    || input.quotes.some(quote => quote.source.kind !== 'route-request' || quote.field !== 'request'
+      || quote.source.requestSourceSha256 !== request.recordSha256 || quote.source.requestSha256 !== request.requestSha256
+      || !normalizeQuoteWhitespace(request.request).includes(normalizeQuoteWhitespace(quote.text)))) {
+    return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
+  }
 }

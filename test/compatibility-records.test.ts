@@ -32,7 +32,7 @@ test('prior task-evidence-v1 bytes remain readable without acquiring current pub
   assert.equal('authorization' in (record.tasks[0]?.renders[0] ?? {}), false);
 
   const withCurrentField = JSON.stringify({ ...JSON.parse(bytes.toString('utf8')), buildSha256: 'a'.repeat(64) });
-  assert.throws(() => parseLegacyTaskEvidenceRecord(withCurrentField), /unknown or missing keys/);
+  assert.throws(() => parseLegacyTaskEvidenceRecord(withCurrentField), /current build authority/);
 });
 
 test('prior reference-usage-v1 bytes use the explicit legacy row reader', () => {

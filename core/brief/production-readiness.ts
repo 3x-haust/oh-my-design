@@ -6,33 +6,63 @@ import { checkFrameUx } from '../frame/check-ux.ts';
 import { validateCopyDeck, validateCurrentCopyReview } from '../copy/index.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readPersistedRoute, pathsOutsideScope } from '../route/index.ts';
-import { resolveRunState, requireConfirmedPlanningForProduction } from '../stage/contract.ts';
+import { resolveRunState, requireConfirmedPlanningForProduction, planningDispositionsForProduction } from '../stage/contract.ts';
 import { stageArtifactProblems } from '../stage/output.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { confidenceDebt, DEBT_CAPABLE_STAGES, mergeConfidenceDebt, recordConfidenceDebt, type ConfidenceDebt } from './confidence-debt.ts';
 import { compositionEntry } from './minimal-composition.ts';
 import { directionCommitmentBlocker } from './candidate-choice.ts';
+import { projection, requireCopyToneReview } from '../design-language/index.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
+import { nativeReframeWork } from '../runtime/native-reframe.ts';
+import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from './candidate-selection.ts';
+import { checkCandidateReferenceReview } from './candidate-reference-review.ts';
+import { readReferenceBoardArtifacts, sha256 } from '../ref/board-artifacts.ts';
+import { requireDesignJudgmentForReferences } from '../design/judgment-files.ts';
+import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
 
 export type ProductionReadiness = Readonly<{
   schema: 'production-readiness-v1'; ok: boolean; blockers: readonly string[]; confidenceDebt: readonly ConfidenceDebt[];
+  warnings: readonly string[];
 }>;
 
 /** Entry permission is not terminal acceptance. Failed authority/frame/safety checks never mutate. */
 export function checkProductionReadiness(root: string, invocation: ProjectRunInvocation, packRoot: string,
   target?: string | readonly string[]): ProductionReadiness {
-  const blockers: string[] = [], debt: ConfidenceDebt[] = [];
+  const blockers: string[] = [], debt: ConfidenceDebt[] = [], warnings: string[] = [];
   const attempt = (label: string, check: () => void): void => {
     try { check(); } catch (error) { blockers.push(`${label}: ${error instanceof Error ? error.message : String(error)}`); }
   };
   let sourceContractSha256: string | undefined;
   attempt('route', () => {
     const route = readPersistedRoute(root, invocation);
+    const currentProcess = route.sourceContract.processPolicy !== undefined;
     sourceContractSha256 = route.sourceContractSha256;
     const pendingDirection = directionCommitmentBlocker(root);
     if (pendingDirection) blockers.push(pendingDirection);
     if (route.deliveryMode === 'design-only' || !route.strategy.stages.includes('production')) {
       blockers.push('production is not selected; finish the design handoff without application writes');
     }
+    if (isNativePiInvocation(invocation)) {
+      attempt('renderer entry', () => {
+        const entryPath = readFrame(root)?.entrySurface?.entryPath;
+        if (entryPath !== undefined && pathsOutsideScope(route, [entryPath]).length > 0) {
+          blockers.push(`RENDER_ENTRY_OUTSIDE_ROUTE: ${entryPath}; resolve the configured build output and route scope before production`);
+        }
+      });
+      attempt('reframe source owner', () => {
+        const work = nativeReframeWork(root, invocation);
+        if (work?.action === 'author-reframe-candidate' || work?.action === 'resolve-reframe-route') {
+          blockers.push(`${work.problems.join('; ')}; ${work.next}`);
+        }
+      });
+    }
+    attempt('design language', () => {
+      const language = projection(root, route);
+      if (language?.status === 'needs-clarification') throw new Error('DESIGN_LANGUAGE_AMBIGUOUS: resolve the current design interpretation');
+      if (language?.status === 'resolved' && !language.targets.length && !language.copyTone) throw new Error('DESIGN_LANGUAGE_UNGROUNDED');
+      requireCopyToneReview(root, route);
+    });
     const targets = target === undefined ? [] : typeof target === 'string' ? [target] : target;
     const outside = pathsOutsideScope(route, targets);
     for (const path of outside) blockers.push(`target is outside the current route: ${path}`);
@@ -52,12 +82,17 @@ export function checkProductionReadiness(root: string, invocation: ProjectRunInv
     attempt('planning', () => {
       const missing = requireConfirmedPlanningForProduction(root);
       if (missing.length) blockers.push(`unconfirmed planning: ${missing.join(', ')}`);
+      for (const statement of planningDispositionsForProduction(root)) {
+        warnings.push(statement.disposition === 'omit-from-production-claims'
+          ? `planning omitted from production claims: ${statement.field}`
+          : `non-factual working decision: ${statement.field}`);
+      }
     });
     const safety = route.strategy.stages.includes('safety-validation');
-    const provisionalCopy = route.projectMode === 'greenfield' && !safety;
+    const provisionalCopy = currentProcess && route.projectMode === 'greenfield' && !safety;
     attempt('selected stages', () => {
       for (const stage of resolveRunState(root, packRoot, invocation).stages) {
-        const canYield = DEBT_CAPABLE_STAGES.has(stage.stage) || (stage.stage === 'copy' && provisionalCopy && !stage.present);
+        const canYield = currentProcess && (DEBT_CAPABLE_STAGES.has(stage.stage) || (stage.stage === 'copy' && provisionalCopy && !stage.present));
         const problems = stage.stage === 'composition' ? [] : stageArtifactProblems(root, stage.stage, invocation);
         const delivery = stage.undelivered.map(contract => `contract not delivered: omd stage deliver --stage ${stage.stage} --contract ${contract}`);
         if (canYield) debt.push(...[...problems, ...delivery].map(reason => confidenceDebt(stage.stage, reason)));
@@ -85,7 +120,7 @@ export function checkProductionReadiness(root: string, invocation: ProjectRunInv
       blockers.push(...validateCopyDeck(deck.toString('utf8')).map(f => `copy: ${f.message}`));
       if (safety || route.behavior.active.copyRepairWorkflow.status === 'selected') {
         const reviewPath = join(root, '.omd/.cache/copy-eye.md');
-        if (!existsSync(reviewPath) && !safety) debt.push(confidenceDebt('copy', 'copy review has not completed; no CLEAN claim is authorized'));
+        if (!existsSync(reviewPath) && !safety && currentProcess) debt.push(confidenceDebt('copy', 'copy review has not completed; no CLEAN claim is authorized'));
         else {
           const review = readContainedRegularFile(root, reviewPath, 'copy review');
           blockers.push(...validateCurrentCopyReview(review.toString('utf8'), deck).map(f => `copy review: ${f.message}`));
@@ -93,14 +128,33 @@ export function checkProductionReadiness(root: string, invocation: ProjectRunInv
       }
     });
     if (route.strategy.stages.includes('composition')) {
-      const composition = compositionEntry(root, invocation);
-      blockers.push(...composition.blockers);
-      debt.push(...composition.debt.map(reason => confidenceDebt('composition', `Full composition deferred: ${reason}`)));
+      if (currentProcess) {
+        const composition = compositionEntry(root, invocation);
+        blockers.push(...composition.blockers);
+        debt.push(...composition.debt.map(reason => confidenceDebt('composition', `Full composition deferred: ${reason}`)));
+      } else attempt('composition', () => {
+        blockers.push(...validateCurrentCompositionContract(root, invocation).map(f => `composition: ${f.message}`));
+      });
+    }
+    if (!currentProcess && route.strategy.stages.includes('reference-board')) {
+      attempt('reference board/judgment', () => {
+        const board = readReferenceBoardArtifacts(root);
+        requireDesignJudgmentForReferences(root, sha256(board.boardBytes));
+      });
+    }
+    if (!currentProcess && route.strategy.stages.includes('candidate-generation')) {
+      attempt('selected candidate', () => {
+        const bytes = readContainedRegularFile(root, CANDIDATE_SELECTION_POINTER_PATH, 'current candidate selection');
+        const pointer = validateCandidateSelectionPointer(JSON.parse(bytes.toString('utf8')));
+        resolveCandidateSelection(root, pointer);
+        checkCandidateReferenceReview(root, invocation, pointer);
+      });
     }
   });
   const unique = [...new Set(blockers)];
   const items = mergeConfidenceDebt(debt);
   const recorded = !unique.length && sourceContractSha256 !== undefined
     ? recordConfidenceDebt(root, sourceContractSha256, items, invocation) : items;
-  return { schema: 'production-readiness-v1', ok: unique.length === 0, blockers: unique, confidenceDebt: recorded };
+  return { schema: 'production-readiness-v1', ok: unique.length === 0, blockers: unique, confidenceDebt: recorded,
+    warnings: [...new Set(warnings)] };
 }

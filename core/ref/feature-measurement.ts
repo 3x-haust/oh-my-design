@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
+import { knownFields } from '../judgment/schema.ts';
 import type { Blueprint, RawIr } from '../types.ts';
 import type { GeometryAxis } from './geometry-comparison.ts';
 
@@ -47,8 +48,13 @@ const anchorName = (value: unknown): value is string => typeof value === 'string
   && (value === '@root' || /^[a-z][a-z0-9-]{0,63}$/.test(value));
 const arity = (quantity: FeatureQuantity): number => quantity === 'width' || quantity === 'height' ? 1 : 2;
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-const exact = (value: Record<string, unknown>, keys: readonly string[]): boolean =>
-  Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+const exact = (value: Record<string, unknown>, keys: readonly string[]): boolean => {
+  try {
+    const { warnings } = knownFields(value, keys, [], 'measurement');
+    for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+    return true;
+  } catch { return false; }
+};
 
 export function parseReferenceFeatureMeasurements(value: unknown, axis: string): readonly ReferenceFeatureMeasurement[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 24) return fail('measurements must contain 1..24 declared features');

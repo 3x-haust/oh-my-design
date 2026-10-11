@@ -1,18 +1,16 @@
+import { browserCallback, browserExpression } from './browser-evaluation.ts';
+import { createHash } from 'node:crypto';
 import type { CDPSession, Page, Route } from 'playwright';
 import { isSelectedAppContent } from './selected-app-content.ts';
+import { referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 
 export type NoticeDismissal = Readonly<{ dialog: string; control: string; method: 'visual-only'; suppressedBackdrops: number }>;
 
 const MODALS = '[role="dialog"], [role="alertdialog"], dialog[open], [id*="popup" i], [class*="popup" i], [id*="modal" i], [class*="modal" i], [id*="cookie" i], [class*="cookie" i], [id*="consent" i], [class*="consent" i]';
-const NOTICE = /공지|안내|알림|notice|announcement/i;
-const SENSITIVE = /쿠키|cookie|consent|동의|privacy|개인정보|로그인|sign\s?in|결제|payment/i;
-const SENSITIVE_BODY = /쿠키|cookie|consent|동의|privacy|개인정보|결제|payment|로그인(?:해|하기|하세요|후)|sign\s?in|log\s?in/i;
-const CLOSE = /^(?:close(?:\s+(?:dialog|popup|window))?|dismiss|닫기|(?:창|팝업)\s*닫기|[×✕x])$/i;
 const BACKDROP_NAME = /overlay|backdrop|shade|dimmer|scrim/i;
 type SuppressedDocument = { session: CDPSession; id: string; loaderId: string; selectors: string[];
   blockedRequests: string[]; requestGuard?: (route: Route) => Promise<void>; allowedNavigationUrl: string | undefined };
 const sheets = new WeakMap<Page, SuppressedDocument>();
-const browserExpression = (source: string) => `(() => { const __name = (callback) => callback; return (${source})(); })()`;
 
 function obstruction(message: string): never {
   throw new Error(`REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: ${message}`);
@@ -41,13 +39,11 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       const style = getComputedStyle(element);
       if (!['fixed', 'absolute'].includes(style.position) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2 || Number(style.zIndex) < 0) return false;
       const namedOverlay = /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`);
-      const errorLayer = /error|unavailable|failure|blocked|오류|장애|접속불가/i.test(`${element.id} ${element.className}`)
-        || /\b(?:unavailable|temporarily|maintenance|outage|interruption|server error|not found|try again later)\b|(?:서비스|시스템|서버).{0,8}(?:점검|중단|오류|장애|이용 불가)|점검 중|접속 불가|잠시 후 다시/i.test((element.querySelector('h1,h2,h3,header')?.textContent ?? '').trim());
       const mains = [...document.querySelectorAll('main')];
       const soleMain = element.matches('main') && mains.length === 1;
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
-      if (!namedOverlay && !errorLayer && soleMain) return false;
+      if (!namedOverlay && soleMain) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
       return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
@@ -159,7 +155,9 @@ async function guardedVisualSuppression<T>(page: Page, work: () => Promise<T>): 
 }
 
 export async function clearReferenceNotices(page: Page, allowedStateSelectors: readonly string[] = [], settleMs = 0,
-  selectedContentSelectors: readonly string[] = allowedStateSelectors): Promise<NoticeDismissal[]> {
+  selectedContentSelectors: readonly string[] = allowedStateSelectors,
+  overlayJudgment?: (selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>,
+  contentJudgment?: (selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>): Promise<NoticeDismissal[]> {
   if (settleMs > 0) await page.waitForTimeout(settleMs);
   const dismissals: NoticeDismissal[] = [];
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -169,22 +167,22 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     for (let index = 0; index < await dialogs.count(); index++) {
       const dialog = dialogs.nth(index);
       if (!await dialog.isVisible()) continue;
-      const plausiblePopup = await dialog.evaluate(element => element.matches('[role="dialog"], [role="alertdialog"], dialog[open]')
-        || ['fixed', 'absolute'].includes(getComputedStyle(element).position));
+      const plausiblePopup = await dialog.evaluate(browserCallback((element: Element) => element.matches('[role="dialog"], [role="alertdialog"], dialog[open]')
+        || ['fixed', 'absolute'].includes(getComputedStyle(element).position)));
       if (!plausiblePopup) continue;
-      const backdrop = await dialog.evaluate(element => /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`));
+      const backdrop = await dialog.evaluate(browserCallback((element: Element) => /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`)));
       if (backdrop) continue;
       const box = await dialog.boundingBox();
       const viewport = page.viewportSize();
       if (!box || !viewport || box.x >= viewport.width || box.y >= viewport.height
         || box.x + box.width <= 0 || box.y + box.height <= 0) continue;
-      const intentional = await dialog.evaluate((element, selectors) => {
+      const intentional = await dialog.evaluate(browserCallback((element: Element, selectors: readonly string[]) => {
         for (const selector of selectors) {
           try { if (element.matches(selector) || element.querySelector(selector) !== null) return true; }
           catch { continue; }
         }
         return false;
-      }, allowedStateSelectors);
+      }), allowedStateSelectors);
       if (intentional) { intentionalModal = true; continue; }
       visibleIndex = index;
       break;
@@ -194,40 +192,40 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
       if (blocked.length) obstruction(`suppressed document attempted a request (${blocked.join(', ')})`);
       if (!intentionalModal) {
         for (const layer of await coveringLayers(page)) {
-          if (!await isSelectedAppContent(page, layer.selector, selectedContentSelectors))
+          if (!await isSelectedAppContent(page, layer.selector, selectedContentSelectors, contentJudgment))
             obstruction('a covering layer still obscures the reference viewport');
         }
       }
       return dismissals;
     }
     const dialog = dialogs.nth(visibleIndex);
-    const info = await dialog.evaluate(element => {
+    const info = await dialog.evaluate(browserCallback((element: Element) => {
       const heading = element.querySelector('h1,h2,h3,[class*="header"],[class*="title"]');
       return {
         title: (element.getAttribute('aria-label') || heading?.textContent || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
         body: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 4000),
         sensitiveForm: element.querySelector('input[type="password"],form') !== null,
       };
-    });
+    }));
     const { title } = info;
-    if (!NOTICE.test(title) || SENSITIVE.test(title) || SENSITIVE_BODY.test(info.body) || info.sensitiveForm) obstruction(`modal is not a safe informational notice: ${title}`);
+    if (info.sensitiveForm) obstruction(`modal contains a form: ${title}`);
     const controls = dialog.locator('button,[role="button"],a');
     let closeIndex = -1;
     let closeName = '';
     for (let index = 0; index < await controls.count(); index++) {
       const control = controls.nth(index);
       if (!await control.isVisible()) continue;
-      const info = await control.evaluate(element => ({
+      const info = await control.evaluate(browserCallback((element: Element) => ({
         name: (element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent || '').replace(/\s+/g, ' ').trim(),
         href: element.getAttribute('href'), type: element.getAttribute('type'), form: element.closest('form') !== null,
-      }));
-      if (info.href !== null || info.type === 'submit' || (info.form && info.type !== 'button') || !CLOSE.test(info.name)) continue;
+      })));
+      if (info.href !== null || info.type === 'submit' || info.form) continue;
       closeIndex = index; closeName = info.name;
       break;
     }
     if (closeIndex < 0) obstruction(`notice has no safe close control: ${title}`);
     const beforeUrl = page.url();
-    const selector = await dialog.evaluate(element => {
+    const selector = await dialog.evaluate(browserCallback((element: Element) => {
       const parts: string[] = [];
       let current: Element | null = element;
       while (current && current !== document.documentElement) {
@@ -237,8 +235,16 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
         current = parent;
       }
       return `html > ${parts.join(' > ')}`;
-    });
+    }));
     if (!selector) obstruction(`notice cannot be isolated for visual suppression: ${title}`);
+    const binding = await overlayJudgment?.(selector, page.url());
+    if (!binding) obstruction('AI_JUDGMENT_REQUIRED: no signed overlay authorization');
+    if (binding.subjectId !== `${page.url()}#${selector}`) obstruction('overlay judgment targets another document or dialog');
+    if ((await referenceDecision('overlay-action', binding)).decision !== 'suppress-informational')
+      obstruction('overlay judgment does not authorize informational suppression');
+    if (binding.context.documentSha256 !== createHash('sha256').update(await page.content()).digest('hex')
+      || page.url() !== beforeUrl || await dialog.count() !== 1)
+      obstruction('overlay judgment document or target changed before suppression');
     const suppressedBackdrops = await guardedVisualSuppression(page, async () => {
       await suppressByBrowserStyle(page, [selector]);
       const layers = await coveringLayers(page);

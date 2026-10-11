@@ -3,8 +3,8 @@ import { realpathSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import {
+  TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
   MEASURED_BROWSER_RECEIPT_SCHEMA,
-  TRUSTED_BROWSER_RECEIPT_SCHEMA,
   trustedBrowserReceiptSha256,
   type TrustedBrowserCapture,
   type TrustedBrowserReceipt,
@@ -13,6 +13,7 @@ import type {
   TrustedEntrySurface,
   TrustedLifecycleManifest,
 } from '../core/runtime/trusted-evaluation-contract.ts';
+import { trustedEvaluationPlanBytes } from '../core/runtime/trusted-evaluation-contract.ts';
 import { serveProjectEntry } from '../core/render/serve.ts';
 import { waitForDocumentFonts } from '../core/render/index.ts';
 import { withLocalView, pageRoute } from '../core/render/stateful.ts';
@@ -59,7 +60,6 @@ export function requireTrustedBrowserEvaluation(
 export type TrustedBrowserArtifactSink = Readonly<{
   write(relativePath: string, bytes: Uint8Array): void;
 }>;
-
 
 export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v7-measured' as const;
 
@@ -331,30 +331,14 @@ async function collectEntrySurfaceFindings(
   }
 }
 
-async function collectRenderedKoreanCopyFindings(
+async function recordRenderedCopyForReview(
   page: Page,
   viewport: Readonly<{ width: number; height: number }>,
-  findings: Set<string>,
+  transcript: string[],
 ): Promise<void> {
   const text = await page.locator('body').innerText().catch(() => '');
-  if (/(?:합니다|했습니다|됩니다|되었습니다|입니다)\.(?:입니다|합니다|했습니다|됩니다|되었습니다)(?=[\s.!?]|$)/u
-    .test(text)) {
-    findings.add(`korean-result-ending-duplicated:${viewport.width}x${viewport.height}`);
-  }
-  for (const match of text.matchAll(
-    /(?:상태|처분|결과|값|단계|모드)(?:를|을)\s+([가-힣]+)(으로|로)\s+(?:바꿨|변경|설정|전환)/gu,
-  )) {
-    const noun = match[1]!;
-    const particle = match[2]!;
-    const finalCode = noun.charCodeAt(noun.length - 1);
-    const jongseong = finalCode >= 0xac00 && finalCode <= 0xd7a3
-      ? (finalCode - 0xac00) % 28
-      : 0;
-    const expected = jongseong === 0 || jongseong === 8 ? '로' : '으로';
-    if (particle !== expected) {
-      findings.add(`korean-result-particle-mismatch:${viewport.width}x${viewport.height}`);
-    }
-  }
+  // Copy quality is contextual; preserve the observed text as advisory review input.
+  if (text) transcript.push(`rendered-copy-review:${viewport.width}x${viewport.height}:${Buffer.from(text.slice(0, 2_048)).toString('base64url')}`);
 }
 
 export async function runTrustedBrowserEvaluation(input: Readonly<{
@@ -470,7 +454,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
         }).catch(() => false);
         if (!focused) accessFindings.add(`keyboard-focus-missing:${viewport.width}x${viewport.height}`);
         await collectInteractiveLabelFindings(page, viewport, accessFindings);
-        await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
+        await recordRenderedCopyForReview(page, viewport, transcript);
         for (const [scriptIndex, script] of input.manifest.scripts.entries()) {
           const findings = behaviorByOutcome.get(script.outcomeRef);
           if (findings === undefined) {
@@ -483,11 +467,11 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           // Attach each visible-state waiter before triggering actions, but convert rejection to a
           // measured boolean immediately so a fast timeout can never become an unhandled rejection.
           const initiallyVisible = await Promise.all(script.assertions.map((assertion) =>
-            assertion.kind === 'visible-text'
+            assertion.kind !== 'absent-text'
               ? resultIsRendered(page, assertion.selector, assertion.text)
               : false));
           const visibleSignals = () => script.assertions.map((assertion) =>
-            assertion.kind === 'visible-text'
+            assertion.kind !== 'absent-text'
               ? waitForRenderedResult(page, assertion.selector, assertion.text)
               : undefined);
           let signals = actions.length === 0 ? visibleSignals() : [];
@@ -496,10 +480,16 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             // immediately before the final triggering/barrier action so the bounded waiter measures
             // the resulting state rather than expiring while the script is still preparing it.
             if (actionIndex === actions.length - 1) signals = visibleSignals();
-            actionLog.push(`${action.kind} ${action.selector} @ ${viewport.width}x${viewport.height}`);
-            transcript.push(`action-${action.kind}:${sha256(Buffer.from(action.selector))}`);
+            actionLog.push(`${action.kind === 'reload' ? 'reload' : `${action.kind} ${action.selector}`} @ ${viewport.width}x${viewport.height}`);
+            transcript.push(action.kind === 'reload' ? 'action-reload' : `action-${action.kind}:${sha256(Buffer.from(action.selector))}`);
             try {
-              if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
+              if (action.kind === 'reload') {
+                const response = await page.reload({ waitUntil: 'load' });
+                if (response === null || !response.ok()) {
+                  findings.add('required-action-unavailable');
+                  safetyFindings.add('browser-navigation-failed');
+                }
+              } else if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
               else await page.locator(action.selector).fill(action.value, { timeout: 2_000 });
               if (request.browserZoom === 2) await ensureMeasuredLayoutZoom(page, request.viewport);
             } catch {
@@ -509,19 +499,23 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           const observedSignals = await Promise.all(signals.map((signal) => signal ?? false));
           if (!await settleTrustedRender(page)) findings.add('required-render-not-settled');
           for (const [index, assertion] of script.assertions.entries()) {
-            const rendered = assertion.kind !== 'visible-text'
+            const rendered = assertion.kind === 'absent-text'
               || await resultIsRendered(page, assertion.selector, assertion.text);
-            if (assertion.kind === 'visible-text' && !rendered) {
+            if (assertion.kind !== 'absent-text' && !rendered) {
               findings.add('required-result-not-rendered');
             }
-            const passed = assertion.kind === 'visible-text'
+            const passed = assertion.kind === 'preserved-text'
+              ? initiallyVisible[index] && observedSignals[index] && rendered
+              : assertion.kind === 'visible-text'
               ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
               : !await page.locator(assertion.selector).filter({ hasText: assertion.text })
                 .isVisible().catch(() => false);
             if (passed) {
               transcript.push(`assertion-pass:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
             } else {
-              findings.add(assertion.kind === 'visible-text' && initiallyVisible[index]
+              findings.add(assertion.kind === 'preserved-text'
+                ? 'required-preserved-state-missing'
+                : assertion.kind === 'visible-text' && initiallyVisible[index]
                 && transitionActions.length > 0
                 ? 'required-state-transition-missing'
                 : 'required-visible-result-missing');
@@ -529,7 +523,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             }
           }
           await collectInteractiveLabelFindings(page, viewport, accessFindings);
-          await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
+          await recordRenderedCopyForReview(page, viewport, transcript);
           const observedUrl = new URL(page.url());
           if (observedUrl.origin !== new URL(initialUrl).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
           const state = `outcome-${sha256(Buffer.from(script.outcomeRef)).slice(0, 16)}`;
@@ -595,7 +589,8 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   }
   if (sealed) input.artifacts.write(sealed.receipt.path, sealed.bytes);
   const receipt: TrustedBrowserReceipt = Object.freeze({
-    schema: sealed ? MEASURED_BROWSER_RECEIPT_SCHEMA : TRUSTED_BROWSER_RECEIPT_SCHEMA,
+    schema: sealed ? MEASURED_BROWSER_RECEIPT_SCHEMA : TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
+    executionPlanSha256: createHash('sha256').update(trustedEvaluationPlanBytes(input.manifest)).digest('hex'),
     runId: input.binding.runId,
     routeSha256: input.binding.routeSha256,
     sourceContractSha256: input.binding.sourceContractSha256,

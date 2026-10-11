@@ -13,6 +13,7 @@ export function harness(t: { after(fn: () => void): void }, routed = true) {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-pi-continuity-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
+  writeFileSync(join(cwd, '.omd/.cache/existing.json'), '{}');
   if (routed) writeFileSync(join(cwd, '.omd/route.json'), '{}');
   const hooks = new Map<string, PortablePiHook>();
   const commands: string[][] = [];
@@ -27,6 +28,7 @@ export function harness(t: { after(fn: () => void): void }, routed = true) {
     on: (name, hook) => { hooks.set(name, hook); },
     registerCommand() {}, registerTool: value => { tool = value; },
     sendMessage: value => { sent.push(value.customType); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, argv) {
       const args = argv.slice(1); commands.push([...args]);
       const stage = args[1] ?? '';
@@ -54,12 +56,15 @@ export function harness(t: { after(fn: () => void): void }, routed = true) {
     const event = { toolName: 'write', toolCallId, input: { path, content: 'new owner output' } };
     const refusal = await emit('tool_call', event);
     if (isBlocked(refusal)) return refusal;
-    if (!failed) { mkdirSync(dirname(join(cwd, path)), { recursive: true }); writeFileSync(join(cwd, path), 'new owner output'); }
+    if (!failed) { mkdirSync(dirname(join(cwd, path)), { recursive: true }); writeFileSync(join(cwd, path), path.endsWith('.json') && path.includes('/.cache/') ? '{}' : 'new owner output'); }
     await emit('tool_result', { ...event, isError: failed });
     return refusal;
   }
   return { cwd, commands, sent, blockedStages, unselected, emit, run, write,
-    activate: (prompt = '/skill:omd-ultradesign') => emit('before_agent_start', { prompt }),
+    activate: async (prompt = '/skill:omd-ultradesign Build the requested application.') => {
+      if (prompt !== '/skill:omd-ultradesign') await emit('input', { source: 'interactive', text: prompt });
+      return emit('before_agent_start', { prompt });
+    },
     end: () => emit('message_end', { message: final }),
     failPublication: () => { publicationFails = true; },
     noNextStage: () => { nextStage = null; } };

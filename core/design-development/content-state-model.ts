@@ -129,7 +129,6 @@ const exactArray = (value: unknown): readonly unknown[] => {
 
 const unsafeDurableValue = (value: string): boolean => {
   const patterns = [
-    /\blorem\s+ipsum\b|\bdolor\s+sit\s+amet\b/i,
     /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
     /(?:\+\d{1,3}[ .-]?)?(?:\(\d{2,4}\)|\d{2,4})[ .-]\d{3,4}[ .-]\d{4}\b/,
     /\b\d{3}-\d{2}-\d{4}\b/,

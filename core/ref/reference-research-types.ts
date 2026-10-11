@@ -11,6 +11,19 @@ export const REFERENCE_RESEARCH_KEYS = [
 ] as const;
 export const REFERENCE_RESEARCH_LANE_KEYS = ['queries', 'searches', 'sources'] as const;
 export const REFERENCE_RESEARCH_DOMAIN_KEYS = [...REFERENCE_RESEARCH_LANE_KEYS, 'benchmarkSha256'] as const;
+export const REFERENCE_RESEARCH_FUNCTIONAL_SOURCE_KEYS = ['id', 'url', 'observations', 'marketObservationSha256',
+  'features', 'similarities', 'differences', 'adopt', 'avoid', 'limitations'] as const;
+export type FunctionalCitation = Readonly<{ observationSha256: string; field: 'observedText' | 'taskText' | 'linkLabels'; quote: string; linkUrl: string | null }>;
+export type FunctionalSource = Readonly<{ id: string; url: string;
+  observations: readonly Readonly<{ url: string; capture: ResearchEvidence }>[];
+  marketObservationSha256: string;
+  features: readonly Readonly<{ id: string; observedLabel: string; finding: string; evidence: readonly FunctionalCitation[] }>[];
+  similarities: readonly Readonly<{ requestQuote: string; featureIds: readonly string[]; assessment: string }>[];
+  differences: readonly Readonly<{ requestQuote: string; featureIds: readonly string[]; assessment: string }>[];
+  adopt: readonly Readonly<{ featureIds: readonly string[]; action: string; reason: string }>[];
+  avoid: readonly Readonly<{ featureIds: readonly string[]; action: string; reason: string }>[];
+  limitations: readonly string[];
+}>;
 export const REFERENCE_RESEARCH_DESIGN_KEYS = [...REFERENCE_RESEARCH_LANE_KEYS, 'boardSha256'] as const;
 export const REFERENCE_RESEARCH_SOURCE_KEYS = [
   'id', 'url', 'observedAt', 'decision', 'finding', 'evidence', 'capture',
@@ -36,10 +49,13 @@ export type ResearchSource = Readonly<{
   evidence: ResearchEvidence;
   capture: ResearchEvidence;
   visualRole?: 'visual-direction' | 'component-support';
-  visualAssessment?: Readonly<Record<'composition' | 'typography' | 'density' | 'imagery' | 'transfer' | 'avoid', string>>;
+  visualAssessment?: Readonly<Record<'composition' | 'typography' | 'density' | 'imagery' | 'transfer' | 'avoid', string> & {
+    selection?: Readonly<{ presentation: 'finished-product-website' | 'finished-app-flow'; verdict: 'emulate';
+      appearanceIntent: string; reason: string; flowCaptures: readonly ResearchEvidence[] }>;
+  }>;
   discovery?: BrowseDesignDiscovery | Readonly<{
     url: string;
-    kind: 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided';
+    kind: 'direct-product' | 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided';
     access: 'free';
     qualityReason: string;
     evidence: ResearchEvidence;
@@ -49,6 +65,7 @@ export type ResearchSource = Readonly<{
 export type ResearchLane = Readonly<{
   queries: readonly string[];
   searches: readonly ResearchEvidence[];
+  leads?: readonly ResearchEvidence[];
   sources: readonly ResearchSource[];
   browseSessions?: readonly ResearchEvidence[];
   navigation?: readonly Readonly<{ url: string; evidence: ResearchEvidence; capture: ResearchEvidence }>[];
@@ -58,11 +75,16 @@ export type ReferenceResearch = Readonly<{
   schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v7' | 'reference-research-v6' | 'reference-research-v5';
   sourceContractSha256: string;
   marketCoverage?: MarketReferenceCoverage | null;
-  domainReference: ResearchLane & Readonly<{ benchmarkSha256: string | null }>;
+  judgments?: readonly Readonly<{ path: string; sha256: string; purpose: string; subjectId: string }>[];
+  domainReference: Omit<ResearchLane, 'sources'> & Readonly<{ sources: readonly (ResearchSource | FunctionalSource)[]; benchmarkSha256: string | null }>;
   designReference: ResearchLane & Readonly<{ boardSha256: string }>;
 }>;
 export type ValidationOptions = Readonly<{
   expectedSourceContractSha256: string;
   benchmarkRequired: boolean;
   expectedRequest?: string;
+  /** Host-verified receipts only; a record cannot assert judgments on its own. */
+  verifiedJudgments?: readonly Readonly<{ path: string; sha256: string; purpose: string; subjectId: string }>[];
+  /** Presentation-only findings; callers record an agent-authored limitation before omitting research. */
+  onAdvisory?: (code: string, detail: string) => void;
 }>;

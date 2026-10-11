@@ -142,12 +142,12 @@ test('a failed or omitted required assertion fails the whole stress proof', () =
   throwsCode(() => parseComponentStressProof(omitted, current()), 'COMPONENT_STRESS_MISSING_ASSERTION');
 });
 
-test('stress proof shape is closed and render paths cannot be reused across contexts', () => {
+test('stress proof ignores ordinary extras but cannot reuse render paths across contexts', () => {
   const reused = valid();
   reused.cases[0]!.render.path = reused.cases[1]!.render.path;
   throwsCode(() => parseComponentStressProof(reused, current()), 'COMPONENT_STRESS_RENDER_REUSED');
 
   const extra = valid() as ReturnType<typeof valid> & { green?: boolean };
   extra.green = true;
-  throwsCode(() => parseComponentStressProof(extra, current()), 'COMPONENT_STRESS_MALFORMED');
+  assert.equal(Object.hasOwn(parseComponentStressProof(extra, current()), 'green'), false);
 });

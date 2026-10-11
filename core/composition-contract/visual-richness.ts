@@ -62,13 +62,6 @@ const BROAD_CARRIER = /typographic|concept-bearing|\bpattern\b|\bgradient\b|\bph
  */
 const STRICT_CARRIER = /typographic|concept-bearing|\bpattern\b|\bgradient\b|\bphoto|\bgraphic|illustration|\bchart|\bdiagram|\bicon|imagery|animation|\bmotion\b|data\s*visuali[sz]ation|infographic/i;
 
-function inferRegister(parsed: Map<string, string>): VisualRichnessRegister {
-  const text = `${parsed.get('Density and visual mass') ?? ''} ${parsed.get('Focal hierarchy') ?? ''}`;
-  if (/\bshowpiece\b/i.test(text)) return 'showpiece';
-  if (/\bquiet\b/i.test(text)) return 'quiet';
-  return 'confident';
-}
-
 /**
  * Pure, advisory-only evaluation: for each content section present in the
  * contract, check whether it declares a purposeful visual carrier (a
@@ -79,7 +72,8 @@ function inferRegister(parsed: Map<string, string>): VisualRichnessRegister {
  */
 export function evaluateVisualRichness(inputs: VisualRichnessInputs): VisualRichnessFinding[] {
   const parsed = sections(inputs.contract);
-  const register = inputs.register ?? inferRegister(parsed);
+  // An undeclared register is not inferred from an English substring.
+  const register = inputs.register ?? 'confident';
 
   if (register === 'quiet') return [];
 

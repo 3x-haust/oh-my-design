@@ -4,9 +4,9 @@
 [![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**사람처럼 디자인하는 AI.** OMD는 디자인 요청을 질문, 근거, 대안, 실제 콘텐츠와 렌더 실험으로
-이어갑니다. 모델은 필요한 방법을 선택하고, 관찰한 결과에 따라 기존 선택을 수정하거나
-유지하거나 문제부터 다시 정의합니다.
+**사람처럼 디자인하는 AI.** 요청을 한 번 입력하면 OMD가 실제 자료를 조사·비교하고 방향을 선택한 뒤 제작·렌더·수정을 내부에서 이어갑니다. 관찰한 근거에 따라 방법을 조정하며, 일상적인 레퍼런스·시안 승인을 요구하지 않습니다. 계정 접근과 외부 변경 권한은 별도로 유지합니다.
+
+네이티브 Pi의 일반 자율 실행과 명시적으로 켠 비공개 개발자 평가는 같은 제작 엔진을 사용합니다. [실행 방법·비공개 평가·버전별 보정 안내](core/protocol/autonomous-design.md)를 참고하세요. 기술적 연결은 테스트했지만 사람 수준 품질 주장은 실제 블라인드 평가가 필요합니다.
 
 [English](README.md)
 

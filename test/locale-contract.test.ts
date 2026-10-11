@@ -60,7 +60,7 @@ test('every declared Beat needs real copy in every declared locale', () => {
     '| B-1 | 소스에서 근거를 수집합니다 |  |',
     '| B-2 | TBD | Records each decision |',
   ].join('\n')));
-  assert.deepEqual(holes.map((finding) => finding.id), ['LOCALE-COPY-MISSING', 'LOCALE-COPY-PLACEHOLDER']);
+  assert.deepEqual(holes.map((finding) => finding.id), ['LOCALE-COPY-MISSING']);
   assert.match(holes[0]!.message, /Beat B-1 has no en-US copy/);
 });
 

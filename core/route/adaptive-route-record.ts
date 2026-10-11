@@ -15,6 +15,8 @@ import { routeAdaptiveFlow, validateAdaptiveStrategyRails } from './adaptive-flo
 import { adaptiveSourceContractSha256, canonicalRouteJson } from './adaptive-source-contract.ts';
 import { validatePersistedAdaptiveBehavior } from './adaptive-behavior-record.ts';
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
+import { parseJudgmentReceipt } from '../judgment/index.ts';
+import { requirePersistedMarketAuthority } from './locale-market-authority.ts';
 
 const RECORD_KEYS = [
   'schema', 'route', 'request', 'projectMode', 'requiredOutcomes', 'prohibitedOutcomes', 'evidenceRequired',
@@ -133,7 +135,7 @@ function parse(
 ): AdaptiveRouteRecord {
   const legacyKeys = RECORD_KEYS.filter((key) => key !== 'projectMode');
   const baseKeys = hasOwn(value, 'projectMode') ? RECORD_KEYS : legacyKeys;
-  const item = fields(value, hasOwn(value, 'deliveryMode') ? [...baseKeys, 'deliveryMode'] : baseKeys);
+  const item = fields(value, [...baseKeys, ...['deliveryMode', 'marketAuthority'].filter(key => hasOwn(value, key))]);
   if (item.has('deliveryMode') && item.get('deliveryMode') !== 'design-only') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   if (item.get('schema') !== ADAPTIVE_ROUTE_RECORD_SCHEMA || item.get('route') !== 'adaptive') {
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
@@ -143,10 +145,17 @@ function parse(
   const legacySourceContract = !hasOwn(persistedSourceContract, 'projectMode') || legacyLearning;
   const replay = sourceRouteInput(persistedSourceContract);
   const classified = routeAdaptiveFlow(replay.input, authority, replay.localeDesign, { replay: true });
+  const marketAuthority = item.has('marketAuthority') ? parseJudgmentReceipt(item.get('marketAuthority')) : undefined;
+  if (marketAuthority && replay.localeDesign?.decision !== 'research') return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
+  if (authority && replay.localeDesign?.decision === 'research') {
+    requirePersistedMarketAuthority(authority.root, marketAuthority, classified.request,
+      replay.localeDesign, classified.sourceContract.evidenceClaims);
+  }
   const snapshot = parseAdaptiveLearningContext(item.get('validatedLearning'));
   // The immutable, authority-bound record owns the publication snapshot. Changing the advisory
   // store must not change route identity on replay. Legacy caller IDs are discarded, not promoted.
-  const expected = Object.freeze({ ...classified, validatedLearning: legacyLearning ? classified.validatedLearning : snapshot });
+  const expected = Object.freeze({ ...classified, ...(marketAuthority === undefined ? {} : { marketAuthority }),
+    validatedLearning: legacyLearning ? classified.validatedLearning : snapshot });
   const normalizedSourceSha256 = adaptiveSourceContractSha256(expected.sourceContract);
   const persistedExpectedSha256 = legacySourceContract
     ? createHash('sha256').update(`${canonicalRouteJson(persistedSourceContract)}\n`).digest('hex')
@@ -167,6 +176,7 @@ function parse(
   const forbidden = strings(item.get('forbiddenWithoutRequest'));
   const candidate: AdaptiveRouteRecord = Object.freeze({
     schema: ADAPTIVE_ROUTE_RECORD_SCHEMA,
+    ...(marketAuthority === undefined ? {} : { marketAuthority }),
     ...(item.has('deliveryMode') ? { deliveryMode: 'design-only' as const } : {}),
     route: 'adaptive',
     request: parseAdaptiveRequest(item.get('request')),

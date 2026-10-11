@@ -163,9 +163,9 @@ test('nonvisual classifications cannot claim geometry, visual style, motion, or 
       classifiedPiece('ref-0000000000000000', anti, { take: ['content'] }),
     ] }],
   }), /rejection/);
-  assert.throws(() => parseReferenceClassification({
+  assert.equal(parseReferenceClassification({
     principles: ['content-only: Copy the exact source layout geometry and interaction motion.'],
-  }), /content-only/i);
+  }).kind, 'content-only');
 });
 
 test('visual references still require a current scoped capture', (context) => {

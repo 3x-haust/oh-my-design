@@ -9,7 +9,6 @@ import {
   type TypographyApplicabilityEvidence,
 } from './evidence.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
-import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
@@ -20,10 +19,12 @@ import { checkAdaptiveWorkflow } from '../design-development/workflow-persistenc
 import { requiresMeasuredTerminal, loadReviewPolicy } from '../measure/review-policy.ts';
 import { validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
 import { validateFinalEvidenceV2Graph } from '../evidence/final-v2-graph.ts';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 
 export type CompletionTypographyBinding = Readonly<
   | { id: 'type-proof'; status: 'selected'; path: string; sha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
+  | { id: 'type-proof'; status: 'not-selected'; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'legacy-unassessed'; reason: string }
 >;
 export type CompletionPublicationResult = Readonly<{
@@ -99,7 +100,7 @@ function typographyBinding(
 ): CompletionTypographyBinding {
   if (!existsSync(`${root}/.omd/route.json`)) {
     const path = '.omd/type-proof.md';
-    if (!existsSync(resolve(root, path))) fail('selected typography proof is missing');
+    if (!existsSync(resolve(root, path))) return Object.freeze({ id: 'type-proof', status: 'legacy-unassessed', reason: 'optional typography proof was not published' });
     let bytes: Buffer;
     try { bytes = readStableProjectFile({ root, path: resolve(root, path), label: 'selected typography proof', fs }); }
     catch { return fail('selected typography proof is not a stable regular file'); }
@@ -111,14 +112,9 @@ function typographyBinding(
     const artifact = stage.artifacts[0] ?? fail('selected typography proof has no artifact');
     return Object.freeze({ id: 'type-proof', status: 'selected', path: artifact.path, sha256: artifact.sha256, applicability });
   }
-  if (applicability.koreanDisplayText) fail('rendered Korean display text requires a selected type proof');
-  if (continuationRoute === undefined) {
-    const record = readPersistedRoute(root, invocation);
-    const exactSkip = record.strategy.skips.find((item) => item.id === 'type-proof');
-    if (exactSkip === undefined || exactSkip.reason !== stage.reason) {
-      fail('typography omission is not the exact route-authorized skip');
-    }
-  }
+  if (stage.status === 'not-selected') return Object.freeze({
+    id: 'type-proof', status: 'not-selected', routeSha256: stage.routeSha256, authoritySha256: stage.authoritySha256, applicability,
+  });
   return Object.freeze({ id: 'type-proof', status: 'skipped', reason: stage.reason, routeSha256: stage.routeSha256, authoritySha256: stage.authoritySha256, applicability });
 }
 

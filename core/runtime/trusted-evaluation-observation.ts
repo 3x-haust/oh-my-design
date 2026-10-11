@@ -197,7 +197,8 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
       ...browserEvidence,
     },
   }, input.writer, input.invocation);
-  if (receipt.schema === 'trusted-browser-receipt-v2') recordTrustedRefinementObservation(input.root, observation,
-    [...new Map(receipt.captures.map(c => [c.measurement!.packet.sha256, c.measurement!.packet])).values()], input.writer, input.invocation);
+  const measuredCaptures = receipt.captures.filter((capture) => capture.measurement !== undefined);
+  if (measuredCaptures.length === receipt.captures.length) recordTrustedRefinementObservation(input.root, observation,
+    [...new Map(measuredCaptures.map(c => [c.measurement!.packet.sha256, c.measurement!.packet])).values()], input.writer, input.invocation);
   return observation;
 }

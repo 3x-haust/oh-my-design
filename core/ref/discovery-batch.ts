@@ -2,9 +2,13 @@ import type { Browser } from 'playwright';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { directDiscoveryEntry, discoveryLane, publicDiscoveryUrl, type DirectDiscoveryEntry, type DiscoveryLane,
   type DirectDiscoveryReceipt, type DiscoveryNavigationReceipt } from './discovery-record.ts';
-import { captureReferenceNavigation, ReferenceNavigationError, type ReferenceDiscoveryAttemptReceipt } from './navigation-capture.ts';
+import { captureReferenceNavigation, ReferenceNavigationError, type ReferenceDiscoveryAttemptReceipt, type ReferenceNavigationReceipt } from './navigation-capture.ts';
 import { executeReferenceSearch, parseSearchInput, readSearchExecution, searchObserved, type SearchExecution } from './search-execution.ts';
 
+import type { AcquisitionDeadlineScope } from './acquisition-deadline.ts';
+import { createReferenceAcquisitionSession } from './acquisition-session.ts';
+import { discoveryProvider, providerCircuitSummaries } from './provider-circuit.ts';
+import { readCurrentReferenceDiscoveryEvidence } from './discovery-evidence.ts';
 type SearchInput = ReturnType<typeof parseSearchInput>;
 export type DiscoveryBatchItem = Readonly<{ kind: 'search'; input: SearchInput }>
   | Readonly<{ kind: 'navigate'; source: string; lane: DiscoveryLane; entry?: DirectDiscoveryEntry }>;
@@ -12,7 +16,7 @@ type SearchReceipt = Awaited<ReturnType<typeof executeReferenceSearch>>;
 export type DiscoveryBatchOutcome = Readonly<{ kind: 'search'; lane: DiscoveryLane; source: string; ok: boolean;
   receipt?: SearchReceipt; status?: SearchExecution['status']; error?: string }>
   | Readonly<{ kind: 'navigate'; lane: DiscoveryLane; source: string; ok: boolean;
-    receipt?: DiscoveryNavigationReceipt | DirectDiscoveryReceipt; attempt?: ReferenceDiscoveryAttemptReceipt; error?: string }>;
+    receipt?: ReferenceNavigationReceipt; attempt?: ReferenceDiscoveryAttemptReceipt; error?: string }>;
 export type DiscoveryBatchResult = Readonly<{ concurrency: number; outcomes: readonly DiscoveryBatchOutcome[] }>;
 
 function record(value: unknown, required: readonly string[], optional: readonly string[] = []): Record<string, unknown> {
@@ -51,18 +55,43 @@ export function parseDiscoveryBatchInput(value: unknown): readonly DiscoveryBatc
 }
 
 export async function runDiscoveryBatch(
-  browser: Browser, root: string, items: readonly DiscoveryBatchItem[], writer: ProjectWriteAdapter,
+  browser: Browser | null, root: string, items: readonly DiscoveryBatchItem[], writer: ProjectWriteAdapter,
+  parentScope?: AcquisitionDeadlineScope,
 ): Promise<DiscoveryBatchResult> {
   const concurrency = Math.min(4, items.length);
   const outcomes: DiscoveryBatchOutcome[] = new Array(items.length);
   let next = 0;
+  const providerQueues = new Map<string, Promise<void>>();
+  const session = createReferenceAcquisitionSession(writer);
+  const navigate = async (item: Extract<DiscoveryBatchItem, { kind: 'navigate' }>, index: number): Promise<void> => {
+    const provider = item.lane === 'design' ? discoveryProvider(item.source) : null;
+    if (provider && providerCircuitSummaries(readCurrentReferenceDiscoveryEvidence(root).design)
+      .some(circuit => circuit.provider === provider)) {
+      outcomes[index] = { kind: 'navigate', source: item.source, lane: item.lane, ok: false,
+        error: `REFERENCE_PROVIDER_CIRCUIT_OPEN: ${provider}` };
+      return;
+    }
+    try {
+      const receipt = browser === null
+        ? await session.navigate(item.source, item.lane, item.entry, parentScope)
+        : await captureReferenceNavigation(browser, item.source, item.lane, writer, item.entry, parentScope);
+      parentScope?.assertLive();
+      outcomes[index] = { kind: 'navigate', source: item.source, lane: item.lane, ok: true, receipt };
+    } catch (error) {
+      outcomes[index] = { kind: 'navigate', source: item.source, lane: item.lane, ok: false,
+        ...(error instanceof ReferenceNavigationError && error.attempt ? { attempt: error.attempt } : {}),
+        error: error instanceof Error ? error.message : String(error) };
+    }
+  };
   const worker = async (): Promise<void> => {
     for (;;) {
+      if (parentScope?.signal.aborted) return;
       const index = next++;
       if (index >= items.length) return;
       const item = items[index]!;
       if (item.kind === 'search') {
         try {
+          if (browser === null) throw new Error('REFERENCE_SEARCH_UNAVAILABLE: legacy browser search requires an explicit browser');
           const receipt = await executeReferenceSearch(browser, item.input, writer);
           const execution = readSearchExecution(root, receipt, item.input.lane);
           outcomes[index] = { kind: 'search', source: item.input.url, lane: item.input.lane,
@@ -72,19 +101,18 @@ export async function runDiscoveryBatch(
             ok: false, error: error instanceof Error ? error.message : String(error) };
         }
       } else {
-        try {
-          const receipt = item.entry === undefined
-            ? await captureReferenceNavigation(browser, item.source, item.lane, writer)
-            : await captureReferenceNavigation(browser, item.source, item.lane, writer, item.entry);
-          outcomes[index] = { kind: 'navigate', source: item.source, lane: item.lane, ok: true, receipt };
-        } catch (error) {
-          outcomes[index] = { kind: 'navigate', source: item.source, lane: item.lane, ok: false,
-            ...(error instanceof ReferenceNavigationError && error.attempt ? { attempt: error.attempt } : {}),
-            error: error instanceof Error ? error.message : String(error) };
+        const provider = item.lane === 'design' ? discoveryProvider(item.source) : null;
+        if (provider === null) await navigate(item, index);
+        else {
+          const previous = providerQueues.get(provider) ?? Promise.resolve();
+          const queued = previous.then(() => navigate(item, index));
+          providerQueues.set(provider, queued);
+          await queued;
         }
       }
     }
   };
-  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  try { await Promise.all(Array.from({ length: concurrency }, () => worker())); }
+  finally { await session.close(); }
   return { concurrency, outcomes };
 }

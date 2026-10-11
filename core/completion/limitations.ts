@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
 import { confidenceDebt, mergeConfidenceDebt, readConfidenceDebt, type ConfidenceDebt } from '../brief/confidence-debt.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
-import { checkReferenceApplication, type ReferenceApplicationProjection } from '../ref/reference-application.ts';
+import { checkReferenceApplication, hasReferenceApplicationArtifacts, type ReferenceApplicationProjection } from '../ref/reference-application.ts';
 
 /** Limitations never authorize a reference-grounding, candidate-comparison or cultural-fit claim.
  * They are not a substitute for product/browser, safety, current copy/type, review or slop gates.
@@ -21,6 +21,7 @@ export function completionLimitations(root: string, route: AdaptiveRouteRecord):
       validateReferenceResearch(root, readPublishedReferenceResearch(root), options);
       application = checkReferenceApplication(root, options);
     } catch (error) {
+      if (hasReferenceApplicationArtifacts(root)) throw error;
       limitations.push(confidenceDebt('reference-board', `Reference grounding not verified: ${error instanceof Error ? error.message : String(error)}`));
     }
   }

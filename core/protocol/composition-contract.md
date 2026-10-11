@@ -1,8 +1,6 @@
 # Composition contract protocol
 
-`.omd/composition.md` is Composer's durable selected-system and expansion contract. Current
-human-design-process-v1 routes choose a representative direction before full type/composition.
-Historical routes keep their original pre-sketch composition ABI and dependency order.
+.omd/composition.md is Composer's durable selected-system and expansion contract. Current human-design-process-v1 routes choose a representative direction before full type/composition; historical routes keep their original pre-sketch ABI and dependency order. The artifact records destination composition decisions rather than copying a reference page. When a current resolved design-language translation exists, include its Design language SHA-256 and exact source-free target rows as defined by protocol/design-language.md.
 
 The composer receives a sanitized frame/concept, clean copy deck, approved type contract, and
 applicable reference evidence. Compose the destination system first: grid, type relationships,
@@ -48,6 +46,21 @@ Hashes cover `.omd/frame.md`, `.omd/copy-deck.md`, `.omd/type-proof.md`, and
 type-proof, or scout-summary change invalidates the contract; rerun composer and the check.
 The coordinator obtains these current file digests with `omd hash <.omd/artifact-path> --json`
 and supplies them with the permitted input packet. A digest is identity, not evidence of review.
+
+When a resolved design-language translation projects scoped targets, add the auxiliary
+`## Design language targets` section with exactly one literal row per current target:
+`- id | route | selector | metric | min..max`. Copy each value from the current projection;
+do not invent or adjust ranges to pass validation. Do not put code fences, table headers,
+explanations or duplicate rows inside that section. These rows bind existing decisions,
+not aesthetic approval. With no projected targets, omit the section. To read the complete
+language protocol, use `omd pack protocol/design-language.md` without `--section`.
+
+When the current route selects `provisional-source-study`, also record exactly one
+`- Source study SHA-256: <64 lowercase hex>` line using the `sha256` from
+`omd study show --json`. Inspect the projection's named first-party source and desktop/mobile
+renders, not only its digest. Missing, changed or invalid selected study data makes composition
+stale. Omit this line when the method is not selected. The study remains a provisional visual
+seed; its selection is not independent approval or permission to override approved copy.
 
 ## Experience spine
 
@@ -129,6 +142,9 @@ Art Director and Sketch already compared 2-3 representative concepts with identi
 
 For explicit historical routes, define at least two structurally divergent candidate axes that can satisfy the same spine, copy,
 type, and acceptance criteria. Genuine divergence is a different macro-layout family — the top-level
+
+
+For current routes, record the unresolved relationship, candidate count, and evidence-based reason before authoring this lineage. One faithful candidate is valid when the selected target already settles the governing relationship; otherwise alternatives differ in content-to-form relationship and macro composition, not cosmetic styling. Integrated visual studies combine approved type, colour, proportion, density, and containment so the representative choice can judge real visual character.
 spatial organization changes (single-column stack, asymmetric split, multi-column or modular grid,
 sidebar/rail, centered canvas, full-bleed alternating bands) or the dominant anchor's placement and
 reading path changes — not the same layout at different sizes. Axes vary spatial relationships, not
@@ -136,6 +152,14 @@ content truth. Two candidates that share one macro-layout family and differ only
 column width, type scale, or the vertical spacing of the same single-column stack — are one axis, not
 two, and are a divergence failure, not a candidate set. Name each axis's macro-layout family so the
 difference is legible before any sketch is built.
+
+The divergence criteria above apply to exploration sets, not refinement of a settled target.
+Compare complete representative states with the same actual content and behavior requirements.
+Do not make one candidate look cleaner by deleting long text, difficult records or required actions.
+Once selected, refinement preserves the governing relationships and changes only the implicated
+decisions. A new governing relationship returns to the composition owner as exploration; it is not
+a silent repair. A saved candidate and a rendered candidate are not automatically a selected one.
+
 
 ## Needed components
 
@@ -157,6 +181,7 @@ must cover every cell and case. Product task/semantic/access evidence remains se
 Publish the closed composition-measurement-contract-v1 JSON block described by visual-measurement.md:
 actual colour consumers/tokens, regions, spacing/order, applicable frequent action and required
 views. Native measurements and owner contracts must agree; prose cannot waive RED.
+
 
 ## Colour roles
 

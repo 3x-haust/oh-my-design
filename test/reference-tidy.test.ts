@@ -60,7 +60,7 @@ test('ref tidy refuses tampered and symlinked legacy evidence without removing a
   assert.equal(existsSync(join(root, '.omd/archive/references')), false);
 });
 
-test('ref tidy archives unqualified design and legacy records while preserving qualified and domain evidence', async t => {
+test('ref tidy preserves genuine direct design captures while archiving legacy records', async t => {
   const value = designAdmissionFixture(t);
   const invalid = value.capture('https://ordinary.example/service', 'unqualified', 'design', 5);
   const legacy = { ...value.domain.ref, component: 'legacy-domain', imagePath: value.domain.evidence.path };
@@ -68,13 +68,13 @@ test('ref tidy archives unqualified design and legacy records while preserving q
   const legacyPath = saveRef(value.root, legacy, value.writer);
   const unknown = join(value.root, '.omd/refs/design/unknown.json');
   writeFileSync(unknown, '{"notes":"keep unknown data"}');
-  const preserved = [value.source.path, value.gallery.path, value.domain.path, value.boardPath, unknown,
-    ...[value.source, value.gallery, value.domain].map(item => join(value.root, item.evidence.path))];
+  const preserved = [value.source.path, value.gallery.path, value.domain.path, invalid.path, value.boardPath, unknown,
+    ...[value.source, value.gallery, value.domain, invalid].map(item => join(value.root, item.evidence.path))];
   const original = preserved.map(path => [path, readFileSync(path)] as const);
   const result = JSON.parse((await run(value.root, '--apply')).stdout);
   const selected = new Set(result.files.map((entry: { path: string }) => entry.path));
-  assert.ok(selected.has(invalid.capture.path));
-  assert.ok(selected.has(invalid.evidence.path));
+  assert.equal(selected.has(invalid.capture.path), false);
+  assert.equal(selected.has(invalid.evidence.path), false);
   assert.ok(selected.has(legacyPath.slice(value.root.length + 1)));
   for (const [path, bytes] of original) assert.deepEqual(readFileSync(path), bytes);
   assert.equal(result.revalidationRequired, true);

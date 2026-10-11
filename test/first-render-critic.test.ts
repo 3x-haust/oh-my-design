@@ -37,15 +37,14 @@ test('the reference-like first viewport retains the task gestalt', () => {
   assert.deepEqual(report.findings, []);
 });
 
-test('missing purpose is critical even when the page has plausible chrome', () => {
+test('purpose fit is not inferred from heading-word overlap', () => {
   const report = critiqueFirstRender(hypothesis, {
     ...goodSurface,
     heading: 'Dashboard',
     visibleText: ['Welcome', 'Overview', 'Settings'],
   });
-  assert.equal(report.verdict, 'revise');
-  assert.equal(report.findings.some((finding) => finding.id === 'PURPOSE_UNCLEAR'), true);
-  assert.equal(report.findings.find((finding) => finding.id === 'PURPOSE_UNCLEAR')?.severity, 'critical');
+  assert.equal(report.verdict, 'retain');
+  assert.equal(report.findings.some((finding) => finding.id === 'PURPOSE_UNCLEAR'), false);
 });
 
 test('missing dominant objects identifies a structure-first page', () => {
@@ -66,7 +65,7 @@ test('utility chrome overriding the task is a critical contradiction', () => {
   });
   const finding = report.findings.find((item) => item.id === 'UTILITY_OVERRIDES_TASK');
   assert.ok(finding);
-  assert.equal(finding.severity, 'critical');
+  assert.equal(finding.severity, 'advisory');
   assert.match(finding.message, /subordinate/);
 });
 

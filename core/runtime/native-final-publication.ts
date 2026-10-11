@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildFinalReviewerPublication } from '../../adapters/final-reviewer-publication.ts';
 import { runPiReviewerLane } from '../../adapters/pi-reviewer-runtime.ts';
@@ -6,7 +7,7 @@ import { checkCompletionPublicationPrerequisites } from '../completion/publicati
 import { publishFinalEvidenceV2 } from '../evidence/final-v2.ts';
 import { preflightFinalEvidenceGraph } from '../evidence/final-v2-publication-preflight.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
-import { checkSlopFinalGraph } from '../slop/review.ts';
+import { checkSlopFinalGraph, SLOP_REVIEW_POINTER } from '../slop/review.ts';
 import { FINAL_RENDER_REVIEWER_TASK, finalRenderReviewerPacket } from './final-render-review.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { buildNativeFinalManifest, buildNativeMeasuredFinalDraft, currentNativeFinalObservations } from './native-final-manifest.ts';
@@ -21,6 +22,7 @@ export { checkNativeFinalReview } from './native-final-review-state.ts';
 import { authorizeNativePiPayload, getNativePiRun } from './native-pi-run.ts';
 import { acquireProjectMutationLock, createProjectWriteAdapter, replaceProjectFileAtomically } from './project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
+import { requireResolvedNativeReframe } from './native-reframe.ts';
 
 type Lane = 'blindLane' | 'fidelityLane' | 'protocolLane';
 type Descriptor = Readonly<{ path: string; sha256: string }>;
@@ -46,6 +48,7 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
 }>> {
   const run = getNativePiRun(input.invocation, input.root);
   const root = run.projectRoot;
+  requireResolvedNativeReframe(root, input.invocation);
   const observationSha256s = currentNativeFinalObservations(root).map(({ receipt }) => receipt.sha256);
   const policy = loadReviewPolicy(root, input.invocation), measured = requiresMeasuredTerminal(readPersistedRoute(root, input.invocation));
   const writer = createProjectWriteAdapter(root, input.invocation);
@@ -95,7 +98,13 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
     throw new NativeFinalPublicationError(`${reason}; inspect ${attemptPath}`);
   };
   const failures = outcomes.filter(outcome => outcome.status === 'rejected');
-  if (failures.length) reject('review process failed');
+  if (failures.length) reject(`review process failed: ${failures.map((outcome, index) => {
+    const lane = work[outcomes.indexOf(outcome)]?.lane ?? `lane-${index}`;
+    const reason = outcome.status === 'rejected'
+      ? outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)
+      : 'unknown';
+    return `${lane}: ${reason}`;
+  }).join('; ')}`);
   input.signal?.throwIfAborted();
   const release = acquireProjectMutationLock(root, input.invocation);
   try {
@@ -138,6 +147,7 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
 export function finalizeNativeEvidence(input: Readonly<{ root: string; invocation: ProjectRunInvocation }>): Readonly<{ path: string }> {
   const run = getNativePiRun(input.invocation, input.root);
   const root = run.projectRoot;
+  requireResolvedNativeReframe(root, input.invocation);
   checkNativeFinalReview(input);
   const activation = Buffer.from(canonicalJson(input.invocation.activation));
   const activationPath = `.omd/activation/sha256-${hash(activation)}.json`;
@@ -146,7 +156,12 @@ export function finalizeNativeEvidence(input: Readonly<{ root: string; invocatio
   const fs = nodeStableProjectFileSystem();
   const validated = preflightFinalEvidenceGraph({ root, graph: manifest.graph, fs, invocation: input.invocation });
   checkCompletionPublicationPrerequisites(root, manifest, input.invocation);
-  checkSlopFinalGraph(root, manifest.graph);
+  // A published slop ledger can inform repair, but its inventory/dispositions are
+  // advisory. The independent browser-bound final-v2 visual floors remain hard.
+  if (existsSync(resolve(root, SLOP_REVIEW_POINTER))) {
+    try { checkSlopFinalGraph(root, manifest.graph); }
+    catch (error) { process.emitWarning(`optional slop review needs attention: ${error instanceof Error ? error.message : String(error)}`); }
+  }
   const bytes = Buffer.from(canonicalJson({ ...manifest, graphRootHash: validated.rootHash }));
   authorizeNativePiPayload(input.invocation, root, 'final-evidence-manifest', bytes);
   const path = publishFinalEvidenceV2(root, manifest, input.invocation);

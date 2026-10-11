@@ -8,10 +8,12 @@ import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
 import { captureReferenceNavigation, readReferenceDiscoveryAttempt, ReferenceNavigationError } from '../core/ref/navigation-capture.ts';
 import { validateDiscoveryCoverage } from '../core/ref/discovery-coverage.ts';
-import { readCurrentDirectDiscoveryEntry, readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
+import { readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
   type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
+import { readDomainObservation } from '../core/ref/domain-observation.ts';
 import { assertPublicNetworkUrl, createPublicNetworkProxy, publicIpAddress } from '../core/ref/public-network.ts';
+import { AcquisitionTimeoutError } from '../core/ref/acquisition-deadline.ts';
 import { loadRefs } from '../core/ref/store.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -29,9 +31,9 @@ test('new navigation binds only rendered links to its captured viewport', async 
     const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
     // Then hidden DOM anchors cannot become discovery edges.
     assert.deepEqual(record.acquisition.links, [DOMAIN_ITEM]);
-    assert.equal(record.schema, 'reference-navigation-capture-v4');
-    assert.deepEqual(readStrictDiscoveryNavigation(root, receipt), { url: PUBLIC_DIRECTORY, finalUrl: PUBLIC_DIRECTORY, links: [DOMAIN_ITEM] });
-    assert.throws(() => readDirectDiscoveryEntry(root, { method: 'direct-public', entry: 'public-directory', ...receipt }), /purpose path/);
+    assert.equal(record.schema, 'reference-domain-observation-v1');
+    assert.deepEqual(readDomainObservation(root, receipt).links, [DOMAIN_ITEM]);
+    assert.equal(existsSync(join(root, '.omd/discovery/domain/navigation')), false);
   });
 });
 
@@ -44,6 +46,8 @@ test('a validated CONNECT proxy loopback address is not mistaken for the public 
   assert.ok(result.receipt.capture.path.startsWith('.omd/discovery/design/entries/'));
 });
 
+const readCurrentDirectDiscoveryEntry = (root: string, receipt: { url: string; capture: { path: string; sha256: string } }) =>
+  readDomainObservation(root, { url: receipt.url, capture: receipt.capture });
 const entryLanes = { 'public-directory': 'domain', 'free-gallery': 'design' } as const;
 async function capture(t: { after(fn: () => void): void }, scenario: DiscoveryScenario, entry: DirectDiscoveryEntry = 'free-gallery') {
   const root = discoveryFixture(t);
@@ -60,18 +64,20 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     const target = entry === 'public-directory' ? DOMAIN_ITEM : GALLERY_ITEM;
     const value = await capture(t, { url, html: directoryHtml(target) }, entry);
     const record = JSON.parse(readFileSync(join(value.root, value.receipt.capture.path), 'utf8'));
-    assert.equal(record.schema, 'reference-discovery-entry-v4');
+    assert.equal(record.schema, entry === 'public-directory' ? 'reference-domain-observation-v1' : 'reference-discovery-entry-v4');
     assert.deepEqual(record.linkLabels, [{ url: target, text: 'Inspect entry 1' }]);
-    assert.equal(value.receipt.method, 'direct-public');
-    assert.equal(value.receipt.entry, entry);
-    assert.deepEqual(readDirectDiscoveryEntry(value.root, value.receipt), { url, finalUrl: url, links: [target] });
-    assert.match(readCurrentDirectDiscoveryEntry(value.root, value.receipt).observedText ?? '', /Public directory/);
-    assert.match(readCurrentDirectDiscoveryEntry(value.root, value.receipt).taskText ?? '', /Public directory/);
-    assert.deepEqual(readFileSync(join(value.root, value.receipt.evidence.path)), value.observed.captures[0]);
+    if (entry === 'public-directory') {
+      assert.deepEqual(readDomainObservation(value.root, { url, capture: value.receipt.capture }).links, [target]);
+      assert.equal(value.observed.captures.length, 0);
+    } else {
+      if (!('evidence' in value.receipt)) throw new Error('design entry requires image evidence');
+      assert.deepEqual(readDirectDiscoveryEntry(value.root, { ...value.receipt, method: 'direct-public', entry }), { url, finalUrl: url, links: [target] });
+      assert.deepEqual(readFileSync(join(value.root, value.receipt.evidence.path)), value.observed.captures[0]);
+    }
     assert.equal(value.observed.contextOptions.length, 1);
     const contextOptions = value.observed.contextOptions[0]!;
     assert.deepEqual({ ...contextOptions, proxy: undefined }, {
-      viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false, proxy: undefined,
+      viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, serviceWorkers: 'block', acceptDownloads: false, proxy: undefined,
     });
     assert.match(contextOptions.proxy?.server ?? '', /^http:\/\/127\.0\.0\.1:\d+$/);
     assert.equal(value.observed.closed(), 1);
@@ -170,6 +176,28 @@ test('public network validation refuses private DNS answers and reserved address
   }
 });
 
+test('the CONNECT proxy supports concurrent deadline and final cleanup', async () => {
+  const proxy = await createPublicNetworkProxy();
+  await Promise.all([proxy.close(), proxy.close()]);
+  await proxy.close();
+  const client = connect(Number(new URL(proxy.server).port), '127.0.0.1');
+  try {
+    const [error] = await once(client, 'error');
+    assert.ok(error instanceof Error && 'code' in error);
+    assert.equal(error.code, 'ECONNREFUSED');
+  } finally { client.destroy(); }
+});
+
+test('the CONNECT proxy final cleanup preserves the original acquisition timeout', async () => {
+  const proxy = await createPublicNetworkProxy();
+  const timeout = new AcquisitionTimeoutError(60_000, 'ref navigate');
+  await proxy.close();
+  await assert.rejects(async () => {
+    try { throw timeout; }
+    finally { await proxy.close(); }
+  }, error => error === timeout);
+});
+
 test('the CONNECT proxy pins the socket to the exact validated DNS answer', async t => {
   const connected: string[] = [];
   const proxy = await createPublicNetworkProxy({
@@ -214,22 +242,24 @@ test('the CONNECT proxy absorbs repeated upstream socket errors after closing th
   assert.doesNotThrow(() => upstream?.emit('error', new Error('late reset')));
 });
 
-test('the CONNECT proxy does not create an upstream after its client closes during DNS', async t => {
+test('the CONNECT proxy does not create an upstream after its client closes during DNS', { timeout: 5000 }, async t => {
   let releaseLookup: (() => void) | undefined;
   let markLookupStarted: (() => void) | undefined;
   const lookupStarted = new Promise<void>(resolve => { markLookupStarted = resolve; });
   const lookupReleased = new Promise<void>(resolve => { releaseLookup = resolve; });
+  let finishLookup: (() => void) | undefined;
+  const lookupFinished = new Promise<void>(resolve => { finishLookup = resolve; });
   let upstreamCreated = 0;
   let upstream: PassThrough | undefined;
   const proxy = await createPublicNetworkProxy({
     lookup: async () => {
       markLookupStarted?.();
       await lookupReleased;
+      finishLookup?.();
       return [{ address: '93.184.216.34', family: 4 }];
     },
     connect: () => { upstreamCreated++; upstream = new PassThrough(); return upstream; },
   });
-  t.after(() => proxy.close());
   const client = connect(Number(new URL(proxy.server).port), '127.0.0.1');
   await once(client, 'connect');
   client.write('CONNECT delayed.example:443 HTTP/1.1\r\nHost: delayed.example:443\r\n\r\n');
@@ -237,7 +267,8 @@ test('the CONNECT proxy does not create an upstream after its client closes duri
   client.destroy();
   await once(client, 'close');
   releaseLookup?.();
-  await new Promise(resolve => setTimeout(resolve, 20));
+  await lookupFinished;
+  await proxy.close();
   assert.ok(upstreamCreated === 0 || upstream?.destroyed);
 });
 
@@ -245,7 +276,6 @@ const unavailable: readonly Readonly<{ name: string; scenario: DiscoveryScenario
   { name: 'hidden item', scenario: { url: GALLERY_DIRECTORY, html: `<p>${'Public list '.repeat(30)}</p><a style="display:none" href="${GALLERY_ITEM}">Hidden</a>` }, error: /visible followable/ },
   { name: 'item beyond scroll budget', scenario: { url: GALLERY_DIRECTORY, html: `<p>${'Public list '.repeat(30)}</p><a style="position:absolute;top:4000px" href="${GALLERY_ITEM}">Beyond exploration</a>` }, error: /visible followable/ },
   { name: 'login overlay', scenario: { url: GALLERY_DIRECTORY, html: `${directoryHtml(GALLERY_ITEM)}<form style="position:fixed;inset:0;background:white"><input type="password"></form>` }, error: /login form/ },
-  { name: 'challenge', scenario: { url: GALLERY_DIRECTORY, html: `<title>Just a moment</title>${directoryHtml(GALLERY_ITEM)}` }, error: /challenge page/ },
   { name: 'HTTP failure', scenario: { url: GALLERY_DIRECTORY, status: 403, html: directoryHtml(GALLERY_ITEM) }, error: /successful native HTTP/ },
   { name: 'foreign provider item', scenario: { url: GALLERY_DIRECTORY, html: directoryHtml('https://dribbble.com/shots/123-dashboard') }, error: /same-provider/ },
   { name: 'provider redirect', scenario: { url: GALLERY_DIRECTORY, finalUrl: 'https://dribbble.com/', html: directoryHtml('https://dribbble.com/shots/123-dashboard') }, error: /supported public list/ },
@@ -274,36 +304,47 @@ for (const row of unavailable) {
   });
 }
 
+test('challenge-looking title stays an observation pending page-access judgment', async t => {
+  const result = await capture(t, { url: GALLERY_DIRECTORY, html: `<title>Just a moment</title>${directoryHtml(GALLERY_ITEM)}` }, 'free-gallery');
+  const observation = readDirectDiscoveryEntry(result.root, result.receipt);
+  assert.ok(observation.links.includes(GALLERY_ITEM));
+});
+
 test('a self-link alone cannot make a domain page a discovery root', async t => {
   await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html: directoryHtml(PUBLIC_DIRECTORY) }, 'public-directory'), /visible followable/);
 });
 
-test('cookie and global navigation links cannot turn a page into a domain discovery root', async t => {
+test('global navigation links remain observations without asserting task role', async t => {
   const html = `<div id="cookie-banner"><a href="https://www.nhs.uk/our-policies/choose-your-cookie-settings/">Choose your cookie settings</a></div>
     <header><nav><a href="https://www.nhs.uk/">NHS home</a></nav></header><main><h1>Medicines A to Z</h1>
     <p>Browse the medicine information, understand the purpose of each treatment, and review its safety details before continuing to an individual medicine page.</p></main>`;
-  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links.length >= 1);
 });
 
 test('a task-specific primary navigation link remains a valid observed service path', async t => {
   const html = `<header><nav><a href="${DOMAIN_ITEM}">Benefits</a><a href="https://site.example/cookie-settings">Cookie settings</a></nav></header>
     <main><h1>Public benefit directory</h1><p>Compare relevant support, review requirements, and follow the benefits task before preparing an application.</p></main>`;
   const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
-  assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [DOMAIN_ITEM]);
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links.includes(DOMAIN_ITEM));
 });
 
-test('global navigation alone cannot qualify a public service directory', async t => {
+test('global navigation is captured without a service-role inference', async t => {
   const html = `<header><nav><a href="https://service.example/about">About Us</a>
     <a href="https://service.example/health-a-to-z">Health A to Z</a>
     <a href="https://service.example/nhs-services">NHS services</a></nav></header>
     <main><h1>Medicines A to Z</h1><p>Browse medicines and prescription information, compare dosage instructions, and prepare questions for your clinician before placing an order. Review the details carefully with your care team.</p></main>`;
-  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links
+    .some((link) => new URL(link).href === new URL('https://service.example/about').href));
 });
 
-test('generic navigation nested in main remains chrome', async t => {
+test('main navigation is captured without a relevance verdict', async t => {
   const html = `<main><nav><a href="https://service.example/about">About Us</a></nav>
     <h1>Medicines A to Z</h1><p>Browse medicines and prescription information, compare dosage instructions, and prepare questions for your clinician before placing an order. Review the details carefully with your care team.</p></main>`;
-  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links
+    .some((link) => new URL(link).href === new URL('https://service.example/about').href));
 });
 
 test('a support task described in main keeps its primary-navigation path', async t => {
@@ -322,10 +363,12 @@ test('an Apply action can match the application task described in main', async t
   assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [apply]);
 });
 
-test('an Apply navigation label cannot borrow context from apple recipes', async t => {
+test('Apply navigation wording alone does not assert task fit', async t => {
   const html = `<header><nav><a href="https://recipes.example/apply">Apply</a></nav></header>
     <main><h1>Apple pie recipes</h1><p>Choose fresh apples, prepare the pastry, bake the filling, and compare several dessert recipes for a family gathering. Serve each slice warm with a spoonful of cream. Keep the remaining slices in a cool container until tomorrow.</p></main>`;
-  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links
+    .some((link) => new URL(link).href === new URL('https://recipes.example/apply').href));
 });
 
 test('page-content task links precede a contextual primary-navigation link', async t => {

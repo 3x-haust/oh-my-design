@@ -13,10 +13,17 @@ export function isPreproductionReadCommand(command: unknown): boolean {
   return /^(?:pwd && )?rg --files(?: --hidden)?(?: -g '(?:!?[a-zA-Z0-9_.*/-]+)')*(?: \| head (?:-n )?[1-9][0-9]{0,3}| \| head -[1-9][0-9]{0,3})?$/.test(text);
 }
 
-const OMD_MUTATING_ROOTS = /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete)$/;
+/** Closed install/build/check grammar. No shell composition, inline programs or arbitrary scripts. */
+export function isNativeVerificationCommand(command: unknown): boolean {
+  return typeof command === 'string'
+    && /^(?:(?:npm|pnpm|bun) (?:install|ci|test|run (?:build|test|typecheck|lint))|npx tsc --noEmit|bun test)$/.test(command.trim());
+}
+
+const OMD_MUTATING_ROOTS = /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete|language|feedback)$/;
 const OMD_READ_ACTIONS = /^(?:show|check|validate|list|handoff|discover-plan|work-next|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/;
 const OMD_MUTATING_PAIRS = new Set([
   'stage deliver', 'grain set', 'acquisition set', 'candidate select', 'candidate plan', 'candidate packet', 'tokens extend', 'judgment publish', 'benchmark record',
+  'study create', 'study select', 'maker run',
 ]);
 
 export function isMutatingOmdCommand(args: readonly string[]): boolean {
@@ -50,8 +57,11 @@ export function classifyPiWrite(root: string, input: unknown): WriteClassificati
     }
   }
   if (!path.startsWith('.omd/')) return { kind: 'production', path };
-  if (/^\.omd\/\.cache\/sketches\/(?:(?:current|plan|set)\.json$|(?:plans|sets|selections|presentations|packets|authority)\/)/.test(path)) {
-    return { kind: 'blocked', path, reason: 'CLI-owned candidate plan/set/choice/authority; use the candidate publisher' };
+  if (path.startsWith('.omd/.cache/sketches/')) {
+    return { kind: 'blocked', path, reason: 'NATIVE_MAKER_REQUIRED: use omd maker run for candidate source; candidate select owns selection publication' };
+  }
+  if (/^\.omd\/\.cache\/studies\/(?:(?:html|renders|sets|selections)\/|(?:current|latest)\.json$)/.test(path)) {
+    return { kind: 'blocked', path, reason: 'host-published study artifact; use omd study with an authored input, not direct writes' };
   }
   // Inputs and directly authored documents only. CLI-owned pointers, authority, research receipts,
   // check history, final evidence, and locks cannot be hand-written to make a gate turn green.

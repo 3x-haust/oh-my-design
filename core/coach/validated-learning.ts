@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { canonicalJson } from '../ref/board-artifacts.ts';
+import { normalizeQuoteWhitespace } from '../judgment/index.ts';
 import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile, StableProjectFileReadError } from '../runtime/stable-project-file.ts';
 import {
@@ -12,6 +13,7 @@ import {
   type CandidateLearningResult,
   type LearningPromotionDependencies,
   type LearningPromotionInput,
+  type LearningAuthorityJudgment,
   type LearningPromotionResult,
   type LearningProposition,
   type LearningPublicationReceipt,
@@ -26,7 +28,6 @@ export * from './validated-learning-contract.ts';
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-const UNSAFE_AUTHORITY = /(?:system prompt|model(?:\s+or\s+system)? instructions?|override|ignore .*instructions?|hard safety|safety rails?|user facts?|user (?:said|preference|identity))/i;
 const trustedResults = new WeakMap<object, string>();
 const PUBLICATION_FS = nodeStableProjectFileSystem();
 type Fields = ReadonlyMap<string, unknown>;
@@ -115,7 +116,6 @@ function parseScope(value: unknown): LearningScope {
 function parseProposition(value: unknown): LearningProposition {
   const item = ownFields(value, ['id', 'statement', 'scope'], 'proposition');
   const statement = text(item.get('statement'), 'proposition.statement');
-  if (UNSAFE_AUTHORITY.test(statement)) fail('UNSAFE_PROPOSITION', 'learning propositions cannot claim model, safety-rail, or user-fact authority');
   return Object.freeze({ id: id(item.get('id'), 'proposition.id'), statement, scope: parseScope(item.get('scope')) });
 }
 
@@ -126,6 +126,50 @@ export function validateLearningProposition(value: unknown): LearningProposition
     return fail('MALFORMED_INPUT', 'learning proposition could not be inspected safely');
   }
 }
+export function validateReusableScopedRule(value: unknown): ReusableScopedRule {
+  immutableJson(value, 'reusable learning rule');
+  const item = ownFields(value, ['schema', 'id', 'statement', 'scope', 'applicability', 'authority', 'cannotOverride', 'provenance', 'promotedAt'], 'reusable learning rule');
+  if (item.get('schema') !== REUSABLE_SCOPED_RULE_SCHEMA || item.get('applicability') !== 'advisory'
+    || item.get('authority') !== 'browser-validated-design-learning'
+    || canonicalJson(item.get('cannotOverride')) !== canonicalJson(['hard-safety-rails', 'model-or-system-instructions', 'user-facts'])) {
+    fail('UNSAFE_PROPOSITION', 'only a scoped advisory learning rule may be consumed');
+  }
+  const promotedAt = timestamp(item.get('promotedAt'), 'rule.promotedAt');
+  const raw = item.get('provenance');
+  if (!Array.isArray(raw) || raw.length < 2) fail('INVALID_BROWSER_EVIDENCE', 'rule needs independent provenance');
+  const digest = (value: unknown): string => {
+    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) fail('INVALID_BROWSER_EVIDENCE', 'invalid provenance digest');
+    return value;
+  };
+  const provenance = raw.map((value: unknown) => {
+    const row = ownFields(value, ['runId', 'contextId', 'outcome', 'observedAt', 'decisionGraphPath', 'decisionGraphSha256', 'observationSha256', 'capture', 'decisionRefs'], 'rule.provenance');
+    if (row.get('outcome') !== 'validated') fail('INVALID_BROWSER_EVIDENCE', 'promoted rule has contradictory evidence');
+    const observedAt = timestamp(row.get('observedAt'), 'rule.observedAt');
+    const age = Date.parse(promotedAt) - Date.parse(observedAt);
+    if (age < 0 || age > MAX_AGE_MS) fail('INVALID_BROWSER_EVIDENCE', 'rule evidence was stale at promotion');
+    const capture = ownFields(row.get('capture'), ['path', 'sha256'], 'rule.capture');
+    const refs = row.get('decisionRefs');
+    if (!Array.isArray(refs) || refs.length === 0) fail('INVALID_BROWSER_EVIDENCE', 'rule decision bindings are missing');
+    const decisionRefs = refs.map((value: unknown) => {
+      const ref = ownFields(value, ['decisionId', 'decisionSha256'], 'rule.decisionRef');
+      return Object.freeze({ decisionId: text(ref.get('decisionId'), 'rule.decisionId'), decisionSha256: digest(ref.get('decisionSha256')) });
+    });
+    if (new Set(decisionRefs.map(ref => ref.decisionId)).size !== decisionRefs.length) fail('DUPLICATE_EVIDENCE', 'duplicate rule decision binding');
+    return Object.freeze({ runId: id(row.get('runId'), 'rule.runId'), contextId: id(row.get('contextId'), 'rule.contextId'),
+      outcome: 'validated' as const, observedAt, decisionGraphPath: projectPath(row.get('decisionGraphPath'), 'rule.decisionGraphPath'),
+      decisionGraphSha256: digest(row.get('decisionGraphSha256')), observationSha256: digest(row.get('observationSha256')),
+      capture: Object.freeze({ path: projectPath(capture.get('path'), 'rule.capture.path'), sha256: digest(capture.get('sha256')) }),
+      decisionRefs: Object.freeze(decisionRefs) });
+  });
+  for (const identities of [provenance.map(row => row.runId), provenance.map(row => row.contextId), provenance.map(row => row.capture.sha256)]) {
+    if (new Set(identities).size !== identities.length) fail('DUPLICATE_EVIDENCE', 'rule provenance is not independent');
+  }
+  return Object.freeze({ schema: REUSABLE_SCOPED_RULE_SCHEMA, id: id(item.get('id'), 'rule.id'),
+    statement: text(item.get('statement'), 'rule.statement'), scope: parseScope(item.get('scope')),
+    applicability: 'advisory', authority: 'browser-validated-design-learning',
+    cannotOverride: Object.freeze(['hard-safety-rails', 'model-or-system-instructions', 'user-facts'] as const),
+    provenance: Object.freeze(provenance), promotedAt });
+}
 function parseValidation(value: unknown, index: number): LearningValidation {
   const label = `validations[${index}]`;
   const item = ownFields(value, ['runId', 'contextId', 'outcome', 'observedAt', 'decisionGraphPath', 'browserEvidence'], label);
@@ -134,6 +178,30 @@ function parseValidation(value: unknown, index: number): LearningValidation {
   const browserEvidence = item.get('browserEvidence'); immutableJson(browserEvidence, `${label}.browserEvidence`);
   const decisionGraphPath = projectPath(item.get('decisionGraphPath'), `${label}.decisionGraphPath`);
   return Object.freeze({ runId: id(item.get('runId'), `${label}.runId`), contextId: id(item.get('contextId'), `${label}.contextId`), outcome, observedAt: timestamp(item.get('observedAt'), `${label}.observedAt`), decisionGraphPath, browserEvidence });
+}
+/** Verify an agent's meaning decision against the current proposition, never against keywords. */
+export function validateLearningAuthorityJudgment(proposition: LearningProposition, judgment: LearningAuthorityJudgment | undefined): LearningAuthorityJudgment {
+  if (judgment === undefined) fail('UNSAFE_PROPOSITION', 'a current learning-authority judgment is required before promotion');
+  immutableJson(judgment, 'learning-authority judgment');
+  const item = ownFields(judgment, ['schema', 'propositionSha256', 'decision', 'reason', 'quote', 'target'], 'learning-authority judgment');
+  if (item.get('schema') !== 'learning-authority-v1' || item.get('propositionSha256') !== sha(canonicalJson(proposition))) {
+    fail('UNSAFE_PROPOSITION', 'learning-authority judgment is stale for this proposition');
+  }
+  const target = ownFields(item.get('target'), ['path', 'fields'], 'learning-authority target');
+  const fields = target.get('fields');
+  if (target.get('path') !== '.omd/coach/rules' || !Array.isArray(fields) || fields.length !== 2
+    || fields[0] !== 'statement' || fields[1] !== 'scope') {
+    fail('UNSAFE_PROPOSITION', 'learning may only target scoped rule statement and scope fields');
+  }
+  const quote = text(item.get('quote'), 'learning-authority quote');
+  if (!normalizeQuoteWhitespace(proposition.statement).includes(normalizeQuoteWhitespace(quote))) {
+    fail('UNSAFE_PROPOSITION', 'learning-authority quote does not occur in the proposition');
+  }
+  text(item.get('reason'), 'learning-authority reason');
+  if (item.get('decision') !== 'scoped-observation') {
+    fail('UNSAFE_PROPOSITION', 'only a scoped-observation judgment can become reusable learning');
+  }
+  return judgment;
 }
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
@@ -172,8 +240,9 @@ function evaluate(value: unknown, dependencies: LearningPromotionDependencies): 
     const candidate: CandidateLearningResult = { schema: LEARNING_RESULT_SCHEMA, ...base, status: 'candidate' };
     deepFreeze(candidate); trustedResults.set(candidate, resolve(dependencies.projectRoot)); return candidate;
   }
+  const learningAuthorityJudgment = validateLearningAuthorityJudgment(proposition, dependencies.learningAuthorityJudgment);
   const rule = deepFreeze<ReusableScopedRule>({ schema: REUSABLE_SCOPED_RULE_SCHEMA, id: learningId, statement: proposition.statement, scope: proposition.scope, applicability: 'advisory', authority: 'browser-validated-design-learning', cannotOverride: ['hard-safety-rails', 'model-or-system-instructions', 'user-facts'], provenance, promotedAt: dependencies.now });
-  const promoted: PromotedLearningResult = { schema: LEARNING_RESULT_SCHEMA, ...base, status: 'promoted', rule };
+  const promoted: PromotedLearningResult = { schema: LEARNING_RESULT_SCHEMA, ...base, status: 'promoted', learningAuthorityJudgment, rule };
   deepFreeze(promoted); trustedResults.set(promoted, resolve(dependencies.projectRoot)); return promoted;
 }
 
@@ -186,12 +255,21 @@ export function evaluateValidatedLearning(value: unknown, dependencies: Learning
 export function publishValidatedLearning(root: string, result: LearningPromotionResult, writer: ProjectWriteAdapter | undefined): LearningPublicationReceipt {
   const adapter = requireProjectWriteAdapter(root, writer);
   if (trustedResults.get(result) !== resolve(root) || !Object.isFrozen(result)) fail('MALFORMED_INPUT', 'only an evaluated immutable learning result from this project can be published');
-  const statePath = `.omd/coach/learnings/${result.proposition.id}.json`;
+  const statePath = `.omd/coach/learnings/${id(result.proposition.id, 'learning id')}.json`;
+  if (result.schema !== LEARNING_RESULT_SCHEMA) fail('MALFORMED_INPUT', 'learning record type changed');
   if (result.status !== 'promoted') {
     adapter.write(statePath, canonicalJson(result));
     return Object.freeze({ status: result.status, statePath });
   }
+  const allowedRuleFields = ['schema', 'id', 'statement', 'scope', 'applicability', 'authority', 'cannotOverride', 'provenance', 'promotedAt'];
+  if (result.rule.schema !== REUSABLE_SCOPED_RULE_SCHEMA || result.rule.applicability !== 'advisory'
+    || result.rule.authority !== 'browser-validated-design-learning'
+    || Object.keys(result.rule).sort().join() !== allowedRuleFields.sort().join()
+    || canonicalJson(result.rule.cannotOverride) !== canonicalJson(['hard-safety-rails', 'model-or-system-instructions', 'user-facts'])) {
+    fail('UNSAFE_PROPOSITION', 'only the scoped advisory learning record may be published');
+  }
   const ruleBytes = canonicalJson(result.rule); const rulePath = `.omd/coach/rules/sha256-${sha(ruleBytes)}.json`;
+  validateReusableScopedRule(result.rule);
   const target = resolve(root, rulePath);
   if (existsSync(target)) {
     let existing: Buffer;

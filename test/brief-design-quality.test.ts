@@ -19,7 +19,7 @@ function fixture(name: string): unknown {
 }
 
 for (const [name, candidateMode] of [
-  ['medical-new-product', 'structural'],
+  ['medical-new-product', 'integrated-visual'],
   ['synth-marketing', 'integrated-visual'],
 ] as const) {
   test(`${name} delivers the exact source quality policy to visual owners in JSON and text`, (t) => {

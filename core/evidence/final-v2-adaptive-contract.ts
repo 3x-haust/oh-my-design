@@ -1,5 +1,6 @@
 import { isAdaptiveSourceSealRoute, type AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import type { ActivationContext } from '../runtime/activation.ts';
+import { knownFields, SchemaInputError } from '../judgment/schema.ts';
 import { parseFinalConfidenceDebt, type FinalConfidenceDebt } from './final-v2-confidence-debt.ts';
 import type { ConfidenceDebt } from '../brief/confidence-debt.ts';
 import { parseMeasuredTerminal, type GraphReviewBindings } from './final-v2-measured-contract.ts';
@@ -32,8 +33,8 @@ export type AdaptiveFinalEvidenceV2Graph = Readonly<{
   activation: AdaptiveArtifactReceipt;
   route: AdaptiveSourceSealRoute;
   omissions: readonly AdaptiveFinalOmission[];
+  copy?: AdaptiveArtifactReceipt;
   confidenceDebt?: FinalConfidenceDebt;
-  copy: AdaptiveArtifactReceipt;
   sourceSeal: AdaptiveArtifactReceipt;
   buildIdentity: AdaptiveArtifactReceipt;
 
@@ -54,16 +55,15 @@ export class AdaptiveFinalEvidenceGraphError extends Error {
 }
 const fail = (reason: string): never => { throw new AdaptiveFinalEvidenceGraphError(reason); };
 function fields(value: unknown, keys: readonly string[], label: string): ReadonlyMap<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return fail(`${label} must be an object`);
-  const own = Reflect.ownKeys(value);
-  if (own.length !== keys.length || own.some((key) => typeof key !== 'string' || !keys.includes(key))) return fail(`${label} has unexpected keys`);
-  const result = new Map<string, unknown>();
-  for (const key of keys) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) return fail(`${label} has invalid fields`);
-    result.set(key, descriptor.value);
+  try {
+    const projected = knownFields(value, keys, [], label);
+    if (projected.warnings.some(({ field }) => field.endsWith('.authority'))) fail(`${label} cannot supply host authority`);
+    for (const warning of projected.warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+    return new Map(Object.entries(projected.value));
+  } catch (error) {
+    if (error instanceof SchemaInputError) return fail(error.message);
+    throw error;
   }
-  return result;
 }
 function text(value: unknown, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') return fail(`${label} must be non-empty text`);
@@ -126,9 +126,11 @@ export function isAdaptiveFinalEvidenceV2Graph(value: unknown): value is Adaptiv
 export function validateAdaptiveFinalEvidenceV2Graph(value: unknown): AdaptiveFinalEvidenceV2Graph {
   const hasContentFit = typeof value === 'object' && value !== null && !Array.isArray(value)
     && Reflect.ownKeys(value).includes('contentFit');
+  const hasCopy = typeof value === 'object' && value !== null && !Array.isArray(value)
+    && Reflect.ownKeys(value).includes('copy');
   const hasDebt = typeof value === 'object' && value !== null && Reflect.ownKeys(value).includes('confidenceDebt');
   const measured = typeof value === 'object' && value !== null && Object.hasOwn(value, 'measuredTerminal');
-  const graph = fields(value, ['schema', 'activation', 'route', 'omissions', 'copy', 'sourceSeal', 'buildIdentity', ...(measured ? ['measuredTerminal'] : ['blindLane', 'fidelityLane', 'protocolLane']), ...(hasContentFit ? ['contentFit'] : []), ...(hasDebt ? ['confidenceDebt'] : []), 'observations'], 'graph');
+  const graph = fields(value, ['schema', 'activation', 'route', 'omissions', ...(hasCopy ? ['copy'] : []), 'sourceSeal', 'buildIdentity', ...(measured ? ['measuredTerminal'] : ['blindLane', 'fidelityLane', 'protocolLane']), ...(hasContentFit ? ['contentFit'] : []), ...(hasDebt ? ['confidenceDebt'] : []), 'observations'], 'graph');
   if (graph.get('schema') !== FINAL_EVIDENCE_V2_ADAPTIVE_OMISSION_GRAPH_SCHEMA || !isAdaptiveSourceSealRoute(graph.get('route'))) fail('unsupported adaptive graph schema or route receipt');
   const route = graph.get('route');
   if (!isAdaptiveSourceSealRoute(route)) return fail('route receipt is invalid');
@@ -148,7 +150,8 @@ export function validateAdaptiveFinalEvidenceV2Graph(value: unknown): AdaptiveFi
     schema: FINAL_EVIDENCE_V2_ADAPTIVE_OMISSION_GRAPH_SCHEMA,
     activation: receipt(graph.get('activation'), 'activation-context-v2', 'activation'), route, omissions,
     ...(confidenceDebt ? { confidenceDebt } : {}),
-    copy: receipt(graph.get('copy'), 'copy-deck-v2', 'copy'), sourceSeal: receipt(graph.get('sourceSeal'), 'source-seal-v1', 'sourceSeal'),
+    ...(hasCopy ? { copy: receipt(graph.get('copy'), 'copy-deck-v2', 'copy') } : {}),
+    sourceSeal: receipt(graph.get('sourceSeal'), ['source-seal-v1', 'source-seal-v2'], 'sourceSeal'),
     buildIdentity: receipt(graph.get('buildIdentity'), 'omd-build-identity-v1', 'buildIdentity'),
     ...(measured ? { measuredTerminal: parseMeasuredTerminal(graph.get('measuredTerminal')) } : { blindLane: receipt(
       graph.get('blindLane'),
@@ -160,7 +163,7 @@ export function validateAdaptiveFinalEvidenceV2Graph(value: unknown): AdaptiveFi
     ...(hasContentFit ? { contentFit: receipt(graph.get('contentFit'), 'content-fit-receipt-v1', 'contentFit') } : {}),
     observations: receipts(graph.get('observations'), 'observation-v2', 'observations'),
   });
-  const paths = [result.activation.path, ...[result.route.pointer, result.route.record, result.route.sourcePointer, result.route.sourceContract, result.route.authority].map((item) => item.path), result.copy.path, result.sourceSeal.path, result.buildIdentity.path, ...[result.blindLane, result.fidelityLane, result.protocolLane].flatMap(r => r ? [r.path] : []), ...(result.contentFit === undefined ? [] : [result.contentFit.path]), ...result.observations.map((item) => item.path)];
+  const paths = [result.activation.path, ...[result.route.pointer, result.route.record, result.route.sourcePointer, result.route.sourceContract, result.route.authority].map((item) => item.path), ...(result.copy === undefined ? [] : [result.copy.path]), result.sourceSeal.path, result.buildIdentity.path, ...[result.blindLane, result.fidelityLane, result.protocolLane].flatMap(r => r ? [r.path] : []), ...(result.contentFit === undefined ? [] : [result.contentFit.path]), ...result.observations.map((item) => item.path)];
   if (new Set(paths).size !== paths.length) fail('receipt paths must be unique');
   return result;
 }

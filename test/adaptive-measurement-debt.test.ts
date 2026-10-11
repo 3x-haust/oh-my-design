@@ -36,6 +36,7 @@ test('greenfield selected art debt is expressible without forging art artifacts 
   const graph = validateAdaptiveFinalEvidenceV2Graph({ schema: 'final-evidence-v2-adaptive-omission-graph', route: sourceRoute, confidenceDebt: confidence, omissions,
     activation: receipt('.omd/activation.json', 'activation-context-v2'), copy: receipt('.omd/copy-deck.md', 'copy-deck-v2'), sourceSeal: receipt('.omd/source-seal.json', 'source-seal-v1'), buildIdentity: receipt('.omd/build.json', 'omd-build-identity-v1'), blindLane: receipt('.omd/blind.json', 'adaptive-blind-review-v3'), fidelityLane: receipt('.omd/fidelity.json', 'adaptive-fidelity-review-v1'), protocolLane: receipt('.omd/protocol.json', 'adaptive-protocol-review-v1'), observations: [receipt('.omd/observation.json', 'observation-v2')] });
   const deferred = graph.omissions.filter(o => o.status === 'selected-with-debt');
+  assert.ok(graph.copy);
   assert.deepEqual(validateFinalConfidenceDebt(root, route, graph.confidenceDebt, deferred, [graph.copy]), items);
   assert.equal(graph.omissions.find(o => o.id === 'artDirection')!.status, 'selected-with-debt');
   const before = readFileSync(join(root, '.omd/confidence-debt.json'));

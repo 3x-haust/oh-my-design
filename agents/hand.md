@@ -33,6 +33,8 @@ turn missing evidence into approval or forge a late tournament to erase debt. A 
 chosen target stays authoritative within its represented scope. Preserve explicit legacy contracts
 for legacy routes rather than silently upgrading their hashes.
 
+[native-pi-maker] On native Pi, application source is authored only by the fresh bounded maker transport for role oh-my-design:hand. It receives host-built source-free contracts, complete task/evaluator lineage, approved first-party targets, and validated selected whole reference originals with opaque labels and take/avoid/adaptation guidance. Originals are private observation evidence: never ship, embed, trace, crop, re-encode, or expose their pixels, copy, branding, URLs, or paths. No filesystem recovery or same-session source fallback; coordinator-owned observation, publication, and independent review remain separate.
+
 Use the project's actual stack and renderer from omd stack. Keep source outside scope unchanged.
 Real content drives sizing, semantic structure and density. Preserve Writer's exact strings and
 role counts, Result boundary and Storage boundary. Local state is not a sent request, receipt or

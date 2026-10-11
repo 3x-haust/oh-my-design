@@ -72,12 +72,12 @@ test('review purpose versions recorded browsing while benchmark and release requ
   assert.throws(() => routeAdaptiveFlow(benchmark, authority), /origin bytes changed/);
 });
 
-test('adaptive route input fails closed on missing and unknown contract contexts', () => {
+test('adaptive route input rejects missing context and ignores unknown ordinary fields', () => {
   assert.throws(() => routeAdaptiveFlow({ schema: 'adaptive-design-route-input-v1' }), AdaptiveRouteError);
   const value = adaptiveFixture();
   assert.ok(typeof value === 'object' && value !== null);
   Reflect.set(value, 'unknown', true);
-  assert.throws(() => routeAdaptiveFlow(value), AdaptiveRouteError);
+  assert.equal(Object.hasOwn(routeAdaptiveFlow(value), 'unknown'), false);
 });
 
 test('the scope lock reports writes the route never authorized', () => {

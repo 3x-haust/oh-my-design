@@ -7,7 +7,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import type { DesignDecision } from '../core/deliberation/contracts.ts';
-import { writeObservationV2 } from '../core/runtime/observation.ts';
+import { observationV2Sha256, writeObservationV2 } from '../core/runtime/observation.ts';
+import { validateFinalBrowserObservations } from '../core/evidence/final-v2-browser-observations.ts';
+import { nodeStableProjectFileSystem } from '../core/runtime/stable-project-file.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import {
   BROWSER_OBSERVATION_SCHEMA,
@@ -196,4 +198,48 @@ test('parsed links detach and freeze mutable source input, and stale capture byt
   assert.equal(parsed.observations[0]?.testedState, 'primary-action-visible');
   assert.equal(parsed.observations[0]?.decisionRefs[0]?.decisionId, 'hero-strategy');
   assert.throws(() => validateBrowserObservationArtifacts(parsed, () => Buffer.from('stale'), false), code('STALE_OBSERVATION_ARTIFACT'));
+});
+
+test('published observation history survives a later design decision while its terminal stays current', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'omd-browser-history-'));
+  try {
+    mkdirSync(join(directory, '.omd', '.cache'), { recursive: true });
+    const buildSha256 = sha('history-build');
+    const buildBytes = Buffer.from(`${JSON.stringify({ buildSha256 })}\n`);
+    writeFileSync(join(directory, '.omd', 'build.json'), buildBytes);
+    const measured = png(390, 844);
+    writeFileSync(join(directory, '.omd', '.cache', 'hero-mobile.png'), measured);
+    const invocation = createTestProjectRunInvocation(directory, 'browser-history-publication');
+    const writer = createTestProjectWriteAdapter(directory, invocation);
+    const publish = (decisions: readonly DesignDecision[]) => {
+      const bytes = graphBytes(decisions);
+      writeFileSync(join(directory, '.omd', 'decision-graph.json'), bytes);
+      // The trusted evaluation publisher retains these exact graph bytes.
+      writer.writeContentAddressed(`.omd/decision-graphs/sha256-${sha(bytes)}.json`, bytes);
+      const measuredCore = {
+        ...core(),
+        observableResult: { ...core().observableResult, capture: { path: '.omd/.cache/hero-mobile.png', sha256: sha(measured) } },
+        decisionRefs: decisions.map((item) => ({ decisionId: item.id, decisionSha256: designDecisionSha256(item) })),
+      };
+      return writeObservationV2(directory, {
+        currentArtifact: { path: '.omd/build.json', sha256: sha(buildBytes) }, buildSha256,
+        evidence: { browserObservations: {
+          schema: BROWSER_OBSERVATION_SET_SCHEMA, decisionGraphSha256: sha(bytes),
+          observations: [{ ...measuredCore, observationSha256: browserObservationSha256(measuredCore) }],
+        } },
+      }, writer, invocation);
+    };
+    const before = publish([decision()]);
+    const after = publish([decision(), { ...decision(), id: 'action-emphasis', dependsOn: ['hero-strategy'] }]);
+    assert.equal(after.predecessorSha256, observationV2Sha256(before));
+    const bindings = validateFinalBrowserObservations(directory, nodeStableProjectFileSystem(),
+      [before.evidence, after.evidence], [observationV2Sha256(before), observationV2Sha256(after)]);
+    assert.equal(bindings.length, 1);
+    assert.equal(bindings[0]?.observationSha256, observationV2Sha256(after));
+    assert.throws(() => validateFinalBrowserObservations(directory, nodeStableProjectFileSystem(),
+      [before.evidence, after.evidence], [observationV2Sha256(before), observationV2Sha256(after)],
+      'legacy-current-graph'), code('STALE_DECISION_GRAPH'));
+    assert.throws(() => validateFinalBrowserObservations(directory, nodeStableProjectFileSystem(),
+      [before.evidence], [observationV2Sha256(before)]), code('STALE_DECISION_GRAPH'));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });

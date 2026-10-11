@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { knownFields } from '../judgment/schema.ts';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { validateSettledCaptureReceipt } from './settled-capture-receipt.ts';
@@ -76,12 +77,9 @@ const FORBIDDEN_VALUES = /(?:embedded-orientation|queue-led-header|lateral-trans
 function exact(value: unknown, keys: readonly string[], label: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)
     || Reflect.getPrototypeOf(value) !== Object.prototype) throw new Error(`${label} must be a plain object`);
-  const data = value as Record<string, unknown>;
-  const actual = Object.keys(data).sort(); const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
-    throw new Error(`${label} keys must be exactly ${expected.join(', ')}`);
-  }
-  return data;
+  const { value: projected, warnings } = knownFields(value, keys, [], label);
+  for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  return projected;
 }
 
 function text(value: unknown, label: string): string {

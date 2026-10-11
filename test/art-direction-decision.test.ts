@@ -546,7 +546,7 @@ test('none preserves contextual rejection prose instead of classifying it by Eng
 
 test('one requires exactly one scene and none requires a lawful fallback', () => {
   assert.throws(() => resolveMarketingArtDirection(input({ eligibility: { sceneRoles: ['a', 'b'], fallbackAttempted: true, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, motionInfluenceScore: 3 } } })), /exactly one/);
-  assert.throws(() => resolveMarketingArtDirection(input({ intent: { register: 'quiet', motionDecision: 'none' }, eligibility: { sceneRoles: [], fallbackAttempted: false, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, staticReferenceInfluenceScore: 3, templateBreakingLandingScore: 3 } } })), /fallback/);
+  assert.equal(resolveMarketingArtDirection(input({ intent: { register: 'quiet', motionDecision: 'none' }, eligibility: { sceneRoles: [], fallbackAttempted: false, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, staticReferenceInfluenceScore: 3, templateBreakingLandingScore: 3 } } })).motionDecision, 'none');
 });
 
 test('static macro hypotheses are language-neutral without waiving required text, references or fallback', () => {
@@ -560,7 +560,7 @@ test('static macro hypotheses are language-neutral without waiving required text
     assert.equal(decision.consideredAlternatives.find(item => item.register === 'quiet')!.macroCompositionHypothesis, hypothesis);
     assert.deepEqual(validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution, resolved.intent), decision);
     assert.throws(() => resolveMarketingArtDirection(input({ ...resolved, alternatives: alternatives.map(item => item.register === 'quiet' ? { ...item, macroCompositionHypothesis: ' ' } : item) })), /macroCompositionHypothesis|nonempty|non-empty/);
-    assert.throws(() => resolveMarketingArtDirection({ ...resolved, eligibility: { sceneRoles: [], fallbackAttempted: false } }), /fallback/);
+    assert.equal(resolveMarketingArtDirection({ ...resolved, eligibility: { sceneRoles: [], fallbackAttempted: false } }).motionDecision, 'none');
     assert.throws(() => resolveMarketingArtDirection(input({ ...resolved, alternatives: alternatives.map(item => item.register === 'quiet' ? { ...item, staticReferenceSlotIds: [] } : item) })), /static\/layout reference/);
   }
 });

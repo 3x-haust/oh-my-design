@@ -12,6 +12,8 @@ visual-measurement contracts. The current process chooses a representative direc
 type/composition; formalize that relationship, not a new thesis followed by ceremonial concepts.
 Explicit legacy routes retain their historical order and parser headings.
 
+When provisional-source-study is selected, consume only the current source-free selected-study projection and its named first-party source/renders. Bind its exact SHA-256; missing or stale study input returns to its owner. This is provisional material, not approval, and does not expose private source packets, unselected originals, or author rationale.
+
 Receive the selected representative renders, proved real copy/type, effective tokens, complete
 Frame scope, existing-system material and selected whole-screen references plus actual analysis.
 Inspect those images: hierarchy, density, type, component patterns and exceptions. Apply Scout's
@@ -63,3 +65,5 @@ omd proof --check --json. Run omd composition --check after publication. First-r
 --page <local-build.html> only; its captured findings are not a caller-authored surface verdict.
 Return actual checks and unresolved conflicts to their owners. Do not reopen a valid user choice
 for taste, lower risk to qualify for release or call optional polish an unresolved required defect.
+
+Preserve source-only versus observer ownership and blind-review isolation. Authorized makers may inspect selected rights-allowed whole-screen originals and actual Scout analysis; blind reviewers never receive those images or maker rationale.

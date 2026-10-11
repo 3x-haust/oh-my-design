@@ -220,6 +220,9 @@ test('frozen contrast capture stops compositor CSS animations', async () => {
       <a style="display:block;width:300px;height:80px;color:black;animation:pulse .01s linear infinite">South Korea service for residents</a>`);
     const capture = await captureFrozenSearchText(page);
     assert.deepEqual(capture.visibleText, capture.confirmedVisibleText);
+    const viewport = page.viewportSize(); assert.ok(viewport);
+    assert.equal(capture.evidence.readUInt32BE(16), viewport.width * 2);
+    assert.equal(capture.evidence.readUInt32BE(20), viewport.height * 2);
   });
 });
 

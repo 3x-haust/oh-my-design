@@ -14,10 +14,10 @@ import { browserObservationSha256, designDecisionSha256, type BrowserObservation
 import type { DesignDecision } from '../core/deliberation/contracts.ts';
 
 const sha = (n: number) => String(n).repeat(64);
-function fixture() {
+function fixture(targetRoute?: string) {
   const lane = { referenceIds: [], coverage: 'brief-derived', gap: 'No direct reference for this case.', application: 'Keep the current task dominant.', doNotTransfer: 'Source branding.', reason: 'The user needs a readable work object.' };
   const application = projectReferenceApplication(parseReferenceApplication({ schema: 'reference-application-v2', sourceContractSha256: sha(1), researchSha256: sha(2), domainBriefSha256: sha(3),
-    screens: ['home', 'detail'].map(surface => ({ surface, target: { route: `/${surface}`, state: 'long-title' }, domain: lane, design: lane, checks: ['The long title keeps the primary action visible.'] })) }));
+    screens: (targetRoute === undefined ? ['home', 'detail'] : ['home']).map(surface => ({ surface, target: { route: targetRoute ?? `/${surface}`, state: 'long-title' }, domain: lane, design: lane, checks: ['The long title keeps the primary action visible.'] })) }));
   const digest = (value: string) => createHash('sha256').update(value).digest('hex');
   const context = { application, build: { path: '.omd/build.json', sha256: sha(4) }, sourceSeal: { path: '.omd/source-seal.json', sha256: sha(5) },
     observations: application.screens.flatMap(screen => (['desktop', 'mobile'] as const).map(viewport => ({ observationSha256: sha(6), browserObservationSha256: digest(`${screen.surface}:${viewport}`), captureSha256: digest(`${screen.surface}:${viewport}:pixels`), viewport, state: 'long-title' }))),
@@ -37,12 +37,44 @@ test('every surface criterion has stable IDs and requires both current fixed vie
   assert.equal(validateReferenceApplicationReview(review, context).results.length, 4);
   assert.throws(() => validateReferenceApplicationReview(plan.input, context), /missing|digest/);
   for (let index = 0; index < review.results.length; index++) {
-    assert.throws(() => validateReferenceApplicationReview({ ...review, results: review.results.filter((_, i) => i !== index) }, context), /missing screen/);
+    assert.equal(validateReferenceApplicationReview({ ...review, results: review.results.filter((_, i) => i !== index) }, context).results.length, 3);
   }
   assert.throws(() => validateReferenceApplicationReview({ ...review, results: [review.results[0], ...review.results.slice(0, 3)] }, context), /duplicate/);
   const changed = structuredClone(context.application); changed.screens[0]!.checks = ['A different criterion.'];
   assert.notEqual(referenceApplicationCriteria(changed)[0]!.criterionId, plan.criteria[0]!.criterionId);
 });
+test('source-free application preserves domain specialization uncertainty separately from visual decisions', () => {
+  const { context } = fixture();
+  const source = { schema: 'reference-application-v2', sourceContractSha256: sha(1), researchSha256: sha(2), domainBriefSha256: sha(3),
+    screens: [{ surface: 'home', target: { route: '/home', state: 'start' },
+      domain: { referenceIds: ['signed-service'], coverage: 'partial', gap: 'Unvalidated user-need hypothesis',
+        application: 'Continue an interrupted application', doNotTransfer: 'Do not assert official submission',
+        reason: 'Observed task step supports the requested resume behavior; need for the new reminder is unvalidated' },
+      design: { referenceIds: ['finished-product'], coverage: 'direct', gap: null,
+        application: 'Calm hierarchy', doNotTransfer: 'Do not reuse source pixels', reason: 'Aesthetic and task fit' },
+      checks: ['Resume action is visible'] }] };
+  const projected = projectReferenceApplication(parseReferenceApplication(source));
+  assert.equal(projected.screens[0]?.domain.gap, source.screens[0]?.domain.gap);
+  assert.equal(projected.screens[0]?.domain.reason, source.screens[0]?.domain.reason);
+  assert.equal(projected.screens[0]?.design.reason, source.screens[0]?.design.reason);
+  assert.equal(JSON.stringify(projected).includes('signed-service'), false);
+  assert.equal(JSON.stringify(projected).includes('finished-product'), false);
+  assert.notEqual(context.application.screens[0]?.domain.gap, projected.screens[0]?.domain.gap);
+});
+
+test('selected visual direction adds a desktop and mobile fidelity judgment without giving blind Eye raw references', () => {
+  const { context } = fixture();
+  const selected = structuredClone(context.application);
+  selected.screens[0]!.design = { coverage: 'direct', gap: null, application: 'A confident spacious workspace with restrained colour',
+    doNotTransfer: 'Brand assets', reason: 'Coordinator-selected finished product' };
+  const criteria = referenceApplicationCriteria(selected);
+  assert.equal(criteria.length, 3);
+  assert.equal(new Set(criteria.map(item => item.criterionId)).size, 3);
+  const plan = referenceApplicationReviewPlan({ ...context, application: selected });
+  assert.equal(plan.input.results.length, 6);
+  assert.equal(JSON.stringify(plan).includes('.omd/refs/'), false, 'fidelity Eye receives source-free decisions, never raw reference paths');
+});
+
 test('home captures cannot certify detail; exact query/hash and state are destination-bound', () => {
   const { context, review } = fixture();
   const homeOnly = { ...context, captureIndex: context.captureIndex.filter(row => row.testedUrl.endsWith('/home')) };
@@ -75,11 +107,12 @@ test('revise can be recorded but not completed; justified departure needs an ins
   assert.throws(() => checkReferenceApplicationReview(root, context), /REFERENCE_APPLICATION_REVIEW:.*unavailable/);
   review.results[0]!.verdict = 'revise';
   assert.equal(publishReferenceApplicationReview(root, review, context, writer).closed, false);
-  assert.throws(() => checkReferenceApplicationReview(root, context), /unresolved/);
+  assert.equal(checkReferenceApplicationReview(root, context).closed, false);
   review.results[0]!.verdict = 'justified-departure';
   review.results[0]!.reason = 'At mobile the longer translated title pushes the action below the title; its distinct group remains clear in the captured state.';
   publishReferenceApplicationReview(root, review, context, writer);
-  assert.deepEqual(checkReferenceApplicationReview(root, context), { criteria: 2, results: 4, closed: true, independence: 'not-attested' });
+  assert.deepEqual(checkReferenceApplicationReview(root, context), { criteria: 2, results: 4, closed: true,
+    warnings: [], independence: 'not-attested' });
   const path = join(root, REFERENCE_APPLICATION_REVIEW_PATH);
   const saved = readFileSync(path, 'utf8'); writeFileSync(path, `${saved} `);
   assert.throws(() => checkReferenceApplicationReview(root, context), /read stably|history/);
@@ -89,7 +122,7 @@ test('final-graph join loads actual PNGs and rejects old seal, swapped graph rec
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-application-final-join-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const writer = createTestProjectWriteAdapter(root);
-  const { context } = fixture();
+  const { context } = fixture('/');
   const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
   const save = (path: string, bytes: Buffer | string, schema = 'test-artifact') => { writer.write(path, bytes); return { path, sha256: hash(bytes), schema }; };
   const buildIdentity = save('.omd/build.json', '{}');
@@ -115,9 +148,37 @@ test('final-graph join loads actual PNGs and rejects old seal, swapped graph rec
   const joined = referenceApplicationReviewContext(root, context.application, graph);
   assert.equal(joined.observations.length, 2);
   assert.equal(referenceApplicationReviewPlan(joined).captureIndex[0]!.path, captures[0]!.observableResult.capture.path);
+  writer.writeContentAddressed(`.omd/decision-graphs/sha256-${decisionGraph.sha256}.json`, readFileSync(join(root, decisionGraph.path)));
+  const revisedDecision = { ...decision, question: 'Where is the revised primary action?' };
+  const revisedGraph = save('.omd/decision-graph.json', `${canonicalJson({ schema: 'decision-graph-v1', decisions: [revisedDecision] })}\n`);
+  const revisedCaptures = captures.map(item => {
+    const core = { ...item, decisionRefs: [{ decisionId: revisedDecision.id, decisionSha256: designDecisionSha256(revisedDecision) }] };
+    return { ...core, observationSha256: browserObservationSha256(core) };
+  });
+  const revisedAggregate = `${canonicalJson({ schema: 'observation-v2', observedAt: '2026-09-21T00:00:00Z', buildSha256: buildIdentity.sha256,
+    currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: observation.sha256,
+    evidence: { browserObservations: { schema: 'browser-observation-set-v1', decisionGraphSha256: revisedGraph.sha256, observations: revisedCaptures } } })}\n`;
+  const revisedObservation = save(`.omd/observation-v2/sha256-${hash(revisedAggregate)}.json`, revisedAggregate, 'observation-v2');
+  const revised = { ...graph, observations: [observation, revisedObservation] };
+  const history = referenceApplicationReviewContext(root, context.application, revised);
+  assert.equal(history.observations.length, 2);
+  assert.equal(history.captureIndex?.length, 2);
+  const plan = referenceApplicationReviewPlan(history);
+  const currentReview = { ...plan.input, results: plan.input.results.map(item => {
+    const binding = history.observations.find(row => row.viewport === item.viewport);
+    assert.ok(binding);
+    return { ...item, observationSha256: binding.observationSha256, captureSha256: binding.captureSha256,
+      state: binding.state, verdict: 'met', reason: 'Inspected the current final capture.' };
+  }) };
+  assert.doesNotThrow(() => validateReferenceApplicationReview(currentReview, history));
+  const staleReview = { ...currentReview, results: currentReview.results.map(item => ({
+    ...item, observationSha256: observation.sha256,
+  })) };
+  assert.throws(() => validateReferenceApplicationReview(staleReview, history), /destination surface/);
+  assert.throws(() => referenceApplicationReviewContext(root, context.application, graph), /decision graph bytes/);
   const oldSeal = save('.omd/old-seal.json', '{"inputs":{}}');
-  assert.throws(() => referenceApplicationReviewContext(root, context.application, { ...graph, sourceSeal: oldSeal }), /sealed before/);
-  assert.throws(() => referenceApplicationReviewContext(root, context.application, { ...graph, buildIdentity: { ...buildIdentity, sha256: sha(0) } }), /artifact changed/);
+  assert.throws(() => referenceApplicationReviewContext(root, context.application, { ...revised, sourceSeal: oldSeal }), /sealed before/);
+  assert.throws(() => referenceApplicationReviewContext(root, context.application, { ...revised, buildIdentity: { ...buildIdentity, sha256: sha(0) } }), /artifact changed/);
   writer.write(captures[0]!.observableResult.capture.path, testPng(10, 10));
-  assert.throws(() => referenceApplicationReviewContext(root, context.application, graph), /capture bytes changed/);
+  assert.throws(() => referenceApplicationReviewContext(root, context.application, revised), /capture bytes changed/);
 });

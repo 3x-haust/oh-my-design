@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
+import { readPersistedRoute } from '../core/route/index.ts';
+import { confidenceDebt, recordConfidenceDebt } from '../core/brief/confidence-debt.ts';
 import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
 const fixture = (name: string): unknown => {
@@ -35,7 +37,7 @@ function expressiveMedical(): unknown {
   }
   Reflect.set(designAxes, 'expressiveDesignNeed', 'showpiece');
   Reflect.set(strategy, 'roles', ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye']);
-  Reflect.set(strategy, 'stages', ['domain', 'frame', 'content-grain', 'scout', 'reference-board', 'reference-selection', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
+  Reflect.set(strategy, 'stages', ['domain', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board', 'reference-selection', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
   Reflect.set(strategy, 'executionWaves', [
     { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
     { id: 'parallel-research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
@@ -50,7 +52,7 @@ function expressiveMedical(): unknown {
   if (!Array.isArray(methods) || !Array.isArray(skips)) throw new Error('medical fixture strategy lists are missing');
   Reflect.set(strategy, 'methods', [...methods, 'image-first-draft', 'motion-one', 'motion-ambition:award-level']);
   Reflect.set(strategy, 'attributionCategories', ['tokens', 'motion', 'composition']);
-  const selected = new Set(['reference-selection', 'art-direction', 'type-proof', 'candidate-generation', 'image-first-draft', 'motion-one']);
+  const selected = new Set(['acquisition', 'reference-selection', 'art-direction', 'type-proof', 'candidate-generation', 'image-first-draft', 'motion-one']);
   Reflect.set(strategy, 'skips', skips.filter((entry) => typeof entry === 'object' && entry !== null && !selected.has(String(Reflect.get(entry, 'id')))));
   return value;
 }
@@ -88,6 +90,27 @@ test('copy-only adaptive sealing binds the exact authorized art-direction skip a
       assert.match(String(Reflect.get(stage, 'routeSha256')), /^[a-f0-9]{64}$/);
       assert.match(String(Reflect.get(stage, 'authoritySha256')), /^[a-f0-9]{64}$/);
     }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('an omitted optional stage is not a fabricated authorized skip', () => {
+  const directory = root();
+  try {
+    writeApprovedInput(directory, 'copy-deck.md');
+    const input = fixture('copy-only') as { strategyDecision: { skips: Array<{ id: string }> } };
+    input.strategyDecision.skips = input.strategyDecision.skips.filter(skip => skip.id !== 'type-proof');
+    const invocation = publishTestAdaptiveRoute(directory, input, 'unselected-type-proof');
+    writeSourceSeal(directory, invocation);
+    assert.deepEqual(validateSourceSeal(directory, invocation), []);
+    const sealPath = join(directory, '.omd', 'source-seal.json');
+    const seal: unknown = JSON.parse(readFileSync(sealPath, 'utf8'));
+    const stage = routeStage(seal, 'type-proof');
+    assert.ok(typeof stage === 'object' && stage !== null);
+    assert.equal(Reflect.get(stage, 'status'), 'not-selected');
+    assert.equal(Object.hasOwn(stage, 'reason'), false);
+    Reflect.set(stage, 'reason', 'An invented skip is not user or harness evidence.');
+    writeFileSync(sealPath, JSON.stringify(seal));
+    assert.notDeepEqual(validateSourceSeal(directory, invocation), []);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -166,12 +189,38 @@ test('adaptive source check rejects route pointer or route path swaps after seal
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('high-risk expressive medical route still requires its exact current art-direction decision', () => {
+test('routed source seal binds explicit missing-input debt and still tracks source currentness', () => {
   const directory = root();
   try {
-    for (const name of ['frame.md', 'scout.md', 'copy-deck.md', 'type-proof.md', 'composition.md']) writeApprovedInput(directory, name);
-    const invocation = publishTestAdaptiveRoute(directory, expressiveMedical(), 'medical-expressive-source-seal');
-    assert.throws(() => writeSourceSeal(directory, invocation), /ART_DIRECTION_DECISION_REQUIRED/);
-    assert.equal(validateSourceSeal(directory, invocation)[0]?.id, 'SOURCE-SEAL-MISSING');
+    const invocation = publishTestAdaptiveRoute(directory, fixture('copy-only'), 'minimal-source-seal');
+    assert.throws(() => writeSourceSeal(directory, invocation), /copy approved input/);
+    recordConfidenceDebt(directory, readPersistedRoute(directory, invocation).sourceContractSha256,
+      [confidenceDebt('copy', 'The selected copy input has not been published; this preliminary seal grants no completion claim.')], invocation);
+    writeSourceSeal(directory, invocation);
+    assert.deepEqual(validateSourceSeal(directory, invocation), []);
+    writeFileSync(join(directory, 'index.html'), '<main>changed</main>');
+    assert.ok(validateSourceSeal(directory, invocation).some(finding => finding.id === 'SOURCE-SEAL-STALE'));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('high-risk preliminary seal binds art and type debt without inventing those artifacts', () => {
+  const directory = root();
+  try {
+    writeApprovedInput(directory, 'copy-deck.md');
+    const input = expressiveMedical() as { strategyDecision: {
+      stages: string[]; roles: string[]; methods: string[]; executionWaves: Array<{ roles: string[] }>; skips: Array<{ id: string; reason: string }>;
+    } };
+    input.strategyDecision.stages = input.strategyDecision.stages.filter(stage => !['composition', 'candidate-generation'].includes(stage));
+    input.strategyDecision.roles = input.strategyDecision.roles.filter(role => !['omd-composer', 'omd-sketch'].includes(role));
+    input.strategyDecision.methods = input.strategyDecision.methods.filter(method => method !== 'image-first-draft');
+    input.strategyDecision.executionWaves = input.strategyDecision.executionWaves.filter(wave => !wave.roles.some(role => ['omd-composer', 'omd-sketch'].includes(role)));
+    for (const id of ['composition', 'candidate-generation', 'image-first-draft']) {
+      input.strategyDecision.skips.push({ id, reason: 'This preliminary source snapshot makes no candidate or composition claim.' });
+    }
+    const invocation = publishTestAdaptiveRoute(directory, input, 'medical-expressive-source-seal');
+    recordConfidenceDebt(directory, readPersistedRoute(directory, invocation).sourceContractSha256,
+      ['art-direction', 'type-proof'].map(stage => confidenceDebt(stage, 'Selected input is absent; preliminary snapshot only.')), invocation);
+    writeSourceSeal(directory, invocation);
+    assert.deepEqual(validateSourceSeal(directory, invocation), []);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });

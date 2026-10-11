@@ -122,11 +122,14 @@ export async function createPublicNetworkProxy(options: Readonly<{
   });
   const address = server.address();
   if (address === null || typeof address === 'string') throw new Error('public network proxy failed to bind');
+  let closing: Promise<void> | undefined;
   return Object.freeze({
     server: `http://127.0.0.1:${address.port}`,
-    async close() {
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    close() {
+      return closing ??= new Promise<void>((resolve, reject) => {
+        for (const socket of sockets) socket.destroy();
+        server.close(error => error ? reject(error) : resolve());
+      });
     },
   });
 }

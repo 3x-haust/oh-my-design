@@ -10,6 +10,7 @@ import { checkProductionReadiness as briefReadiness } from '../core/brief/produc
 import { checkBriefEntry } from '../core/brief/entry.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { contractSha256, deliveryReceipt } from '../core/stage/contract.ts';
+import { nextStageWork } from '../core/stage/next.ts';
 import { copyDeckSha256 } from '../core/copy/index.ts';
 import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
@@ -111,6 +112,39 @@ test('valid copy-only inputs pass without forcing skipped research, type, candid
   assert.equal(checkProductionReadiness(root, invocation, pack, 'src/unrequested.ts').ok, false);
 });
 
+test('classified unprovided planning continues without fabricated claims or an await state', () => {
+  const { root, invocation } = readyCopyProject();
+  const brief = JSON.parse(readFileSync(join(root, '.omd/domain-brief.json'), 'utf8'));
+  brief.planning = {
+    businessGoal: { text: 'Improve confirmation clarity', disposition: 'non-factual-working-decision' },
+    successSignal: { text: 'The confirmation is understandable', disposition: 'omit-from-production-claims' },
+    nonGoals: [{ text: 'No layout changes', disposition: 'omit-from-production-claims' }],
+  };
+  write(root, '.omd/domain-brief.json', JSON.stringify(brief));
+  const result = checkProductionReadiness(root, invocation, pack, 'src/copy/confirmation.ts');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.blockers, []);
+  assert.deepEqual(result.warnings, [
+    'non-factual working decision: businessGoal',
+    'planning omitted from production claims: successSignal',
+    'planning omitted from production claims: nonGoals[0]',
+  ]);
+  const work = nextStageWork(root, pack, invocation);
+  assert.deepEqual(work.planning, [
+    { field: 'businessGoal', text: 'Improve confirmation clarity', disposition: 'non-factual-working-decision' },
+    { field: 'successSignal', text: 'The confirmation is understandable', disposition: 'omit-from-production-claims' },
+    { field: 'nonGoals[0]', text: 'No layout changes', disposition: 'omit-from-production-claims' },
+  ]);
+  assert.ok(work.progress.validatedStages.includes('domain'));
+  assert.doesNotMatch(work.instruction, /\b(?:ask|question|await)\b/i);
+
+  brief.planning.businessGoal = { text: 'Invented user goal' };
+  write(root, '.omd/domain-brief.json', JSON.stringify(brief));
+  const unsafe = checkProductionReadiness(root, invocation, pack, 'src/copy/confirmation.ts');
+  assert.equal(unsafe.ok, false);
+  assert.match(unsafe.blockers.join('\n'), /planning: .*explicit disposition/);
+});
+
 test('stage entry connects selected procedure to actual current validation, not a cached successful brief', () => {
   const { root, invocation } = readyCopyProject();
   const inspection = buildBrief(root, 'production', pack, invocation);
@@ -129,7 +163,7 @@ test('stage entry connects selected procedure to actual current validation, not 
   assert.match(checkBriefEntry(root, 'production', pack, invocation).blockers.join('\n'), /current copy-deck bytes/);
 });
 
-test('CLI stage entry refuses missing, unselected and stale inputs while inspection and repaired entry remain available', () => {
+test('CLI stage entry refuses missing or stale prerequisites while inspection stays available', () => {
   const { root } = readyCliCopyProject();
   const checked = (...args: string[]) => runCli(root, 'brief', ...args, '--json');
   assert.equal(checked('copy', '--check').status, 0);
@@ -169,17 +203,18 @@ test('source path gates reject target symlinks even when both paths are in route
   assert.equal(checkProductionReadiness(root, invocation, pack, ['src/copy/new.ts', 'src/copy/current.ts']).ok, true);
 });
 
-test('direct routed recipe CLI refuses stale inputs before writes and succeeds after current evidence is restored', () => {
+test('direct routed recipe CLI refuses stale selected copy review before writing and accepts repaired inputs', () => {
   const { root } = readyCliCopyProject();
   const output = join(root, 'src/copy/recipe');
   write(root, '.omd/copy-deck.md', deck + '\nStale review.\n');
-  const blocked = runCli(root, 'recipe', 'add', 'scroll-reveal', '--out', output, '--json');
-  assert.equal(blocked.status, 1);
-  assert.match(blocked.stderr, /OMD_PRODUCTION_BLOCKED/);
-  assert.match(blocked.stderr, /current copy-deck bytes/);
-  assert.equal(existsSync(output), false);
+  const readiness = runCli(root, 'guard', 'production', '--json');
+  assert.equal(readiness.status, 1);
+  assert.match(readiness.stdout, /current copy-deck bytes/);
   assert.equal(runCli(root, 'recipe', 'show', 'scroll-reveal', '--json').status, 0);
-  write(root, '.omd/copy-deck.md', deck);
+  const refused = runCli(root, 'recipe', 'add', 'scroll-reveal', '--out', output, '--json');
+  assert.equal(refused.status, 1);
+  assert.equal(existsSync(output), false);
+  write(root, '.omd/.cache/copy-eye.md', review(deck + '\nStale review.\n'));
   const installed = runCli(root, 'recipe', 'add', 'scroll-reveal', '--out', output, '--json');
   assert.equal(installed.status, 0, installed.stderr);
   const written = JSON.parse(installed.stdout).written as string[];
@@ -213,7 +248,7 @@ test('standalone recipe use does not silently activate an OMD design workflow', 
   assert.ok(JSON.parse(installed.stdout).written.every((path: string) => existsSync(path)));
 });
 
-test('file presence cannot substitute for copy validation, current CLEAN review or contract delivery', () => {
+test('selected copy validation and delivery failures remain production blockers', () => {
   const { root, invocation } = readyCopyProject();
   write(root, '.omd/.cache/copy-eye.md', review(deck, 'REVISE'));
   assert.match(checkProductionReadiness(root, invocation, pack).blockers.join('\n'), /CLEAN/);
@@ -227,7 +262,7 @@ test('file presence cannot substitute for copy validation, current CLEAN review 
   assert.match(checkProductionReadiness(root, invocation, pack).blockers.join('\n'), /contract not delivered/);
 });
 
-test('new-product frame and safety remain hard while unresolved board and candidate stub are debt', () => {
+test('new-product missing selected evidence blocks initial writes instead of becoming warnings', () => {
   const root = project();
   const invocation = publishTestAdaptiveRoute(root, fixture('medical-new-product'));
   mkdirSync(join(root, '.omd/.cache/sketches/fake-selected'), { recursive: true });
@@ -236,11 +271,10 @@ test('new-product frame and safety remain hard while unresolved board and candid
   write(root, '.omd/.cache/sketches/fake-selected/index.html', '<p>not selection evidence</p>');
   const result = checkProductionReadiness(root, invocation, pack);
   assert.equal(result.ok, false);
+  assert.deepEqual(result.warnings, []);
   const reasons = result.blockers.join('\n');
-  // Phase 1 preserves safety and real task framing, not acquisition as an infinite source gate.
-  for (const pattern of [/product\/mixed/, /copy-deck/, /composition/]) assert.match(reasons, pattern);
-  assert.ok(result.confidenceDebt.some(item => item.stage === 'reference-board'));
-  assert.ok(result.confidenceDebt.some(item => item.stage === 'candidate-generation'));
+  for (const pattern of [/product\/mixed/, /reference board\/judgment:/, /copy-deck/, /composition/, /current candidate selection/]) assert.match(reasons, pattern);
+  assert.equal(existsSync(join(root, 'src')), false);
 });
 
 test('real local CLI transport rejects missing inputs and design-only source writes without asking for activation', () => {
@@ -256,7 +290,7 @@ test('real local CLI transport rejects missing inputs and design-only source wri
   assert.doesNotMatch(missing.stdout, /ROUTE_AUTHORITY_REQUIRED/);
   const completion = run('guard', 'completion', '--json');
   assert.equal(completion.status, 1);
-  assert.match(completion.stdout, /copy-deck/);
+  assert.match(completion.stderr + completion.stdout, /copy-deck/);
   write(root, 'route-input.json', JSON.stringify(fixture('design-only-test007')));
   const design = run('route', 'classify', '--input', 'route-input.json', '--json');
   assert.equal(design.status, 0, design.stderr);

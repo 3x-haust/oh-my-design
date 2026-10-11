@@ -26,6 +26,10 @@ export class TrustedEvaluationContractError extends Error {
 
 export type TrustedEvaluationAction =
   | Readonly<{
+    kind: 'reload';
+    viewports?: readonly TrustedEvaluationViewport[];
+  }>
+  | Readonly<{
     kind: 'click';
     selector: string;
     viewports?: readonly TrustedEvaluationViewport[];
@@ -40,7 +44,7 @@ export type TrustedEvaluationAction =
 export type TrustedEvaluationViewport = '1280x900' | '390x844';
 
 export type TrustedEvaluationAssertion = Readonly<{
-  kind: 'visible-text' | 'absent-text';
+  kind: 'visible-text' | 'preserved-text' | 'absent-text';
   selector: string;
   text: string;
 }>;
@@ -52,7 +56,8 @@ export type TrustedEntrySurface = Readonly<{
   purpose: Readonly<{ selector: string; text: string }>;
   workObject: Readonly<{ selector: string; anchorSelector: string; anchorText: string }>;
   nextAction?: Readonly<{ selector: string; accessibleName: string }>;
-  trigger: Exclude<TrustedEvaluationAction, Readonly<{ viewports: readonly TrustedEvaluationViewport[] }>>;
+  trigger: Exclude<TrustedEvaluationAction,
+    Readonly<{ kind: 'reload' }> | Readonly<{ viewports: readonly TrustedEvaluationViewport[] }>>;
   consequence: Readonly<{ selector: string; beforeText: string; afterText: string }>;
 }>;
 
@@ -87,6 +92,8 @@ const CLICK_ACTION_KEYS = new Set(['kind', 'selector']);
 const SCOPED_CLICK_ACTION_KEYS = new Set(['kind', 'selector', 'viewports']);
 const FILL_ACTION_KEYS = new Set(['kind', 'selector', 'value']);
 const SCOPED_FILL_ACTION_KEYS = new Set(['kind', 'selector', 'value', 'viewports']);
+const RELOAD_ACTION_KEYS = new Set(['kind']);
+const SCOPED_RELOAD_ACTION_KEYS = new Set(['kind', 'viewports']);
 const EVALUATION_VIEWPORTS = new Set<TrustedEvaluationViewport>(['1280x900', '390x844']);
 const ASSERTION_KEYS = new Set(['kind', 'selector', 'text']);
 const ENTRY_SURFACE_KEYS = new Set([
@@ -125,8 +132,14 @@ function record(value: unknown): Record<string, unknown> {
 
 function exact(value: Record<string, unknown>, keys: ReadonlySet<string>): void {
   const own = Reflect.ownKeys(value);
-  if (own.length !== keys.size || own.some((key) => typeof key !== 'string' || !keys.has(key))) {
+  if (own.some((key) => typeof key !== 'string' || key === 'authority')
+    || [...keys].some((key) => !Object.hasOwn(value, key))) {
     return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+  }
+  for (const key of own) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    if (!keys.has(key as string)) process.emitWarning(`ignored unknown lifecycle manifest field: ${String(key)}`);
   }
 }
 
@@ -238,6 +251,11 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
       const scoped = Object.hasOwn(action, 'viewports');
       if (action.kind === 'click') exact(action, scoped ? SCOPED_CLICK_ACTION_KEYS : CLICK_ACTION_KEYS);
       else if (action.kind === 'fill') exact(action, scoped ? SCOPED_FILL_ACTION_KEYS : FILL_ACTION_KEYS);
+      else if (action.kind === 'reload') {
+        const keys = scoped ? SCOPED_RELOAD_ACTION_KEYS : RELOAD_ACTION_KEYS;
+        exact(action, keys);
+        if (Object.keys(action).some(key => !keys.has(key))) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      }
       else return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
       const viewports = action.viewports === undefined
         ? undefined
@@ -249,6 +267,12 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
         });
       if (viewports !== undefined && (viewports.length === 0 || new Set(viewports).size !== viewports.length)) {
         return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      }
+      if (action.kind === 'reload') {
+        return Object.freeze({
+          kind: 'reload' as const,
+          ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }),
+        });
       }
       const selector = text(action.selector);
       if (action.kind === 'click') {
@@ -268,7 +292,7 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
     const assertions = array(script.assertions).map((candidateAssertion) => {
       const assertion = record(candidateAssertion);
       exact(assertion, ASSERTION_KEYS);
-      if (assertion.kind !== 'visible-text' && assertion.kind !== 'absent-text') {
+      if (assertion.kind !== 'visible-text' && assertion.kind !== 'preserved-text' && assertion.kind !== 'absent-text') {
         return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
       }
       return Object.freeze({

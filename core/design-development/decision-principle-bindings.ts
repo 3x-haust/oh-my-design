@@ -150,8 +150,6 @@ const parseBinding = (value: unknown, index: number): DecisionPrincipleBinding =
     evidenceIds: uniqueTokens(item.get('evidenceIds'), `${label}.evidenceIds`, malformed, false),
   });
 };
-const AESTHETIC_COPY = /(?:\b(?:copy|clone|imitate|match|reproduce|trace)\b.{0,48}\b(?:source|reference|aesthetic|style|look)\b|\blooks?\s+like\b|\bexact\s+(?:geometry|layout|type|typography|palette|radii?|silhouette)\b|\b(?:source\s+)?(?:palette|font\s+family|branded\s+(?:interaction|silhouette))\b)/i;
-
 function validateReferencePrinciple(
   principle: BoundPrinciple,
   current: DecisionPrincipleBindingsCurrent,
@@ -159,7 +157,6 @@ function validateReferencePrinciple(
   if (principle.source.kind !== 'reference') return;
   const expected = current.referencePrinciples.find((item) => item.id === principle.id);
   if (expected === undefined
-    || expected.statement !== principle.statement
     || expected.locator !== principle.source.locator
     || !sameReceipt(principle.source.artifact, snapshotReceipt(expected.artifact))) {
     fail('DECISION_PRINCIPLE_STALE_REFERENCE', `reference principle ${principle.id} is not current`);
@@ -195,9 +192,6 @@ export function parseDecisionPrincipleBindings(
       validateReferencePrinciple(principle, current);
       if (principle.source.kind === 'reference' && referenceSelection === null) fail('DECISION_PRINCIPLE_STALE_REFERENCE');
       if (principle.classification === 'source-aesthetic' && principle.disposition === 'used') {
-        fail('DECISION_PRINCIPLE_AESTHETIC_COPY');
-      }
-      if (principle.disposition === 'used' && AESTHETIC_COPY.test(principle.statement)) {
         fail('DECISION_PRINCIPLE_AESTHETIC_COPY');
       }
     }

@@ -8,6 +8,7 @@ import {
   type ResolvedImageFragmentPiece,
 } from './board-contract.ts';
 import { trustedReferenceImage } from './board-security.ts';
+import { knownFields } from '../judgment/schema.ts';
 import { hasAssemblyPayload } from './board-sanitization.ts';
 import { parseReferenceGrade, requireStructuralClaim } from './reference-scope.ts';
 
@@ -16,8 +17,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const record = (value: unknown, label: string): Record<string, unknown> => isRecord(value) ? value : fail(`${label} must be an object`);
 const array = (value: unknown, label: string): readonly unknown[] => Array.isArray(value) ? value : fail(`${label} must be an array`);
 const exactKeys = (value: Record<string, unknown>, keys: readonly string[], label: string): void => {
-  const actual = Object.keys(value);
-  if (actual.length !== keys.length || actual.some((key) => !keys.includes(key))) fail(`${label} has unknown or missing keys`);
+  try {
+    const { warnings } = knownFields(value, keys, [], label);
+    for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  } catch { fail(`${label} has missing, unsafe or host-owned keys`); }
 };
 const text = (value: unknown, label: string): string => typeof value === 'string' && value.trim() !== '' ? value : fail(`${label} must be a non-empty string`);
 const sanitizedText = (value: unknown, label: string): string => {
@@ -97,7 +100,9 @@ export const parseImageFragmentTransfer = (value: unknown): ImageFragmentTransfe
 
 export function validatedImageFragmentPiece(root: string, expected: ReferenceBoardImageFragmentPiece, value: ResolvedImageFragmentPiece): ResolvedImageFragmentPiece {
   if (value.slotId !== expected.slotId || value.referenceId !== expected.referenceId || value.sourceKind !== expected.sourceKind) fail('resolver changed the board piece identity');
-  return { ...expected, imagePath: trustedReferenceImage(root, text(value.imagePath, 'imagePath')), provenance: parseImageFragmentProvenance(value.provenance), transfer: parseImageFragmentTransfer(value.transfer) };
+  const provenance = parseImageFragmentProvenance(value.provenance);
+  if (provenance.cropBox !== undefined) fail('new board publication cannot retain a cropped image fragment');
+  return { ...expected, imagePath: trustedReferenceImage(root, text(value.imagePath, 'imagePath')), provenance, transfer: parseImageFragmentTransfer(value.transfer) };
 }
 
 export function copyImageFragmentTransfer(value: ImageFragmentTransfer): ImageFragmentTransfer {

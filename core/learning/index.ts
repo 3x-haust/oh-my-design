@@ -7,7 +7,10 @@ import { nodeStableProjectFileSystem, readStableProjectFile, type StableProjectF
 import {
   evaluateValidatedLearning,
   publishValidatedLearning,
+  validateLearningAuthorityJudgment,
   validateLearningProposition,
+  validateReusableScopedRule,
+  type LearningAuthorityJudgment,
   type LearningPromotionInput,
   type LearningPromotionResult,
   type LearningScope,
@@ -49,6 +52,12 @@ export type LearningObservationInput = Readonly<{
 }>;
 export type LearningObservation = LearningObservationInput & Readonly<{
   schema: typeof LEARNING_OBSERVATION_SCHEMA;
+}>;
+export type LearningAuthorityJudgmentInput = Readonly<{
+  predictionId: string;
+  decision: 'scoped-observation';
+  reason: string;
+  quote: string;
 }>;
 export type LearningCalibration = Readonly<{
   predictions: number;
@@ -140,6 +149,7 @@ function parseJson(bytes: Uint8Array, label: string): unknown {
 function digest(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }
 function predictionPath(id: string): string { return `.omd/learning/predictions/${id}.json`; }
 function observationsDirectory(id: string): string { return `.omd/learning/observations/${id}`; }
+function authorityPath(id: string): string { return `.omd/learning/authority/${id}.json`; }
 
 function parsePrediction(value: unknown): LearningPrediction {
   const item = record(value, 'learning prediction');
@@ -201,10 +211,17 @@ function evaluated(root: string, prediction: LearningPrediction, observations: r
   return evaluateValidatedLearning(input, {
     now: options.now ?? new Date().toISOString(), projectRoot: root, fs: options.fs ?? nodeStableProjectFileSystem(),
     idFor: (sha256) => `learning-${sha256.slice(0, 16)}`,
+    learningAuthorityJudgment: readLearningAuthority(root, prediction, options.fs ?? nodeStableProjectFileSystem()),
   });
 }
 function readPrediction(root: string, id: string, fs: StableProjectFileSystem): LearningPrediction {
   return parsePrediction(parseJson(stableBytes(root, predictionPath(id), `learning prediction ${id}`, fs), `learning prediction ${id}`));
+}
+function readLearningAuthority(root: string, prediction: LearningPrediction, fs: StableProjectFileSystem): LearningAuthorityJudgment | undefined {
+  const path = authorityPath(prediction.decisionId);
+  if (!existsSync(resolve(root, path))) return undefined;
+  const judgment = deepFreeze(structuredClone(parseJson(stableBytes(root, path, `learning authority ${prediction.decisionId}`, fs), `learning authority ${prediction.decisionId}`)));
+  return validateLearningAuthorityJudgment(prediction.proposition, judgment as LearningAuthorityJudgment);
 }
 function readObservations(root: string, id: string, fs: StableProjectFileSystem): readonly LearningObservation[] {
   const directory = resolve(root, observationsDirectory(id));
@@ -221,17 +238,36 @@ function calibration(predictions: number, observations: readonly LearningObserva
 }
 function parseIndex(value: unknown): LearningRuleIndex {
   const item = record(value, 'learning rule index');
+  exact(item, ['schema', 'updatedAt', 'entries'], 'learning rule index');
   if (item.schema !== LEARNING_RULE_INDEX_SCHEMA || !Array.isArray(item.entries) || typeof item.updatedAt !== 'string') throw new Error('learning rule index is malformed');
   const entries = item.entries.map((raw): LearningIndexEntry => {
     const entry = record(raw, 'learning rule index entry');
     if (entry.status !== 'promoted' && entry.status !== 'contradicted') throw new Error('learning rule index status is invalid');
+    exact(entry, ['id', 'status', 'proposition', 'blockers', 'evaluatedAt', 'calibration',
+      ...(entry.status === 'promoted' ? ['rule'] : [])], 'learning rule index entry');
     const proposition = validateLearningProposition(deepFreeze(structuredClone(entry.proposition)));
     if (!Array.isArray(entry.blockers) || entry.blockers.some((value) => typeof value !== 'string')) throw new Error('learning rule index blockers are invalid');
-    if (typeof entry.id !== 'string' || typeof entry.evaluatedAt !== 'string') throw new Error('learning rule index identity is invalid');
-    if (entry.status === 'promoted' && (typeof entry.rule !== 'object' || entry.rule === null)) throw new Error('promoted learning index entry has no rule');
-    return deepFreeze({ id: entry.id, status: entry.status, proposition, blockers: [...entry.blockers], evaluatedAt: entry.evaluatedAt,
-      calibration: entry.calibration as LearningCalibration, ...(entry.status === 'promoted' ? { rule: entry.rule as ReusableScopedRule } : {}) });
+    const id = safeId(entry.id, 'learning rule index id'), evaluatedAt = timestamp(entry.evaluatedAt, 'learning rule evaluatedAt');
+    const metrics = record(entry.calibration, 'learning calibration');
+    exact(metrics, ['predictions', 'observations', 'hits', 'misses', 'hitRate'], 'learning calibration');
+    const count = (key: string): number => {
+      const value = metrics[key];
+      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('learning calibration count is invalid');
+      return value;
+    };
+    const predictions = count('predictions'), observations = count('observations'), hits = count('hits'), misses = count('misses');
+    const hitRate = observations === 0 ? null : hits / observations;
+    if (predictions !== 1 || observations !== hits + misses || metrics.hitRate !== hitRate) throw new Error('learning calibration is inconsistent');
+    const rule = entry.status === 'promoted' ? validateReusableScopedRule(deepFreeze(structuredClone(entry.rule))) : undefined;
+    if (rule && (rule.id !== id || rule.statement !== proposition.statement || canonicalJson(rule.scope) !== canonicalJson(proposition.scope)
+      || rule.promotedAt !== evaluatedAt || entry.blockers.length !== 0 || misses !== 0 || hits !== rule.provenance.length)) {
+      throw new Error('promoted learning index binding is inconsistent');
+    }
+    if (!rule && (misses === 0 || !entry.blockers.includes('contradiction'))) throw new Error('contradicted learning index has no contradiction');
+    return deepFreeze({ id, status: entry.status, proposition, blockers: [...entry.blockers], evaluatedAt,
+      calibration: { predictions, observations, hits, misses, hitRate }, ...(rule === undefined ? {} : { rule }) });
   });
+  if (new Set(entries.map(entry => entry.id)).size !== entries.length) throw new Error('learning rule index has duplicate ids');
   return deepFreeze({ schema: LEARNING_RULE_INDEX_SCHEMA, updatedAt: timestamp(item.updatedAt, 'learning rule index updatedAt'), entries });
 }
 function readProjectIndex(root: string, fs: StableProjectFileSystem): LearningRuleIndex | undefined {
@@ -257,6 +293,25 @@ export function recordLearningPrediction(root: string, input: LearningPrediction
   const prediction = deepFreeze({ schema: LEARNING_PREDICTION_SCHEMA, decisionId: proposition.id, proposition, predictedAt: timestamp(now, 'prediction time') });
   adapter.write(predictionPath(proposition.id), `${canonicalJson(prediction)}\n`);
   return prediction;
+}
+
+export function recordLearningAuthorityJudgment(root: string, input: LearningAuthorityJudgmentInput, writer: ProjectWriteAdapter,
+  options: Pick<LearningLoopOptions, 'fs'> = {}): LearningAuthorityJudgment {
+  const adapter = requireProjectWriteAdapter(root, writer);
+  const raw = record(input, 'learning authority input');
+  exact(raw, ['predictionId', 'decision', 'reason', 'quote'], 'learning authority input');
+  const prediction = readPrediction(root, safeId(input.predictionId, 'learning authority predictionId'), options.fs ?? nodeStableProjectFileSystem());
+  const judgment = deepFreeze<LearningAuthorityJudgment>({
+    schema: 'learning-authority-v1',
+    propositionSha256: digest(Buffer.from(canonicalJson(prediction.proposition))),
+    decision: input.decision,
+    reason: input.reason,
+    quote: input.quote,
+    target: { path: '.omd/coach/rules', fields: ['statement', 'scope'] },
+  });
+  validateLearningAuthorityJudgment(prediction.proposition, judgment);
+  adapter.write(authorityPath(prediction.decisionId), `${canonicalJson(judgment)}\n`);
+  return judgment;
 }
 
 export function recordLearningObservation(root: string, input: LearningObservationInput, writer: ProjectWriteAdapter, options: LearningLoopOptions = {}): LearningObservation {

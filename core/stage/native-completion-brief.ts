@@ -6,7 +6,16 @@ export type NativeCompletionProcedure = Readonly<{
 
 export function nativeCompletionBrief(stage: string, referenceApplication: boolean) {
   const read = 'omd pack protocol/native-pi-completion.md';
-  const limits = 'Entry evaluation does not prove every screen. Preserve all required route/state/viewport captures and keep reference application review after authenticated final publication.';
+  const limits = 'Evaluation ok/executionStatus describes assertion execution; acceptanceStatus remains review-required. Entry text does not prove every behavior. Preserve the executed plan and every required route/state/viewport capture for independent protocol outcomeAssessments; keep reference application review after authenticated final publication.';
+  if (stage === 'candidate-generation' || stage === 'production') return {
+    owner: stage === 'production' ? 'omd-hand' : 'omd-sketch',
+    owns: [stage === 'production' ? 'Route-authorized application source through the fresh native maker.'
+      : 'Assigned integrated candidate source through the fresh native maker; candidate select retains selection publication.'],
+    procedure: { read, steps: [...(stage === 'production' ? ['omd guard production --json'] : []), 'omd schema native-maker --json',
+      'omd maker run --input .omd/.cache/maker-input.json --json',
+      ...(stage === 'candidate-generation' ? ['omd candidate select --input .omd/.cache/candidate-selection-input.json --json'] : [])],
+    limits: 'Maker execution is source-only, using inherited Pi provider/model and source-owned effort. No same-session fallback. Coordinator and existing publishers retain captures, selection, review and completion.' },
+  };
   if (stage === 'browser-evidence') return {
     owner: 'omd-hand',
     owns: ['Publisher-owned current browser observations, trusted receipts and actual captures; do not hand-author passing results.'],

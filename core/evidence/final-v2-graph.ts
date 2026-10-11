@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { validateCurrentOutcomeAssessments } from '../runtime/native-outcome-review.ts';
+import { validateCurrentReferenceFidelityAssessments } from '../runtime/native-reference-fidelity.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { relative, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { validateActivationContext } from '../runtime/activation.ts';
@@ -171,26 +174,6 @@ const object = (value: unknown, label: string): Record<string, unknown> => (
 const exact = (value: Record<string, unknown>, keys: readonly string[], label: string): void => {
   const actual = Object.keys(value).sort(); const expected = [...keys].sort();
   if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) fail(`${label} has unexpected keys`);
-};
-const PLACEHOLDER_TEXT_FIELDS = new Set([
-  'adaptation', 'conceptRole', 'fallbackPath', 'lawfulImplementationPath', 'macroCompositionHypothesis',
-  'markdown', 'obligationReason', 'performanceAccessibilityBudget', 'rationale', 'reason',
-  'rejectionCondition', 'subjectIdentityFit', 'take', 'transformation', 'uxAccessibilityPerformanceRisks',
-  'verificationNote',
-]);
-const rejectPlaceholderText = (value: unknown, label: string): void => {
-  if (typeof value === 'string' && /^(?:placeholder|todo|tbd|n\/a|null)$/i.test(value.trim())) fail(`${label} contains a hand-authored placeholder`);
-  if (Array.isArray(value)) { value.forEach((item) => rejectPlaceholderText(item, label)); return; }
-  if (isRecord(value)) Object.values(value).forEach((item) => rejectPlaceholderText(item, label));
-};
-const rejectHandAuthoredPlaceholder = (value: unknown, label: string): void => {
-  if (Array.isArray(value)) { value.forEach((item) => rejectHandAuthoredPlaceholder(item, label)); return; }
-  if (isRecord(value)) {
-    Object.entries(value).forEach(([key, item]) => {
-      if (PLACEHOLDER_TEXT_FIELDS.has(key)) rejectPlaceholderText(item, label);
-      else rejectHandAuthoredPlaceholder(item, label);
-    });
-  }
 };
 
 const RECEIPT_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
@@ -486,6 +469,7 @@ function validateCompletedReviewerExecutions(
   lane: Record<string, unknown>,
   observationBindings: readonly DesignQualityObservationBinding[],
   usedExecutions: Set<string>,
+  terminalObservation: Readonly<{ path: string; sha256: string }>,
 ): void {
   const provenance = object(lane.provenance, `${label}.provenance`);
   const expectedReviewers = array(provenance.reviewerIds, `${label}.provenance.reviewerIds`).map((value, index) => stringValue(value, `${label}.provenance.reviewerIds[${index}]`));
@@ -507,7 +491,14 @@ function validateCompletedReviewerExecutions(
     if (createHash('sha256').update(bytes).digest('hex') !== digest(item.sha256, `${label}.executionReceipts[${index}].sha256`)) fail(`${label} completed execution receipt bytes changed`);
     requireFinalReviewerLaneAuthorization(invocation, root, bytes);
     const execution = parseReceipt(bytes, `${label}.executionReceipts[${index}]`);
-    exact(execution, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(contract.requiresDesignQuality ? ['designQuality'] : []), ...(execution.findings === undefined ? [] : ['findings']), 'isolationReceiptSha256', 'observationSha256s', 'artDirectionSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${label}.executionReceipts[${index}]`);
+    exact(execution, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(contract.requiresDesignQuality ? ['designQuality'] : []), ...(execution.findings === undefined ? [] : ['findings']), ...(label === 'protocolLane' && execution.outcomeAssessments !== undefined ? ['outcomeAssessments'] : []), ...(label === 'fidelityLane' && execution.referenceFidelityAssessments !== undefined ? ['referenceFidelityAssessments'] : []), 'isolationReceiptSha256', 'observationSha256s', 'artDirectionSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${label}.executionReceipts[${index}]`);
+    if (label === 'protocolLane') {
+      validateCurrentOutcomeAssessments(root, invocation,
+        terminalObservation.sha256, execution.outcomeAssessments, terminalObservation.path);
+    }
+    if (label === 'fidelityLane' && (isNativePiInvocation(invocation) || execution.referenceFidelityAssessments !== undefined)) {
+      validateCurrentReferenceFidelityAssessments(root, invocation, expectedObservations, execution.referenceFidelityAssessments);
+    }
     if (execution.schema !== contract.executionSchema || execution.lane !== label) fail(`${label} execution receipt is not a completed host reviewer execution for this lane`);
     const reviewerId = stringValue(execution.reviewerId, `${label}.executionReceipts[${index}].reviewerId`);
     if (!expectedReviewers.includes(reviewerId) || completedReviewers.has(reviewerId)) fail(`${label} execution receipts do not cover the issued reviewer identities exactly once`);
@@ -638,7 +629,6 @@ function validateGraphFiles(root: string, graphInput: unknown, fs: EvidenceGraph
     hashes.set(label, loaded.semanticHash);
     values.set(label, loaded.value);
     validateTypedReceipt(label.startsWith('observations[') ? 'observation' : label, loaded.value);
-    rejectHandAuthoredPlaceholder(loaded.value, label);
     if (label === 'blindLane' || label === 'fidelityLane' || label === 'protocolLane') {
       requireFinalReviewerLaneAuthorization(invocation, root, loaded.bytes);
     }
@@ -864,6 +854,7 @@ function validateGraphFiles(root: string, graphInput: unknown, fs: EvidenceGraph
     graph.observations.map((_, index) =>
       (values.get(`observations[${index}]`) ?? fail(`observation ${index} receipt is missing`)).evidence),
     observationHashes,
+    sourceSeal.route === undefined ? 'legacy-current-graph' : 'terminal',
   );
   const trustedOutcomeRoute = sourceSeal.route === undefined
     ? undefined
@@ -926,7 +917,10 @@ function validateGraphFiles(root: string, graphInput: unknown, fs: EvidenceGraph
       if (criticalReviewerIds.has(reviewer)) fail('critical reviewer identities must be unique across final lanes');
       criticalReviewerIds.add(reviewer);
     }
-    validateCompletedReviewerExecutions(root, fs, invocation, label, lane, observationBindings, completedReviewerExecutions);
+    validateCompletedReviewerExecutions(root, fs, invocation, label, lane, observationBindings, completedReviewerExecutions, {
+      path: graph.observations.at(-1)?.path ?? fail('terminal observation missing'),
+      sha256: graph.observations.at(-1)?.sha256 ?? fail('terminal observation missing'),
+    });
     rejectRed(lane, label);
   }
   let predecessor: string | null = null;

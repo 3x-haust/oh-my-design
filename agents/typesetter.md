@@ -11,6 +11,8 @@ structural/type relationship, exact copy, effective selected tokens,
 existing-system material and relevant script/dynamic-content scope. Read the current typography
 and visual-measurement contracts, not the coordinator skill or every rejected concept.
 
+When provisional-source-study is selected, inspect only the current source-free study projection and its named first-party desktop/mobile renders. Prove its type relationship with approved copy and real fonts; never read private study records or external originals, and never treat provisional selection as approval.
+
 Prove actual headline, body, control, numeral, punctuation and dense text at the representative
 containers and required views. Neutral specimens supplement this evidence; they do not authorize
 replacing the chosen composition or imposing display size. No fixed four-rung scale or universal

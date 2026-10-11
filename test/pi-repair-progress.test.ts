@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import omdExtension, { type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
+import { readBrowserConsent, readBrowserInterpretation, writeBrowserConsent, writeUserBrowserConsent } from '../core/ref/browser-consent.ts';
 
 const final = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: '작업을 완료했습니다.' }] };
 function harness(t: { after(fn: () => void): void }) {
@@ -16,6 +17,8 @@ function harness(t: { after(fn: () => void): void }) {
   let duringDiagnosis: (() => Promise<unknown>) | undefined;
   let referenceMutation: ((args: readonly string[]) => number) | undefined;
   let diagnosisFails = false;
+  let setupFails = false;
+  let consentSelection: (() => Promise<string | undefined>) | undefined;
   const work = { schema: 'stage-next-v1', stage: 'copy', owner: 'omd-writer', action: 'repair-output',
     next: 'omd brief copy --check --json',
     instruction: 'Repair the copy deck, publish its current review, then run the named check.',
@@ -24,6 +27,7 @@ function harness(t: { after(fn: () => void): void }) {
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool: value => { tool = value; },
     sendMessage: message => { sent.push(message); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args) {
       calls.push([...args]);
       if (args[1] === 'route' && args[2] === 'classify') writeFileSync(join(cwd, '.omd/route.json'), '{}');
@@ -31,26 +35,51 @@ function harness(t: { after(fn: () => void): void }) {
         await duringDiagnosis?.();
         if (diagnosisFails) return { stdout: '', stderr: 'stage diagnosis unavailable', code: 1, killed: false };
       }
-      const code = args[1] === 'ref' ? referenceMutation?.(args) ?? 0 : 0;
+      const code = args[1] === 'ref' ? referenceMutation?.(args) ?? 0 : args[1] === 'browser' && setupFails ? 1 : 0;
+      if (args[1] === 'browser' && args[2] === 'skip' && code === 0) {
+        const decision = args[args.indexOf('--decision') + 1] as 'skipped-this-run' | 'never-ask';
+        writeBrowserConsent(decision, cwd); writeUserBrowserConsent(decision, cwd);
+      }
+      if (args[1] === 'browser' && args[2] === 'setup' && code === 0) {
+        const engine = args[args.indexOf('--engine') + 1];
+        if (engine === 'user-browser') writeUserBrowserConsent('consented', cwd);
+        else writeBrowserConsent('consented', cwd);
+      }
       return { stdout: args[1] === 'stage' ? JSON.stringify(work) : '{}', stderr: '', code, killed: false };
     },
   });
   async function emit(name: string, event: Parameters<PortablePiHook>[0]) {
-    const hook = hooks.get(name); assert.ok(hook); return hook(event, { cwd });
+    const hook = hooks.get(name); assert.ok(hook); return hook(event, { cwd, browserConsentHome: cwd,
+      ...(consentSelection ? { ui: { select: consentSelection } } : {}) });
   }
   async function start() {
-    await emit('before_agent_start', { prompt: 'omd-ultradesign' });
+    const prompt = '/skill:omd-ultradesign Build the requested application.';
+    await emit('input', { source: 'interactive', text: prompt });
+    await emit('before_agent_start', { prompt });
     await emit('tool_call', { toolName: 'write', input: { path: '.omd/.cache/route.json' } });
     mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
+    writeFileSync(join(cwd, '.omd/.cache/route.json'), '{}');
     assert.ok(tool);
     await tool.execute('route', { args: ['route', 'classify', '--input', '.omd/.cache/route.json'] }, undefined, undefined, { cwd });
     await tool.execute('brief', { args: ['brief', 'domain', '--check'] }, undefined, undefined, { cwd });
   }
-  return { cwd, work, sent, calls, emit, start, run: (args: string[]) => {
+  async function ask(question = '레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요?') {
+    await emit('tool_result', { toolName: 'omd_cli', input: { args: ['ref', 'work-next', '--json'] }, isError: false,
+      content: [{ type: 'text', text: JSON.stringify({ status: 'action', workSha256: 'c'.repeat(64), action: {
+        kind: 'browser-consent', question, answers: {
+          '평소 쓰는 브라우저 그대로 쓰기': 'omd browser setup --engine user-browser --consent',
+          'OMD 전용 로그인 브라우저': 'omd browser setup --engine omd-profile --consent',
+          '이번엔 건너뛰기': 'omd browser skip --decision skipped-this-run --json',
+          '다시 묻지 않기': 'omd browser skip --decision never-ask --json',
+        } } }) }] });
+  }
+  return { cwd, work, sent, calls, emit, start, ask, run: (args: string[]) => {
     assert.ok(tool); return tool.execute(args.join('-'), { args }, undefined, undefined, { cwd });
   }, end: () => emit('message_end', { message: final }),
     interruptDuringDiagnosis: () => { duringDiagnosis = () => emit('input', { source: 'interactive' }); },
     failDiagnosis: () => { diagnosisFails = true; },
+    failSetup: (fails: boolean) => { setupFails = fails; },
+    setConsentSelection: (select: () => Promise<string | undefined>) => { consentSelection = select; },
     onReferenceMutation: (callback: (args: readonly string[]) => number) => { referenceMutation = callback; } };
 }
 
@@ -66,7 +95,7 @@ test('missing reference board advances a native discovery action instead of only
     'Pi must execute an owned native acquisition step before another diagnostic turn');
 });
 
-test('an outstanding reference action refuses repeated diagnostics without publishing a board', async t => {
+test('an outstanding reference action permits read-only diagnostics without publishing a board', async t => {
   const h = harness(t); await h.start();
   Object.assign(h.work, {
     stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference', next: 'omd ref advance --json',
@@ -75,11 +104,148 @@ test('an outstanding reference action refuses repeated diagnostics without publi
   });
   await h.end();
   const before = h.calls.length;
-  const refusal = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'discover-plan', '--json'] } }) as { block: boolean; reason: string };
-  assert.equal(refusal.block, true);
-  assert.match(refusal.reason, /OMD_OWNED_WORK_REQUIRED/);
-  assert.equal(h.calls.length, before, 'refused diagnostics must not execute the CLI');
+  const inspection = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'discover-plan', '--json'] } });
+  assert.equal(inspection, undefined);
+  assert.equal(h.calls.length, before, 'tool_call interception does not execute the diagnostic itself');
   assert.equal(existsSync(join(h.cwd, '.omd/reference-board.json')), false);
+});
+
+test('native select requests explicit consent before scheduling a headed browser setup', async t => {
+  const h = harness(t); await h.start();
+  h.setConsentSelection(async () => 'OMD 전용 로그인 브라우저');
+  await h.ask();
+  Object.assign(h.work, { stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference',
+    referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+      action: { kind: 'follow-link', lane: 'design', url: 'https://mobbin.com/', args: ['ref', 'advance', '--json'], reason: 'Visit observed item.' } } });
+  await h.end();
+  assert.ok(h.calls.some(args => args[1] === 'browser' && args[2] === 'setup' && args.includes('--consent')));
+  assert.equal(h.sent.length, 0, 'the browser is launched only after the native user selection');
+});
+
+test('fallback consent packet accepts only a later explicit interactive choice', async t => {
+  const h = harness(t); await h.start(); await h.ask();
+  Object.assign(h.work, { stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference',
+    referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+      action: { kind: 'collect-leads', lane: 'design', args: [], reason: 'Find design leads.' } } });
+  const result = await h.end() as { message: { content: Array<{ text: string }> } };
+  assert.match(result.message.content.at(-1)!.text, /레퍼런스 검색 전에 브라우저 사용 방식을 선택해 주세요/);
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
+  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']);
+  assert.equal(readBrowserInterpretation(h.cwd)?.userText, '평소 쓰는 브라우저');
+  assert.equal(h.calls.filter(args => args[1] === 'browser').length, 1);
+});
+
+test('a pending browser question survives stage repair without counting a stall', async t => {
+  const h = harness(t); await h.start();
+  const question = '브라우저를 선택해 주세요?';
+  await h.emit('tool_result', { toolName: 'omd_cli', input: { args: ['ref', 'work-next', '--json'] },
+    isError: false, message: { role: 'toolResult', content: [{ type: 'text', text: JSON.stringify({ status: 'action',
+      workSha256: 'c'.repeat(64), action: { kind: 'browser-consent', question, answers: {
+        '평소 쓰는 브라우저 그대로 쓰기': 'omd browser setup --engine user-browser --consent',
+        'OMD 전용 로그인 브라우저': 'omd browser setup --engine omd-profile --consent',
+        '이번엔 건너뛰기': 'omd browser skip --decision skipped-this-run --json',
+        '다시 묻지 않기': 'omd browser skip --decision never-ask --json' } } }) }] } });
+  const result = await h.end() as { message: { content: Array<{ text: string }> } };
+  assert.match(result.message.content.at(-1)!.text, /브라우저를 선택해 주세요\?/);
+  assert.match(result.message.content.at(-1)!.text, /다시 묻지 않기/);
+  assert.equal(h.sent.length, 0);
+  await h.end(); await h.end(); await h.end();
+  assert.equal(h.sent.length, 0);
+  await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
+  await h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']);
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+});
+
+test('stage-next design ambiguity resumes internal selection without any user answer', async t => {
+  const h = harness(t); await h.start();
+  let questions = 0;
+  h.setConsentSelection(async () => { questions += 1; throw new Error('unexpected design question'); });
+  Object.assign(h.work, { action: { kind: 'design-language-ambiguity', awaitsUser: true,
+    question: '어느 디자인 방향인가요?', options: ['가벼운 방향', '절제된 방향'] } });
+  await h.end();
+  assert.equal(questions, 0);
+  assert.equal(h.sent.length, 1);
+  assert.equal(Reflect.get(h.sent[0] as object, 'customType'), 'omd-stage-repair');
+});
+
+test('native select on a stage-next consent action records the engine before setup', async t => {
+  const h = harness(t); await h.start();
+  h.setConsentSelection(async () => '평소 쓰는 브라우저 그대로 쓰기');
+  Object.assign(h.work, { referenceWork: { status: 'action', workSha256: 'd'.repeat(64), action: {
+    kind: 'browser-consent', args: [], reason: '브라우저를 선택해 주세요', question: '브라우저를 선택해 주세요',
+    answers: { '평소 쓰는 브라우저 그대로 쓰기': 'setup', 'OMD 전용 로그인 브라우저': 'setup',
+      '이번엔 건너뛰기': 'skip', '다시 묻지 않기': 'never' } } } });
+  await h.end();
+  assert.ok(h.calls.some(args => args[1] === 'browser' && args[2] === 'setup' && args.includes('user-browser')));
+  assert.equal(h.sent.length, 0);
+});
+
+test('agent interpretation binds the exact later turn and a failed setup preserves it', async t => {
+  for (const answer of ['평소 쓰는 브라우저', 'ㅇㅇ', '세팅 하라고']) {
+    const h = harness(t); await h.start(); await h.ask(); await h.end();
+    await h.emit('input', { source: 'interactive', text: answer });
+    const args = ['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', answer];
+    h.failSetup(true);
+    await assert.rejects(h.run(args));
+    h.failSetup(false);
+    await h.run(args);
+    assert.deepEqual(readBrowserInterpretation(h.cwd), { questionDigest: readBrowserInterpretation(h.cwd)?.questionDigest,
+      userText: answer, agentInterpretation: 'user-browser' });
+    await assert.rejects(h.run(args), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  }
+});
+
+test('fabricated, unseen and pre-question text cannot authorize setup or skip', async t => {
+  const h = harness(t); await h.start();
+  await h.emit('input', { source: 'interactive', text: 'ㅇㅇ' });
+  await h.ask();
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', 'ㅇㅇ']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.end();
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', 'ㅇㅇ']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.emit('input', { source: 'rpc', text: 'unrelated' });
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', 'fabricated']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await assert.rejects(h.run(['browser', 'skip', '--decision', 'never-ask', '--user-answer', 'fabricated']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.run(['browser', 'skip', '--decision', 'never-ask', '--user-answer', 'unrelated']);
+  assert.equal(readBrowserInterpretation(h.cwd)?.agentInterpretation, 'never-ask');
+});
+
+test('a changed question digest invalidates previous authorization', async t => {
+  const h = harness(t); await h.start(); await h.ask(); await h.end();
+  await h.emit('input', { source: 'interactive', text: '평소 쓰는 브라우저' });
+  await h.ask('새로운 브라우저 질문?');
+  await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  await h.end();
+  await h.emit('input', { source: 'interactive', text: '4' });
+  await h.run(['browser', 'skip', '--decision', 'never-ask', '--user-answer', '4']);
+  assert.equal(readBrowserConsent(h.cwd), 'never-ask');
+});
+
+test('Pi refuses browser setup without a pending explicit user yes', async t => {
+  const h = harness(t); await h.start();
+  await assert.rejects(h.run(['browser', 'setup', '--consent']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
+  assert.equal(h.calls.some(args => args[1] === 'browser'), false);
+});
+
+test('native never-ask decision persists and suppresses further browser prompts', async t => {
+  const h = harness(t); await h.start();
+  let selections = 0;
+  h.setConsentSelection(async () => { selections++; return '다시 묻지 않기'; });
+  await h.ask();
+  Object.assign(h.work, { stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference',
+    referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+      action: { kind: 'collect-leads', lane: 'design', args: [], reason: 'Find design leads.' } } });
+  await h.end(); await h.end();
+  assert.equal(readBrowserConsent(h.cwd), 'never-ask');
+  assert.equal(selections, 1);
+  assert.equal(h.calls.some(args => args[1] === 'browser'), false);
+});
+
+test('skip-this-run browser decision clears at the next session boundary', async t => {
+  const h = harness(t);
+  writeBrowserConsent('skipped-this-run', h.cwd);
+  await h.emit('session_start', {});
+  assert.equal(readBrowserConsent(h.cwd), null);
 });
 
 test('Scout can inspect ref work-next while reference work is pending', async t => {
@@ -103,13 +269,13 @@ test('failed or unchanged reference mutations keep the pending-work refusal', as
   h.onReferenceMutation(args => args[2] === 'navigate' ? 1 : 0);
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'navigate', 'https://example.test/', '--json'] } });
   await assert.rejects(h.run(['ref', 'navigate', 'https://example.test/', '--json']));
-  const afterFailure = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(afterFailure.block, true);
+  const afterFailure = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(afterFailure, undefined);
   h.onReferenceMutation(() => 0);
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'add', '--input', 'unrelated.json'] } });
   await h.run(['ref', 'add', '--input', 'unrelated.json']);
-  const afterUnchanged = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(afterUnchanged.block, true);
+  const afterUnchanged = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(afterUnchanged, undefined);
 });
 
 test('successful reference mutation clears pending refusal when work digest advances', async t => {
@@ -127,8 +293,8 @@ test('successful reference mutation clears pending refusal when work digest adva
     return 0;
   });
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'navigate', 'https://example.test/', '--json'] } });
-  const beforeResult = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(beforeResult.block, true, 'a planned mutation is not evidence of completed work');
+  const beforeResult = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(beforeResult, undefined, 'read-only diagnosis remains available before publication');
   await h.run(['ref', 'navigate', 'https://example.test/', '--json']);
   const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
   assert.equal(next, undefined);
@@ -163,8 +329,8 @@ test('successful reference mutation preserves its result when progress diagnosis
   const result = await h.run(['ref', 'navigate', 'https://example.test/', '--json']);
   assert.equal(result.details.code, 0);
   assert.equal(result.content[0]?.text, '{}');
-  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
-  assert.equal(next.block, true, 'unknown work state must remain pending until message-end recovery');
+  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(next, undefined, 'unknown work state does not prevent a read-only diagnostic');
 });
 
 test('failed internal stage diagnosis releases stale pending refusal for recovery', async t => {
@@ -186,7 +352,7 @@ test('legacy exhausted reference discovery queues bounded recovery without execu
     stage: 'reference-board', owner: 'omd-scout', action: 'resolve-external-blocker', next: 'REFERENCE_DISCOVERY_EXHAUSTED',
     referenceWork: { schema: 'reference-discovery-work-v1', status: 'exhausted', workSha256: 'd'.repeat(64),
       code: 'REFERENCE_DISCOVERY_EXHAUSTED', action: null,
-      attempts: [{ lane: 'design', url: 'https://example-gallery.test/', reason: 'login wall',
+      attempts: [{ lane: 'design', url: 'https://example-gallery.test/', reason: 'network unavailable',
         receipt: { path: '.omd/discovery/design/attempts/receipt.json', sha256: 'e'.repeat(64) } }] },
   });
   const held = await h.end() as { message: { content: Array<{ type: string; text: string }> } };
@@ -243,13 +409,13 @@ test('a visible continuation names the current owner, action and next validation
   assert.doesNotMatch(followUp.content, /"schema":"stage-next-v1"/);
 });
 
-test('a successful mutating OMD publication counts as progress after the stage loop stalls', async t => {
+test('an unrelated successful mutation cannot reopen a stalled stage loop', async t => {
   const h = harness(t); await h.start();
   await h.end(); await h.end(); await h.end(); await h.end();
   assert.equal(h.sent.length, 3);
   await h.run(['frame', 'set', '--input', '.omd/.cache/frame.json']);
   await h.end();
-  assert.equal(h.sent.length, 4, 'successful CLI publication must advance the repair revision');
+  assert.equal(h.sent.length, 3, 'only a validated stage or useful evidence identity can reset repair progress');
 });
 
 test('an unchanged work pointer stops only after repeated no-progress turns', async t => {
@@ -278,23 +444,36 @@ test('completion repair state cannot cross a replaced route', async t => {
   writeFileSync(join(cwd, '.omd/route.json'), '{"route":"first"}');
   const hooks = new Map<string, PortablePiHook>();
   const sent: unknown[] = [];
+  let tool: PortablePiTool | undefined;
   omdExtension({
-    on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool() {},
+    on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {},
+    registerTool(value) { if (value.name === 'omd_cli') tool = value; },
     sendMessage: message => { sent.push(message); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args) {
       if (args[1] === 'stage') return { stdout: '{}', stderr: '', code: 0, killed: false };
       if (args[1] === 'guard' && args[2] === 'production') return { stdout: '{"ok":true}', stderr: '', code: 0, killed: false };
+      if (args[1] === 'maker' && args[2] === 'run') {
+        writeFileSync(join(cwd, 'src/main.jsx'), 'source');
+        return { stdout: '{}', stderr: '', code: 0, killed: false };
+      }
       return { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false };
     },
   });
   const emit = (name: string, event: Parameters<PortablePiHook>[0]) => hooks.get(name)!(event, { cwd });
-  await emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  const request = '/skill:omd-ultradesign Build the requested local interface.';
+  await emit('input', { text: request, source: 'interactive' });
+  await emit('before_agent_start', { prompt: request });
   mkdirSync(join(cwd, 'src'), { recursive: true });
-  await emit('tool_call', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' } });
-  writeFileSync(join(cwd, 'src/main.jsx'), 'source');
-  await emit('tool_result', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' }, isError: false });
+  const refused = await emit('tool_call', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' } });
+  assert.ok(refused && typeof refused === 'object' && Reflect.get(refused, 'block') === true);
+  assert.equal(existsSync(join(cwd, 'src/main.jsx')), false);
+  assert.ok(tool);
+  await tool.execute('maker', { args: ['maker', 'run', '--input', '.omd/.cache/maker-input.json', '--json'] }, undefined, undefined, { cwd });
+  assert.equal(existsSync(join(cwd, 'src/main.jsx')), true);
   await emit('message_end', { message: final });
   assert.equal(sent.length, 1);
+  assert.equal(Reflect.get(sent[0] as object, 'customType'), 'omd-gate-repair');
   writeFileSync(join(cwd, '.omd/route.json'), '{"route":"replacement"}');
   await emit('message_end', { message: final });
   assert.equal(sent.length, 1, 'route replacement must stall the prior completion loop');

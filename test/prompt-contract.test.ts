@@ -24,6 +24,7 @@ test('current concept team precedes selected type/composition while legacy graph
   assert.equal(adaptiveStageOwners(true)['candidate-generation'], 'omd-art-director');
   assert.equal(adaptiveStageOwners(false)['candidate-generation'], 'omd-sketch');
   assert.ok(current.composition.afterIfSelected.includes('candidate-generation'));
+
 });
 
 test('selected copy work remains an isolated writer boundary', () => {
@@ -71,4 +72,5 @@ test('held-out layout evaluation input bytes retain their frozen identities', ()
     'a6feb3c5c8d5b3f29c6f40cae743c106154107ee02223bed819d9e349ba2851b',
     '9c2db1b49cf0d221320eebab53d4808f8c1f72f3e4e621847da0fed745b41cd4',
   ]);
+
 });

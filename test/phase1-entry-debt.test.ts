@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +22,8 @@ import { withBrowser } from '../core/render/index.ts';
 import { withLocalView } from '../core/render/stateful.ts';
 import type { RawIr, Rule } from '../core/types.ts';
 import { createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { routeInput as currentRouteInput, frameInput as currentFrameInput } from './helpers/phase6-process.ts';
+import { createAdaptiveSourceSealRoute } from '../core/source-seal/adaptive-inputs.ts';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const pack = join(repo, 'core');
@@ -32,7 +34,7 @@ const snapshot = (root: string): unknown => readdirSync(root, { recursive: true,
 function fixture(t: { after(fn: () => void): void }) {
   const root = mkdtempSync(join(tmpdir(), 'omd-phase1-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const input = JSON.parse(readFileSync(join(repo, 'test/fixtures/adaptive-flow/synth-marketing.json'), 'utf8'));
+  const input = currentRouteInput();
   const invocation = publishTestAdaptiveRoute(root, input);
   const route = readPersistedRoute(root, invocation);
   const evidence = [{ status: 'user-provided', reference: 'request' }];
@@ -42,7 +44,9 @@ function fixture(t: { after(fn: () => void): void }) {
     surfaces: [{ name: 'Launch', purpose: 'Understand patching and inspect details', evidence }], coreObjects: [{ name: 'Patch', evidence }],
     audience: { description: 'Instrument players', evidence }, referenceQueries: { component: ['patch panel'], craft: ['readable type'], mood: ['instrument workspace'] },
     planning: { businessGoal: statement('Explain patching'), successSignal: statement('Reach details without commitment'), nonGoals: [statement('No invented commercial terms')] } }));
-  write(root, '.omd/frame.md', `---\n${stringify({ uxSurface: 'marketing', uxTask: 'Understand patching', uxFrequentAction: 'Inspect preorder details', uxCostliestError: 'Mistake unknown terms for facts',
+  const frame = currentFrameInput();
+  write(root, '.omd/frame.md', `---\n${stringify({ surfacePlan: frame.surfacePlan, validationPlan: frame.validationPlan,
+    accessibilityPlan: frame.accessibilityPlan, uxSurface: 'marketing', uxTask: 'Understand patching', uxFrequentAction: 'Inspect preorder details', uxCostliestError: 'Mistake unknown terms for facts',
     reality: { schema: 'reality-ledger-v1', mode: 'greenfield', facts: [{ category: 'subject', status: 'supplied', statement: 'Compact patchable synthesizer', source: 'request' }] } })}---\n# Launch frame\n`);
   write(root, '.omd/composition.md', `## Input fingerprint\n- Frame SHA-256: ${sha(readFileSync(join(root, '.omd/frame.md')))}\n- Source contract SHA-256: ${route.sourceContractSha256}\n\n${MINIMAL_COMPOSITION_SECTIONS.map(section => `## ${section}\nKeep the patching explanation before the details action; reflow controls in task order without commercial claims.\n`).join('\n')}`);
   write(root, '.omd/delivery.jsonl', STAGES.filter(stage => route.strategy.stages.includes(stage.id)).flatMap(stage => stage.requiredContracts.map(contract =>
@@ -125,6 +129,26 @@ test('completion limitation projection never turns absent research into referenc
   assert.ok(output.limitations.some(item => item.stage === 'reference-board'));
   assert.ok(output.limitations.every(item => item.claim === 'not-verified'));
   assert.deepEqual(snapshot(f.root), before);
+});
+
+test('present invalid application evidence cannot become completion confidence debt', t => {
+  for (const entry of ['invalid-file', 'dangling-application', 'orphaned-projection', 'dangling-projection']) {
+    const f = fixture(t);
+    assert.equal(checkProductionReadiness(f.root, f.invocation, pack).ok, true);
+    assert.doesNotThrow(() => createAdaptiveSourceSealRoute(f.root, f.invocation));
+    const path = entry.endsWith('projection') ? '.omd/reference-application-projection.json' : '.omd/reference-application.json';
+    if (entry.startsWith('dangling')) symlinkSync('missing-application-target', join(f.root, path));
+    else write(f.root, path, '{}');
+    const before = snapshot(f.root);
+    assert.throws(() => completionLimitations(f.root, f.route), entry);
+    assert.throws(() => createAdaptiveSourceSealRoute(f.root, f.invocation), entry);
+    assert.deepEqual(snapshot(f.root), before);
+    if (entry.startsWith('dangling')) {
+      assert.equal(readlinkSync(join(f.root, path)), 'missing-application-target');
+      unlinkSync(join(f.root, path));
+    }
+    assert.equal(existsSync(join(f.root, '.omd/final-evidence-v2.json')), false);
+  }
 });
 
 test('semantic delivery keeps unconsumed edits fresh and refuses consumed edits without mutation', t => {

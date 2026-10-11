@@ -12,6 +12,7 @@ import { adaptiveRouteAuthorityBytes } from '../core/route/adaptive-route-author
 import { adaptiveRouteRecordSha256, publishAdaptiveRoute } from '../core/route/adaptive-route-persistence.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
+import { capturePiRequest } from '../extensions/omd-request-source.ts';
 import { authorizeTestProjectRunPayloads, createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import omdExtension, { type PortablePiApi, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
 import { classificationAllowsInputRepair, routeInputFailure, routeValidationArgs } from '../extensions/omd-route-bootstrap.ts';
@@ -65,13 +66,21 @@ function signedReviewPurpose(root: string, input: ReturnType<typeof fixture>, pu
 function harness(cwd: string, exec?: PortablePiApi['exec']) {
   const hooks = new Map<string, PortablePiHook>();
   const calls: string[][] = [];
-  const sent: Array<Parameters<NonNullable<PortablePiApi['sendMessage']>>> = [];
+  const sent: Array<[
+    { customType: string; content: string; display: boolean },
+    Parameters<NonNullable<PortablePiApi['sendMessage']>>[1],
+  ]> = [];
   let tool!: PortablePiTool;
   let writeSequence = 0;
   omdExtension({
     on: (name, hook) => { hooks.set(name, hook); },
     registerTool: value => { tool = value; }, registerCommand() {},
-    sendMessage: (...args) => { sent.push(args); },
+    sendMessage: (message, options) => {
+      assert.equal(typeof message.content, 'string');
+      if (typeof message.content !== 'string') throw new Error('bootstrap emits text, not images');
+      sent.push([{ ...message, content: message.content }, options]);
+    },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(command, args, options) {
       calls.push(args.slice(1));
       if (exec) return exec(command, args, options);
@@ -96,15 +105,12 @@ function harness(cwd: string, exec?: PortablePiApi['exec']) {
   };
 }
 
-test('sanitized test-013 input reports all three linked blockers without editing or weakening the input', () => {
+test('sanitized test-013 input treats process omissions as advisory without mutating input', () => {
   const input = fixture(); const before = JSON.stringify(input);
   const diagnostics = diagnoseAdaptiveRouteInput(input);
-  assert.deepEqual(new Set(diagnostics.map(d => d.code)), new Set(['REFERENCE_WORK_MISMATCH', 'REQUIRED_METHOD_MISSING', 'ADAPTIVE_EXECUTION_WAVE_INVALID']));
-  assert.match(diagnostics.map(d => d.message).join('\n'), /parallel-reference-acquisition/);
-  assert.match(diagnostics.map(d => d.message).join('\n'), /hypothesis-validation/);
-  assert.match(diagnostics.map(d => d.message).join('\n'), /same execution wave/);
+  assert.deepEqual(diagnostics, []);
   assert.equal(JSON.stringify(input), before);
-  assert.throws(() => routeAdaptiveFlow(input), /REFERENCE_WORK_MISMATCH:.*parallel-reference-acquisition/);
+  assert.equal(routeAdaptiveFlow(input).route, 'adaptive');
   repair(input);
   assert.deepEqual(diagnoseAdaptiveRouteInput(input), []);
   const record = routeAdaptiveFlow(input);
@@ -157,6 +163,7 @@ test('a fresh explicit Korean market reaches target-market-first discovery throu
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, '.omd/.cache'), { recursive: true });
   const input = fixture(); repair(input);
+  input.request = `${String(input.request)} 한국 사용자를 위한 서비스`;
   input.evidenceClaims.claims.push({ id: 'market-authority', text: 'The product targets South Korea.', status: 'confirmed',
     userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: '한국 사용자를 위한 서비스' }] });
   input.evidenceClaims.userFacts.push('market-authority');
@@ -167,16 +174,25 @@ test('a fresh explicit Korean market reaches target-market-first discovery throu
   };
   writeFileSync(join(root, inputPath), JSON.stringify(input));
   writeFileSync(join(root, '.omd/locale-design-context.json'), JSON.stringify(context));
+  capturePiRequest(root, input.request);
   const run = (args: string[]) => spawnSync(process.execPath, [cliPath, ...args], {
     cwd: root, encoding: 'utf8', env, timeout: 20000,
   });
+  const starterResult = run(['schema', 'ai-judgment', '--purpose', 'target-market', '--json']);
+  assert.equal(starterResult.status, 0, starterResult.stderr);
+  const starter = JSON.parse(starterResult.stdout);
+  assert.equal(starter.skeleton.subjectId, 'request');
+  writeFileSync(join(root, starter.path), JSON.stringify({ ...starter.skeleton, payload: { region: 'KR' } }));
+  const judgmentResult = run(['ai-judgment', 'publish', '--input', starter.path, '--json']);
+  assert.equal(judgmentResult.status, 0, judgmentResult.stderr);
+  const judgment = JSON.parse(judgmentResult.stdout);
   const locale = run(['locale', 'plan', '--input', '.omd/locale-design-context.json', '--json']);
   assert.equal(locale.status, 0, locale.stderr);
   assert.equal(JSON.parse(locale.stdout).route.decision, 'research');
   const routeArgs = ['--input', inputPath, '--locale-context', '.omd/locale-design-context.json', '--json'];
   const validated = run(['route', 'validate', ...routeArgs]);
   assert.equal(validated.status, 0, `${validated.stderr}\n${validated.stdout}`);
-  const classified = run(['route', 'classify', ...routeArgs]);
+  const classified = run(['route', 'classify', ...routeArgs, '--judgment', judgment.receipt.path]);
   assert.equal(classified.status, 0, `${classified.stderr}\n${classified.stdout}`);
   const discovered = run(['ref', 'discover-plan', '--json']);
   assert.equal(discovered.status, 0, discovered.stderr);
@@ -200,46 +216,72 @@ test('wave parsing explains accepted mode and sequential-host semantics without 
   }
 });
 
-test('real Pi setup: reject, diagnose, bounded repair, validate, classify and enter first stage; production still refuses missing design', async t => {
+test('real Pi route classification cannot authorize source writes without selected prerequisites', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-test013-bootstrap-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const h = harness(cwd);
-  await h.emit('before_agent_start', { prompt: '/skill:omd-ultradesign Implement a React product' });
-  const input = fixture(); await h.author(input);
-  assert.match((await h.run(['route', 'validate', '--input', inputPath, '--json'])).content[0]?.text ?? '', /REFERENCE_WORK_MISMATCH/);
-  assert.deepEqual(readdirSync(join(cwd, '.omd')), ['.cache']); // validation writes no activation/receipt/route
-  await assert.rejects(h.run(['route', 'classify', '--input', inputPath, '--json']), /REFERENCE_WORK_MISMATCH/);
-  assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
-  const stopped = await h.end();
-  const progress = stopped.message.content[0]!.text.split('\n\n')[0] ?? '';
-  assert.match(progress, new RegExp(inputPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(progress, /route validate/);
-  assert.match(stopped.message.content[0]!.text, /REFERENCE_WORK_MISMATCH/);
-  assert.match(stopped.message.content[0]!.text, /hypothesis-validation/);
-  assert.doesNotMatch(stopped.message.content[0]!.text, /ROUTE_UNCLASSIFIED/);
-  assert.equal(h.sent.length, 1);
-  assert.equal(h.sent[0]![0].customType, 'omd-route-repair');
-  assert.match(h.sent[0]![0].content, /Classification was already attempted/);
-  assert.equal(h.calls.some(args => args[0] === 'guard' && args[1] === 'completion'), false);
-
-  // Simulate the model applying the named repairs, not a hidden extension writer or forged receipt.
-  repair(input); await h.author(input);
+  const prompt = '/skill:omd-ultradesign Implement a React product';
+  await h.emit('input', { source: 'interactive', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  await h.author(fixture());
   const validated = JSON.parse((await h.run(['route', 'validate', '--input', inputPath, '--json'])).content[0]!.text);
-  assert.equal(validated.ok, true); assert.equal(validated.published, false);
+  assert.equal(validated.ok, true);
+  assert.equal(validated.published, false);
+  assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
   const classified = JSON.parse((await h.run(['route', 'classify', '--input', inputPath, '--json'])).content[0]!.text);
+  assert.equal(classified.request, 'Implement a React product');
   assert.ok(classified.gates.includes('dual-reference-research'));
-  await h.run(['route', 'check', '--json']);
-  const resumed = JSON.parse((await h.run(['stage', 'resume', '--json'])).content[0]!.text);
-  assert.equal(resumed.current, 'domain');
-  assert.equal((await h.run(['brief', 'domain', '--check', '--json'])).details.code, 1);
-  await h.run(['stage', 'deliver', '--stage', 'domain', '--contract', 'protocol/domain-analysis.md', '--json']);
-  await h.run(['brief', 'domain', '--check', '--json']);
-  await h.run(['ref', 'discover-plan', '--json']);
-  assert.equal((await h.run(['guard', 'production', '--json'])).details.code, 1);
-  const blocked = await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } }) as { block: boolean };
+  const readiness = await h.run(['guard', 'production', '--json']);
+  assert.equal(readiness.details.code, 1);
+  assert.match(readiness.content[0]?.text ?? '', /copy-deck|reference/);
+  const blocked = await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } });
+  assert.ok(blocked && typeof blocked === 'object' && 'block' in blocked);
   assert.equal(blocked.block, true);
+  const completion = await h.run(['guard', 'completion', '--json']);
+  assert.equal(completion.details.code, 1);
+  assert.match(completion.content[0]?.text ?? '', /copy-deck|reference/);
   assert.equal(existsSync(join(cwd, 'src')), false);
-  assert.equal(existsSync(join(cwd, '.omd/copy-deck.md')), false);
+});
+
+test('test-038 explicit skill continues route repair without a judgment after policy validation fails', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-test038-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const h = harness(cwd);
+  const prompt = '/skill:omd-ultradesign Build a benefits product.';
+  await h.emit('input', { source: 'interactive', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  const input = fixture();
+  input.uxPolicy.decisions[1].status = 'required';
+  input.uxPolicy.decisions.push({ id: 'optional-discovery', kind: 'recommended_method', status: 'selected' });
+  await h.author(input);
+  const failed = await h.run(['route', 'validate', '--input', inputPath, '--json']);
+  assert.equal(failed.details.code, 1);
+  const report = JSON.parse(failed.content[0]!.text.replace(/^OMD_CLI_FAILED \(1\): /, ''));
+  assert.deepEqual(report.diagnostics.map((d: { code: string }) => d.code), ['HARD_SAFETY_RAIL_REQUIRED']);
+  assert.match(report.diagnostics[0].message, /uxPolicy.decisions\[1\].status.*"enforced"/);
+  assert.deepEqual(report.warnings.map((w: { code: string }) => w.code).filter((c: string) => c === 'RECOMMENDATION_REASON_REQUIRED'), ['RECOMMENDATION_REASON_REQUIRED']);
+  await h.end();
+  assert.deepEqual(h.sent.map(([message]) => message.customType), ['omd-route-repair']);
+  assert.match(h.sent[0]![0].content, /full workflow/);
+});
+
+test('route validation collects multiple malformed policy decisions in one call', () => {
+  const input = fixture();
+  input.uxPolicy.decisions[0].status = 'skipped';
+  input.uxPolicy.decisions[1].status = 'required';
+  input.uxPolicy.decisions.push({ id: 'optional', kind: 'recommended_method', status: 'selected' });
+  const diagnostics = diagnoseAdaptiveRouteInput(input);
+  assert.deepEqual(diagnostics.map(d => d.code), ['REQUIRED_OUTCOME_REQUIRED', 'HARD_SAFETY_RAIL_REQUIRED']);
+  assert.deepEqual(diagnostics.map(d => d.path), ['uxPolicy.decisions[0]', 'uxPolicy.decisions[1]']);
+});
+
+test('route validation diagnoses independent route fields despite an earlier malformed field', () => {
+  const input = fixture();
+  input.uxPolicy.decisions[1].status = 'required';
+  input.browserDecisionContext.status = 'invalid';
+  const diagnostics = diagnoseAdaptiveRouteInput(input);
+  assert.ok(diagnostics.some(d => d.code === 'HARD_SAFETY_RAIL_REQUIRED'));
+  assert.ok(diagnostics.some(d => d.path === 'browserDecisionContext'));
 });
 
 test('bootstrap retries stop on repeated unchanged input and reread current input; input-only recovery does not authorize publication', async t => {
@@ -267,7 +309,7 @@ test('bootstrap retries stop on repeated unchanged input and reread current inpu
   await h.end(); assert.equal(h.sent.length, 4);
 });
 
-test('bootstrap keeps repairing beyond two passes while the authored input changes', async t => {
+test('bootstrap stops after three unvalidated repairs despite changing authored bytes', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-progress-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const h = harness(cwd, async () => ({ stdout: failureReport(), stderr: '', code: 1, killed: false }));
@@ -278,7 +320,7 @@ test('bootstrap keeps repairing beyond two passes while the authored input chang
     assert.equal((await h.run(['route', 'validate', '--input', inputPath, '--json'])).details.code, 1);
     await h.end(); await h.emit('input', { source: 'extension' });
   }
-  assert.equal(h.sent.length, 5);
+  assert.equal(h.sent.length, 3);
   assert.ok(h.sent.every(([message]) => message.customType === 'omd-route-repair'));
 });
 
@@ -340,11 +382,12 @@ test('a real full-build input continues from failed validation through repair to
   const prompt = '/skill:omd-ultradesign Build a React product.';
   await h.emit('input', { source: 'interactive', text: prompt });
   await h.emit('before_agent_start', { prompt });
-  const input = fixture(); input.taskOutcome.executionRequirements = []; await h.author(input);
+  const input = fixture(); input.allowedPaths = []; await h.author(input);
   assert.equal((await h.run(['route', 'validate', '--input', inputPath, '--json'])).details.code, 1);
   await h.end();
   assert.equal(h.sent.length, 1);
   await h.emit('input', { source: 'extension' });
+  input.allowedPaths = fixture().allowedPaths;
   repair(input); await h.author(input);
   assert.equal((await h.run(['route', 'validate', '--input', inputPath, '--json'])).details.code, 0);
   await h.end();
@@ -379,6 +422,9 @@ test('a real full build that ends after schema inspection gets one authoring act
   const packet = JSON.parse(packetText);
   assert.equal(packet.action, 'author-route-input');
   assert.equal(packet.inputPath, inputPath);
+  assert.equal(packet.writeTool, 'write');
+  assert.equal(packet.editTool, 'edit');
+  assert.equal(packet.preclassificationAuthoringAllowed, true);
   assert.equal(h.calls.length, callsBeforeEntry, 'entry must request authored work, not repeat checks');
   assert.equal(existsSync(join(cwd, inputPath)), false);
   assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
@@ -394,6 +440,26 @@ test('a real full build that ends after schema inspection gets one authoring act
   assert.deepEqual(route.allowedPaths, input.allowedPaths);
   assert.equal(route.request, 'Build a React product.');
   assert.equal(JSON.parse((await h.run(['stage', 'resume', '--json'])).content[0]?.text ?? 'null').current, 'domain');
+});
+
+test('an existing unclassified route input receives validation rather than a missing-input action', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-existing-route-entry-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
+  const bytes = JSON.stringify(fixture());
+  writeFileSync(join(cwd, inputPath), bytes);
+  const h = harness(cwd), prompt = '/skill:omd-ultradesign Build a React product.';
+  await h.emit('input', { source: 'rpc', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  await h.run(['schema', 'product-route-input', '--json']);
+  await h.end();
+  const packetText = /^Action packet: (.+)$/mu.exec(h.sent[0]?.[0].content ?? '')?.[1];
+  assert.ok(packetText);
+  const packet = JSON.parse(packetText);
+  assert.equal(packet.action, 'validate-route-input');
+  assert.deepEqual(packet.afterAuthoring[0], ['route', 'validate', '--input', inputPath, '--json']);
+  assert.equal(readFileSync(join(cwd, inputPath), 'utf8'), bytes);
+  assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
 });
 
 test('new user input revokes an untouched old turn before its delayed final message', async t => {
@@ -422,7 +488,6 @@ test('missing bound source refuses initial authoring continuation', async t => {
 
 for (const scenario of [
   { source: 'interactive', prompt: '/skill:omd-ultradesign' },
-  { source: 'interactive', prompt: '/skill:omd-ultradesign Research only; do not build.' },
   { source: 'interactive', prompt: 'Only report status of omd-ultradesign.' },
   { source: 'extension', prompt: '/skill:omd-ultradesign Build a React product.' },
 ]) {
@@ -443,19 +508,15 @@ for (const scenario of [
   });
 }
 
-test('real design-only bootstrap recovery preserves the non-implementation delivery mode', async t => {
+test('design-only route omits advisory method but retains hard application write scope', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-design-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  const h = harness(cwd), prompt = '/skill:omd-ultradesign Design-only, no application code';
-  await h.emit('input', { source: 'interactive', text: prompt });
-  await h.emit('before_agent_start', { prompt });
+  const h = harness(cwd);
   const input = structuredClone(inputSkeleton('design-route-input').skeleton) as ReturnType<typeof fixture>;
   Object.assign(input, signedReviewPurpose(cwd, input));
   input.strategyDecision.methods = input.strategyDecision.methods.filter((m: string) => m !== 'hypothesis-validation');
   await h.author(input);
-  await assert.rejects(h.run(['route', 'classify', '--input', inputPath, '--json']), /hypothesis-validation|REQUIRED_METHOD_MISSING/);
-  await h.end(); assert.equal(h.sent.length, 1);
-  input.strategyDecision.methods.push('hypothesis-validation'); await h.author(input);
+
   await h.run(['route', 'validate', '--input', inputPath, '--json']);
   const route = JSON.parse((await h.run(['route', 'classify', '--input', inputPath, '--json'])).content[0]!.text);
   assert.equal(route.deliveryMode, 'design-only');

@@ -52,21 +52,22 @@ test('quiet register never advises, even when no section names a carrier', () =>
   assert.deepEqual(findings, []);
 });
 
-test('register is inferred as quiet from Density and visual mass wording', () => {
+test('quiet register is explicit rather than inferred from prose', () => {
   const bare = contract({
     'Density and visual mass': 'This is a deliberately quiet, restrained composition throughout.',
     'Domain form grammar': 'Workflow steps map to functional UI roles with limits noted.',
   });
-  const findings = evaluateVisualRichness({ contract: bare });
+  const findings = evaluateVisualRichness({ contract: bare, register: 'quiet' });
   assert.deepEqual(findings, []);
+  assert.ok(evaluateVisualRichness({ contract: bare }).length > 0);
 });
 
-test('register is inferred as showpiece from Focal hierarchy wording and applies stricter carrier matching', () => {
+test('explicit showpiece register applies stricter carrier matching', () => {
   const markdown = contract({
     'Focal hierarchy': 'This is a showpiece anchor; media carries the value claim.',
     'Media roles': 'The hero section carries supporting media only.',
   });
-  const findings = evaluateVisualRichness({ contract: markdown });
+  const findings = evaluateVisualRichness({ contract: markdown, register: 'showpiece' });
   // "media" alone is too generic for showpiece strictness -> Media roles should be flagged
   assert.ok(findings.some((f) => f.section === 'Media roles'));
 });

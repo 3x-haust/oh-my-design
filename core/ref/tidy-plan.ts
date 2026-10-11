@@ -41,7 +41,7 @@ export function referenceTidyCandidates(root: string): readonly TidyCandidate[] 
     const image = readTidyFile(root, path);
     requireTidyDigest(image, expected);
     const dimensions = decodePng(image.bytes);
-    if (dimensions.width !== 1280 || dimensions.height !== 900) throw new ReferenceTidyError(`${path} search capture viewport differs`);
+    if (![1280, 2560].includes(dimensions.width) || dimensions.height !== dimensions.width * 900 / 1280) throw new ReferenceTidyError(`${path} search capture viewport differs`);
     if (!protectedImages.has(path)) select(image, 'legacy-search-capture');
   }
   for (const [path, file] of records) {
@@ -79,6 +79,7 @@ export function referenceTidyCandidates(root: string): readonly TidyCandidate[] 
   }
   for (const { reference, admission, discoveryAdmission } of decisions) {
     if (admission === null || admission.eligible || discoveryAdmission?.eligible) continue;
+    if (reference.researchLane === 'design' && reference.acquisition) continue;
     const path = relative(resolve(root), refRecordPath(root, reference));
     // The physical domain lane is never reclassified through a conflicting JSON label.
     if (path.startsWith('.omd/refs/domain/')) continue;

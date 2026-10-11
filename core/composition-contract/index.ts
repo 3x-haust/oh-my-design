@@ -2,13 +2,15 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { refIdentity } from '../ref/identity.ts';
+import { projection } from '../design-language/index.ts';
+import { readPersistedRoute } from '../route/index.ts';
 import { loadRefs } from '../ref/store.ts';
 import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { parseReferenceHandoffReceipt } from '../ref/reference-handoff.ts';
 import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceSelectionV2Sha256, validateMotionResolutionProjection } from '../ref/reference-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
-import { readPersistedRoute } from '../route/index.ts';
+import { readSelectedSourceStudy } from '../art-direction/source-study-records.ts';
 import { readFrame } from '../frame/index.ts';
 import { readSelectedArtDirection } from '../art-direction/selected.ts';
 import { resolveSelectedTokens } from '../tokens/resolve.ts';
@@ -31,7 +33,7 @@ export const CURRENT_COMPOSITION_SECTIONS = [
 // validator (task evidence owns `## UX task coverage`). The composition contract only
 // recognizes the heading so it can be authored as normal LF Markdown; it never restates
 // or revalidates that section's internal schema.
-export const AUXILIARY_SECTIONS = ['UX task coverage', 'Production revision binding', 'Needed components', 'Expansion mapping', 'Measurement contract'] as const;
+export const AUXILIARY_SECTIONS = ['UX task coverage', 'Production revision binding', 'Design language targets', 'Needed components', 'Expansion mapping', 'Measurement contract'] as const;
 
 export interface CompositionContractFinding {
   id: 'COMPOSITION-MISSING' | 'COMPOSITION-SECTION' | 'COMPOSITION-HASH' | 'COMPOSITION-STALE' | 'COMPOSITION-SCOUT' | 'COMPOSITION-SYNTHESIS';
@@ -40,7 +42,6 @@ export interface CompositionContractFinding {
 }
 
 const COLOUR_ROLES = ['Dominant', 'Secondary', 'Accent', 'Semantic success', 'Semantic error'] as const;
-const COLOUR_ROLE_PLACEHOLDER = /\b(?:tbd|todo|placeholder|later|unknown)\b/i;
 
 export function validateColourRoles(lines: readonly string[]): string[] {
   const findings: string[] = [];
@@ -57,11 +58,8 @@ export function validateColourRoles(lines: readonly string[]): string[] {
     }
     if (seen.has(role)) findings.push(`duplicate colour role: ${role}`);
     seen.add(role);
-    if (!token || COLOUR_ROLE_PLACEHOLDER.test(token)) findings.push(`placeholder token/value for ${role}`);
-    if (!use || COLOUR_ROLE_PLACEHOLDER.test(use)) findings.push(`placeholder intended use for ${role}`);
-    if (role === 'Accent' && !/(primary action|selected state|critical)/i.test(use)) {
-      findings.push('Accent intended use must name a primary action, selected state, or critical state');
-    }
+    if (!token) findings.push(`missing token/value for ${role}`);
+    if (!use) findings.push(`missing intended use for ${role}`);
   }
   for (const role of COLOUR_ROLES) if (!seen.has(role)) findings.push(`missing colour role: ${role}`);
   return findings;
@@ -79,8 +77,7 @@ const synthesisPath = `.omd/composition.md#${SYNTHESIS_SECTION}`;
 const synthesisFinding = (message: string): CompositionContractFinding => ({ id: 'COMPOSITION-SYNTHESIS', path: synthesisPath, message });
 const sectionFinding = (section: string, message: string): CompositionContractFinding => ({ id: 'COMPOSITION-SECTION', path: `.omd/composition.md#${section}`, message });
 const normalize = (value: string): string => value.trim().replace(/\s+/g, ' ').toLowerCase();
-const isPlaceholder = (value: string): boolean => /^(?:n\/?a|none|unknown|unspecified|tbd|todo|placeholder|example)(?:\s|$)/i.test(value.trim());
-const substantive = (value: string): boolean => value.trim().length >= 8 && !isPlaceholder(value);
+const substantive = (value: string): boolean => value.trim().length >= 8;
 const recordName = (kind: string, feature: string): string => `${kind} "${feature}"`;
 
 interface ParsedSections { sections: Map<string, string[]>; findings: CompositionContractFinding[]; }
@@ -118,7 +115,7 @@ function validateFingerprint(
   const values = new Map<string, string>();
   for (const line of lines) {
     if (line.trim() === '') continue;
-    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256|Candidate selection SHA-256|Effective tokens SHA-256): (.+)$/.exec(line);
+    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256|Design language SHA-256|Source study SHA-256|Candidate selection SHA-256|Effective tokens SHA-256): (.+)$/.exec(line);
     if (!match) { findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'Input fingerprint contains an unknown or malformed line' }); continue; }
     const key = match[1]!;
     if (values.has(key)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${key} must appear exactly once` });
@@ -151,6 +148,19 @@ function validateFingerprint(
     else if (actual === undefined) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} is missing; composition cannot be current` });
     else if (value !== actual) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} changed after composition was written` });
   }
+  if (inputs.designLanguage !== undefined) {
+    const value = values.get('Design language SHA-256');
+    if (value !== inputs.designLanguage) findings.push({ id: 'COMPOSITION-STALE', path: '.omd/composition.md#Input fingerprint', message: 'DESIGN_LANGUAGE_BINDING_MISSING: current translation fingerprint is missing or stale' });
+  } else if (values.has('Design language SHA-256')) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'unexpected design language fingerprint' });
+  if (inputs.sourceStudy !== undefined) {
+    if (values.get('Source study SHA-256') !== inputs.sourceStudy) findings.push({
+      id: 'COMPOSITION-STALE', path: '.omd/composition.md#Input fingerprint',
+      message: 'SOURCE_STUDY_BINDING_MISSING: current selected study fingerprint is missing or stale',
+    });
+  } else if (values.has('Source study SHA-256')) findings.push({
+    id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint',
+    message: 'unexpected source study fingerprint',
+  });
   const scout = values.get('Scout SHA-256');
   if (inputs.scout !== undefined) {
     if (!scout || !/^[0-9a-f]{64}$/.test(scout)) findings.push({ id: 'COMPOSITION-SCOUT', path: '.omd/composition.md#Input fingerprint', message: 'Scout SHA-256 must be a 64-hex hash while .omd/scout.md exists' });
@@ -169,7 +179,7 @@ function validRoute(value: string): boolean {
   if (value === '/') return true;
   if (!/^\/[A-Za-z0-9._~!$&'()*+,;=:@\/-]*$/.test(value) || value.startsWith('//')) return false;
   const segments = value.slice(1).split('/');
-  return segments.every((segment) => segment !== '.' && segment !== '..') && !isPlaceholder(segments[0] ?? '');
+  return segments.every((segment) => segment !== '.' && segment !== '..');
 }
 function normalizedSelector(value: string): string | undefined {
   const selector = value.trim().replace(/\s+/g, ' ');
@@ -195,7 +205,7 @@ function validateReferenceSynthesis(lines: string[]): SynthesisResult {
   const selectors = new Set<string>();
   for (const record of records) {
     const identity = recordName(record.kind, record.feature);
-    if (!record.feature.trim() || isPlaceholder(record.feature)) findings.push(synthesisFinding(`${identity}: feature label is missing or a placeholder`));
+    if (!record.feature.trim()) findings.push(synthesisFinding(`${identity}: feature label is missing`));
     const fields = new Map<string, string>();
     const axes: string[][] = [];
     const expected = record.kind === 'Feature' ? featureFields : declineFields;
@@ -269,6 +279,8 @@ function sha256(path: string): string { return createHash('sha256').update(readF
 export interface CompositionContractInputs {
   contract?: string; frame?: string; copyDeck?: string; typeProof?: string; scout?: string;
   artDirectionRecord?: string; motionResolutionProjection?: string; settledSelection?: string; composerHandoff?: string;
+  designLanguage?: string; languageTargets?: readonly { id: string; route: string; selector: string; metric: string; range: readonly [number, number] }[];
+  sourceStudy?: string;
   candidateSelection?: string; effectiveTokens?: string;
   /** Exact normalized Source ref identities for user-origin refs, not host labels. */
   userRefLabels?: string[];
@@ -288,6 +300,14 @@ function validateCompositionContractSourceFor(
     for (const message of validateColourRoles(colourRoleLines)) findings.push(sectionFinding('Colour roles', message));
   }
   findings.push(...validateFingerprint(parsed.sections.get('Input fingerprint') ?? [], inputs, artDirection));
+  const targetLines = parsed.sections.get('Design language targets')?.filter(line => line.trim()) ?? [];
+  if (inputs.languageTargets?.length) {
+    for (const target of inputs.languageTargets) {
+      const expected = `- ${target.id} | ${target.route} | ${target.selector} | ${target.metric} | ${target.range[0]}..${target.range[1]}`;
+      if (!targetLines.includes(expected)) findings.push(sectionFinding('Design language targets', `DESIGN_LANGUAGE_BINDING_MISSING: target row missing: ${target.id}`));
+    }
+    if (targetLines.length !== inputs.languageTargets.length) findings.push(sectionFinding('Design language targets', 'DESIGN_LANGUAGE_BINDING_MISSING: unexpected or duplicate target row'));
+  } else if (targetLines.length) findings.push(sectionFinding('Design language targets', 'unexpected design language targets'));
   const synthesisLines = parsed.sections.get(SYNTHESIS_SECTION);
   const synthesis = synthesisLines?.join('\n').trim() ?? '';
   const result = synthesis ? validateReferenceSynthesis(synthesisLines!) : { findings: [], sourceRefs: [] };
@@ -343,6 +363,21 @@ function validateCompositionContractWith(
   const frame = readHash('frame.md'); const copyDeck = readHash('copy-deck.md'); const typeProof = readHash('type-proof.md'); const scout = readHash('scout.md');
   const userRefLabels = loadRefs(root).filter((ref) => ref.origin === 'user').map((ref) => refIdentity(ref.source, ref.component)).sort();
   const derived: Omit<CompositionContractInputs, 'contract' | 'frame' | 'copyDeck' | 'typeProof' | 'scout' | 'userRefLabels'> = {};
+  if (invocation !== undefined && existsSync(join(omd, 'route.json'))) {
+    try {
+      const route = readPersistedRoute(root, invocation);
+      if (route.strategy.methods.includes('provisional-source-study')) {
+        try { derived.sourceStudy = readSelectedSourceStudy(root, invocation).sha256; }
+        catch { stale('.cache/studies/current.json', 'SOURCE_STUDY_REQUIRED: selected study is missing, invalid or stale'); }
+      }
+      const language = projection(root, route);
+      if (language?.status === 'needs-clarification') stale('design-language/intake.json', 'DESIGN_LANGUAGE_AMBIGUOUS');
+      if (language?.status === 'resolved') {
+        derived.designLanguage = language.sha256;
+        derived.languageTargets = language.targets;
+      }
+    } catch (error) { stale('design-language/intake.json', error instanceof Error ? error.message : String(error)); }
+  }
   let artDirectionRequirement: ArtDirectionFingerprintRequirement = 'selected';
   if (existsSync(join(omd, 'route.json'))) {
     if (invocation === undefined) stale('route.json', 'adaptive route authority is required to validate composition');

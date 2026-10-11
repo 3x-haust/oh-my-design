@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 const args = process.argv.slice(2), option = name => args[args.indexOf(name) + 1];
-const provider = option('--provider'), model = option('--model'), thinkingLevel = option('--thinking');
+const provider = option('--provider'), model = option('--model');
+let thinkingLevel = option('--thinking');
 const sessionId = randomUUID(), messages = [];
 let ready = false;
 const emit = value => process.stdout.write(`${JSON.stringify(value)}\n`);
@@ -27,7 +28,11 @@ function handback(packet) {
       }) })) } };
 }
 async function handle(request) {
-  if (request.type === 'get_state') {
+  if (request.type === 'set_thinking_level') {
+    if (request.level !== 'high' || request.scope !== 'turn' || messages.length !== 0) throw new Error('Reviewer thinking must be high and turn-scoped');
+    thinkingLevel = request.level;
+    response(request);
+  } else if (request.type === 'get_state') {
     response(request, { sessionId, model: { provider, id: model }, thinkingLevel, isStreaming: false, isCompacting: false, pendingMessageCount: 0, messageCount: messages.length });
     if (!ready) { ready = true; emit({ type: 'omd_reviewer_ready', sessionId, provider, model, thinkingLevel, tools: ['read_reviewer_evidence'], modelMessageCount: 0,
       systemPromptSha256: createHash('sha256').update(systemPrompt).digest('hex') }); }

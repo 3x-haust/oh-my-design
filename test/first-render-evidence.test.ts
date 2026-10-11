@@ -23,6 +23,11 @@ test('native first-render facts derive from immutable measurements; invented sur
   assert.ok(result.report.findings.some(f => f.severity === 'advisory'));
   assert.ok(result.report.findings.every(f => f.measurementRefs.length > 0));
   assert.ok(result.report.projection.every(v => v.utilityAreaShare !== null && v.taskAreaShare !== null && v.utilityAreaShare !== 1 - v.taskAreaShare));
+  assert.deepEqual(result.captures.map(capture => capture.viewport), [
+    { width: 1280, height: 900 }, { width: 390, height: 844 },
+  ]);
+  assert.ok(result.captures.every(capture => capture.fullPage === false
+    && existsSync(join(root, capture.path))));
   assert.ok(checkFirstRenderEvidence(root));
   const pointer = readFileSync(join(root, '.omd/first-render-critic.json'));
   writer.write('.omd/first-render-critic.json', JSON.stringify({ ...result, report: { ...result.report, verdict: 'revise' } }));

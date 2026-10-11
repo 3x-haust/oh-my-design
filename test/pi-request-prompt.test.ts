@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { verifyJudgment, type JudgmentPolicy } from '../core/judgment/index.ts';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { normalizeOmdAlias, parseOmdWorkflowPrompt } from '../extensions/omd-request-prompt.ts';
@@ -11,33 +13,42 @@ const source = readFileSync(skillPath, 'utf8').replace(/^\uFEFF/, '').replace(/\
 const delimiter = source.startsWith('---') ? source.indexOf('\n---', 3) : -1;
 const body = (delimiter < 0 ? source : source.slice(delimiter + 4)).trim();
 const expansion = `<skill name="omd-ultradesign" location="${skillPath}">\nReferences are relative to ${dirname(skillPath)}.\n\n${body}\n</skill>`;
+const digest = (text: string) => createHash('sha256').update(text).digest('hex');
+const policy: JudgmentPolicy = { purpose: 'workflow-intent', decisions: ['implement', 'inspect'], authorRoles: ['coordinator'],
+  sourceKinds: ['user-turn'], fields: ['text'], requiredSourceKinds: ['user-turn'], mode: 'advisory', parsePayload: value => value };
+async function judgmentFor(text: string) {
+  const context = { requestSha256: digest('request'), sourceContractSha256: null, questionDigest: null, documentSha256: null };
+  return verifyJudgment({ schema: 'ai-judgment-v1', purpose: 'workflow-intent', subjectId: 'turn', context,
+    decision: 'implement', reason: 'Current user intent', quotes: [{ source: { kind: 'user-turn', sessionId: 'session', turnId: 'turn', sha256: digest(text) }, field: 'text', itemId: null, text }], evidence: [], payload: null },
+  policy, { ...context, resolve: async (_source, field, itemId) => ({ ...context, sha256: digest(text), field, itemId, text }) });
+}
 
-test('direct workflow commands preserve the complete request after their separator', () => {
+test('direct workflow commands preserve the complete request after their separator', async () => {
   // Given: body whitespace and embedded source material that belong to the user request.
   const request = '  React로 복지 서비스를 구현해 주세요.\r\n\r\n# 요구사항\r\n추천 이유와 신청 상태를 분리한다.\n\n  ';
   for (const command of ['/skill:omd-ultradesign', '$omd-ultradesign']) {
     // When: the host receives a direct command with its original body.
-    const parsed = parseOmdWorkflowPrompt(`${command} ${request}`);
+    const parsed = parseOmdWorkflowPrompt(`${command} ${request}`, await judgmentFor(request));
     // Then: authorization retains every body character.
     assert.deepEqual(parsed, { kind: 'full-build', request });
   }
 });
 
-test('the official expanded skill preserves a long hook-visible body exactly', () => {
+test('the official expanded skill preserves a long hook-visible body exactly', async () => {
   // Given: Pi has separated an official skill block from a long product brief.
   const request = `\n리액트로 복지 서비스를 구현해줘.\n${'요구사항: 지역, 가족, 소득별 추천 근거를 표시한다.\r\n'.repeat(800)}  \n`;
   // When: the verified expansion precedes the request.
-  const parsed = parseOmdWorkflowPrompt(`${expansion}\n\n${request}`);
+  const parsed = parseOmdWorkflowPrompt(`${expansion}\n\n${request}`, await judgmentFor(request));
   // Then: no summary, truncation, or whitespace normalization replaces the body.
   assert.deepEqual(parsed, { kind: 'full-build', request });
 });
 
-test('Pi skill expansion transport returns its already-trimmed argument body', () => {
+test('Pi skill expansion transport returns its already-trimmed argument body', async () => {
   // Given: Pi splits on the first space and trims arguments before expansion.
   const input = '/skill:omd-ultradesign \n Build a dashboard.\nKeep every feature.  \n';
   const args = input.slice(input.indexOf(' ') + 1).trim();
   // When: the parser receives the host-produced skill transport.
-  const parsed = parseOmdWorkflowPrompt(`${expansion}\n\n${args}`);
+  const parsed = parseOmdWorkflowPrompt(`${expansion}\n\n${args}`, await judgmentFor(args));
   // Then: it preserves the exact body exposed by that transport.
   assert.deepEqual(parsed, { kind: 'full-build', request: args });
 });
@@ -69,11 +80,11 @@ test('research-only, quoted builds and stop instructions grant no full workflow'
   }
 });
 
-test('quoted labels and preliminary research do not alter an authorized request', () => {
+test('quoted labels and preliminary research do not alter an authorized request', async () => {
   // Given: the actual instruction builds a product after preliminary inspection.
   const request = 'Only inspect references first, then build a dashboard.\nThe warning label is "Do not build".\n';
   // When: the request is parsed.
-  const parsed = parseOmdWorkflowPrompt(`${expansion}\n\n${request}`);
+  const parsed = parseOmdWorkflowPrompt(`${expansion}\n\n${request}`, await judgmentFor(request));
   // Then: classification strips labels only internally and retains the original request.
   assert.deepEqual(parsed, { kind: 'full-build', request });
 });
@@ -111,12 +122,12 @@ test('checked domain publication starts the parsed skill-only workflow', () => {
   assert.equal(work.started(cwd), true);
 });
 
-test('the exact leading alias canonicalizes while preserving argument bytes', () => {
+test('the exact leading alias canonicalizes while preserving argument bytes', async () => {
   const request = '  Build a dashboard.\r\n상세 요구사항을 보존한다.  \n';
   for (const separator of [' ', '\t', '\n', '\r']) {
     const normalized = normalizeOmdAlias(`/ultradesign${separator}${request}`);
     assert.equal(normalized, `/skill:omd-ultradesign ${request}`);
-    assert.deepEqual(parseOmdWorkflowPrompt(normalized), { kind: 'full-build', request });
+    assert.deepEqual(parseOmdWorkflowPrompt(normalized, await judgmentFor(request)), { kind: 'full-build', request });
   }
 });
 

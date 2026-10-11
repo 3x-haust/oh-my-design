@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../core/runtime/stable-project-file.ts';
 import { capturePiRequest, PiRequestBindingError, readPiRequest, requestDigest, type PiRequestSource } from './omd-request-source.ts';
-import { parseOmdWorkflowPrompt } from './omd-request-prompt.ts';
+import { extractOmdWorkflowRequest, parseOmdWorkflowPrompt } from './omd-request-prompt.ts';
 import { routeValidationArgs } from './omd-route-bootstrap.ts';
 import type { PortablePiEvent } from './omd-runtime.ts';
 import { PiDirectionInputs } from './omd-direction.ts';
@@ -26,21 +26,37 @@ export class PiRequestBindings {
   classificationGranted(cwd: string): boolean {
     return this.fullWorkflows.has(cwd) && this.active.has(cwd) && !this.suspended.has(cwd) && !this.failures.has(cwd);
   }
+  current(cwd: string): PiRequestSource | undefined { return this.active.get(cwd); }
+  hasPendingInput(cwd: string): boolean { return (this.pending.get(cwd)?.length ?? 0) > 0; }
+  suspend(cwd: string): void { this.suspended.add(cwd); this.fullWorkflows.delete(cwd); }
+  /** Called only after the host verifies the current captured-turn continuation judgment. */
+  resume(cwd: string, requestSha256: string): boolean {
+    const current = readPiRequest(cwd);
+    const previous = this.active.get(cwd);
+    if (this.failures.has(cwd) || !current || current.requestSha256 !== requestSha256
+      || (previous && previous.recordSha256 !== current.recordSha256)) return false;
+    this.active.set(cwd, current);
+    this.suspended.delete(cwd);
+    this.fullWorkflows.add(cwd);
+    return true;
+  }
   receive(cwd: string, event: PortablePiEvent): void {
     if ((event.source !== 'interactive' && event.source !== 'rpc') || typeof event.text !== 'string') return;
-    const parsed = parseOmdWorkflowPrompt(event.text);
-    if (parsed?.kind === 'full-build' || isExplicitWorkflowResumePrompt(event.text)) this.directions.renew(cwd);
-    const direction = parsed?.kind !== 'full-build' && this.directions.receive(cwd, event);
+    const mechanicalRequest = extractOmdWorkflowRequest(event.text);
+    if (typeof mechanicalRequest === 'string' || isExplicitWorkflowResumePrompt(event.text)) this.directions.renew(cwd);
+    const direction = mechanicalRequest === undefined && this.directions.receive(cwd, event);
     const pending = this.pending.get(cwd) ?? [];
-    pending.push({ text: event.text, source: event.source === 'rpc' ? 'pi-rpc' : 'pi-interactive', ...(parsed?.kind === 'full-build' ? { request: parsed.request } : {}), ...(direction ? { direction: true } : {}) });
+    pending.push({ text: event.text, source: event.source === 'rpc' ? 'pi-rpc' : 'pi-interactive',
+      ...(typeof mechanicalRequest === 'string' ? { request: mechanicalRequest } : {}), ...(direction ? { direction: true } : {}) });
     this.pending.set(cwd, pending);
   }
   activate(cwd: string, prompt: string): boolean {
     const parsed = parseOmdWorkflowPrompt(prompt);
+    const mechanicalRequest = extractOmdWorkflowRequest(prompt);
     const pending = this.pending.get(cwd);
     // Pi's documented /skill expansion trims its argument; preserve the earlier real input bytes.
-    const index = pending?.findIndex(candidate => candidate.text === prompt || (parsed?.kind === 'full-build'
-      && (candidate.request === parsed.request || candidate.request?.trim() === parsed.request)));
+    const index = pending?.findIndex(candidate => candidate.text === prompt || (typeof mechanicalRequest === 'string'
+      && (candidate.request === mechanicalRequest || candidate.request?.trim() === mechanicalRequest.trim())));
     if (pending === undefined || index === undefined || index < 0) return false;
     const candidate = pending[index];
     if (candidate === undefined) return false;
@@ -50,7 +66,7 @@ export class PiRequestBindings {
       if (valid) { const source = readPiRequest(cwd); if (source) this.active.set(cwd, source); this.suspended.delete(cwd); }
       return valid;
     }
-    if (candidate.request !== undefined && parsed?.kind === 'full-build') {
+    if (candidate.request !== undefined) {
       try {
         this.active.set(cwd, capturePiRequest(cwd, candidate.request));
         observePiReviewPurpose(cwd, candidate.request, candidate.source);
@@ -61,12 +77,9 @@ export class PiRequestBindings {
         throw failure;
       }
       this.failures.delete(cwd);
-      this.fullWorkflows.add(cwd);
-      this.suspended.delete(cwd);
-    } else if (parsed?.kind === 'skill-only' || isWorkflowResumePrompt(prompt)) {
-      if (isExplicitWorkflowResumePrompt(prompt)) { const source = readPiRequest(cwd); if (source) this.active.set(cwd, source); }
-      this.suspended.delete(cwd);
-    }
+      if (candidate.request.trim()) { this.fullWorkflows.add(cwd); this.suspended.delete(cwd); }
+      else { this.fullWorkflows.delete(cwd); this.suspended.add(cwd); }
+    } else if (parsed?.kind === 'skill-only' || isWorkflowResumePrompt(prompt)) this.suspended.delete(cwd);
     else { this.suspended.add(cwd); this.fullWorkflows.delete(cwd); }
     return false;
   }

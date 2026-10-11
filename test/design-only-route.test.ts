@@ -55,7 +55,7 @@ test('test-007 malformed values explain the precise repair without relaxing the 
   const waves = fixture();
   waves.strategyDecision.executionWaves[2].roles.push('omd-composer');
   waves.strategyDecision.executionWaves.splice(3, 1);
-  assert.throws(() => routeAdaptiveFlow(waves), /composition.*later execution wave than type-proof/);
+  assert.throws(() => routeAdaptiveFlow(waves), /ADAPTIVE_EXECUTION_WAVE_INVALID/);
   assert.doesNotThrow(() => routeAdaptiveFlow(inputSkeleton('design-route-input').skeleton));
   const study = fixture();
   study.strategyDecision.roles.push('omd-study');
@@ -74,6 +74,7 @@ test('real Pi extension validates, publishes, resumes and reads a design route w
   let tool!: PortablePiTool;
   omdExtension({
     registerCommand() {}, registerTool(value) { tool = value; },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args, options) {
       const result = spawnSync(process.execPath, [...args], { cwd: options.cwd, encoding: 'utf8', env, timeout: 20000 });
       return { stdout: result.stdout ?? '', stderr: result.stderr ?? '', code: result.status ?? 1, killed: result.signal !== null };
@@ -100,11 +101,11 @@ test('real Pi extension validates, publishes, resumes and reads a design route w
   assert.notEqual(cli(root, ['route', 'check', '--json']).status, 0);
 });
 
-test('design handoff rejects stale documents, omitted parts, absent selected outputs and fabricated completion', t => {
+test('design handoff binds submitted documents without requiring an optional document inventory', t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-design-handoff-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, '.omd', 'design'), { recursive: true });
-  // Existing copy-only evidence does not select discovery; its design-only equivalent still needs every document.
+  // A design-only route may deliver a focused set of documents.
   const value = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/copy-only.json', import.meta.url), 'utf8'));
   value.deliveryMode = 'design-only'; value.allowedPaths = ['.omd/**'];
   value.strategyDecision.roles = value.strategyDecision.roles.filter((r: string) => r !== 'omd-hand');
@@ -130,7 +131,9 @@ test('design handoff rejects stale documents, omitted parts, absent selected out
   assert.equal(checked.verification, 'artifact-integrity-with-limitations');
   assert.equal(checked.implementation, 'not-performed');
   assert.equal(checked.review.independence, 'not-attested');
-  assert.throws(() => parseDesignHandoff({ ...handoff, artifacts: handoff.artifacts.slice(1) }));
+  assert.equal(parseDesignHandoff({ ...handoff, artifacts: handoff.artifacts.slice(1) }).artifacts.length, handoff.artifacts.length - 1);
+  assert.throws(() => parseDesignHandoff({ ...handoff, artifacts: [] }), /artifact inventory/);
+  assert.throws(() => parseDesignHandoff({ ...handoff, artifacts: [handoff.artifacts[0], handoff.artifacts[0]] }), /separate documents/);
   writeFileSync(join(root, handoff.artifacts[0]!.path), 'changed');
   assert.throws(() => validateDesignHandoffArtifacts(root, route, handoff), /stale document/);
 });

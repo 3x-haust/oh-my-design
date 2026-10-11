@@ -139,6 +139,7 @@
     "stages": [
       "domain",
       "frame",
+      "acquisition",
       "scout",
       "reference-board",
       "reference-selection",
@@ -238,10 +239,6 @@
       {
         "id": "moodboard",
         "reason": "The measured reference board settles the visual direction without a separate moodboard."
-      },
-      {
-        "id": "acquisition",
-        "reason": "No user-supplied URLs or first-party assets require acquisition."
       },
       {
         "id": "art-direction",

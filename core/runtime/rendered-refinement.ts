@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { requireMovement } from '../design-language/check.ts';
 import { existsSync, lstatSync, readdirSync, realpathSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 
@@ -780,6 +781,7 @@ export function commitRenderedRefinementCheckpoint(input: Readonly<{
         !== evidence.before.observationSha256) {
       fail('REFINEMENT_CHECKPOINT_STALE');
     }
+    requireMovement(root, input.invocation);
     const checkpoint = decide(review.value, evidence, previous, review.sha256);
     const bytes = Buffer.from(`${canonicalJson(checkpoint)}\n`);
     const sha256 = hash(bytes);

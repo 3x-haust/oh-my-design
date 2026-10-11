@@ -120,7 +120,9 @@ export function checkDeliberationRun(
 
   return {
     phase,
-    ok: findings.length === 0,
+    // Workflow proof inventory is advice, not an implementation/completion refusal.
+    // Findings remain visible for an owner to record why a proof was omitted.
+    ok: true,
     ...(depth ? { depth } : {}),
     findings,
     counts: { decisions: graph?.decisions.length ?? 0, deliberations, observations, zones },

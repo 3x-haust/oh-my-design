@@ -5,6 +5,7 @@ import {
   validateBrowserObservationArtifacts,
   validateBrowserObservationDecisionLinks,
 } from '../runtime/browser-observation.ts';
+import { validateObservationDecisionGraph } from '../runtime/observation-decision-graph.ts';
 import { readStableProjectFile, StableProjectFileReadError, type StableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { observationV2Sha256, validateObservationV2 } from '../runtime/observation.ts';
 import type { DesignQualityObservationBinding } from './final-v2-design-quality.ts';
@@ -97,6 +98,7 @@ export function validateFinalBrowserObservations(
   fs: FinalBrowserObservationFs,
   evidence: readonly unknown[],
   observationSha256s: readonly string[] = [],
+  scope: 'terminal' | 'legacy-current-graph' = 'terminal',
 ): readonly DesignQualityObservationBinding[] {
   const root = resolve(rootInput);
   if (observationSha256s.length !== 0 && observationSha256s.length !== evidence.length) {
@@ -105,9 +107,12 @@ export function validateFinalBrowserObservations(
   const decisionGraph = readBrowserProjectFile({ root, fs, code: 'STALE_DECISION_GRAPH', label: 'current design decision graph' }, fsPath(root, '.omd/decision-graph.json'));
   const bindings: DesignQualityObservationBinding[] = [];
   evidence.forEach((value, index) => {
-    const links = validateBrowserObservationDecisionLinks(value, decisionGraph, true);
-    if (links === undefined) fail('INVALID_OBSERVATION_ARTIFACT', `observation ${index} has no browser links`);
+    const { links } = validateObservationDecisionGraph({
+      root, fs, evidence: value, currentGraph: decisionGraph,
+      requireCurrentGraph: scope === 'legacy-current-graph' || index === evidence.length - 1,
+    });
     validateBrowserObservationArtifacts(links, (path) => readBrowserProjectFile({ root, fs, code: 'INVALID_OBSERVATION_ARTIFACT', label: `observation ${index} browser capture` }, fsPath(root, path)), true);
+    if (scope === 'terminal' && index !== evidence.length - 1) return;
     const observationSha256 = observationSha256s[index];
     if (observationSha256 === undefined) return;
     for (const observation of links.observations) {

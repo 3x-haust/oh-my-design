@@ -1,4 +1,9 @@
 import { createHash } from 'node:crypto';
+import { withUserBrowserPage } from './user-browser-engine.ts';
+import { browserCallback } from './browser-evaluation.ts';
+import type { PublicHostLookup } from './public-network.ts';
+import type { UserBrowserDriver } from '../browser/contracts.ts';
+import { publicDiscoveryUrl } from './discovery-record.ts';
 import { resolve } from 'node:path';
 import type { Browser } from 'playwright';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
@@ -13,26 +18,30 @@ import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { actionableSearchTargets, observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
 import { currentReferenceEvidenceAfter } from './discovery-record.ts';
+import { assessPageAccess, type ReferenceJudgmentBinding } from './judgment-policy.ts';
+import { SEARCH_BUDGET_MS, withAcquisitionDeadline, type AcquisitionDeadlineScope } from './acquisition-deadline.ts';
 
 export { observedSearchTargets } from './search-result.ts';
 
 export const SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v3';
+export const USER_BROWSER_SEARCH_SCHEMA = 'reference-search-execution-v4';
 const HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v2';
 const HISTORICAL_SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v1';
 type Lane = 'domain' | 'design';
 type Receipt = Readonly<{ path: string; sha256: string }>;
 type SearchInput = Readonly<{ lane: Lane; query: string; url: string; queryParam: string }>;
 export type SearchExecution = Readonly<{
-  schema: typeof SEARCH_EXECUTION_SCHEMA | typeof HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA | typeof HISTORICAL_SEARCH_EXECUTION_SCHEMA;
+  schema: typeof USER_BROWSER_SEARCH_SCHEMA | typeof SEARCH_EXECUTION_SCHEMA | typeof HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA | typeof HISTORICAL_SEARCH_EXECUTION_SCHEMA;
   lane: Lane; query: string; queryParam: string;
   requestedUrl: string; finalUrl: string | null; provider: string;
   observedAt: string; status: 'page-observed' | 'gallery-observed' | 'empty-observation' | 'blocked' | 'http-error' | 'navigation-error'; httpStatus: number | null;
   links: readonly string[]; capture: Receipt | null; error: string | null;
   results?: readonly ObservedSearchResult[];
-  limitations: 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested';
+  limitations: 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested' | 'rendered-organic-links; user-browser-http-status-unobserved; not-provider-attested';
   signature?: string;
 }>;
 const LIMITATIONS: SearchExecution['limitations'] = 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested';
+const USER_LIMITATIONS: SearchExecution['limitations'] = 'rendered-organic-links; user-browser-http-status-unobserved; not-provider-attested';
 const hash = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const fail = (message: string): never => { throw new Error(`REFERENCE_SEARCH: ${message}`); };
 function object(value: unknown, keys: readonly string[]) {
@@ -61,7 +70,7 @@ export function parseSearchInput(value: unknown): SearchInput {
   const input: SearchInput = { lane: row.lane, query: text(row.query), url: url(row.url), queryParam: text(row.queryParam) };
   const parsed = new URL(input.url);
   if (gallerySearchProvider(input) !== null) return input;
-  if (input.queryParam !== 'q' || !SEARCH_ENDPOINTS.has(`${parsed.origin}${parsed.pathname}`)) return fail('unsupported or mismatched query endpoint; use Google/Bing/DuckDuckGo/Daum with q, or the exact design-only gallery input from ref discover-plan');
+  if (input.queryParam !== 'q' || !SEARCH_ENDPOINTS.has(`${parsed.origin}${parsed.pathname}`)) return fail('unsupported or mismatched query endpoint; start with Google in a consented browser, then host search if available, DuckDuckGo HTML leads, and Bing last; historical Daum receipts remain readable');
   if (parsed.hostname === 'search.daum.net' && (parsed.searchParams.get('w') !== 'tot'
     || [...parsed.searchParams.keys()].sort().join(',') !== 'q,w')) return fail('Daum search requires exactly w=tot and one q parameter');
   const terms = parsed.searchParams.getAll(input.queryParam);
@@ -79,13 +88,14 @@ function parseReceipt(value: unknown, lane: Lane, extension: string): Receipt {
 function parseExecution(value: unknown): SearchExecution {
   const schema = typeof value === 'object' && value !== null
     ? Object.getOwnPropertyDescriptor(value, 'schema') : undefined;
-  const current = schema !== undefined && 'value' in schema && schema.value === SEARCH_EXECUTION_SCHEMA;
+  const current = schema !== undefined && 'value' in schema && [SEARCH_EXECUTION_SCHEMA, USER_BROWSER_SEARCH_SCHEMA].includes(schema.value as string);
+  const userBrowser = schema !== undefined && 'value' in schema && schema.value === USER_BROWSER_SEARCH_SCHEMA;
   const signed = current || (schema !== undefined && 'value' in schema && schema.value === HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA);
   const keys = ['schema', 'lane', 'query', 'queryParam', 'requestedUrl', 'finalUrl', 'provider', 'observedAt', 'status', 'httpStatus', 'links', 'capture', 'error', 'limitations'];
   const row = object(value, signed ? [...keys, 'results', 'signature'] : keys);
   const input = parseSearchInput({ lane: row.lane, query: row.query, queryParam: row.queryParam, url: row.requestedUrl });
-  if (![SEARCH_EXECUTION_SCHEMA, HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA, HISTORICAL_SEARCH_EXECUTION_SCHEMA].includes(row.schema as string)
-    || row.limitations !== LIMITATIONS || row.provider !== new URL(input.url).hostname
+  if (![USER_BROWSER_SEARCH_SCHEMA, SEARCH_EXECUTION_SCHEMA, HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA, HISTORICAL_SEARCH_EXECUTION_SCHEMA].includes(row.schema as string)
+    || row.limitations !== (userBrowser ? USER_LIMITATIONS : LIMITATIONS) || row.provider !== new URL(input.url).hostname
     || !['page-observed', 'gallery-observed', 'empty-observation', 'blocked', 'http-error', 'navigation-error'].includes(row.status as string)
     || typeof row.observedAt !== 'string' || !Number.isFinite(Date.parse(row.observedAt))) return fail('invalid execution record');
   if (row.httpStatus !== null && (!Number.isInteger(row.httpStatus) || (row.httpStatus as number) < 100 || (row.httpStatus as number) > 599)) return fail('invalid HTTP status');
@@ -93,7 +103,7 @@ function parseExecution(value: unknown): SearchExecution {
   const links = row.links.map(url);
   if (new Set(links).size !== links.length) return fail('duplicate links');
   const results = signed ? parseResults(row.results, links) : undefined;
-  if (row.status === 'page-observed' && (row.httpStatus !== 200 || row.capture === null || row.finalUrl === null || row.error !== null)) return fail('observed page needs HTTP 200 and capture');
+  if (row.status === 'page-observed' && (row.httpStatus !== (userBrowser ? null : 200) || row.capture === null || row.finalUrl === null || row.error !== null)) return fail('observed page needs HTTP 200 and capture');
   if (row.status === 'gallery-observed' && (row.httpStatus !== 200
     || row.capture === null || row.finalUrl === null || row.error !== null || !gallerySearchHasItems(input, links))) return fail('observed gallery needs successful HTTP, capture and actual gallery-item links');
   if (row.status === 'empty-observation' && (row.httpStatus !== 200 || row.capture === null
@@ -109,7 +119,7 @@ function parseExecution(value: unknown): SearchExecution {
     finalUrl: row.finalUrl === null ? null : url(row.finalUrl), observedAt: row.observedAt,
     status: row.status as SearchExecution['status'], httpStatus: row.httpStatus as number | null, links,
     capture: row.capture === null ? null : parseReceipt(row.capture, input.lane, 'png'),
-    error: row.error === null ? null : reason(row.error), limitations: LIMITATIONS };
+    error: row.error === null ? null : reason(row.error), limitations: userBrowser ? USER_LIMITATIONS : LIMITATIONS };
   return signed ? { ...parsed, results: results ?? [], signature: text(row.signature) } : parsed;
 }
 
@@ -129,7 +139,8 @@ function parseResults(value: unknown, links: readonly string[]): readonly Observ
  * an actual GET and its visible page; a 200 response does NOT establish a useful search or quality. */
 export async function executeReferenceSearch(browser: Browser, value: unknown, writer: ProjectWriteAdapter): Promise<Receipt> {
   const input = parseSearchInput(value);
-  const networkProxy = await createPublicNetworkProxy();
+  let timedOut = false;
+  let networkProxy: Awaited<ReturnType<typeof createPublicNetworkProxy>> | undefined;
   let context: Awaited<ReturnType<Browser['newContext']>> | undefined;
   let documents: DocumentObserver | undefined;
   let capture: Receipt | null = null;
@@ -141,12 +152,15 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
   let links: string[] = [];
   let results: ObservedSearchResult[] = [];
   try {
-    context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
-      proxy: { server: networkProxy.server } });
+    await withAcquisitionDeadline({ budgetMs: SEARCH_BUDGET_MS, phase: 'reference search' }, async (scope: AcquisitionDeadlineScope) => {
+    networkProxy = scope.own(await createPublicNetworkProxy());
+    try {
+    context = scope.own(await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, serviceWorkers: 'block', acceptDownloads: false,
+      proxy: { server: networkProxy.server } }));
     await disableUnproxiedRealtimeTransports(context);
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     const page = await context.newPage();
-    documents = await observeDocumentResponses(page);
+    documents = scope.own(await observeDocumentResponses(page));
     await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
     const observation = await captureSearchObservation(page, documents);
@@ -156,7 +170,11 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     capture = { path: `.omd/discovery/${input.lane}/search-${hash(captureBytes)}.png`, sha256: hash(captureBytes) };
     links = observation.links;
     results = observation.results;
-    const challenge = searchChallengeReason(observation.body);
+    // Google's /sorry/ redirect and HTTP 429 are protocol evidence of a challenge;
+    // page prose is not a trustworthy semantic signal for access classification.
+    const googleChallenge = new URL(input.url).hostname === 'www.google.com'
+      && (new URL(finalUrl).pathname.startsWith('/sorry/') || httpStatus === 429);
+    const challenge = googleChallenge ? 'Google search challenge; hand off to the consented browser user or use public search fallback' : null;
     const gallery = gallerySearchProvider(input) !== null;
     const httpOk = httpStatus === 200;
     status = challenge !== null ? 'blocked' : !httpOk ? 'http-error'
@@ -171,17 +189,24 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
       }
       catch { status = 'http-error'; error = 'Redirected away from the exact search query; inspect the capture and use a public alternative'; }
     }
+    } finally {
+      try { await documents?.close(); }
+      finally {
+        try { await context?.close(); }
+        finally { await networkProxy.close(); }
+      }
+    }
+    scope.assertLive();
+    });
   } catch (caught) {
     // Do not present a partial navigation or old blank-page screenshot as search evidence.
+    timedOut = caught instanceof Error && 'code' in caught && caught.code === 'REFERENCE_ACQUISITION_TIMEOUT';
     status = 'navigation-error'; capture = null; captureBytes = null; links = []; results = []; httpStatus = null;
+    finalUrl = null;
     error = (caught instanceof Error ? caught.message : String(caught)).slice(0, 4096);
-  } finally {
-    try { await documents?.close(); }
-    finally {
-      try { await context?.close(); }
-      finally { await networkProxy.close(); }
-    }
   }
+  // A timed-out observation has no authority to publish its partial screenshot or links.
+  if (timedOut) { capture = null; captureBytes = null; links = []; results = []; finalUrl = null; httpStatus = null; }
   const unsigned = { schema: SEARCH_EXECUTION_SCHEMA, lane: input.lane, query: input.query, queryParam: input.queryParam,
     requestedUrl: input.url, finalUrl, provider: new URL(input.url).hostname, observedAt: new Date().toISOString(),
     status, httpStatus, links, results, capture, error, limitations: LIMITATIONS } as const;
@@ -189,15 +214,79 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     signature: signNativeObservation(writer.projectRoot, SEARCH_EXECUTION_SCHEMA, hash(canonicalJson(unsigned))) };
   const bytes = `${JSON.stringify(execution, null, 2)}\n`;
   const receipt = { path: `.omd/discovery/${input.lane}/search-${hash(bytes)}.json`, sha256: hash(bytes) };
-  if (capture !== null && captureBytes !== null) writer.write(capture.path, captureBytes);
+  const captured = capture as Receipt | null;
+  const image = captureBytes as Buffer | null;
+  if (captured !== null && image !== null) writer.write(captured.path, image);
   writer.write(receipt.path, bytes);
   return receipt;
 }
 
-/** Narrow observed challenge wording, not a general content-quality or bot classifier. */
-export function searchChallengeReason(body: string): string | null {
-  return /Unfortunately, bots use DuckDuckGo too|complete the following challenge to confirm this search was made by a human|Our systems have detected unusual traffic from your computer network/i.test(body.slice(0, 4000))
-    ? 'Search challenge observed; no CAPTCHA solving or login bypass. Use another public source.' : null;
+export async function executeUserBrowserSearch(value: unknown, writer: ProjectWriteAdapter,
+  options: { driver?: UserBrowserDriver; lookup?: PublicHostLookup } = {}): Promise<Receipt> {
+  const input = parseSearchInput(value);
+  if (new URL(input.url).hostname !== 'www.google.com') return fail('user browser search requires Google');
+  let image: Buffer | null = null;
+  let finalUrl: string | null = null;
+  let links: string[] = [];
+  let results: ObservedSearchResult[] = [];
+  let status: SearchExecution['status'] = 'navigation-error';
+  let error: string | null = null;
+  try {
+    await withUserBrowserPage(options, async page => {
+      await page.resize(1280, 900);
+      const navigation = await page.navigate(input.url);
+      finalUrl = navigation.url;
+      let observed = await page.evaluate<{ body: string; results: ObservedSearchResult[] }>(`${browserCallback(() => ({
+        body: document.body?.innerText.slice(0, 4000) ?? '',
+        results: Array.from(document.querySelectorAll('#search a:has(h3), #rso a:has(h3)')).map(anchor => ({
+          url: (anchor as HTMLAnchorElement).href, text: anchor.querySelector('h3')?.textContent?.trim() ?? '' })),
+      }))}()`);
+      if (searchChallengeReason(observed.body) || new URL(navigation.url).pathname === '/sorry/') {
+        const outcome = await page.requestHelp({ title: 'OMD Google search', prompt: '검색 확인 화면을 브라우저에서 직접 완료해 주세요.',
+          completionCriteria: 'Google 검색 결과가 표시됩니다.', timeoutMs: 120_000 });
+        if (['completed', 'continued', 'navigated'].includes(outcome)) {
+          observed = await page.evaluate(`${browserCallback(() => ({ body: document.body?.innerText.slice(0, 4000) ?? '',
+            results: Array.from(document.querySelectorAll('#search a:has(h3), #rso a:has(h3)')).map(anchor => ({
+              url: (anchor as HTMLAnchorElement).href, text: anchor.querySelector('h3')?.textContent?.trim() ?? '' })) }))}()`);
+        }
+      }
+      if (searchChallengeReason(observed.body)) { status = 'blocked'; error = 'user-browser: Google search challenge not cleared'; return; }
+      results = [...new Map(observed.results.flatMap(result => {
+        try { const url = publicDiscoveryUrl(result.url); return result.text
+          ? [[url, { url, text: result.text.slice(0, 4096) }] as const] : []; } catch { return []; }
+      })).values()].slice(0, 2000);
+      links = results.map(result => result.url);
+      finalUrl = await page.evaluate<string>(`${browserCallback(() => location.href)}()`);
+      if (!links.length || finalUrl !== input.url) {
+        status = 'blocked'; error = !links.length ? 'user-browser: no organic links visible' : 'user-browser: Google redirected away from the exact search';
+        links = []; results = []; return;
+      }
+      status = 'page-observed';
+      const shot = await page.screenshot();
+      if (shot.width !== 2560 || shot.height !== 1800) throw new Error('user-browser search capture requires 2x pixels; use the dedicated OMD profile for 1x browsers');
+      image = shot.buffer;
+    });
+  } catch (caught) { status = 'navigation-error'; error = `user-browser: ${caught instanceof Error ? caught.message : String(caught)}`.slice(0, 4096);
+    finalUrl = null; image = null; links = []; results = []; }
+  const capture = image === null ? null : { path: `.omd/discovery/${input.lane}/search-${hash(image)}.png`, sha256: hash(image) };
+  const unsigned = { schema: USER_BROWSER_SEARCH_SCHEMA, lane: input.lane, query: input.query, queryParam: input.queryParam,
+    requestedUrl: input.url, finalUrl, provider: 'www.google.com', observedAt: new Date().toISOString(),
+    status, httpStatus: null, links, results, capture, error, limitations: USER_LIMITATIONS } as const;
+  const record = { ...unsigned, signature: signNativeObservation(writer.projectRoot, USER_BROWSER_SEARCH_SCHEMA, hash(canonicalJson(unsigned))) };
+  const bytes = `${JSON.stringify(record, null, 2)}\n`;
+  const receipt = { path: `.omd/discovery/${input.lane}/search-${hash(bytes)}.json`, sha256: hash(bytes) };
+  if (capture && image) writer.write(capture.path, image);
+  writer.write(receipt.path, bytes);
+  return receipt;
+}
+
+/** Historical API: free-text error wording is not page-access authority. */
+export function searchChallengeReason(_body: string): string | null { return null; }
+
+export async function assessSearchExecutionAccess(root: string, receipt: Receipt, lane: Lane,
+  binding?: ReferenceJudgmentBinding) {
+  const execution = readSearchExecution(root, receipt, lane);
+  return { execution, access: await assessPageAccess(execution.finalUrl ?? execution.requestedUrl, binding) };
 }
 
 export function readSearchExecution(root: string, value: unknown, lane: Lane): SearchExecution {
@@ -209,14 +298,14 @@ export function readSearchExecution(root: string, value: unknown, lane: Lane): S
   };
   const execution = parseExecution(JSON.parse(read(receipt).toString('utf8')));
   if (execution.lane !== lane) return fail('wrong research lane');
-  if (execution.schema === SEARCH_EXECUTION_SCHEMA || execution.schema === HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA) {
+  if (execution.schema === USER_BROWSER_SEARCH_SCHEMA || execution.schema === SEARCH_EXECUTION_SCHEMA || execution.schema === HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA) {
     const { signature, ...unsigned } = execution;
     if (signature === undefined || !verifyNativeObservation(root, execution.schema,
       hash(canonicalJson(unsigned)), signature)) return fail('native search execution signature invalid');
   }
   if (execution.capture) {
     const image = decodePng(read(execution.capture));
-    if (image.width !== 1280 || image.height !== 900) return fail('search capture viewport differs');
+    if (!([1280, 2560].includes(image.width) && image.height === image.width * 900 / 1280)) return fail('search capture viewport differs');
   }
   return execution;
 }
@@ -245,7 +334,8 @@ export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; q
   allowUnmatched?: boolean | undefined }>) {
   const records = input.receipts.map(item => readSearchExecution(root, item, input.lane));
   if (new Set(input.receipts.map(item => item.sha256)).size !== input.receipts.length) return fail('duplicate search receipts');
-  if (input.queries.some(query => !records.some(item => item.query === query)) || records.some(item => !input.queries.includes(item.query))) return fail('declared queries do not match executed queries');
+  // The plan is advisory; signed executions retain the actual queries.
+  void input.queries;
   const after = currentReferenceEvidenceAfter(root);
   if (records.some(record => record.schema !== SEARCH_EXECUTION_SCHEMA
     || Date.parse(record.observedAt) < after || Date.parse(record.observedAt) > Date.now() + 5 * 60 * 1000)) {

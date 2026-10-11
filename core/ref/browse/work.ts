@@ -1,10 +1,14 @@
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import type { RouteRecord } from '../../route/index.ts';
 import type { ReferenceDiscoveryAction, ReferenceDiscoveryWork } from '../discovery-work.ts';
 import { canonicalJson, sha256 } from './json.ts';
 import { readContainedRegularFile } from '../reference-selection.ts';
 import { referenceServiceFamily } from '../design-discovery-sources.ts';
+import { refIdentity } from '../identity.ts';
+import { loadDesignCandidates } from '../reference-candidate.ts';
+import { readAuthenticatedAdmissionHistory } from '../reference-direction-admission.ts';
+import { loadRefs, refRecordPath } from '../store.ts';
 import { readCurrentBrowseEvidence } from './evidence.ts';
 import { evaluateBrowseStop, browseSaturation } from './budget.ts';
 import { parseCanonical, readBrowseBytes, replayBrowseKeeps, verifySigned } from './trace.ts';
@@ -13,6 +17,24 @@ import { ACQUISITION, browseFail, type Binding, type BrowseEvent, type BrowseObs
 type LivePointer = { binding: Binding; head: string | null; checkpoint: Receipt | null; seal: Receipt | null };
 export function browseDiscoveryWork(root: string, route: Pick<RouteRecord, 'sourceContractSha256'>): ReferenceDiscoveryWork {
   const sealed = readCurrentBrowseEvidence(root, route.sourceContractSha256);
+  const admissions = readAuthenticatedAdmissionHistory(root, route.sourceContractSha256).flatMap(item => item.admissions);
+  const candidates = loadDesignCandidates(root);
+  const pendingCandidates = candidates.filter(candidate => !admissions.some(row =>
+    row.sourceId === refIdentity(candidate.reference.source, candidate.reference.component)
+    && row.captureSha256 === sha256(candidate.capture) && row.imageSha256 === sha256(candidate.image)));
+  const promotedDirections = loadRefs(root).flatMap(reference => {
+    if (reference.researchLane !== 'design' || !reference.imagePath || !reference.acquisition?.imageSha256) return [];
+    const imageSha256 = reference.acquisition.imageSha256;
+    const capture = readContainedRegularFile(root, relative(root, refRecordPath(root, reference)), 'retained design capture');
+    const admitted = admissions.some(row => row.verdict === 'direction'
+      && row.sourceId === refIdentity(reference.source, reference.component)
+      && row.captureSha256 === sha256(capture) && row.imageSha256 === imageSha256);
+    if (!admitted) return [];
+    if (sha256(readContainedRegularFile(root, reference.imagePath, 'retained design image')) !== imageSha256) {
+      browseFail('BROWSE_RETAINED_IMAGE_CHANGED', 'the admitted retained image bytes changed', 2);
+    }
+    return [{ reference, imageSha256 }];
+  });
   const pointerPath = '.omd/.cache/ref-browse/current.json';
   let live: LivePointer | null = null;
   if (existsSync(resolve(root, pointerPath))) {
@@ -45,6 +67,9 @@ export function browseDiscoveryWork(root: string, route: Pick<RouteRecord, 'sour
       args: stopping ? ['ref', 'browse', 'end', '--reason', nativeStop ?? 'budget', '--json'] : ['ref', 'browse', 'status', '--json'],
       reason: stopping ? 'Seal the bounded research attempt and carry unresolved gaps as confidence debt.'
         : 'Choose a recorded browse action from the visible observation. Inspect whole screens, keep concrete reasons, compare the tray, then author reference analysis.' };
+  } else if (pendingCandidates.length > 0) {
+    action = { kind: 'review-candidates', lane: 'design', args: ['ref', 'direction-review', '--json'],
+      reason: 'Independent Eye must inspect the staged original pixels before any design reference can be retained or counted as a visual direction.' };
   } else {
     const exhausted = sealed.some(item => item.summary.stopReason === 'budget' || evaluateBrowseStop(item.verified.seal.budget, Date.now()) === 'budget'
       || item.verified.seal.confidenceDebt.some(debt => debt.code === 'browser-capability-gap'));
@@ -58,9 +83,19 @@ export function browseDiscoveryWork(root: string, route: Pick<RouteRecord, 'sour
   }
   const keeps = sealed.flatMap(item => item.verified.seal.keeps.map(keep => ({ lane: item.summary.lane, keep })));
   const progress = { domainFamilies: new Set(keeps.filter(item => item.lane === 'domain').map(item => referenceServiceFamily(item.keep.source))).size,
-    designFamilies: new Set(keeps.filter(item => item.lane === 'design').map(item => referenceServiceFamily(item.keep.source))).size,
+    designFamilies: new Set([
+      ...keeps.filter(item => item.lane === 'design').map(item => referenceServiceFamily(item.keep.source)),
+      ...promotedDirections.map(({ reference }) => referenceServiceFamily(reference.source)),
+    ]).size,
     searches: 0, entries: 0, visits: 0, unavailable: sealed.reduce((sum, item) => sum + item.verified.events.filter(event => event.error).length, 0), ignored: 0 };
+  const materialProgressIdentities = [
+    ...keeps.map(item => `${item.lane}:${item.keep.source}:${item.keep.image.sha256}`),
+    ...promotedDirections.map(({ reference, imageSha256 }) => `design:${reference.source}:${imageSha256}`),
+  ].toSorted();
   return { schema: 'reference-discovery-work-v2', status, action, next: `omd ${action.args.join(' ')}`, instruction: action.reason,
-    workSha256: sha256(canonicalJson({ contract: route.sourceContractSha256, status, action, discrete })), code: null, attempts: [], exclusions: [], progress,
+    workSha256: sha256(canonicalJson({ contract: route.sourceContractSha256, status, action, discrete,
+      pendingCaptures: pendingCandidates.map(candidate => sha256(candidate.capture)).toSorted(),
+      materialProgressIdentities })), code: null, attempts: [], exclusions: [],
+    materialProgressIdentities, circuits: [], progress,
     browse: { head: live?.head ?? null, budget: live?.binding.budget ?? sealed.at(-1)?.verified.seal.budget ?? null, observation, confidenceDebt: sealed.flatMap(item => item.verified.seal.confidenceDebt) } };
 }

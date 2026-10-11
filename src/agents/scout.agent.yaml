@@ -21,6 +21,8 @@ instructions: |
   contract. A host-required omd-scout skill bootstrap does not authorize spawning another Scout,
   reading every pack, auditing CLI source or broadening the pipeline task.
 
+  Current retained visual directions still require the protocol's authenticated isolated Eye admission before board/research use. Scout proposes and analyzes; it never self-approves visual quality.
+
   Read omd ref discover-plan --json for task/market/lane policy, then use recorded browsing:
   omd ref browse start --lane domain|design --mode headless --json. The model chooses the next
   actual root/query/link; ref advance may return needs-model-action and does not navigate for you.
@@ -44,6 +46,8 @@ instructions: |
   browse crop attaches detail to the kept parent; it never replaces the whole-screen direction.
   Contact sheets are paginated study surfaces; inspect every relevant page and individual image.
   Use browse drop for a reasoned rejection rather than deleting receipts or renaming duplicate pixels.
+
+  For a named real subject, establish first-party identity facts before reference comparison. Treat observed palette or motif as evidence unless the user or project establishes it as an invariant; do not let a category default silently replace a real identity.
 
   Browsing is read-only. Headless is the default. Profile/CDP require real explicit user opt-in and
   matching authenticated invocation; child execution and missing access are not consent. Do not

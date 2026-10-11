@@ -16,7 +16,7 @@ const cliPath = fileURLToPath(new URL('./fixtures/pi-reviewer-rpc.mjs', import.m
 const nodePath = realpathSync(process.execPath);
 type FixtureEvent = Readonly<{ event: string; pid: number }>;
 
-function setup(t: TestContext, mode = 'success') {
+function setup(t: TestContext, mode = 'success', thinkingLevel = 'high') {
   const { root: fixtureRoot, invocation: base, observationSha256s } = prepareFinalRenderReviewFixture();
   const root = realpathSync(fixtureRoot);
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -28,7 +28,7 @@ function setup(t: TestContext, mode = 'success') {
   });
   const host = {
     nodePath, nodeSha256: digest(readFileSync(nodePath)), cliPath, cliSha256: digest(readFileSync(cliPath)),
-    provider: 'fixture-provider', model: 'fixture-model', thinkingLevel: 'high', parentSessionId: 'fixture-parent',
+    provider: 'fixture-provider', model: 'fixture-model', thinkingLevel, parentSessionId: 'fixture-parent',
   };
   const invocation = createTestNativePiInvocation({ root, host, current: base.current });
   const packet = finalRenderReviewerPacket({ root, invocation: base, packetInput: {
@@ -57,7 +57,7 @@ function observeFixture(t: TestContext, root: string, observe: (event: FixtureEv
   return read;
 }
 
-test('Given a fresh Pi reviewer lane When its children consume evidence Then two independently signed results are returned', { timeout: 30_000 }, async t => {
+test('Given the owned Pi system prompt with the exact child cwd When reviewers consume evidence Then two signed results return', { timeout: 30_000 }, async t => {
   const input = setup(t);
 
   const results = await runPiReviewerLane({ ...input, signal: t.signal });
@@ -92,26 +92,84 @@ test('Given a fresh Pi reviewer lane When its children consume evidence Then two
   }
 });
 
+test('repair baseline images cannot enter the blind final reviewer', async t => {
+  const input = setup(t);
+  const trace = observeFixture(t, input.root, () => {});
+  const packet = JSON.parse(input.packet.toString('utf8'));
+  packet.evidence.priorRenders = [];
+  await assert.rejects(() => runPiReviewerLane({
+    ...input, packet: Buffer.from(JSON.stringify(packet)), signal: t.signal,
+  }), error => error instanceof PiReviewerError && error.code === 'packet-prior-renders');
+  assert.deepEqual(trace(), []);
+});
+
+test('Given a host returning only the owned system prompt When reviewers consume evidence Then signed results return', { timeout: 30_000 }, async t => {
+  const input = setup(t, 'bare-system-prompt');
+
+  const results = await runPiReviewerLane({ ...input, signal: t.signal });
+
+  assert.equal(results.length, 2);
+  for (const result of results) verifySignedPiEyeRoleResult(result, input.root);
+});
+
+test('Given a medium-thinking Pi host When Eye runs Then its declared high tier is used without replacing the host model', { timeout: 30_000 }, async t => {
+  const input = setup(t, 'success', 'medium');
+  const results = await runPiReviewerLane({ ...input, signal: t.signal });
+  for (const result of results) {
+    const { receipt } = verifySignedPiEyeRoleResult(result, input.root);
+    assert.equal(receipt.modelReasoningEffort, 'high');
+    assert.equal(receipt.provider, 'fixture-provider');
+    assert.equal(receipt.model, 'fixture-model');
+  }
+});
+
+test('a host-generated empty high-effort configuration update is not prior reviewer conversation', { timeout: 30_000 }, async t => {
+  const input = setup(t, 'configuration-update', 'medium');
+  const results = await runPiReviewerLane({ ...input, signal: t.signal });
+  for (const result of results) {
+    const { receipt } = verifySignedPiEyeRoleResult(result, input.root);
+    assert.equal(receipt.modelReasoningEffort, 'high');
+    assert.equal(receipt.model, 'fixture-model');
+  }
+});
+
 for (const [mode, code, stage] of [
+  ['configuration-user-history', 'initial-conversation-history', 'thinking-scoped'],
+  ['configuration-guidance', 'initial-conversation-history', 'thinking-scoped'],
+  ['configuration-wrong-effort', 'initial-conversation-history', 'thinking-scoped'],
   ['wrong-model', 'state-model-session-or-history', 'state'],
+  ['thinking-drift', 'state-model-session-or-history', 'state'],
   ['prehistory', 'state-model-session-or-history', 'state'],
   ['no-ready', 'child-exited:0:', 'ready-omitted'],
   ['failed-final', 'assistant-failed', 'final'],
   ['no-evidence', 'evidence-tool-execution', 'evidence-skipped'],
   ['extra-tool', 'child-isolation', 'ready'],
   ['ambient-system', 'ambient-system-prompt', 'ready'],
+  ['wrong-cwd-prompt', 'ambient-system-prompt', 'ready'],
+  ['cwd-extra-guidance', 'ambient-system-prompt', 'ready'],
   ['unauthorized-tool', 'evidence-tool-execution', 'evidence'],
   ['session-changed', 'state-model-session-or-history', 'settled'],
   ['images-blocked', 'images-not-delivered', 'evidence'],
   ['extension-error', 'child-context-or-extension-failure', 'evidence'],
   ['auto-compaction', 'child-context-or-extension-failure', 'evidence'],
+  ['auto-compaction-event', 'child-context-or-extension-failure', 'evidence'],
 ] as const) {
   test(`Given Pi reviewer ${mode} When its lane runs Then no signed completion is returned`, { timeout: 15_000 }, async t => {
     const input = setup(t, mode);
     const events = observeFixture(t, input.root, () => undefined);
 
-    await assert.rejects(runPiReviewerLane({ ...input, signal: t.signal }), error =>
-      error instanceof PiReviewerError && error.code === code);
+    await assert.rejects(runPiReviewerLane({ ...input, signal: t.signal }), error => {
+      if (!(error instanceof PiReviewerError) || error.code !== code) return false;
+      if (mode === 'extension-error' || mode === 'auto-compaction' || mode === 'auto-compaction-event') {
+        const expected = {
+          'extension-error': { type: 'extension_error', event: 'before_provider_request', error: 'Offline fixture extension failure' },
+          'auto-compaction': { type: 'compaction_start', reason: 'threshold' },
+          'auto-compaction-event': { type: 'auto_compaction_start', reason: 'overflow' },
+        }[mode];
+        assert.deepEqual(JSON.parse(error.message.slice(`PI_REVIEWER_REJECTED:${code}:`.length)), expected);
+      }
+      return true;
+    });
 
     assert.ok(events().some(event => event.event === stage), `fixture reached ${stage}`);
   });

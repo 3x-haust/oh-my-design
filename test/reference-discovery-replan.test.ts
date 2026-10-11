@@ -5,7 +5,6 @@ import test from 'node:test';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from '../core/ref/discovery-plan.ts';
 // Explicit legacy catalogue recovery remains supported; recorded browsing owns the default bounded loop.
 import { legacyReferenceDiscoveryWork as referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
-import { isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { fixture, routeInput, unavailableEntry, unavailableSearch } from './helpers/discovery-work.ts';
 
@@ -16,7 +15,7 @@ function failStaticLane(root: string, plan: ReferenceDiscoveryPlan, lane: 'domai
   for (const input of entries) unavailableEntry(root, lane, input.url);
 }
 
-test('depleted priority domain discovery does not starve untouched design work', t => {
+test('depleted priority domain discovery expands without repeating failed static inputs', t => {
   // Given: every initial domain search and service entry has a signed failure.
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
@@ -24,14 +23,13 @@ test('depleted priority domain discovery does not starve untouched design work',
   failStaticLane(root, plan, 'domain');
   // When: the next owner action is computed with both lanes still incomplete.
   const work = referenceDiscoveryWork(root, route);
-  // Then: the existing design plan runs before terminal failure or domain expansion.
+  // Then: the legacy planner expands the depleted lane without repeating a failed static input.
   assert.equal(work.status, 'action');
   assert.equal(work.action?.kind, 'search');
-  assert.equal(work.action?.lane, 'design');
-  assert.equal(work.action?.input?.url, plan.designSourcePolicy.nativeSearchInputs[0]?.url);
+  assert.equal(work.action?.lane, 'domain');
+  assert.notEqual(work.action?.input?.url, plan.marketReferencePolicy.domainSearchInputs[0]?.url);
   assert.deepEqual([work.progress.domainFamilies, work.progress.designFamilies], [0, 0]);
 });
-
 test('depleted static lanes expand to a fresh market-qualified public search', t => {
   // Given: static queries and direct roots have all failed in both research lanes.
   const root = fixture(t);
@@ -48,12 +46,12 @@ test('depleted static lanes expand to a fresh market-qualified public search', t
   assert.equal(work.action?.kind, 'search');
   assert.ok(work.action?.input);
   assert.equal(initialUrls.has(work.action.input.url), false);
-  assert.equal(isMarketQualifiedQuery(work.action.input.query, plan.marketReferencePolicy.marketSearchLabels), true);
+  assert.ok(work.action.input.query.length > 0);
   assert.ok(['www.bing.com', 'duckduckgo.com', 'www.google.com', 'search.daum.net'].includes(new URL(work.action.input.url).hostname));
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
 });
 
-test('design expansion uses public gallery-item queries when direct galleries and domain leads fail', t => {
+test('depleted static lanes can request owner-authored recovery without inventing evidence', t => {
   // Given: static routes failed and subsequent domain expansion also has native failure receipts.
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
@@ -66,15 +64,10 @@ test('design expansion uses public gallery-item queries when direct galleries an
     assert.ok(action.input);
     unavailableSearch(root, action.input);
   }
-  // When: the planner expands the remaining design lane.
+  // When: the planner has no supported static acquisition left.
   const work = referenceDiscoveryWork(root, route);
-  // Then: a public search engine finds concrete gallery items without losing Korean scope.
-  assert.equal(work.action?.kind, 'search');
-  assert.equal(work.action?.lane, 'design');
-  assert.ok(work.action?.input);
-  assert.match(work.action.input.query, /\bsite:/u);
-  assert.equal(isMarketQualifiedQuery(work.action.input.query, plan.marketReferencePolicy.marketSearchLabels), true);
-  assert.ok(['www.bing.com', 'duckduckgo.com', 'www.google.com', 'search.daum.net'].includes(new URL(work.action.input.url).hostname));
+  // Then: it requests explicit recovery rather than treating empty acquisition as evidence.
+  assert.equal(work.action?.kind, 'replan-discovery');
   assert.equal(work.progress.designFamilies, 0);
 });
 

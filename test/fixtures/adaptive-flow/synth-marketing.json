@@ -129,6 +129,7 @@
     "stages": [
       "domain",
       "frame",
+      "acquisition",
       "scout",
       "reference-board",
       "reference-selection",
@@ -220,10 +221,6 @@
       {
         "id": "content-grain",
         "reason": "The page has a compact supplied message set rather than a content-morphology problem."
-      },
-      {
-        "id": "acquisition",
-        "reason": "Official manuals and guidance can be acquired directly during parallel reference discovery."
       },
       {
         "id": "safety-validation",

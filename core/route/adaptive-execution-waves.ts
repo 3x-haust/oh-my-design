@@ -20,7 +20,7 @@ function selectedDependencies(stage: AdaptiveStageId, selected: ReadonlySet<stri
 }
 
 /** Validates explicit concurrency groups against selected roles and the artifact DAG. */
-export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only', currentProcess = false): void {
+export function validateAdaptiveExecutionWaves(strategy: Pick<AdaptiveStrategyDecision, 'roles' | 'stages' | 'methods' | 'executionWaves'>, deliveryMode?: 'design-only', currentProcess = false): void {
   const graph = adaptiveStageGraph(currentProcess), owners = adaptiveStageOwners(currentProcess);
   const waveByRole = new Map<string, number>();
   for (const [waveIndex, wave] of strategy.executionWaves.entries()) {
@@ -38,6 +38,14 @@ export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecisio
   }
   const studyWave = waveByRole.get('omd-study');
   if (studyWave !== undefined) {
+    if (strategy.methods.includes('provisional-source-study')) {
+      const scoutWave = waveByRole.get('omd-scout');
+      const typeWave = waveByRole.get('omd-typesetter');
+      if ((scoutWave !== undefined && scoutWave >= studyWave)
+        || (typeWave !== undefined && typeWave <= studyWave)) {
+        return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', 'source-aware study follows selected Scout work and precedes Typesetter');
+      }
+    }
     for (const consumer of deliveryMode === 'design-only' ? ['omd-composer'] : ['omd-composer', 'omd-hand']) {
       const consumerWave = waveByRole.get(consumer);
       if (consumerWave === undefined || consumerWave <= studyWave) {

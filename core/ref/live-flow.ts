@@ -1,3 +1,4 @@
+import { browserCallback } from './browser-evaluation.ts';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Browser, Page } from 'playwright';
@@ -9,8 +10,11 @@ import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime
 import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { decodePng } from '../motion/energy.ts';
 import { clearReferenceNotices, hasSuspendedReferenceScripts, prepareSuppressedReferenceLink, resumeScriptsOnNewReferenceDocument, type NoticeDismissal } from './notice-overlay.ts';
+import { referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 
 type Receipt = { path: string; sha256: string };
+type NetworkRestriction = Readonly<{ method: string; origin: string; path: string; navigation: boolean;
+  resourceType: string; phase: 'before-action' | 'after-action' }>;
 type StepInput = { screenId: string; state: string; clicks: string[]; assertions: ViewAssertion[] };
 type Input = { schema: 'reference-flow-input-v1'; sourceId: string; flowId: string; url: string; viewport: { width: number; height: number }; steps: StepInput[] };
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
@@ -55,13 +59,18 @@ async function frameVisibleAssertions(page: Page, assertions: readonly ViewAsser
   }
 }
 
-async function safeClick(page: Page, selector: string, origin: string): Promise<void> {
+async function safeClick(page: Page, selector: string, origin: string,
+  actionJudgment?: (page: Page, selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>): Promise<void> {
   const control = page.locator(selector);
   await control.waitFor({ state: 'visible', timeout: 3000 });
   if (await control.count() !== 1) return fail('ambiguous click target');
-  const info = await control.evaluate(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') }));
-  // Read-only public navigation only. No submit/login/payment/delete actions, even if a site uses GET.
-  if (/log\s*(?:in|out)|sign\s*(?:in|out|up)|purchase|pay\b|checkout|delete|remove|unsubscribe|submit|apply\s+now|로그인|로그아웃|가입|결제|구매|삭제|탈퇴|제출|신청하기/i.test(`${info.label} ${info.href ?? ''}`)) return fail('sensitive action is excluded; record an authentication/payment/destructive-action gap');
+  const info = await control.evaluate(browserCallback((node: Element) => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
+  // A verified judgment authorizes meaning; structural transport restrictions below remain hard.
+  const binding = await actionJudgment?.(page, selector, page.url());
+  if (binding && binding.subjectId !== `${page.url()}#${selector}`) return fail('action judgment targets another control or document');
+  const judgment = await referenceDecision('reference-action', binding);
+  if (!['read-only-navigation', 'disclosure'].includes(judgment.decision)) return fail('sensitive or unclear action is excluded');
+  if (info.form) return fail('form controls are excluded from reference clicks');
   const link = info.tag === 'A' && info.href !== null;
   if (link) {
     if ((info.target && info.target.toLowerCase() !== '_self') || info.download) return fail('new-window, frame-targeted and download links are excluded from reference clicks');
@@ -69,6 +78,10 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   }
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
   if (info.tag === 'BUTTON' && hasSuspendedReferenceScripts(page)) return fail('same-document scripted action is unavailable after visual-only notice suppression; record a bounded gap or inspect another public source');
+  const current = await control.evaluate(browserCallback((node: Element) => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
+  if (JSON.stringify(current) !== JSON.stringify(info) || await control.count() !== 1
+    || binding?.context.documentSha256 !== hash(await page.content()) || binding?.subjectId !== `${page.url()}#${selector}`)
+    return fail('action control or document changed since the judgment');
   const previousUrl = page.url();
   if (link && hasSuspendedReferenceScripts(page)) {
     const destination = new URL(info.href!, previousUrl);
@@ -80,7 +93,9 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
 }
 
 /** One fresh browser context preserves the actual step-to-step state; no authored receipt input. */
-export async function recordLiveReferenceFlow(browser: Browser, rootInput: string, value: unknown, writer: ProjectWriteAdapter) {
+export async function recordLiveReferenceFlow(browser: Browser, rootInput: string, value: unknown, writer: ProjectWriteAdapter,
+  actionJudgment?: (page: Page, selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>,
+  overlayJudgment?: (page: Page, selector: string, documentUrl: string) => Promise<ReferenceJudgmentBinding | undefined>) {
   const root = resolve(rootInput); requireProjectWriteAdapter(root, writer);
   const input = parseLiveFlowInput(value), origin = new URL(input.url).origin;
   const save = (directory: string, bytes: Buffer | string, ext: string): Receipt => {
@@ -90,6 +105,8 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
   const startedAt = new Date().toISOString();
   const steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals: NoticeDismissal[] }[] = [];
   const blocked: string[] = [];
+  const networkRestrictions: NetworkRestriction[] = [];
+  let actionStarted = false;
   let limitation: string | null = null;
   try {
     await inspectionDeadline(async own => {
@@ -97,7 +114,14 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     await context.route('**/*', route => {
       const request = route.request(), url = new URL(request.url());
       if (!['GET', 'HEAD'].includes(request.method()) || (request.isNavigationRequest() && url.origin !== origin)
-        || !['https:', 'data:'].includes(url.protocol)) { blocked.push('non-read-only or cross-service request'); return route.abort(); }
+        || !['https:', 'data:'].includes(url.protocol)) {
+        networkRestrictions.push({ method: request.method(), origin: url.origin, path: url.pathname,
+          navigation: request.isNavigationRequest(), resourceType: request.resourceType(),
+          phase: actionStarted ? 'after-action' : 'before-action' });
+        if (request.isNavigationRequest() || actionStarted || !['https:', 'data:'].includes(url.protocol))
+          blocked.push('non-read-only or cross-service request');
+        return route.abort();
+      }
       return route.continue();
     });
     await context.routeWebSocket('**/*', socket => { blocked.push('WebSocket unavailable in read-only reference research'); socket.close(); });
@@ -106,13 +130,17 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     context.on('page', other => { if (other !== page) { blocked.push('popup excluded'); void other.close(); } });
     let response = await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     page.on('response', r => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) response = r; });
+    const overlay = overlayJudgment && ((selector: string, url: string) => overlayJudgment(page, selector, url));
     const initialDismissals = await clearReferenceNotices(page,
-      input.steps[0]!.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector), 1000);
+      input.steps[0]!.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector), 1000, [], overlay);
     for (const [index, step] of input.steps.entries()) {
       const beforeUrl = page.url();
-      for (const selector of step.clicks) await safeClick(page, selector, origin);
+      for (const selector of step.clicks) {
+        actionStarted = true;
+        await safeClick(page, selector, origin, actionJudgment);
+      }
       const allowedStateSelectors = step.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector);
-      const noticeDismissals = [...(index === 0 ? initialDismissals : []), ...await clearReferenceNotices(page, allowedStateSelectors, index === 0 ? 0 : 400)];
+      const noticeDismissals = [...(index === 0 ? initialDismissals : []), ...await clearReferenceNotices(page, allowedStateSelectors, index === 0 ? 0 : 400, allowedStateSelectors, overlay)];
       await assertViewState(page, step.assertions);
       await waitForDocumentFonts(page);
       const reason = detectBlockReason(await page.title(), (await page.locator('body').innerText()).trim().length, response?.status() ?? null);
@@ -121,7 +149,7 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
       await frameVisibleAssertions(page, step.assertions);
       const capturedUrl = page.url();
       let png = await page.screenshot({ timeout: 5000 });
-      const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors);
+      const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, allowedStateSelectors, overlay);
       noticeDismissals.push(...lateDismissals);
       if (lateDismissals.length) png = await page.screenshot({ timeout: 5000 });
       await assertViewState(page, step.assertions);
@@ -135,7 +163,7 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     }
     }, 120000);
   } catch (error) { limitation = (error instanceof Error ? error.message : String(error)).slice(0, 2000); }
-  const record = { schema: 'reference-flow-execution-v1', input, startedAt, completedAt: new Date().toISOString(), status: limitation === null ? 'completed' : 'blocked', limitation, steps };
+  const record = { schema: 'reference-flow-execution-v1', input, startedAt, completedAt: new Date().toISOString(), status: limitation === null ? 'completed' : 'blocked', limitation, steps, networkRestrictions };
   const digest = hash(canonicalJson(record));
   const execution = save('executions', `${canonicalJson({ ...record, signature: signNativeObservation(root, 'reference-flow-v1', digest) })}\n`, 'json');
   return { execution, ...record, limitations: 'Only these public navigation/disclosure states were executed; no authenticated or transactional controls tested.' };
@@ -164,5 +192,5 @@ export function readLiveReferenceFlow(rootInput: string, receipt: Receipt) {
     const png = decodePng(read(step.capture, 'captures', 'png'));
     if (png.width !== input.viewport.width || png.height !== input.viewport.height) return fail('native capture viewport differs');
   }
-  return record as { schema: string; input: Input; status: 'completed' | 'blocked'; limitation: string | null; steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals?: NoticeDismissal[] }[] };
+  return record as { schema: string; input: Input; status: 'completed' | 'blocked'; limitation: string | null; networkRestrictions?: readonly NetworkRestriction[]; steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals?: NoticeDismissal[] }[] };
 }

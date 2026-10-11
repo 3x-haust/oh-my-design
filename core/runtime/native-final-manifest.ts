@@ -156,7 +156,8 @@ function nativeFinalManifest(root: string, invocation: ProjectRunInvocation, act
       return record.strategy.stages.includes(routeSkipId) && debts.length ? [{ id, status: 'selected-with-debt', routeSkipId, reason: debts[0]!.reason,
         routeSha256: route.record.sha256, authoritySha256: route.authority.sha256, claim: 'not-verified', debtIds: debts.map(d => d.id) }] : [];
     }),
-    copy: descriptor(root, '.omd/copy-deck.md', 'copy-deck-v2'),
+    ...(route.stages.some(stage => stage.id === 'copy' && stage.status === 'selected')
+      ? { copy: descriptor(root, '.omd/copy-deck.md', 'copy-deck-v2') } : {}),
     sourceSeal: descriptor(root, '.omd/source-seal.json', seal.schemaVersion === 2 ? 'source-seal-v2' : 'source-seal-v1'),
     buildIdentity: descriptor(root, first.value.currentArtifact.path, 'omd-build-identity-v1'),
     ...(confidenceDebt ? { confidenceDebt } : {}),

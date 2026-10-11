@@ -21,10 +21,77 @@ import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { advanceReferenceDiscoveryWork } from '../core/ref/discovery-advance.ts';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { assertProjectRunMutationInventory } from '../core/runtime/project-write-inventory.ts';
-import { validateBrowseMarketLocal, readBrowseMarketExecutions } from '../core/ref/browse/market.ts';
+import { validateBrowseMarketLocal, validateBrowseMarketFallback, readBrowseMarketExecutions } from '../core/ref/browse/market.ts';
 import type { ResearchSource } from '../core/ref/reference-research-types.ts';
+import { validateBrowseSourceCoverage } from '../core/ref/reference-research-browse.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
+
+test('goto cannot be retained and a real shot cannot fabricate an unrelated discovery path', { timeout: 60_000 }, async t => {
+  const fixture = designAdmissionFixture(t), site = await browseFixture(), { root } = fixture;
+  const invocation = createTestProjectRunInvocation(root), writer = createTestProjectWriteAdapter(root, invocation);
+  const current = { sourceContractSha256: fixture.research.sourceContractSha256, request: 'Inspect a complete public task screen' };
+  let driver: Awaited<ReturnType<typeof runBrowseDriver>> | undefined, clock = 0, wallOffset = 0;
+  const run = (args: string[]) => executeBrowseCommand(root, parseBrowseCommand(args), current, invocation, writer, {
+    launch: async binding => driver = await runBrowseDriver(binding, { transport: site.transport, clock: () => Date.now() + wallOffset, monotonic: () => clock += 1001 }),
+  });
+  try {
+    await run(['start', '--lane', 'design']);
+    const query = 'account services United States';
+    const search = await run(['search', 'https://design.fixture.test/search', query, '--scope', 'target-market']);
+    assert.equal(search.ok, true, JSON.stringify(search.error));
+    const first = await run(['goto', 'https://unrelated.fixture.test/market', '--scope', 'target-market', '--reason', 'Inspect a local service candidate.']);
+    assert.equal(first.ok, true, JSON.stringify(first.error));
+    assert.equal(first.observation?.url, 'https://unrelated.fixture.test/market');
+    assert.match(first.observation?.text ?? '', /United States/);
+    wallOffset = 120_000;
+    const second = await run(['goto', 'https://independent.fixture.test/other', '--reason', 'Inspect an independent public screen directly.']);
+    assert.equal(second.ok, true, JSON.stringify(second));
+    const kept = await run(['keep', '--source-app', 'Independent Service', '--rights', 'allowed', '--reason', 'Retain the complete task screen, not a claimed link path.']);
+    assert.equal(kept.ok, false);
+    assert.equal(kept.error?.code, 'BROWSE_KEEP_BINDING');
+    assert.equal(loadRefs(root).some(ref => ref.browse), false);
+    assert.equal((await run(['shot'])).ok, true);
+    const retained = await run(['keep', '--source-app', 'Independent Service', '--rights', 'allowed', '--reason', 'Retain the complete task screen after a real shot.']);
+    assert.equal(retained.ok, true, JSON.stringify(retained.error));
+    const ended = await run(['end']); assert.equal(ended.ok, true, JSON.stringify(ended.error));
+    const native = loadRefs(root).find(ref => ref.browse)!;
+    const verified = verifyBrowseSession(root, ended.seal!);
+    const entry = verified.events.find(event => event.action.verb === 'goto' && event.finalUrl === 'https://unrelated.fixture.test/market')!;
+    assert.equal(entry.finalUrl, 'https://unrelated.fixture.test/market');
+    const capture = verified.events[native.browse!.capture.seq]!;
+    assert.equal(capture.action.verb, 'shot');
+    const source: ResearchSource = {
+      id: refIdentity(native.source, native.component), url: native.source, observedAt: native.capturedAt.slice(0, 10),
+      decision: 'Inspect task grouping', finding: 'A directly observed complete screen',
+      evidence: ended.retained![0]!.image, capture: ended.retained![0]!.capture,
+      provenance: { kind: 'recorded-browse', session: ended.seal!, capture: native.browse!.capture, keep: native.browse!.keep },
+      discovery: { kind: 'recorded-browse', url: native.source, access: 'public', qualityReason: 'Direct complete-screen observation.',
+        session: ended.seal!, entry: { seq: capture.seq, hash: capture.hash } },
+    };
+    assert.doesNotThrow(() => validateBrowseSourceCoverage(root, source, 'design', current.sourceContractSha256));
+    const before = readFileSync(join(root, source.capture.path));
+    const disconnected = { ...source, discovery: { ...source.discovery!, url: entry.finalUrl,
+      entry: { seq: entry.seq, hash: entry.hash } } };
+    assert.throws(() => validateBrowseSourceCoverage(root, disconnected, 'design', current.sourceContractSha256), /BROWSE_PATH/);
+    const binding = { provenanceReceiptSha256: ended.seal!.sha256,
+      gap: { attemptedQueries: [query], attemptedRoots: ['https://unrelated.fixture.test/market'] } };
+    assert.doesNotThrow(() => validateBrowseMarketFallback(root, source, binding, [ended.seal!], ['United States']));
+    const readClock = t.mock.method(Date, 'now', () => Date.parse(capture.time) + 7 * 86400_000 - 60_000);
+    try {
+      assert.doesNotThrow(() => verifyBrowseSession(root, ended.seal!));
+      assert.throws(() => validateBrowseMarketFallback(root, source, binding, [ended.seal!], ['United States']), /MARKET_BROWSE_ORDER/);
+    } finally { readClock.mock.restore(); }
+    for (const gap of [
+      { ...binding.gap, attemptedQueries: ['a query that was never issued'] },
+      { ...binding.gap, attemptedRoots: ['https://never.fixture.test/not-observed'] },
+    ]) {
+      const fabricated = { ...binding, gap };
+      assert.throws(() => validateBrowseMarketFallback(root, source, fabricated, [ended.seal!], ['United States']), /MARKET_BROWSE_ATTEMPT/);
+    }
+    assert.deepEqual(readFileSync(join(root, source.capture.path)), before);
+  } finally { await driver?.close(); await site.close(); }
+});
 
 test('browse market claims require visible source-bound bytes, not hidden copy or a query/locale', { timeout: 60_000 }, async t => {
   const fixture = designAdmissionFixture(t), site = await browseFixture(), { root } = fixture;
@@ -45,9 +112,12 @@ test('browse market claims require visible source-bound bytes, not hidden copy o
       provenance: { kind: 'recorded-browse', session: end.seal!, capture: keep.capture, keep: keep.keep } };
     const local = { sourceId: source.id, evidenceSha256: source.evidence.sha256, scope: 'service' as const, basis: 'market-browse-observation' as const,
       provenanceReceiptSha256: end.seal!.sha256, browseEvent: keep.capture, claim: { kind: 'source-task-text' as const, textSha256: admissionHash(visible), linkUrl: null } };
-    assert.doesNotThrow(() => validateBrowseMarketLocal(root, source, local, 'DOMAIN', 'US', ['United States'], 'account'));
+    assert.deepEqual(validateBrowseMarketLocal(root, source, local, 'DOMAIN', 'US', ['United States'], 'account'), {
+      provenance: 'verified', marketScope: 'unclear', taskCapability: 'unclear',
+      sourceUrl: source.url, marketRegion: 'US', taskCategory: 'account',
+    });
     assert.throws(() => validateBrowseMarketLocal(root, source, { ...local, claim: { ...local.claim, textSha256: admissionHash('South Korea account services for local residents') } }, 'DOMAIN', 'KR', ['South Korea'], 'account'), /BROWSE_SCOPE/);
-    assert.throws(() => validateBrowseMarketLocal(root, source, local, 'DOMAIN', 'KR', ['United States'], 'account'), /BROWSE_SCOPE/);
+    assert.equal(validateBrowseMarketLocal(root, source, local, 'DOMAIN', 'KR', ['United States'], 'account').marketScope, 'unclear');
     assert.equal(readBrowseMarketExecutions(root, [end.seal!]).length, 1);
     assert.equal(shot.observation!.text.includes('South Korea'), false);
   } finally { await driver?.close(); await site.close(); }
@@ -74,7 +144,9 @@ test('v8 mixed research admits whole-screen browse evidence into the real image 
     const entry = verified.events.find(event => event.action.verb === 'goto')!;
     const source = { id: refIdentity(native.source, native.component), url: native.source, observedAt: native.capturedAt.slice(0, 10), decision: 'Task hierarchy', finding: 'Compact work region with visible context',
       evidence: { path: fragment.imagePath, sha256: fragment.sha256 }, capture: { path: fragmentPath, sha256: admissionHash(readFileSync(join(root, fragmentPath))) },
-      visualRole: 'visual-direction', visualAssessment: { composition: 'Compact work region', typography: 'Readable hierarchy', density: 'Useful task density', imagery: 'No invented imagery', transfer: 'Hierarchy and grouping', avoid: 'Brand and exact content' },
+      visualRole: 'visual-direction', visualAssessment: { composition: 'Compact work region', typography: 'Readable hierarchy', density: 'Useful task density', imagery: 'No invented imagery', transfer: 'Hierarchy and grouping', avoid: 'Brand and exact content',
+        selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Keep the work region and contextual hierarchy.',
+          reason: 'The complete task screen provides a coherent grouping reference.', flowCaptures: [] } },
       provenance: { kind: 'recorded-browse', session: ended.seal!, capture: native.browse!.capture, keep: native.browse!.keep },
       discovery: { kind: 'recorded-browse', url: native.source, access: 'public', qualityReason: 'Whole task screen provides a coherent independent hierarchy.', session: ended.seal!, entry: { seq: entry.seq, hash: entry.hash } } };
     fixture.board.candidates[0]!.pieces.push({ ...fixture.board.candidates[0]!.pieces[0]!, sourceKind: 'image-fragment', referenceId: fragment.id, slotId: 'whole-screen', targetComponent: 'Workspace', targetSelector: '#workspace', grid: { column: 1, span: 12, order: 1 } });
@@ -89,7 +161,9 @@ test('v8 mixed research admits whole-screen browse evidence into the real image 
     const domainBytes = JSON.stringify({ schema: 'domain-brief-v1', request: current.request, domain: 'service', summary: 'Account task workspace',
       surfaces: [{ name: 'home', purpose: 'Inspect current account work', evidence }], coreObjects: [{ name: 'account', evidence }], audience: { description: 'account owners', evidence },
       referenceQueries: { component: ['account overview'], craft: ['state feedback'], mood: ['readable workspace'] },
-      planning: { businessGoal: { text: 'Reduce inspection effort' }, successSignal: { text: 'Find relevant account detail' }, nonGoals: [{ text: 'No transactions' }] } });
+      planning: { businessGoal: { text: 'Reduce inspection effort', disposition: 'non-factual-working-decision' },
+        successSignal: { text: 'Find relevant account detail', disposition: 'non-factual-working-decision' },
+        nonGoals: [{ text: 'No transactions', disposition: 'omit-from-production-claims' }] } });
     writer.write('.omd/domain-brief.json', domainBytes);
     const retained = ended.retained![0]!;
     const analysis = { schema: 'reference-analysis-v1', sourceContractSha256: current.sourceContractSha256, domainBriefSha256: admissionHash(domainBytes),

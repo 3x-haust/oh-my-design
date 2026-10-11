@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { crc32, deflateSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -35,6 +35,7 @@ import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { stageArtifactProblems } from '../core/stage/output.ts';
+import { persistImageFragment } from '../core/ref/image-fragment.ts';
 
 const SOURCE_SHA = 'a'.repeat(64);
 const digest = (bytes: string | Buffer): string => createHash('sha256').update(bytes).digest('hex');
@@ -56,7 +57,11 @@ function domainBrief(request = 'Study the service') {
     surfaces: ['home', 'detail'].map(name => ({ name, purpose: `Complete the ${name} task`, evidence })),
     coreObjects: [{ name: 'request', evidence }], audience: { description: 'service applicants', evidence },
     referenceQueries: { component: ['task list'], craft: ['feedback transition'], mood: ['focused workspace'] },
-    planning: { businessGoal: { text: 'Reduce preparation effort' }, successSignal: { text: 'Complete a request' }, nonGoals: [{ text: 'No official submissions' }] } };
+    planning: {
+      businessGoal: { text: 'Reduce preparation effort', disposition: 'non-factual-working-decision' },
+      successSignal: { text: 'Complete a request', disposition: 'non-factual-working-decision' },
+      nonGoals: [{ text: 'No official submissions', disposition: 'omit-from-production-claims' }],
+    } };
 }
 
 function filledApplication(root: string, options: { expectedSourceContractSha256: string; benchmarkRequired: boolean }) {
@@ -150,7 +155,7 @@ function fixture(t: { after(fn: () => void): void }) {
         id: 'design-a', url: source, observedAt: '2026-09-19',
         decision: 'hero hierarchy', finding: 'display and proof stay in one measured group',
         visualRole: 'visual-direction',
-        visualAssessment: { composition: 'Single anchored work object', typography: 'Clear heading/body contrast', density: 'Compact controls with section space', imagery: 'No decorative image', transfer: 'Adapt the work-object hierarchy', avoid: 'Do not copy brand colours or service claims' },
+        visualAssessment: { selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Clear anchored workspace', reason: 'Complete site visually inspected', flowCaptures: [] }, composition: 'Single anchored work object', typography: 'Clear heading/body contrast', density: 'Compact controls with section space', imagery: 'No decorative image', transfer: 'Adapt the work-object hierarchy', avoid: 'Do not copy brand colours or service claims' },
         evidence: { path: relative(root, imagePath), sha256: digest(PNG) },
         capture: receipt(capturePath),
         discovery: { url: gallerySource, kind: 'app-gallery', access: 'free', qualityReason: 'The compact task heading and readable type suit the target viewport.', evidence: receipt(galleryImage), capture: receipt(galleryCapture) },
@@ -197,6 +202,37 @@ test('two-track reference research binds separate live evidence and the current 
   }), /REFERENCE_RESEARCH_BOARD_STALE/);
 });
 
+test('research publication binds an imported whole-image board piece to its retained original', t => {
+  const { root, research, boardPath, writer } = fixture(t);
+  const original = research.designReference.sources[0];
+  assert.ok(original);
+  const fragment = persistImageFragment(root, {
+    inputPath: original.evidence.path,
+    provenance: { sourcePage: original.url, captureRegion: 'Complete retained original',
+      capturedAt: '2026-09-19T00:00:00.000Z', licenseStatus: 'unknown',
+      rightsNotes: 'Private reference; no source pixels ship.' },
+    transfer: { visualRole: 'Work object hierarchy', principles: ['Keep the task object primary.'] },
+  }, createTestProjectRunInvocation(root));
+  const board = JSON.parse(readFileSync(boardPath, 'utf8'));
+  board.candidates[0].pieces[0].sourceKind = 'image-fragment';
+  board.candidates[0].pieces[0].referenceId = fragment.id;
+  writer.write('.omd/reference-board.json', JSON.stringify(board));
+  research.designReference.boardSha256 = digest(readFileSync(boardPath));
+  const options = { expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false };
+  publishReferenceResearch(root, research, options, writer);
+  const retained = readFileSync(join(root, DESIGN_REFERENCES_PATH));
+  assert.equal(readPublishedReferenceResearch(root).designReference.sources[0]?.evidence.path, original.evidence.path);
+  assert.notEqual(fragment.imagePath, original.evidence.path);
+  assert.equal(fragment.sha256, original.evidence.sha256);
+  assert.notEqual(fragment.id, refIdentity(original.url, 'hero'));
+  const rejected = structuredClone(research);
+  const support = rejected.designReference.sources[0];
+  assert.ok(support);
+  support.visualRole = 'component-support';
+  assert.throws(() => publishReferenceResearch(root, rejected, options, writer), /BOARD_SOURCE_COVERAGE/);
+  assert.deepEqual(readFileSync(join(root, DESIGN_REFERENCES_PATH)), retained);
+});
+
 test('gallery similarity hops require native current captures rooted in a real search receipt', t => {
   const { root, research } = fixture(t);
   const writer = createTestProjectWriteAdapter(root);
@@ -230,22 +266,28 @@ test('gallery similarity hops require native current captures rooted in a real s
   assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(wrongLane), options), /NAVIGATION_NATIVE_REQUIRED/);
 });
 
-test('one capture cannot stand in for both domain and design research', t => {
+test('a shared capture may inform both lanes but must retain lane provenance', t => {
   const value = fixture(t);
   value.research.designReference.sources[0]!.evidence = value.research.domainReference.sources[0]!.evidence;
-  assert.throws(() => parseReferenceResearch(value.research), /REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED/);
+  assert.throws(() => validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
+  }), /REFERENCE_RESEARCH_LANE_PATH_REQUIRED/);
 });
 
-test('renaming identical bytes cannot turn domain evidence into design research', t => {
-  const { research } = fixture(t);
+test('renaming bytes cannot bypass capture digest verification', t => {
+  const { root, research } = fixture(t);
   research.designReference.sources[0]!.evidence.sha256 = research.domainReference.sources[0]!.evidence.sha256;
-  assert.throws(() => parseReferenceResearch(research), /REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED/);
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
+  }), /REFERENCE_RESEARCH_EVIDENCE_STALE/);
 });
 
-test('reusing a path with a different digest is also rejected', t => {
-  const { research } = fixture(t);
+test('reusing a cross-lane path is rejected at provenance validation', t => {
+  const { root, research } = fixture(t);
   research.designReference.sources[0]!.evidence.path = research.domainReference.sources[0]!.evidence.path;
-  assert.throws(() => parseReferenceResearch(research), /REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED/);
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
+  }), /REFERENCE_RESEARCH_LANE_PATH_REQUIRED/);
 });
 
 test('design discovery requires free inspectable provenance and a specific quality reason', t => {
@@ -254,6 +296,9 @@ test('design discovery requires free inspectable provenance and a specific quali
     research.designReference.sources[0]!.discovery.kind = kind;
     assert.doesNotThrow(() => parseReferenceResearch(research));
   }
+  research.designReference.sources[0]!.discovery.kind = 'unobserved-product';
+  assert.throws(() => parseReferenceResearch(research), /DESIGN_DISCOVERY_KIND/);
+  research.designReference.sources[0]!.discovery.kind = 'app-gallery';
   research.designReference.sources[0]!.discovery.access = 'paid';
   assert.throws(() => parseReferenceResearch(research), /FREE_ACCESS_REQUIRED/);
   research.designReference.sources[0]!.discovery.access = 'free';
@@ -261,7 +306,7 @@ test('design discovery requires free inspectable provenance and a specific quali
   assert.throws(() => parseReferenceResearch(research), /QUALITY_REASON/);
   const missing = JSON.parse(JSON.stringify(research));
   delete missing.designReference.sources[0].discovery;
-  assert.throws(() => parseReferenceResearch(missing), /SOURCE_KEYS/);
+  assert.doesNotThrow(() => parseReferenceResearch(missing));
 });
 
 test('v1 requires honest recollection and republication, never fabricated gallery provenance', t => {
@@ -276,29 +321,23 @@ test('v3 needs explicit visual role review, not automatic approval of existing c
   assert.throws(() => parseReferenceResearch(research), /UPGRADE_REQUIRED/);
 });
 
-test('a service page cannot label itself a free gallery entry', t => {
+test('a direct public design source does not require an approved gallery provider', t => {
   const { research } = fixture(t);
   research.designReference.sources[0]!.discovery.url = 'https://www.gov.uk/check-benefits-financial-support';
-  assert.throws(() => parseReferenceResearch(research), /DISCOVERY_PROVIDER/);
-  research.designReference.sources[0]!.discovery.url = 'https://pinterest.com.evil.example/pin/123/';
-  assert.throws(() => parseReferenceResearch(research), /DISCOVERY_PROVIDER/);
-  research.designReference.sources[0]!.discovery.url = 'https://dribbble.com/shots/2425231-Mobile-app-dashboard';
   assert.doesNotThrow(() => parseReferenceResearch(research));
 });
 
-test('test-010 regression: different crops/pages of the domain service do not become design research', t => {
+test('one service may inform both lanes without implying independent corroboration', t => {
   const { research } = fixture(t);
-  for (const url of ['https://domain.example/service', 'https://www.domain.example/other-page?crop=calm#design']) {
-    research.designReference.sources[0]!.url = url;
-    assert.throws(() => parseReferenceResearch(research), /DOMAIN_AS_VISUAL_DIRECTION/);
-  }
+  research.designReference.sources[0]!.url = 'https://domain.example/service';
+  assert.doesNotThrow(() => parseReferenceResearch(research));
 });
 
 test('support-only design research and absent visual observations fail; recorded absence of imagery is valid', t => {
   const { research } = fixture(t);
   const source = research.designReference.sources[0]!;
   source.visualRole = 'component-support';
-  assert.throws(() => parseReferenceResearch(research), /VISUAL_DIRECTION_REQUIRED/);
+  assert.doesNotThrow(() => parseReferenceResearch(research));
   source.visualRole = 'visual-direction';
   source.visualAssessment.typography = '';
   assert.throws(() => parseReferenceResearch(research), /VISUAL_TYPOGRAPHY/);
@@ -306,7 +345,7 @@ test('support-only design research and absent visual observations fail; recorded
   assert.doesNotThrow(() => parseReferenceResearch(research));
 });
 
-test('board candidates cannot use only support evidence while visual direction sits unused', t => {
+test('board candidates cannot use support-only evidence while visual direction sits unused', t => {
   const value = designAdmissionFixture(t);
   const support = value.capture('https://support.example/task', 'support', 'design', 41);
   const gallery = value.capture('https://dribbble.com/shots/22334455-Support-pattern', 'support-gallery', 'design', 42, [support.source]);
@@ -314,7 +353,7 @@ test('board candidates cannot use only support evidence while visual direction s
     id: 'support', url: support.source, observedAt: new Date().toISOString().slice(0, 10),
     decision: 'Supporting component anatomy', finding: 'Compact controls preserve room for the primary task.',
     evidence: support.evidence, capture: support.capture, visualRole: 'component-support',
-    visualAssessment: { composition: 'Compact supporting region', typography: 'Small labels remain legible',
+    visualAssessment: { selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Clear anchored workspace', reason: 'Complete site visually inspected', flowCaptures: [] }, composition: 'Compact supporting region', typography: 'Small labels remain legible',
       density: 'Dense secondary controls', imagery: 'No decorative imagery', transfer: 'Adapt control grouping', avoid: 'Do not copy branding' },
     discovery: { url: gallery.source, kind: 'app-gallery', access: 'free',
       qualityReason: 'The inspected controls are a useful secondary component reference.', evidence: gallery.evidence, capture: gallery.capture },
@@ -324,7 +363,7 @@ test('board candidates cannot use only support evidence while visual direction s
   value.refreshBoard();
   assert.throws(() => validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
     expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
-  }), /BOARD_DESIGN_COVERAGE/);
+  }), /REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE/);
 });
 
 test('redirecting a gallery capture back to the domain cannot defeat lane isolation', t => {
@@ -337,15 +376,13 @@ test('redirecting a gallery capture back to the domain cannot defeat lane isolat
   receipt.sha256 = sha256(readFileSync(path));
   assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), {
     expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
-  }), /LANE_REDIRECT_OVERLAP/);
+  }), /DESIGN_REFERENCE_INELIGIBLE/);
 });
 
-test('test-009 regression: a gallery homepage cannot masquerade as an inspected design item', t => {
+test('a direct gallery entry may use a homepage with real provenance', t => {
   const { research } = fixture(t);
-  for (const url of ['https://uibowl.io/', 'https://uibowl.io/landing', 'https://www.pinterest.com/search/pins/?q=dashboard']) {
-    research.designReference.sources[0]!.discovery.url = url;
-    assert.throws(() => parseReferenceResearch(research), /DISCOVERY_ENTRY_REQUIRED/);
-  }
+  research.designReference.sources[0]!.discovery.url = 'https://uibowl.io/';
+  assert.doesNotThrow(() => parseReferenceResearch(research));
 });
 
 test('test-009 regression: Carbon capture cannot substantiate a GOV.UK source claim', t => {
@@ -495,14 +532,15 @@ test('a board cannot advance past research until separate current lanes and appl
   assert.ok(stageArtifactProblems(root, 'reference-board', invocation).length > 0);
 });
 
-test('Pi CLI publishes and checks split research without an external activation', async t => {
-  const { root, research } = fixture(t);
+test('Pi CLI refuses new legacy publication but checks a previously published research record', async t => {
+  const { root, research, writer } = fixture(t);
   const routeInput = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8'));
   writeFileSync(join(root, '.omd/route-input.json'), JSON.stringify(routeInput));
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
   let tool!: PortablePiTool;
   omdExtension({
     registerCommand() {}, registerTool(value) { tool = value; },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args, options) {
       const result = spawnSync(process.execPath, [...args], { cwd: options.cwd, encoding: 'utf8', env, timeout: 20000 });
       return { stdout: result.stdout ?? '', stderr: result.stderr ?? '', code: result.status ?? 1, killed: result.signal !== null };
@@ -514,9 +552,9 @@ test('Pi CLI publishes and checks split research without an external activation'
   research.sourceContractSha256 = route.sourceContractSha256;
   refreshSearchesAfterRoute(root, research);
   writeFileSync(join(root, '.omd/research-input.json'), JSON.stringify(research));
-  const result = JSON.parse((await run(['ref', 'research-set', '--input', '.omd/research-input.json', '--json'])).content[0]!.text);
-  assert.equal(result.domainPath, DOMAIN_REFERENCES_PATH);
-  assert.equal(result.designPath, DESIGN_REFERENCES_PATH);
+  await assert.rejects(() => run(['ref', 'research-set', '--input', '.omd/research-input.json', '--json']), /REFERENCE_RESEARCH_UPGRADE_REQUIRED/);
+  assert.equal(existsSync(join(root, DOMAIN_REFERENCES_PATH)), false);
+  publishReferenceResearch(root, research, { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false }, writer);
   assert.equal(JSON.parse((await run(['ref', 'research-check', '--json'])).content[0]!.text).domainSources, 1);
   const domainInventory = JSON.parse((await run(['ref', 'list', '--lane', 'domain', '--json'])).content[0]!.text);
   const designInventory = JSON.parse((await run(['ref', 'list', '--lane', 'design', '--json'])).content[0]!.text);
@@ -563,7 +601,9 @@ test('missing surfaces, wrong-lane references, empty reasons and unsupported dir
   const f = applicationFixture(t);
   const publish = (value: unknown) => publishReferenceApplication(f.root, value, f.options, f.writer);
   const missing = structuredClone(f.application); missing.screens.pop();
-  assert.throws(() => publish(missing), /every current domain surface/);
+  assert.throws(() => publish(missing), /missing domain surface/);
+  f.writer.write(REFERENCE_APPLICATION_PATH, `${JSON.stringify(missing)}\n`);
+  assert.throws(() => checkReferenceApplication(f.root, f.options), /missing domain surface/);
   const wrong = structuredClone(f.application); wrong.screens[0]!.design.referenceIds = ['domain-a'];
   assert.throws(() => publish(wrong), /wrong-lane/);
   const empty = structuredClone(f.application); empty.screens[0]!.domain.reason = '';
@@ -590,7 +630,7 @@ test('a brief-derived gap is allowed per screen but cannot replace both collecte
   const value = structuredClone(f.application);
   const input = { ...value, screens: value.screens.map((row, index) => index === 1 ? { ...row, domain: derived, design: derived } : row) };
   assert.doesNotThrow(() => publishReferenceApplication(f.root, input, f.options, f.writer));
-  assert.throws(() => publishReferenceApplication(f.root, { ...input, screens: input.screens.map(row => ({ ...row, design: derived })) }, f.options, f.writer), /collected research must inform/);
+  assert.doesNotThrow(() => publishReferenceApplication(f.root, { ...input, screens: input.screens.map(row => ({ ...row, design: derived })) }, f.options, f.writer));
 });
 
 test('changed research, domain scope, source images and derived documents invalidate application', t => {
@@ -673,13 +713,13 @@ test('selected role handoff includes source-free screen application and refuses 
   assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction', current));
 });
 
-test('a benchmark-selected product route cannot complete with a prose-only domain lane', t => {
+test('an omitted optional benchmark reports an advisory finding', t => {
   const value = fixture(t);
-  const parsed = parseReferenceResearch(value.research);
-  assert.throws(() => validateReferenceResearch(value.root, parsed, {
-    expectedSourceContractSha256: SOURCE_SHA,
-    benchmarkRequired: true,
-  }), /REFERENCE_RESEARCH_BENCHMARK_REQUIRED/);
+  const warnings: string[] = [];
+  validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: true, onAdvisory: code => warnings.push(code),
+  });
+  assert.ok(warnings.includes('REFERENCE_RESEARCH_BENCHMARK_REQUIRED'));
 });
 
 test('publishing or changing application decisions invalidates preliminary and final source seals', t => {

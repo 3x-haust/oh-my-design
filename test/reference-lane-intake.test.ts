@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { loadRefs } from '../core/ref/store.ts';
+import { loadDesignCandidates } from '../core/ref/reference-candidate.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 
@@ -43,7 +44,7 @@ function project(t: { after(fn: () => void): void }, route = true) {
   return cwd;
 }
 
-test('selected discovery refuses omitted lane before service captures can silently enter design', t => {
+test('selected discovery requires a lane but permits visual domain capture without functional claims', t => {
   const cwd = project(t);
   const result = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'domain-flow', '--image']);
   assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -51,20 +52,19 @@ test('selected discovery refuses omitted lane before service captures can silent
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   const valid = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'domain-flow', '--image', '--lane', 'domain']);
   assert.equal(valid.status, 0, valid.stderr);
-  assert.equal(loadRefs(cwd).length, 0);
-  assert.equal(loadRefs(cwd, { includeDomain: true })[0]?.researchLane, 'domain');
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 1);
 });
 
-test('selected discovery rejects a domain service explicitly relabelled design without gallery provenance', t => {
+test('selected direct design imports cannot bypass complete-pixel candidate review', t => {
   const cwd = project(t);
   const result = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'beautiful-flow', '--image', '--lane', 'design']);
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /DESIGN_DISCOVERY_REQUIRED/);
-  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
+  assert.match(result.stderr, /REFERENCE_CANDIDATE_IMAGE_REQUIRED/);
+  assert.equal(loadRefs(cwd).length, 0);
   const gallery = run(cwd, ['ref', 'add', 'https://dribbble.com/shots/123-screen', '--as', 'visual-study', '--image', '--lane', 'design']);
   assert.equal(gallery.status, 1, gallery.stderr);
   assert.match(gallery.stderr, /DESIGN_GALLERY_DISCOVERY_ONLY/);
-  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
+  assert.equal(loadRefs(cwd).length, 0);
 });
 
 test('batch preflight rejects an incomplete lane manifest atomically before browser launch', t => {
@@ -92,7 +92,7 @@ test('direct batch API cannot bypass selected-route intake by omitting every lan
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
 
-test('same-manifest service overlap is refused before any batch acquisition', t => {
+test('a domain ref-add batch is refused before any browser acquisition', t => {
   const cwd = project(t);
   const path = join(cwd, '.omd/.cache/batch.json');
   writeFileSync(path, JSON.stringify([
@@ -101,19 +101,21 @@ test('same-manifest service overlap is refused before any batch acquisition', t 
   ]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /REFERENCE_LANE_SERVICE_OVERLAP/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
 
-test('independent local user-reference batch still captures into both selected lanes', t => {
+test('local user-reference pixels remain quarantined without fabricated user direction', t => {
   const cwd = project(t);
   const path = join(cwd, '.omd/.cache/batch.json');
   writeFileSync(path, JSON.stringify([
-    { source: fileURLToPath(new URL('fixtures/slop.html', import.meta.url)), as: 'task', lane: 'domain', energy: false, shot: true },
+    { source: fileURLToPath(new URL('fixtures/slop.html', import.meta.url)), as: 'task', lane: 'design', fromUser: true, energy: false, shot: true },
     { source: fileURLToPath(new URL('fixtures/considered.html', import.meta.url)), as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
   ]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 2);
-  assert.equal(loadRefs(cwd).length, 1);
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 0);
+  assert.equal(loadRefs(cwd).length, 0);
+  const candidates = loadDesignCandidates(cwd);
+  assert.equal(candidates.length, 2);
+  assert.ok(candidates.every(candidate => candidate.reference.origin === 'user'));
 });

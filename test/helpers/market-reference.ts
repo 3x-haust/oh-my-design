@@ -13,8 +13,11 @@ export const marketDomainBrief = {
   coreObjects: [{ name: 'benefit', evidence: [{ status: 'user-provided', reference: 'test' }] }],
   audience: { description: 'Korean residents', evidence: [{ status: 'user-provided', reference: 'test' }] },
   referenceQueries: { component: ['benefit card'], craft: ['eligibility feedback'], mood: ['visual task'] },
-  planning: { businessGoal: { text: 'Find benefits' }, successSignal: { text: 'Open a relevant benefit' },
-    nonGoals: [{ text: 'Do not submit official applications' }] },
+  planning: {
+    businessGoal: { text: 'Find benefits', disposition: 'non-factual-working-decision' },
+    successSignal: { text: 'Open a relevant benefit', disposition: 'non-factual-working-decision' },
+    nonGoals: [{ text: 'Do not submit official applications', disposition: 'omit-from-production-claims' }],
+  },
 };
 export const marketContext = { schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
   marketRegion: 'KR', marketAuthorityClaimId: 'market-authority', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',

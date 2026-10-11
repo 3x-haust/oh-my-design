@@ -46,11 +46,12 @@ test('every stage names a real owner, artifact, and existing pack contract', () 
   }
 });
 
-test('a stage is blocked until an earlier owner produced its artifact', () => {
+test('a read-only stage requirement reports missing upstream artifacts without refusing diagnostics', () => {
   const dir = project();
   const blocked = run(['stage', 'require', 'frame', '--json'], dir);
-  assert.equal(blocked.status, 1, blocked.stdout);
+  assert.equal(blocked.status, 0, blocked.stdout);
   const requirement = JSON.parse(blocked.stdout);
+  assert.equal(requirement.ok, false);
   assert.deepEqual(requirement.missingArtifacts, ['.omd/domain-brief.json', '.omd/depth.json']);
 
   write(dir, '.omd/domain-brief.json', '{}');
@@ -96,7 +97,7 @@ test('an adaptive route preserves the selected model stage order instead of the 
   const state = resolveRunState(dir, PACK, invocation);
   assert.deepEqual(
     state.stages.map((stage) => stage.stage),
-    ['domain', 'frame', 'content-grain', 'scout', 'reference-board', 'reference-selection', 'copy', 'composition', 'candidate-generation'],
+    ['domain', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board', 'reference-selection', 'copy', 'composition', 'candidate-generation'],
   );
   assert.equal(state.current, 'domain');
 });
@@ -132,7 +133,7 @@ test('adaptive stage require follows producer dependencies, not route order, for
   assert.ok(typeProof.missingArtifacts.includes('.omd/frame.md'));
 });
 
-test('production refuses to start while planning is still a hypothesis', () => {
+test('production accepts classified planning but refuses fabricated confirmation', () => {
   const dir = project();
   const confirmed = {
     schema: 'domain-brief-v1', request: 'r', domain: 'd', summary: 's',
@@ -149,17 +150,23 @@ test('production refuses to start while planning is still a hypothesis', () => {
         text: 'no parallel sheet',
         userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'request', excerpt: 'as asked' }],
       },
-      nonGoals: [{ text: 'no accounting exports' }],
+      nonGoals: [{ text: 'no accounting exports', disposition: 'omit-from-production-claims' }],
     },
   };
   write(dir, '.omd/domain-brief.json', JSON.stringify(confirmed));
-  assert.deepEqual(requireConfirmedPlanningForProduction(dir), ['nonGoals[0]'], 'an unconfirmed non-goal still blocks production');
+  assert.deepEqual(requireConfirmedPlanningForProduction(dir), [], 'an omitted non-goal cannot narrow production scope');
 
   write(dir, '.omd/domain-brief.json', JSON.stringify({
     ...confirmed,
     planning: { ...confirmed.planning, nonGoals: [{ text: 'no accounting exports', userEvidence: confirmed.planning.businessGoal.userEvidence }] },
   }));
   assert.deepEqual(requireConfirmedPlanningForProduction(dir), []);
+
+  write(dir, '.omd/domain-brief.json', JSON.stringify({
+    ...confirmed,
+    planning: { ...confirmed.planning, businessGoal: { text: 'invented goal' } },
+  }));
+  assert.throws(() => requireConfirmedPlanningForProduction(dir), /explicit disposition/);
 
   const bare = project();
   assert.deepEqual(requireConfirmedPlanningForProduction(bare), [], 'a project with no domain brief is not blocked by this check');

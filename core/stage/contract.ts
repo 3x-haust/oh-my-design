@@ -13,7 +13,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
-import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/domain-brief.ts';
+import {
+  requireConfirmedPlanning,
+  unprovidedPlanningStatements,
+  validateDomainBrief,
+  type UnprovidedPlanningStatement,
+} from '../domain/domain-brief.ts';
 import { adaptiveStageGraph, adaptiveStageOwners, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -234,13 +239,24 @@ export function adaptivePrerequisiteStages(
  * stage must obey was never delivered with its current bytes.
  */
 /**
- * Planning intent is the one input search cannot supply, so a run that reaches production with an
- * unresolved hypothesis would ship a business goal nobody stated. This is the check production runs.
+ * Production accepts explicitly classified hypotheses while refusing an unclassified invented claim.
+ * The legacy return remains a list so existing callers can report unsafe fields without fabricating
+ * confirmation; valid classified planning returns no blockers.
  */
 export function requireConfirmedPlanningForProduction(projectRoot: string): readonly string[] {
   const path = join(projectRoot, '.omd', 'domain-brief.json');
   if (!existsSync(path)) return [];
-  return unconfirmedPlanningStatements(validateDomainBrief(JSON.parse(readFileSync(path, 'utf8'))).planning);
+  const planning = validateDomainBrief(JSON.parse(readFileSync(path, 'utf8'))).planning;
+  requireConfirmedPlanning(planning);
+  return [];
+}
+
+export function planningDispositionsForProduction(projectRoot: string): readonly UnprovidedPlanningStatement[] {
+  const path = join(projectRoot, '.omd', 'domain-brief.json');
+  if (!existsSync(path)) return [];
+  const planning = validateDomainBrief(JSON.parse(readFileSync(path, 'utf8'))).planning;
+  requireConfirmedPlanning(planning);
+  return unprovidedPlanningStatements(planning);
 }
 
 export function requireStage(

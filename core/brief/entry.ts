@@ -11,6 +11,7 @@ import { stageArtifactProblems } from '../stage/output.ts';
 import type { AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { checkNativeBrowserEvidence } from '../stage/native-completion.ts';
+import { requireResolvedNativeReframe } from '../runtime/native-reframe.ts';
 import { selectedDirectionCopyClosureProblems } from '../art-direction/copy-closure.ts';
 
 /** Explicit coordinator entry check. Ordinary brief inspection remains available when blocked. */
@@ -18,7 +19,12 @@ export function checkBriefEntry(root: string, stage: BriefStage, packRoot: strin
   const brief = buildBrief(root, stage, packRoot, invocation);
   if (stage === 'production' || (stage === 'browser-evidence' && isNativePiInvocation(invocation))) {
     const readiness = checkProductionReadiness(root, invocation, packRoot);
-    return { ...brief, blockers: readiness.blockers, confidenceDebt: readiness.confidenceDebt };
+    const blockers = [...readiness.blockers];
+    if (stage === 'browser-evidence' && isNativePiInvocation(invocation)) {
+      try { requireResolvedNativeReframe(root, invocation); }
+      catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
+    }
+    return { ...brief, blockers, confidenceDebt: readiness.confidenceDebt };
   }
   const blockers = [...brief.blockers];
   if (brief.direction?.selectionStatus === 'current' && ['type-proof', 'composition'].includes(stage)) {

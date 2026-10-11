@@ -31,11 +31,12 @@ export const closedObject = (
   }
   const descriptors = Object.getOwnPropertyDescriptors(value);
   for (const [key, descriptor] of Object.entries(descriptors)) {
-    if (!keys.includes(key)) invalid(`${label} has unknown key ${key}`);
-    if (!('value' in descriptor)) invalid(`${label} must be a plain object with data properties`);
+    if (!('value' in descriptor) || !descriptor.enumerable) invalid(`${label} must be a plain object with data properties`);
+    if (key === 'authority' && !keys.includes(key)) invalid(`${label} cannot supply unexpected host authority`);
+    if (!keys.includes(key)) process.emitWarning(`ignored optional field ${label}.${key}`);
   }
   return Object.fromEntries(
-    Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value]),
+    Object.entries(descriptors).filter(([key]) => keys.includes(key)).map(([key, descriptor]) => [key, descriptor.value]),
   );
 };
 

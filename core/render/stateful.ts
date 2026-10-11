@@ -150,6 +150,6 @@ export async function withLocalView<T>(browser: Browser, root: string, view: { p
 
 /** No hover/tab probes: they would disturb the exact opened modal/tab state. */
 export async function statefulIr(page: Page): Promise<RawIr> {
-  const raw = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), '4000, null')) as RawIr;
+  const raw = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), [4000, null])) as RawIr;
   return { ...raw, meta: { ...raw.meta, interaction: null, motion: null, measurementCoverage: { ...PREPARED_MEASUREMENT_COVERAGE } } };
 }

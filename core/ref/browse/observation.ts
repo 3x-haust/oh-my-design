@@ -1,4 +1,5 @@
 import type { Page } from 'playwright';
+import { browserCallback, browserEvaluationExpression } from '../browser-evaluation.ts';
 import { extractInPage } from '../../ir/dom.ts';
 import { normalize } from '../../ir/normalize.ts';
 import { extractInvariants } from '../invariants.ts';
@@ -77,7 +78,7 @@ export function visibleSnapshot() {
     dpr: devicePixelRatio, scroll: { x: scrollX, y: scrollY } };
 }
 export async function inspectVisible(page: Page) {
-  const { renderKey, ...result } = await page.evaluate(visibleSnapshot);
+  const { renderKey, ...result } = await page.evaluate(browserCallback(visibleSnapshot));
   const rendered = await inspectRenderedState(page, 'discovery');
   // Reuse legacy visibility/contrast checks, but never freeze or recolour an interactive page.
   // Ambiguous backgrounds are excluded from claims rather than represented as observed text.
@@ -120,14 +121,14 @@ export async function captureBrowseObservation(page: Page, observer: DocumentObs
       if (image) { if (!image.loaded) browseFail('BROWSE_IMAGE_UNLOADED', 'image has not loaded'); kind = 'image'; try { mediaUrl = browseUrl(image.url); } catch { mediaUrl = null; } }
       else {
         kind = 'component';
-        const raw = await page.evaluate(`(${extractInPage.toString()})(2000, ${JSON.stringify(options.selector)})`) as RawIr;
+        const raw = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), [2000, options.selector])) as RawIr;
         invariants = extractInvariants(normalize(raw));
         invariants.measurementCoverage = { interactionProbe: 'not-measured', motionProbe: 'not-measured', energyCurve: 'not-measured' };
         blueprint = captureBlueprint(raw.nodes, options.selector);
       }
     }
     if (!options.selector && !options.wholeImageSelector && !options.search && before.masks.length === 0) {
-      const raw = await page.evaluate(`(${extractInPage.toString()})(2000, 'body')`) as RawIr;
+      const raw = await page.evaluate(browserEvaluationExpression(extractInPage.toString(), [2000, 'body'])) as RawIr;
       const nodes = raw.nodes.filter(node => node.box && node.box.w > 0 && node.box.h > 0 && node.box.x < before.viewport.width
         && node.box.y < before.viewport.height && node.box.x + node.box.w > 0 && node.box.y + node.box.h > 0);
       const ids = new Set(nodes.map(node => node.id));

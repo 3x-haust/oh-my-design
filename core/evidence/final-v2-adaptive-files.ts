@@ -4,11 +4,15 @@ import { validateActivationContext } from '../runtime/activation.ts';
 import { requireFinalReviewerLaneAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { observationV2Sha256, validateObservationV2 } from '../runtime/observation.ts';
 import { parseRouteRecord } from '../route/adaptive-route-record.ts';
+import { hasPublishedTaskFlowBenchmark } from '../ref/reference-research.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
 import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
 import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
 import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
+import { validateCurrentOutcomeAssessments } from '../runtime/native-outcome-review.ts';
+import { validateCurrentReferenceFidelityAssessments } from '../runtime/native-reference-fidelity.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { validateFinalV2ContentFitCurrentness } from './final-v2-content-fit.ts';
 import { validateFinalConfidenceDebt } from './final-v2-confidence-debt.ts';
 import { validateMeasuredTerminal } from './final-v2-measured-terminal.ts';
@@ -113,11 +117,12 @@ function laneContract(
 }
 export function adaptiveBlindLaneContract(
   routeRecord: Pick<AdaptiveRouteRecord, 'projectMode' | 'gates'>,
+  benchmarkAvailable = false,
 ): Readonly<{ schema: string; verdicts: readonly string[]; floors: readonly string[] }> {
   return laneContract(
     'blindLane',
     routeRecord.projectMode,
-    routeRecord.gates.includes('greenfield-task-flow-benchmark'),
+    routeRecord.gates.includes('greenfield-task-flow-benchmark') && benchmarkAvailable,
   );
 }
 function greenValues(value: unknown, keys: readonly string[], label: string, floor: boolean): void {
@@ -162,7 +167,18 @@ function execution(
   let parsed: unknown; try { parsed = JSON.parse(bytes.toString('utf8')); } catch { return fail(`${lane} execution is not JSON`); }
   const hasFindings = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
     && Reflect.has(parsed, 'findings');
-  const item = fields(parsed, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(lane === 'blindLane' ? ['designQuality'] : []), ...(hasFindings ? ['findings'] : []), 'isolationReceiptSha256', 'observationSha256s', 'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${lane} execution`);
+  const hasOutcomeAssessments = lane === 'protocolLane' && typeof parsed === 'object' && parsed !== null
+    && Reflect.has(parsed, 'outcomeAssessments');
+  const hasReferenceFidelityAssessments = lane === 'fidelityLane' && typeof parsed === 'object' && parsed !== null
+    && Reflect.has(parsed, 'referenceFidelityAssessments');
+  const item = fields(parsed, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(lane === 'blindLane' ? ['designQuality'] : []), ...(hasFindings ? ['findings'] : []), ...(hasOutcomeAssessments ? ['outcomeAssessments'] : []), ...(hasReferenceFidelityAssessments ? ['referenceFidelityAssessments'] : []), 'isolationReceiptSha256', 'observationSha256s', 'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${lane} execution`);
+  if (lane === 'protocolLane') {
+    const terminal = expected.observations.at(-1) ?? fail('terminal observation missing');
+    validateCurrentOutcomeAssessments(root, invocation, terminal, item.get('outcomeAssessments'));
+  }
+  if (lane === 'fidelityLane' && (isNativePiInvocation(invocation) || hasReferenceFidelityAssessments)) {
+    validateCurrentReferenceFidelityAssessments(root, invocation, expected.observations, item.get('referenceFidelityAssessments'));
+  }
   const reviewer = text(item.get('reviewerId'), `${lane} reviewerId`);
   const executionSchema = lane === 'blindLane'
     ? 'adaptive-final-reviewer-execution-v2'
@@ -313,7 +329,7 @@ function validateAdaptiveGraphFiles(root: string, graphInput: unknown, fs: Adapt
   );
   const deferred = graph.omissions.filter(o => o.status === 'selected-with-debt');
   const limitations = validateFinalConfidenceDebt(root, record, graph.confidenceDebt, deferred,
-    [graph.copy, graph.sourceSeal, graph.buildIdentity, ...[graph.blindLane, graph.fidelityLane, graph.protocolLane].flatMap(r => r ? [r] : []), ...graph.observations,
+    [...(graph.copy === undefined ? [] : [graph.copy]), graph.sourceSeal, graph.buildIdentity, ...[graph.blindLane, graph.fidelityLane, graph.protocolLane].flatMap(r => r ? [r] : []), ...graph.observations,
       ...graph.route.stages.flatMap(stage => stage.status === 'selected' ? stage.artifacts : [])]);
   const expectedOmissions = adaptiveFinalOmissionMappings().filter(([, routeSkipId]) =>
     record.strategy.skips.some(({ id }) => id === routeSkipId)
@@ -334,13 +350,16 @@ function validateAdaptiveGraphFiles(root: string, graphInput: unknown, fs: Adapt
   const activationLoaded = load(root, fs, graph.activation, 'activation'); const activation = validateActivationContext(activationLoaded.value);
   const build = fields(load(root, fs, graph.buildIdentity, 'buildIdentity').value, ['schemaVersion', 'packageVersion', 'buildSha256', 'sourceSkillSha256'], 'buildIdentity');
   if (build.get('schemaVersion') !== 'omd-build-identity-v1' || build.get('buildSha256') !== activation.buildSha256 || build.get('sourceSkillSha256') !== activation.loadedSkillSha256) fail('build identity is not current');
-  const copyBytes = read(root, fs, graph.copy.path, 'copy'); if (hash(copyBytes) !== graph.copy.sha256) fail('copy bytes changed');
+  if (graph.copy !== undefined) {
+    const copyBytes = read(root, fs, graph.copy.path, 'copy');
+    if (hash(copyBytes) !== graph.copy.sha256) fail('copy bytes changed');
+  }
   const sealLoaded = load(root, fs, graph.sourceSeal, 'sourceSeal'); const seal = validateSourceSealArtifact(sealLoaded.value);
   const sourceSealFindings = seal.schemaVersion === 1
     ? validateSourceSeal(root, undefined, graph.route)
     : validateSourceSeal(root, invocation);
   if (seal.route === undefined || canonicalRouteJson(seal.route) !== canonicalRouteJson(graph.route)
-    || seal.inputs.copyDeckSha256 !== graph.copy.sha256
+    || (graph.copy === undefined ? seal.inputs.copyDeckSha256 !== undefined : seal.inputs.copyDeckSha256 !== graph.copy.sha256)
     || sourceSealFindings.length !== 0) {
     fail('source seal does not bind current route and copy bytes');
   }
@@ -365,7 +384,8 @@ function validateAdaptiveGraphFiles(root: string, graphInput: unknown, fs: Adapt
     ...(graph.contentFit === undefined ? {} : { contentFit: graph.contentFit }),
     observations: observations.map((item) => item.value.evidence),
   });
-  const benchmarkRequired = record.gates.includes('greenfield-task-flow-benchmark');
+  const benchmarkRequired = record.gates.includes('greenfield-task-flow-benchmark')
+    && hasPublishedTaskFlowBenchmark(root, record.sourceContractSha256);
   validateTrustedOutcomeEvidence({
     root,
     branch: 'adaptive-omission',

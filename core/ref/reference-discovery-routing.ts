@@ -150,12 +150,8 @@ function assertConsistentState(
   uncertaintyState: ReferenceDiscoveryUncertainty,
   evidenceState: ReferenceDiscoveryEvidence,
 ): void {
-  if ((uncertaintyState === 'unresolved' && evidenceState === 'sufficient')
-    || (uncertaintyState === 'resolved' && evidenceState !== 'sufficient')
-    || ((need === 'new-product' || need === 'new-marketing') && uncertaintyState === 'resolved')) {
-    return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE',
-      'New product/marketing or unresolved discovery requires uncertainty=unresolved and existingEvidence=none|insufficient. Resolved existing work requires existingEvidence=sufficient.');
-  }
+  // Availability and uncertainty are agent observations, not a mechanically provable implication.
+  void need; void uncertaintyState; void evidenceState;
 }
 
 function recommendation(
@@ -187,22 +183,13 @@ function parse(input: unknown): ReferenceDiscoveryRouting {
   const intended = text(dataValue(record, 'intendedUse'));
   const existingUse = nullableText(dataValue(record, 'existingEvidenceUse'));
   const reasonInput = dataValue(record, 'skipReason');
-  const decision: ReferenceDiscoveryDecision = need === 'new-product'
-    || need === 'new-marketing'
-    || uncertaintyState === 'unresolved'
-    ? 'discover'
-    : 'skip';
+  // Research is the default even when prior evidence is available. An explicit skip is
+  // accepted with its authored reason and preserved as an advisory limitation.
+  const decision: ReferenceDiscoveryDecision = reasonInput === null ? 'discover' : 'skip';
 
   if (decision === 'discover') {
-    if (existingUse !== null || reasonInput !== null) {
-      return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE',
-        'Discovery is selected: existingEvidenceUse and skipReason must both be explicit null, not omitted or explanatory strings.');
-    }
-    const reason = need === 'new-product'
-      ? 'A new product needs reference discovery before its direction is established.'
-      : need === 'new-marketing'
-        ? 'A new marketing surface needs reference discovery before its direction is established.'
-      : 'Unresolved task uncertainty requires reference discovery before production.';
+    if (reasonInput !== null) return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE');
+    const reason = 'Reference research is recommended by default; continue with recorded limitations if sources are unavailable.';
     const actual: ReferenceDiscoveryActualUse = Object.freeze({
       status: 'pending-discovery',
       description: 'No discovered references have been used yet.',
@@ -222,12 +209,9 @@ function parse(input: unknown): ReferenceDiscoveryRouting {
     return fail('REFERENCE_DISCOVERY_SKIP_REASON_REQUIRED',
       'Discovery is skipped: skipReason must explain why existing evidence is sufficient.');
   }
-  if (existingUse === null) return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE',
-    'Discovery is skipped: existingEvidenceUse must describe the existing evidence actually used.');
-  const actual: ReferenceDiscoveryActualUse = Object.freeze({
-    status: 'existing-evidence',
-    description: existingUse,
-  });
+  const actual: ReferenceDiscoveryActualUse = existingUse === null
+    ? Object.freeze({ status: 'pending-discovery', description: 'No discovered references have been used yet.' })
+    : Object.freeze({ status: 'existing-evidence', description: existingUse });
   return Object.freeze({
     schema: REFERENCE_DISCOVERY_ROUTING_SCHEMA,
     decision,

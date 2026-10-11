@@ -584,7 +584,13 @@ export interface Blueprint {
 export interface Reference {
   /** Separate task/domain evidence from visual design evidence. Absent only on legacy records. */
   researchLane?: 'domain' | 'design';
-  acquisition?: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null; noticeDismissals?: import('./ref/notice-overlay.ts').NoticeDismissal[] };
+  acquisition?: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null;
+    noticeDismissals?: import('./ref/notice-overlay.ts').NoticeDismissal[];
+    engine?: import('./ref/acquisition-engine.ts').AcquisitionEngine;
+    httpStatusSource?: 'response' | 'unobserved'; authentication?: 'user-browser-session';
+    networkIsolation?: 'initial-url-check-only'; getOnlyEnforced?: false;
+    captureMethod?: 'viewport' | 'viewport-crop' | 'full-page'; captureGeometry?: import('./ref/acquisition-png.ts').ElementGeometry;
+    sourceImage?: string; sourceImageSha256?: string; imageDimensions?: { width: number; height: number } };
   visibleKoreanText?: true;
   source: string;
   component: string;

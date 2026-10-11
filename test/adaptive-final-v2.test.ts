@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { checkFinalEvidenceV2, publishFinalEvidenceV2 } from '../core/evidence/final-v2.ts';
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
+import { validateAdaptiveFinalEvidenceV2Graph } from '../core/evidence/final-v2-adaptive-contract.ts';
 import { confidenceDebt, recordConfidenceDebt } from '../core/brief/confidence-debt.ts';
 import { captureSlopCheckpoint, publishSlopReview } from '../core/slop/review.ts';
 import { canonicalFinalEvidenceV2Graph, validateFinalEvidenceV2GraphFiles } from '../core/evidence/final-v2-graph.ts';
@@ -116,7 +117,7 @@ function fixtureWithSelectedUpstreamStages(): unknown {
     'omd-framer', 'omd-scout',
   ]);
   Reflect.set(strategy, 'stages', [
-    'domain', 'frame', 'scout', 'reference-board', 'copy', 'production',
+    'domain', 'frame', 'acquisition', 'scout', 'reference-board', 'copy', 'production',
     'browser-evidence', 'independent-review',
   ]);
   Reflect.set(strategy, 'executionWaves', [
@@ -126,7 +127,7 @@ function fixtureWithSelectedUpstreamStages(): unknown {
     { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
     { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
   ]);
-  const selected = new Set(['frame', 'scout', 'reference-board']);
+  const selected = new Set(['frame', 'acquisition', 'scout', 'reference-board']);
   Reflect.set(
     strategy,
     'skips',
@@ -630,15 +631,20 @@ test('sealed adaptive evidence finalizes under a continuation activation', () =>
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test('new routed final-v2 publication rejects missing requirements and completeness', () => {
+test('new routed final-v2 publication rejects absent functional requirements and completeness evidence', () => {
   const value = prepared();
   try {
     rmSync(join(value.root, '.omd', 'functional-requirements.json'));
     rmSync(join(value.root, '.omd', 'completeness-current.json'));
-    assert.throws(
-      () => publishPrepared(value),
-      /requires functional requirements and a completeness run/,
-    );
+    assert.throws(() => publishPrepared(value), /requires functional requirements and a completeness run/);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('a routed requirements document requires its separate completeness run', () => {
+  const value = prepared();
+  try {
+    rmSync(join(value.root, '.omd', 'completeness-current.json'));
+    assert.throws(() => publishPrepared(value), /completeness current pointer/);
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
@@ -679,7 +685,6 @@ test('workflow cannot be finalized through a legacy graph or after its pointer/r
 test('adaptive omission publication rejects missing authority, changed skip, selected-model drift, pointer swap, and record swap', () => {
   for (const mutate of [
     (value: ReturnType<typeof prepared>) => rmSync(join(value.root, '.omd', 'route-authorities'), { recursive: true, force: true }),
-    (value: ReturnType<typeof prepared>) => Reflect.set(mutable(list(value.graph, 'omissions')[0]), 'reason', 'changed reason'),
     (value: ReturnType<typeof prepared>) => {
       const route = structuredClone(field(value.graph, 'route'));
       Reflect.set(mutable(field(route, 'selectedModel')), 'revision', 'swapped-revision');
@@ -692,6 +697,50 @@ test('adaptive omission publication rejects missing authority, changed skip, sel
     try { mutate(value); assert.throws(() => publishPrepared(value)); }
     finally { rmSync(value.root, { recursive: true, force: true }); }
   }
+});
+
+test('adaptive graph ignores ordinary extra fields but refuses injected authority', () => {
+  const value = prepared();
+  try {
+    const graph = structuredClone(value.graph);
+    Reflect.set(mutable(graph), 'extraNote', 'advisory');
+    assert.equal(Object.hasOwn(validateAdaptiveFinalEvidenceV2Graph(graph), 'extraNote'), false);
+    Reflect.set(mutable(graph), 'authority', { forged: true });
+    assert.throws(() => validateAdaptiveFinalEvidenceV2Graph(graph), /authority/);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('adaptive graph can omit copy when no copy deck was consumed', () => {
+  const value = prepared();
+  try {
+    const graph = structuredClone(value.graph);
+    Reflect.deleteProperty(mutable(graph), 'copy');
+    assert.equal(field(validateAdaptiveFinalEvidenceV2Graph(graph), 'copy'), undefined);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('adaptive omission summary must preserve the exact route skip wording', () => {
+  const value = prepared();
+  try {
+    Reflect.set(mutable(list(value.graph, 'omissions')[0]), 'reason', 'Independent summary of the same skipped stage');
+    assert.throws(() => publishPrepared(value), /exact current route skip/);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('selected-art branch cannot forge an unsealed art receipt', () => {
+  const value = prepared();
+  try {
+    const route = structuredClone(field(value.graph, 'route'));
+    Reflect.set(mutable(value.graph), 'route', route);
+    const stages = list(route, 'stages');
+    const art = stages.find((stage) => text(stage, 'id') === 'art-direction');
+    assert.ok(art !== undefined);
+    const selectedArt = mutable(art);
+    Reflect.set(selectedArt, 'status', 'selected');
+    Reflect.deleteProperty(selectedArt, 'reason'); Reflect.deleteProperty(selectedArt, 'routeSha256'); Reflect.deleteProperty(selectedArt, 'authoritySha256');
+    Reflect.set(selectedArt, 'artifacts', [{ path: '.omd/art-direction.json', sha256: sha('selected-art') }]);
+    assert.throws(() => publishPrepared(value));
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
 test('selected upstream evidence debt is disclosed by an authorized terminal graph and cannot impersonate evidence', () => {

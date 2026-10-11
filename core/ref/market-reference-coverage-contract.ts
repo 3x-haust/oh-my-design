@@ -1,9 +1,11 @@
+import { knownFields } from '../judgment/schema.ts';
+
 export type MarketLaneCoverage = Readonly<{
   localSources: readonly Readonly<{
     sourceId: string;
     evidenceSha256: string;
     scope: 'service' | 'product' | 'gallery' | 'audience';
-    basis: 'market-search-result' | 'market-direct-result' | 'market-browse-observation';
+    basis: 'market-search-result' | 'market-direct-result' | 'market-observed-page' | 'market-browse-observation';
     provenanceReceiptSha256: string;
     browseEvent?: Readonly<{ seq: number; hash: string }>;
     claim?: Readonly<{ kind: 'source-task-text' | 'link-label'; textSha256: string; linkUrl: string | null }>;
@@ -27,7 +29,7 @@ export type MarketReferenceCoverage = Readonly<{
 export type MarketSourceIdentity = Readonly<{
   id: string;
   url: string;
-  observedAt: string;
+  observedAt?: string;
   evidence: Readonly<{ sha256: string }>;
   discovery?: Readonly<{ url: string }>;
 }>;
@@ -39,8 +41,10 @@ export function marketObject(value: unknown, code: string): Record<string, unkno
   return value as Record<string, unknown>;
 }
 function exact(value: Record<string, unknown>, keys: readonly string[], code: string): void {
-  const actual = Object.keys(value).sort(), expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) marketReject(code);
+  try {
+    const { warnings } = knownFields(value, keys, [], code);
+    for (const warning of warnings) process.emitWarning(`ignored optional field ${warning.field}`);
+  } catch { marketReject(code); }
 }
 export function marketText(value: unknown, code: string): string {
   if (typeof value !== 'string') return marketReject(code);
@@ -57,15 +61,15 @@ export function marketTexts(value: unknown, code: string, allowEmpty = false, al
   if (!allowDuplicates && new Set(result).size !== result.length) return marketReject(`${code}_DUPLICATE`);
   return Object.freeze(result);
 }
-function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: string, browse: boolean): MarketLaneCoverage {
+function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: string, allowObserved: boolean): MarketLaneCoverage {
   const code = `REFERENCE_RESEARCH_MARKET_${label.toUpperCase()}`;
   const input = marketObject(value, code);
   exact(input, ['localSources', 'globalFallback'], `${code}_KEYS`);
-  if (!Array.isArray(input.localSources) || !input.localSources.length
+  if (!Array.isArray(input.localSources)
     || Object.keys(input.localSources).length !== input.localSources.length) return marketReject(`${code}_LOCAL`);
   const localSources = Object.freeze(input.localSources.map(value => {
     const source = marketObject(value, `${code}_LOCAL`);
-    const native = browse && source.basis === 'market-browse-observation';
+    const native = allowObserved && source.basis === 'market-browse-observation';
     exact(source, ['sourceId', 'evidenceSha256', 'scope', 'basis', 'provenanceReceiptSha256', ...(native ? ['browseEvent', 'claim'] : [])], `${code}_LOCAL_KEYS`);
     let binding: Pick<MarketLaneCoverage['localSources'][number], 'browseEvent' | 'claim'> = {};
     if (native) {
@@ -81,7 +85,8 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
     if (retained === undefined || source.evidenceSha256 !== retained.evidence.sha256) return marketReject(`${code}_LOCAL_EVIDENCE`);
     const scopes = label === 'domain' ? ['service', 'audience'] : ['product', 'gallery', 'audience'];
     if (!scopes.includes(source.scope as string)) return marketReject(`${code}_LOCAL_SCOPE`);
-    if (!native && source.basis !== 'market-search-result' && source.basis !== 'market-direct-result') return marketReject(`${code}_LOCAL_BASIS`);
+    if (source.basis !== 'market-search-result' && source.basis !== 'market-direct-result'
+      && !(allowObserved && source.basis === 'market-observed-page') && !native) return marketReject(`${code}_LOCAL_BASIS`);
     const provenanceReceiptSha256 = marketText(source.provenanceReceiptSha256, `${code}_LOCAL_RECEIPT`);
     if (!/^[a-f0-9]{64}$/.test(provenanceReceiptSha256)) return marketReject(`${code}_LOCAL_RECEIPT`);
     return Object.freeze({ sourceId, evidenceSha256: retained.evidence.sha256,
@@ -99,7 +104,6 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
       || !['availability', 'access', 'coverage'].includes(gap.kind as string)) return marketReject(`${code}_FALLBACK_GAP`);
     const attemptedQueries = marketTexts(gap.attemptedQueries, `${code}_FALLBACK_QUERIES`, true, true);
     const attemptedRoots = marketTexts(gap.attemptedRoots, `${code}_FALLBACK_ROOTS`, true);
-    if (!attemptedQueries.length && !attemptedRoots.length) return marketReject(`${code}_FALLBACK_ATTEMPTS`);
     const sourceIds = marketTexts(fallback.sourceIds, `${code}_FALLBACK_SOURCES`);
     if (!Array.isArray(fallback.provenance) || Object.keys(fallback.provenance).length !== fallback.provenance.length) {
       return marketReject(`${code}_FALLBACK_PROVENANCE`);
@@ -118,8 +122,8 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
   }
   const classified = [...localSources.map(source => source.sourceId), ...globalFallback?.sourceIds ?? []];
   const sourceIds = sources.map(source => source.id);
-  if (new Set(classified).size !== classified.length || classified.length !== sourceIds.length
-    || classified.some(id => !sourceIds.includes(id))) return marketReject(`${code}_COVERAGE`);
+  if (new Set(classified).size !== classified.length || classified.some(id => !sourceIds.includes(id)))
+    return marketReject(`${code}_COVERAGE`);
   return Object.freeze({ localSources, globalFallback });
 }
 
@@ -130,8 +134,7 @@ function sameIds(left: readonly string[], right: readonly string[]): boolean {
 export function parseMarketReferenceCoverage(
   value: unknown,
   domainSources: readonly MarketSourceIdentity[],
-  designSources: readonly MarketSourceIdentity[],
-  browse = false,
+  designSources: readonly MarketSourceIdentity[], allowObserved = false,
 ): MarketReferenceCoverage | null {
   if (value === null) return null;
   const input = marketObject(value, 'REFERENCE_RESEARCH_MARKET_COVERAGE');
@@ -139,5 +142,5 @@ export function parseMarketReferenceCoverage(
   const marketRegion = marketText(input.marketRegion, 'REFERENCE_RESEARCH_MARKET_REGION').toUpperCase();
   if (!/^(?:[A-Z]{2}|\d{3})$/.test(marketRegion)) return marketReject('REFERENCE_RESEARCH_MARKET_REGION');
   return Object.freeze({ marketRegion,
-    domain: lane(input.domain, domainSources, 'domain', browse), design: lane(input.design, designSources, 'design', browse) });
+    domain: lane(input.domain, domainSources, 'domain', allowObserved), design: lane(input.design, designSources, 'design', allowObserved) });
 }

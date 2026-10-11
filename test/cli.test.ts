@@ -153,9 +153,9 @@ test('omd config preserves legacy checkpoints without treating them as autonomou
   assert.notEqual(run(['config', 'set', 'checkpoint', 'always'], dir).status, 0);
 });
 
-test('omd craft requires an observed change and reports structured status', () => {
+test('omd craft requires a nonempty change record and reports structured status', () => {
   const dir = project();
-  assert.notEqual(run(['craft', 'checkpoint', 'semantic', '--render', 'a.png', '--observed', 'hero wraps', '--changed', 'no change'], dir).status, 0);
+  assert.notEqual(run(['craft', 'checkpoint', 'semantic', '--render', 'a.png', '--observed', 'hero wraps', '--changed', ''], dir).status, 0);
   assert.equal(run(['craft', 'checkpoint', 'semantic', '--render', 'a.png', '--observed', 'hero wraps at mobile', '--changed', 'reduced heading max width'], dir).status, 0);
   const records = JSON.parse(run(['craft', 'status', '--json'], dir).stdout) as Array<{ phase: string; changed: string }>;
   assert.equal(records[0]?.phase, 'semantic');
@@ -186,6 +186,21 @@ test('frame.md survives a hand-written file with no frontmatter', () => {
 test('omd --version and unknown commands behave', () => {
   assert.equal(run(['--version']).status, 0);
   assert.notEqual(run(['nonsense-command']).status, 0);
+});
+
+test('omd --help succeeds and discovers implemented learning and judgment commands', () => {
+  const result = run(['--help']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /learn predict\|judge\|observe/);
+  assert.match(result.stdout, /ai-judgment publish/);
+  assert.equal(result.stderr, '');
+});
+
+test('top-level typo suggestions include implemented learning commands', () => {
+  const result = run(['lern']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /did you mean: omd learn\?/);
+  assert.doesNotMatch(result.stderr, /did you mean: omd clean\?/);
 });
 
 // ── omd pack: host-neutral pack-path resolution ──

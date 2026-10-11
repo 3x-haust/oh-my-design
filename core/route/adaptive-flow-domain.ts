@@ -35,7 +35,7 @@ export const MANDATORY_ADAPTIVE_GATES = Object.freeze([
 ] as const);
 
 export const OPTIONAL_STAGE_IDS = Object.freeze([
-  'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'moodboard', 'reference-board',
+  'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'moodboard', 'reference-board',
   'reference-selection', 'art-direction', 'copy', 'type-proof', 'composition',
   'candidate-generation', 'safety-validation',
 ] as const);
@@ -44,13 +44,11 @@ export const OPTIONAL_STAGE_IDS = Object.freeze([
  * accepts a `strategyDecision.skips` reason; `validateAdaptiveStrategyRails` rejects the route
  * when one is absent.
  */
-export const MANDATORY_STAGE_IDS = Object.freeze([
-  'domain',
-] as const);
+export const MANDATORY_STAGE_IDS = Object.freeze([] as const);
 export const OPTIONAL_METHOD_IDS = Object.freeze([
   'reflection-in-action', 'reference-distance', 'image-first-draft',
   'evidence-driven-refinement', 'copy-repair-workflow', 'motion-one',
-  'ai-shipped-asset', 'concept-exploration',
+  'ai-shipped-asset', 'provisional-source-study', 'concept-exploration',
 ] as const);
 export const ADAPTIVE_STAGE_IDS = Object.freeze([
   ...MANDATORY_STAGE_IDS, ...OPTIONAL_STAGE_IDS, 'production', 'browser-evidence', 'independent-review',
@@ -99,9 +97,11 @@ export type AdaptiveRouteErrorCode =
 export class AdaptiveRouteError extends Error {
   override readonly name = 'AdaptiveRouteError';
   readonly code: AdaptiveRouteErrorCode;
-  constructor(code: AdaptiveRouteErrorCode, detail?: string) {
+  readonly requiredRoles?: readonly string[];
+  constructor(code: AdaptiveRouteErrorCode, detail?: string, requiredRoles?: readonly string[]) {
     super(detail === undefined ? code : `${code}: ${detail}`);
     this.code = code;
+    if (requiredRoles !== undefined) this.requiredRoles = Object.freeze([...requiredRoles]);
   }
 }
 
@@ -195,6 +195,7 @@ export type AdaptiveRouteRecord = Readonly<{
   deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_ROUTE_RECORD_SCHEMA;
   route: 'adaptive';
+  marketAuthority?: import('../judgment/index.ts').JudgmentReceipt;
   request: string;
   projectMode: 'greenfield' | 'existing';
   requiredOutcomes: readonly string[];

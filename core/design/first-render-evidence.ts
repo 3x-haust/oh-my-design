@@ -6,12 +6,40 @@ import { acquireProjectMutationLock, replaceProjectFileAtomically, requireProjec
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { measureProject } from '../measure/index.ts';
 import { loadMeasurement } from '../measure/files.ts';
-import { canonicalBytes, digest } from '../measure/identity.ts';
+import { canonicalBytes, digest, sha256 } from '../measure/identity.ts';
 import { readArtifact } from '../measure/inputs.ts';
+import type { VisualMeasurement } from '../measure/types.ts';
 import { critiqueMeasuredFirstRender } from './first-render-measurement.ts';
 
 const PATH = '.omd/first-render-critic.json';
 const fail = (message: string): never => { throw new Error(`FIRST_RENDER_REQUIRED: ${message}; rerun first-render check --page <local-build.html>`); };
+const REVIEW_VIEWS = Object.freeze([
+  Object.freeze({ viewport: { width: 1280, height: 900 }, label: 'desktop' }),
+  Object.freeze({ viewport: { width: 390, height: 844 }, label: 'mobile' }),
+]);
+
+function measuredReviewCaptures(packet: VisualMeasurement) {
+  return REVIEW_VIEWS.map(({ viewport, label }) => {
+    const view = packet.scope.find((item) => item.state === 'initial' && item.browserZoom === 1
+      && item.viewport.width === viewport.width && item.viewport.height === viewport.height)
+      ?? fail(`${label} measurement view is missing`);
+    const binding = packet.captures.find((item) => item.viewId === view.id)
+      ?? fail(`${label} measurement capture is missing`);
+    if (binding.image.width !== viewport.width || binding.image.height !== viewport.height) {
+      return fail(`${label} measurement dimensions changed`);
+    }
+    return {
+      sourcePath: binding.capture.path,
+      record: Object.freeze({
+        path: `.omd/first-render/captures/${binding.capture.sha256}.png`,
+        sha256: binding.capture.sha256,
+        viewport,
+        fullPage: false as const,
+      }),
+    };
+  });
+}
+
 /** The old surface argument is retained only to issue an explicit migration refusal. */
 export async function publishFirstRenderCheck(root: string, page: string, input: unknown, writer: ProjectWriteAdapter, invocation?: ProjectRunInvocation) {
   if (input !== undefined) return fail('agent-authored surfaces cannot publish measurement-derived evidence; remove --input');
@@ -20,7 +48,10 @@ export async function publishFirstRenderCheck(root: string, page: string, input:
   const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('current design hypothesis is missing');
   const result = await measureProject({ root, entry: page, writer, invocation });
   const packet = loadMeasurement(root, result.packet);
-  const native = { schema: 'first-render-check-v3' as const, page, measurements: [result.packet], sourceSha256: packet.binding.sourceSha256, buildSha256: packet.binding.production[0]!.servedTreeSha256,
+  const reviewCaptures = measuredReviewCaptures(packet);
+  const native = { schema: 'first-render-check-v3' as const, page, measurements: [result.packet],
+    captures: reviewCaptures.map(({ record }) => record),
+    sourceSha256: packet.binding.sourceSha256, buildSha256: packet.binding.production[0]!.servedTreeSha256,
     hypothesisSha256: digest(hypothesis), report: critiqueMeasuredFirstRender(hypothesis, packet, result.packet), interpretation: 'native-measurement-derived' as const };
   const record = { ...native, signature: signNativeObservation(realpathSync(root), 'first-render-v3', digest(native)) };
   const reportSha256 = digest(record), body = canonicalBytes({ ...record, reportSha256 });
@@ -28,13 +59,16 @@ export async function publishFirstRenderCheck(root: string, page: string, input:
   try {
     loadMeasurement(root, result.packet);
     if (digest(readDesignJudgment(root)?.hypothesis) !== digest(hypothesis)) return fail('hypothesis changed during capture');
+    for (const capture of reviewCaptures) {
+      writer.writeContentAddressed(capture.record.path, readArtifact(root, capture.sourcePath));
+    }
     writer.writeContentAddressed(`.omd/first-render/reports/${reportSha256}.json`, body);
     replaceProjectFileAtomically({ projectRoot: root, relativePath: PATH, content: body, invocation });
   } finally { unlock(); }
   return { ...record, reportSha256 };
 }
 /** Historical v2 is inspectable as JSON, but cannot authorize a new measured completion. */
-export function checkFirstRenderEvidence(root: string) {
+export function checkFirstRenderEvidence(root: string, purpose: 'review' | 'acceptance' = 'acceptance') {
   if (!existsSync(resolve(root, PATH))) {
     if (existsSync(resolve(root, '.omd/design-judgment.json'))) return fail('report is missing');
     return null;
@@ -46,8 +80,14 @@ export function checkFirstRenderEvidence(root: string) {
   if (typeof signature !== 'string' || !verifyNativeObservation(realpathSync(root), 'first-render-v3', digest(native), signature)) return fail('native report signature invalid');
   if (!Array.isArray(record.measurements) || record.measurements.length !== 1) return fail('measurement receipt required');
   const packet = loadMeasurement(root, record.measurements[0]);
+  const expectedCaptures = measuredReviewCaptures(packet).map(({ record }) => record);
+  if (digest(record.captures) !== digest(expectedCaptures)) return fail('independent review capture bindings changed');
+  for (const capture of expectedCaptures) {
+    if (sha256(readArtifact(root, capture.path)) !== capture.sha256) return fail('independent review capture bytes changed');
+  }
   const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('hypothesis is missing');
   if (record.hypothesisSha256 !== digest(hypothesis) || digest(record.report) !== digest(critiqueMeasuredFirstRender(hypothesis, packet, record.measurements[0]))) return fail('hypothesis or measured critic result changed');
-  if (record.sourceSha256 !== packet.binding.sourceSha256 || record.buildSha256 !== packet.binding.production[0]?.servedTreeSha256 || record.report.verdict !== 'retain') return fail('critical findings or stale source/build remain');
-  return record;
+  if (record.sourceSha256 !== packet.binding.sourceSha256 || record.buildSha256 !== packet.binding.production[0]?.servedTreeSha256) return fail('stale source/build remain');
+  if (purpose === 'acceptance' && record.report.verdict !== 'retain') return fail('critical findings remain');
+  return { ...record, reportSha256 };
 }

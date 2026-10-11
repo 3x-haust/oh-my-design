@@ -726,6 +726,21 @@ test('closed parser rejects unknown or duplicate H2 sections and fingerprint key
   }
 });
 
+test('selected first-party study fingerprint must be present and current', () => {
+  const { values, digests } = baseInputs();
+  const sourceStudy = hash('selected-first-party-study');
+  const complete = artifact(values);
+  const bound = complete.replace('## Input fingerprint\n',
+    `## Input fingerprint\n\n- Source study SHA-256: ${sourceStudy}\n`);
+  assert.deepEqual(validateCompositionContractSource({ contract: bound, ...digests, sourceStudy }), []);
+  assert.ok(validateCompositionContractSource({ contract: complete, ...digests, sourceStudy })
+    .some(finding => finding.id === 'COMPOSITION-STALE'));
+  assert.ok(validateCompositionContractSource({ contract: bound, ...digests, sourceStudy: hash('changed-study') })
+    .some(finding => finding.id === 'COMPOSITION-STALE'));
+  assert.ok(validateCompositionContractSource({ contract: bound, ...digests })
+    .some(finding => finding.id === 'COMPOSITION-HASH'));
+});
+
 test('owned auxiliary sections are allowed once and Unicode separators fail closed', () => {
   const { values, digests } = baseInputs();
   const complete = artifact(values);
@@ -777,7 +792,6 @@ test('routes and selectors are local, stable, normalized, and diagnostic records
     complete.replace('- Destination route: /inbox', '- Destination route: https://example.com'),
     complete.replace('- Destination route: /inbox', '- Destination route: TODO route'),
     complete.replace('- Destination route: /inbox', '- Destination route: //example.com'),
-    complete.replace('- Destination route: /inbox', '- Destination route: /todo'),
     complete.replace('[data-region="inbox"]', '.inbox-card'),
     `${complete}\n\n${synthesis('Second', 'SECOND-REF', '[data-region="inbox"]').replace(/^## Reference synthesis\n+/, '')}`,
   ]) {

@@ -36,8 +36,9 @@ test('every chromium.launch( in the codebase requests headless: true', () => {
   }
 });
 
-test('no source ever launches a headed browser (headless: false)', () => {
+test('explicit headed launches stay in the consent-bound profile login and challenge helper', () => {
   for (const { f, text } of sources) {
+    if (f === join(root, 'core/ref/browser-profile.ts')) continue;
     assert.doesNotMatch(text, /headless:\s*false/, `${f} must never set headless: false`);
   }
 });
@@ -46,13 +47,13 @@ test('persistent headed capability is confined to the opt-in reference browser',
   // Inspect calls, not inventory audit strings or comments that merely mention a launch.
   const parser = new API();
   for (const { f, text } of sources) {
-    if (!/chromium\.(launchServer|launchPersistentContext)\(/.test(text)) continue;
+    if (!/\.(launchServer|launchPersistentContext)\(/.test(text)) continue;
     const snapshot = parser.updateSnapshot({ openFiles: [f] });
     try {
       const file = snapshot.getDefaultProjectForFile(f)?.program.getSourceFile(f); assert.ok(file);
       const visit = (node: Node): void => {
-        if (isCallExpression(node) && isPropertyAccessExpression(node.expression) && isIdentifier(node.expression.expression)
-          && node.expression.expression.text === 'chromium' && ['launchServer', 'launchPersistentContext'].includes(node.expression.name.text)) {
+        if (isCallExpression(node) && isPropertyAccessExpression(node.expression)
+          && ['launchServer', 'launchPersistentContext'].includes(node.expression.name.text)) {
           const mode = node.expression.name.text;
           const options = node.arguments[mode === 'launchPersistentContext' ? 1 : 0];
           assert.ok(options && isObjectLiteralExpression(options), `${f}: explicit launch options required`);
@@ -60,6 +61,8 @@ test('persistent headed capability is confined to the opt-in reference browser',
           assert.ok(headless && isPropertyAssignment(headless), `${f}: explicit headless option required`);
           if (f === join(root, 'core/ref/browse/browser.ts') && mode === 'launchPersistentContext') {
             assert.match(file.text.slice(headless.pos, headless.end), /headless:\s*!start\.headed/);
+          } else if (f === join(root, 'core/ref/browser-profile.ts') && mode === 'launchPersistentContext') {
+            assert.equal(headless.initializer.kind, SyntaxKind.FalseKeyword);
           } else assert.equal(headless.initializer.kind, SyntaxKind.TrueKeyword, `${f}: non-browse launches stay headless`);
         }
         node.forEachChild(visit);

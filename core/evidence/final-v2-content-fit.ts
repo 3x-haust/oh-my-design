@@ -9,10 +9,9 @@ import {
 } from '../content-grain/contract.ts';
 import { readContentFitReceipt, readContentGrain } from '../content-grain/files.ts';
 import { validateDecisionGraph } from '../deliberation/contracts.ts';
-import {
-  validateBrowserObservationDecisionLinks,
-  type BrowserObservation,
-} from '../runtime/browser-observation.ts';
+import type { BrowserObservation } from '../runtime/browser-observation.ts';
+import { validateObservationDecisionGraph } from '../runtime/observation-decision-graph.ts';
+import { nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 
 export type FinalV2ContentFitErrorCode =
   | 'CONTENT_FIT_REQUIRED'
@@ -39,11 +38,10 @@ const fail = (code: FinalV2ContentFitErrorCode): never => { throw new FinalV2Con
 const expectedViewport = (viewport: 'desktop' | 'mobile'): Readonly<{ width: number; height: number }> =>
   viewport === 'desktop' ? { width: 1280, height: 900 } : { width: 390, height: 844 };
 
-function currentDecisionGraph(root: string): Readonly<{
+function decisionGraph(bytes: Buffer): Readonly<{
   bytes: Buffer;
   decisions: ReadonlyMap<string, readonly string[]>;
 }> {
-  const bytes = readFileSync(resolve(root, '.omd', 'decision-graph.json'));
   let value: unknown;
   try { value = JSON.parse(bytes.toString('utf8')); } catch { return fail('CONTENT_FIT_DECISION_GRAPH_INVALID'); }
   const graph = validateDecisionGraph(value).value ?? fail('CONTENT_FIT_DECISION_GRAPH_INVALID');
@@ -54,20 +52,25 @@ function currentDecisionGraph(root: string): Readonly<{
 }
 
 function observationBindings(
+  root: string,
   evidence: readonly unknown[],
-  decisionGraph: ReturnType<typeof currentDecisionGraph>,
+  currentGraph: ReturnType<typeof decisionGraph>,
 ): Readonly<{
   coverage: readonly ContentFitObservationBinding[];
   observations: ReadonlyMap<string, BrowserObservation>;
 }> {
   const observations = new Map<string, BrowserObservation>();
   const coverage = new Map<string, ContentFitObservationBinding>();
-  for (const item of evidence) {
-    const set = validateBrowserObservationDecisionLinks(item, decisionGraph.bytes, true);
-    if (set === undefined) continue;
+  for (const [index, item] of evidence.entries()) {
+    const resolved = validateObservationDecisionGraph({
+      root, fs: nodeStableProjectFileSystem(), evidence: item, currentGraph: currentGraph.bytes,
+      requireCurrentGraph: index === evidence.length - 1,
+    });
+    const graph = decisionGraph(resolved.graphBytes);
+    const set = resolved.links;
     for (const observation of set.observations) {
       const decisionRefs = observation.decisionRefs.flatMap((reference) =>
-        decisionGraph.decisions.get(reference.decisionId) ?? [],
+        graph.decisions.get(reference.decisionId) ?? [],
       ).filter((reference) => reference.startsWith('content-grain:'));
       observations.set(observation.observationSha256, observation);
       coverage.set(observation.observationSha256, {
@@ -95,8 +98,8 @@ export function validateFinalV2ContentFitCurrentness(
   const bytes = readFileSync(resolve(input.root, descriptor.path));
   if (hash(bytes) !== descriptor.sha256) fail('CONTENT_FIT_DESCRIPTOR_STALE');
   const grain = readContentGrain(input.root);
-  const decisionGraph = currentDecisionGraph(input.root);
-  const bindings = observationBindings(input.observations, decisionGraph);
+  const currentGraph = decisionGraph(readFileSync(resolve(input.root, '.omd', 'decision-graph.json')));
+  const bindings = observationBindings(input.root, input.observations, currentGraph);
   for (const check of receipt.checks) {
     const observation = bindings.observations.get(check.observationSha256);
     const viewport = expectedViewport(check.viewport);
@@ -109,7 +112,7 @@ export function validateFinalV2ContentFitCurrentness(
   validateContentFitCoverage({
     grain,
     grainSha256: contentGrainSha256(grain),
-    decisionGraphSha256: hash(decisionGraph.bytes),
+    decisionGraphSha256: hash(currentGraph.bytes),
     receipt,
     observations: bindings.coverage,
   });

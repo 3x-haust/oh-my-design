@@ -20,6 +20,12 @@ export function loadRules(dirPath: string): Rule[] {
   return rules;
 }
 
+// Literal wording matches are retrieval cues for a human/AI reviewer, not rule violations.
+export const CONTEXTUAL_COPY_RULE_IDS = new Set([
+  'SLOP-COPY', 'SLOP-PLACEHOLDER-COPY', 'SLOP-PINK-ELEPHANT', 'SLOP-COPY-KO',
+  'SLOP-KO-REGISTER-MIX', 'SLOP-KO-SIGNPOST', 'SLOP-FAKE-STAT', 'SLOP-BADGE-SPAM',
+]);
+
 type Compiled = Script;
 
 const cache = new Map<string, Compiled>();
@@ -39,7 +45,25 @@ function compile(ruleId: string, expr: string): Compiled {
 
 function evalExpr(ruleId: string, expr: string, node: Node, ir: Ir, value: RuleValue): unknown {
   try {
-    const context = { node: structuredClone(node), ir: structuredClone(ir), value: structuredClone(value) };
+    let irSnapshot: unknown;
+    let hasIrSnapshot = false;
+    const context = {
+      node: structuredClone(node),
+      // Most per-node expressions never read ir. Clone only on first access, still
+      // giving each expression its own mutable snapshot rather than sharing data.
+      get ir(): unknown {
+        if (!hasIrSnapshot) {
+          irSnapshot = structuredClone(ir);
+          hasIrSnapshot = true;
+        }
+        return irSnapshot;
+      },
+      set ir(next: unknown) {
+        irSnapshot = next;
+        hasIrSnapshot = true;
+      },
+      value: structuredClone(value),
+    };
     return compile(ruleId, expr).runInNewContext(context, { timeout: RULE_EVALUATION_TIMEOUT_MS, contextCodeGeneration: { strings: false, wasm: false } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -58,10 +82,11 @@ function interpolate(template: string, ctx: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => formatValue(ctx[key]));
 }
 
-export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categories?: Category[] } = {}): Violation[] {
+export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categories?: Category[]; contextualSuggestions?: boolean } = {}): Violation[] {
   const violations: Violation[] = [];
 
   for (const rule of rules) {
+    if (CONTEXTUAL_COPY_RULE_IDS.has(rule.id) !== (opts.contextualSuggestions === true)) continue;
     if (opts.layers && !opts.layers.includes(rule.layer)) continue;
     if (opts.categories && !opts.categories.includes(rule.category)) continue;
 

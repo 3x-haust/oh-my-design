@@ -21,7 +21,7 @@ interface ProbePlanFixture { name: string; destructive: false; steps: PlanStep[]
 interface ResultExpectation { type: PlanExpectation['type']; selector?: string; name?: string; value?: string; ok: boolean }
 interface ResultStep { action: PlanStep['action']; selector?: string; key?: string; ok: boolean; expectations: ResultExpectation[] }
 interface ProbeResultFixture { name: string; target: string; viewport: { width: number; height: number }; steps: ResultStep[]; warnings: [] }
-interface TaskFixture { id: string; context: 'production'; production: { route: string; locator: string; workObject: string }; probes: ProbeEvidence[]; renders: [RenderEvidence, RenderEvidence]; invalidSubmit?: ProbeEvidence; transient?: TransientEvidence[] }
+interface TaskFixture { id: string; context: 'production'; production: { route: string; locator: string; workObject: string }; probes: ProbeEvidence[]; renders: [RenderEvidence, RenderEvidence]; invalidSubmit?: ProbeEvidence; invalidSubmitFeedback?: { decision: 'actionable'; reason: string; quote: string }; transient?: TransientEvidence[] }
 interface ManifestFixture { schemaVersion: 1; buildSha256: string; surface: 'product' | 'mixed'; frame: Artifact; composition: Artifact; tasks: TaskFixture[] }
 interface Fixture { root: string; input: string; writer: ReturnType<typeof createTestProjectRunInvocation>; manifest: ManifestFixture; frame: string; snapshot(): void; restore(): void; cleanup(): void }
 
@@ -341,15 +341,18 @@ test('invalid submit requires ordered same-field fill, production activation, an
     const frame = item.frame.replace('requirements: none', 'requirements: invalid-submit');
     writeFileSync(join(item.root, '.omd/frame.md'), frame);
     item.manifest.frame.sha256 = hash(frame);
-    const plan: ProbePlanFixture = { name: 'invalid', destructive: false, steps: [{ action: 'fill', selector: '#email', value: 'a@example.test', expect: [{ type: 'visible', selector: '#email' }] }, { action: 'click', selector: '#save', expect: [{ type: 'visible', selector: '#error' }, { type: 'attribute', selector: '#email', name: 'value', value: 'a@example.test' }] }] };
-    const result: ProbeResultFixture = { name: 'invalid', target: 'http://localhost/editor', viewport: { width: 390, height: 844 }, steps: [{ action: 'fill', selector: '#email', ok: true, expectations: [{ type: 'visible', selector: '#email', ok: true }] }, { action: 'click', selector: '#save', ok: true, expectations: [{ type: 'visible', selector: '#error', ok: true }, { type: 'attribute', selector: '#email', name: 'value', value: 'a@example.test', ok: true }] }], warnings: [] };
+    const plan: ProbePlanFixture = { name: 'invalid', destructive: false, steps: [{ action: 'fill', selector: '#email', value: 'a@example.test', expect: [{ type: 'visible', selector: '#email' }] }, { action: 'click', selector: '#save', expect: [{ type: 'text', selector: '#error', value: '다시 입력해 주세요' }, { type: 'attribute', selector: '#email', name: 'value', value: 'a@example.test' }] }] };
+    const result: ProbeResultFixture = { name: 'invalid', target: 'http://localhost/editor', viewport: { width: 390, height: 844 }, steps: [{ action: 'fill', selector: '#email', ok: true, expectations: [{ type: 'visible', selector: '#email', ok: true }] }, { action: 'click', selector: '#save', ok: true, expectations: [{ type: 'text', selector: '#error', value: '다시 입력해 주세요', ok: true }, { type: 'attribute', selector: '#email', name: 'value', value: 'a@example.test', ok: true }] }], warnings: [] };
     const planArtifact = writeArtifact(item, '.omd/.cache/invalid-plan.json', plan);
     const resultArtifact = writeArtifact(item, '.omd/.cache/invalid-result.json', result);
     taskOf(item.manifest).invalidSubmit = { planPath: planArtifact.path, planSha256: planArtifact.sha256, resultPath: resultArtifact.path, resultSha256: resultArtifact.sha256, role: 'invalid-submit', viewport: 'mobile' };
+    taskOf(item.manifest).invalidSubmitFeedback = { decision: 'actionable', reason: 'The observed result explains how to recover.', quote: '다시 입력해 주세요' };
     writeFileSync(item.input, JSON.stringify(item.manifest));
     item.snapshot();
     authorizeTaskEvidencePayloads(item, item.manifest);
     publishTaskEvidence(item.root, item.input, item.writer);
+    fail(item, manifest => { delete taskOf(manifest).invalidSubmitFeedback; }, /invalid-submit AI judgment/);
+    fail(item, manifest => { taskOf(manifest).invalidSubmitFeedback!.quote = 'not in the rendered result'; }, /invalid-submit evidence/);
     fail(item, manifest => {
       const probe = invalidOf(taskOf(manifest));
       const invalidPlan = readArtifact<ProbePlanFixture>(item, probe.planPath);

@@ -113,6 +113,8 @@ generator: "a bold agency site"
 
 ## Frame
 
+- register: showpiece
+
 This page commits to the **showpiece** register...
 `.trim();
 

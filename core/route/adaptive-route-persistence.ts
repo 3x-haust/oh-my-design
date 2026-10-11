@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import type { VerifiedJudgment } from '../judgment/index.ts';
 import {
   acquireProjectMutationLock,
   replaceProjectFileAtomically,
@@ -87,12 +88,13 @@ export function publishAdaptiveRoute(
   writer: ProjectWriteAdapter,
   invocation: ProjectRunInvocation,
   localeDesign?: LocaleDesignRoute,
+  marketJudgment?: VerifiedJudgment,
 ): PublishedAdaptiveRoute {
   requireProjectWriteAdapter(root, writer);
   const release = acquireProjectMutationLock(root, invocation);
   try {
     if (localeDesign !== undefined) requireCurrentLocaleDesignContext(root, localeDesign);
-    const record = routeAdaptiveFlow(input, { root, invocation }, localeDesign);
+    const record = routeAdaptiveFlow(input, { root, invocation, ...(marketJudgment === undefined ? {} : { marketJudgment }) }, localeDesign);
     const sourceSha256 = adaptiveSourceContractSha256(record.sourceContract);
     const sourcePath = `route-sources/sha256-${sourceSha256}.json`;
     const recordSha256 = adaptiveRouteRecordSha256(record);

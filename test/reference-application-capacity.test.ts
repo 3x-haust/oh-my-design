@@ -99,8 +99,11 @@ test('seventeen current domain surfaces publish and pass the application check i
     surfaces: input.screens.map(({ surface }) => ({ name: surface, purpose: `Complete the ${surface} task`, evidence })),
     coreObjects: [{ name: 'application', evidence }], audience: { description: 'welfare applicants', evidence },
     referenceQueries: { component: ['application workspace'], craft: ['status feedback'], mood: ['readable workspace'] },
-    planning: { businessGoal: { text: 'Reduce application effort' }, successSignal: { text: 'Resume prepared work' },
-      nonGoals: [{ text: 'No official submissions in this fixture' }] },
+    planning: {
+      businessGoal: { text: 'Reduce application effort', disposition: 'non-factual-working-decision' },
+      successSignal: { text: 'Resume prepared work', disposition: 'non-factual-working-decision' },
+      nonGoals: [{ text: 'No official submissions in this fixture', disposition: 'omit-from-production-claims' }],
+    },
   }));
   const draft = referenceApplicationPlan(fixture.root, options).input;
 

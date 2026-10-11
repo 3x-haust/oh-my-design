@@ -1,3 +1,14 @@
+import { browserCallback, browserEvaluationExpression } from '../ref/browser-evaluation.ts';
+import { withUserBrowserPage } from '../ref/user-browser-engine.ts';
+import { observeUserBrowserPreparation } from '../ref/user-browser-preparation.ts';
+import { clearUserBrowserChallenge, observeUserBrowser } from '../ref/user-browser-observation.ts';
+import type { ElementGeometry } from '../ref/acquisition-png.ts';
+import { PREPARED_MEASUREMENT_COVERAGE as USER_BROWSER_UNMEASURED } from '../ref/measurement-coverage.ts';
+import type { UserBrowserDriver } from '../browser/contracts.ts';
+import type { PublicHostLookup } from '../ref/public-network.ts';
+import { USER_BROWSER_PROVENANCE } from '../ref/user-browser-provenance.ts';
+import { readReferenceBrowserConfig, type BrowserConnector, type ReferenceBrowserConfig } from '../ref/browser-config.ts';
+import { createPublicNetworkProxy } from '../ref/public-network.ts';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { constants as fsConstants, closeSync, fstatSync, lstatSync, openSync, readFileSync, realpathSync, type Stats } from 'node:fs';
@@ -9,8 +20,12 @@ import { disableUnproxiedRealtimeTransports } from '../ref/browser-security.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
 import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
+import { AcquisitionTimeoutError, type AcquisitionDeadlineScope } from '../ref/acquisition-deadline.ts';
+import { collectGalleryImageCandidates } from '../ref/gallery-image-candidates.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
 import { clearReferenceNotices, suspendReferenceScriptsForShot, type NoticeDismissal } from '../ref/notice-overlay.ts';
+import { isNearUniformBlankCapture } from '../ref/blank-capture.ts';
+import type { ReferenceJudgmentBinding } from '../ref/judgment-policy.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -77,9 +92,7 @@ const writeScreenshot = async (
   output: string,
 ): Promise<string> => adapter.write(projectOutputPath(adapter, output), await capture());
 
-export function browserEvaluationExpression(source: string, argumentExpression: string): string {
-  return `(() => { const __name = (callback) => callback; return (${source})(${argumentExpression}); })()`;
-}
+export { browserEvaluationExpression } from '../ref/browser-evaluation.ts';
 
 // ── Block detection ─────────────────────────────────────────────────────────
 
@@ -97,35 +110,11 @@ export class BlockedPageError extends Error {
   }
 }
 
-/** Challenge-page title patterns that indicate bot/Cloudflare/WAF blocking. */
-const CHALLENGE_TITLE_PATTERNS: RegExp[] = [
-  /^just a moment/i,
-  /^attention required/i,
-  /^access denied/i,
-  /^ddos.{0,20}protection/i,
-  /^please (verify|wait)/i,
-  /^security check/i,
-  /^cloudflare/i,
-  /^are you (a )?human/i,
-  /^checking your browser/i,
-  /^one more step/i,
-  /^403\b/,
-  /^error\s+403\b/i,
-  /^(503|502|500)\b/,
-];
+
 
 /**
- * Pure heuristic, fully testable without a browser.
- *
- * Returns the block reason string when the signals indicate a bot-challenge or
- * hollow page; returns null when the page looks valid.
- *
- * Rules, in order:
- *   1. HTTP 4xx/5xx → unavailable, blocked, or server error (never reference content)
- *   2. Challenge-page title → Cloudflare / WAF interstitial
- *   3. Near-empty body (< 200 visible chars) → hollow unless a visible, nonempty
- *      component has been measured in a successful response. Length alone does
- *      not distinguish an empty page from a standalone component example.
+ * Only transport status is sufficient to refuse here. Page-access meaning needs
+ * a judgment grounded in the signed visible observation.
  */
 export function detectBlockReason(
   title: string,
@@ -136,16 +125,8 @@ export function detectBlockReason(
   if (httpStatus !== null && httpStatus >= 400) {
     return `HTTP ${httpStatus}`;
   }
-  for (const pattern of CHALLENGE_TITLE_PATTERNS) {
-    if (pattern.test(title.trim())) {
-      return `challenge page: "${title.trim()}"`;
-    }
-  }
-  const sparseComponent = hasMeasuredComponent && bodyTextLength > 0
-    && httpStatus !== null && httpStatus >= 200 && httpStatus < 300;
-  if (bodyTextLength < 200 && !sparseComponent) {
-    return `near-empty body (${bodyTextLength} visible chars)`;
-  }
+  // Titles and sparse content are observations for page-access judgment, not blockers.
+  void title; void bodyTextLength; void hasMeasuredComponent;
   return null;
 }
 
@@ -169,13 +150,13 @@ async function assertNotBlocked(
   if (await galleryLoginOccludes(page, resolvedUrl)) throw new BlockedPageError('gallery login form obscures the reference; inspect another public source');
   const title = await page.title().catch(() => '');
   const bodyTextLength = await page
-    .evaluate(() => (document.body?.innerText?.trim() ?? '').length)
+    .evaluate(browserCallback(() => (document.body?.innerText?.trim() ?? '').length))
     .catch(() => 999); // can't measure → assume valid so capture still runs
   let reason = detectBlockReason(title, bodyTextLength, httpStatus);
   // No caller-controlled bypass: only a live, explicitly scoped component can
   // resolve the weak short-body signal. HTTP and challenge signals still win.
   if (reason?.startsWith('near-empty body') && selector !== null) {
-    const measured = await page.locator(selector).evaluateAll((elements) => {
+    const measured = await page.locator(selector).evaluateAll(browserCallback((elements: Element[]) => {
       const element = elements[0];
       if (!(element instanceof HTMLElement) || element === document.body
         || element === document.documentElement) return false;
@@ -187,7 +168,7 @@ async function assertNotBlocked(
       return box.width > 0 && box.height > 0 && style.visibility === 'visible'
         && style.display !== 'none' && Number(style.opacity) > 0
         && element.innerText.trim().length > 0;
-    }).catch(() => false);
+    })).catch(() => false);
     reason = detectBlockReason(title, bodyTextLength, httpStatus, measured);
   }
   if (reason !== null) throw new BlockedPageError(reason);
@@ -197,14 +178,14 @@ async function assertNotBlocked(
  * does not hide the primary capture, and an actual product login screen is not a gallery block. */
 export async function galleryLoginOccludes(page: import('playwright').Page, url: string): Promise<boolean> {
   if (designDiscoveryProvider(url) === null) return false;
-  return page.evaluate(() => Array.from(document.querySelectorAll('input[type="password"]')).some(input => {
+  return page.evaluate(browserCallback(() => Array.from(document.querySelectorAll('input[type="password"]')).some(input => {
     const box = input.getBoundingClientRect();
     if (box.width <= 0 || box.height <= 0 || getComputedStyle(input).visibility === 'hidden') return false;
     const form = input.closest('form, [role="dialog"], [aria-modal="true"]');
     if (!form) return false;
     const centre = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
     return centre !== null && form.contains(centre);
-  }));
+  })));
 }
 
 /**
@@ -220,13 +201,13 @@ async function assertSelectorIsMeasurableDom(
   if (selector === null) return;
   const element = await page.$(selector);
   if (element === null) return;
-  const frame = await element.evaluate((selected) => {
+  const frame = await element.evaluate(browserCallback((selected) => {
     if (!(selected instanceof HTMLIFrameElement)) return null;
     return {
       url: selected.src || selected.contentWindow?.location.href || 'about:srcdoc',
       title: selected.title.trim(),
     };
-  }).finally(() => element.dispose());
+  })).finally(() => element.dispose());
   if (frame === null) return;
   const title = frame.title === '' ? '' : ` (${JSON.stringify(frame.title)})`;
   throw new Error(
@@ -251,7 +232,7 @@ export async function waitForDocumentFonts(
   page: Pick<import('playwright').Page, 'evaluate'>,
   timeoutMs = FONT_READY_TIMEOUT_MS,
 ): Promise<void> {
-  const outcome = await page.evaluate(async (limit) => {
+  const outcome = await page.evaluate(browserCallback(async (limit) => {
     if (!document.fonts?.ready) return 'unsupported';
     if (document.fonts.size === 0) return 'ready';
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -265,7 +246,7 @@ export async function waitForDocumentFonts(
     } finally {
       if (timer !== undefined) clearTimeout(timer);
     }
-  }, timeoutMs);
+  }), timeoutMs);
   if (outcome === 'timeout') {
     throw new Error(`document.fonts.ready timed out after ${timeoutMs}ms`);
   }
@@ -273,20 +254,46 @@ export async function waitForDocumentFonts(
 
 
 type Browser = import('playwright').Browser;
+type Page = import('playwright').Page;
 
 /** Launch one chromium, run fn, close it. Batch capture reuses a single browser across many pages. */
-export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Promise<T> {
+export async function withBrowser<T>(
+  fn: (browser: Browser) => Promise<T>,
+  owner?: Pick<AcquisitionDeadlineScope, 'own'>,
+  profile?: Readonly<{ reference: true; config?: ReferenceBrowserConfig; connector?: BrowserConnector }>,
+): Promise<T> {
   const { chromium } = await import('playwright');
-  // Always headless — OMD never opens a visible browser window in any situation.
-  const browser = await chromium.launch({ headless: true, timeout: 30000 });
+  const config = profile?.config ?? (profile ? readReferenceBrowserConfig() : undefined);
+  const connector = profile?.connector ?? chromium;
+  const cdp = config?.mode === 'cdp';
+  const proxy = config?.mode === 'profile' ? await createPublicNetworkProxy() : undefined;
+  let persistent: import('playwright').BrowserContext | undefined;
+  let browser: Browser;
   try {
-    return await fn(browser);
-  } finally {
-    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-    try { await Promise.race([browser.close(), new Promise<void>((_, reject) => {
-      cleanupTimer = setTimeout(() => reject(new Error(`browser cleanup timed out after ${BROWSER_CLEANUP_TIMEOUT_MS}ms`)), BROWSER_CLEANUP_TIMEOUT_MS);
-    })]); }
-    finally { clearTimeout(cleanupTimer); }
+    if (config?.mode === 'profile') {
+      persistent = await (connector.launchPersistentContext?.bind(connector) ?? chromium.launchPersistentContext.bind(chromium))(
+        config.profilePath!, { headless: true, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, serviceWorkers: 'block', acceptDownloads: false,
+          proxy: { server: proxy!.server } });
+      const context = persistent;
+      browser = { newContext: async () => context,
+        newPage: async (options?: { viewport?: { width: number; height: number } }) => {
+          const page = await context.newPage();
+          if (options?.viewport) await page.setViewportSize(options.viewport);
+          return page;
+        }, close: async () => context.close() } as unknown as Browser;
+    } else browser = cdp ? await connector.connectOverCDP(config!.cdpUrl!) : await connector.launch({
+      headless: true, timeout: 30000, ...(config?.mode === 'stealth' ? { executablePath: config.executablePath } : {}),
+    });
+  } catch (error) { await proxy?.close(); throw error; }
+  if (!cdp) owner?.own(browser);
+  try { return await fn(browser); }
+  finally {
+    if (!cdp) {
+      let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([browser.close(), new Promise<void>((_, reject) => {
+        cleanupTimer = setTimeout(() => reject(new Error(`browser cleanup timed out after ${BROWSER_CLEANUP_TIMEOUT_MS}ms`)), BROWSER_CLEANUP_TIMEOUT_MS);
+      })]); } finally { clearTimeout(cleanupTimer); await proxy?.close(); }
+    } else await browser.close(); // For connectOverCDP, close disconnects this client; it does not own Chromium.
   }
 }
 
@@ -300,7 +307,8 @@ export async function onPage<T>(
   referenceSafety = false,
   localOrigin?: string,
 ): Promise<T> {
-  const page = await browser.newPage({ viewport, ...(referenceSafety || localOrigin ? { serviceWorkers: 'block' as const } : {}), ...(localOrigin ? { acceptDownloads: false } : {}) });
+  const page = await browser.newPage({ viewport, ...(referenceSafety ? { deviceScaleFactor: 2 } : {}),
+    ...(referenceSafety || localOrigin ? { serviceWorkers: 'block' as const } : {}), ...(localOrigin ? { acceptDownloads: false } : {}) });
   const blocked: string[] = [];
   if (referenceSafety || localOrigin) {
     if (localOrigin) await disableUnproxiedRealtimeTransports(page.context());
@@ -497,9 +505,9 @@ async function probeInteraction(page: import('playwright').Page): Promise<Intera
     let hoverResponsive = 0;
     for (const handle of visible) {
       try {
-        const before = await handle.evaluate(pickHoverStyle);
+        const before = await handle.evaluate(browserCallback(pickHoverStyle));
         await handle.hover({ timeout: 2000 });
-        const after = await handle.evaluate(pickHoverStyle);
+        const after = await handle.evaluate(browserCallback(pickHoverStyle));
         if (HOVER_KEYS.some((k) => before[k] !== after[k])) hoverResponsive += 1;
       } catch {
         // Not hoverable (covered, detached mid-probe): does not count either way.
@@ -509,18 +517,18 @@ async function probeInteraction(page: import('playwright').Page): Promise<Intera
     // the focus-visible pass below.
     await page.mouse.move(0, 0).catch(() => {});
 
-    await page.evaluate(() => document.body.focus());
+    await page.evaluate(browserCallback(() => document.body.focus()));
     let tabStops = 0;
     let focusVisible = 0;
     for (let i = 0; i < MAX_PROBED; i += 1) {
       await page.keyboard.press('Tab');
-      const indicator = await page.evaluate(() => {
+      const indicator = await page.evaluate(browserCallback(() => {
         const el = document.activeElement;
         if (!el || el === document.body || el === document.documentElement) return null;
         const cs = getComputedStyle(el);
         const outlined = cs.outlineStyle !== 'none' && cs.outlineWidth !== '0px';
         return outlined || cs.boxShadow !== 'none';
-      });
+      }));
       if (indicator === null) continue;
       tabStops += 1;
       if (indicator) focusVisible += 1;
@@ -598,8 +606,8 @@ function checkReducedMotionInPage(): boolean {
  */
 async function probeMotion(page: import('playwright').Page): Promise<MotionMeasurement | null> {
   const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-  const snapshotExpression = browserEvaluationExpression(captureMotionSnapshot.toString(), '');
-  const reducedMotionExpression = browserEvaluationExpression(checkReducedMotionInPage.toString(), '');
+  const snapshotExpression = browserEvaluationExpression(captureMotionSnapshot.toString());
+  const reducedMotionExpression = browserEvaluationExpression(checkReducedMotionInPage.toString());
   try {
     type Snap = Array<{ duration: number; easing: string; properties: string[]; playState: string }>;
 
@@ -723,21 +731,26 @@ export async function renderFilmstrip(
  */
 export async function captureEnergy(
   target: string,
-  opts: { viewport: Viewport; frames?: number; interval?: number; browser?: Browser },
+  opts: { viewport: Viewport; frames?: number; interval?: number; browser?: Browser; deadline?: Pick<AcquisitionDeadlineScope, 'signal' | 'assertLive'> },
 ): Promise<EnergyCurve | null> {
   const frameCount = Math.min(Math.max(opts.frames ?? 4, 2), 6);
   const interval = opts.interval ?? 300;
   try {
+    opts.deadline?.assertLive();
     const sample = (browser: Browser) => onPage(browser, target, opts.viewport, async (page) => {
       const buffers: Buffer[] = [];
       for (let i = 0; i < frameCount; i++) {
         if (i > 0) await new Promise<void>((r) => setTimeout(r, interval));
         buffers.push(await page.screenshot({ fullPage: false }));
+        opts.deadline?.assertLive();
       }
       return computeEnergy(buffers);
     }, REFERENCE_ENERGY_TIMEOUT_MS);
-    return await (opts.browser === undefined ? withBrowser(sample) : sample(opts.browser));
-  } catch {
+    const result = await (opts.browser === undefined ? withBrowser(sample) : sample(opts.browser));
+    opts.deadline?.assertLive();
+    return result;
+  } catch (error) {
+    if (error instanceof AcquisitionTimeoutError || opts.deadline?.signal.aborted) throw error;
     return null;
   }
 }
@@ -764,7 +777,7 @@ async function extractIrCore(
   }
   await assertSelectorIsMeasurableDom(page, selector);
   const raw = await page.evaluate(
-    browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector ?? null)}, ${JSON.stringify(detail)}`),
+    browserEvaluationExpression(extractInPage.toString(), [MAX_NODES, selector ?? null, detail]),
   ) as RawIr;
   const interaction = probe ? await probeInteraction(page) : null;
   const motion = probe ? await probeMotion(page) : null;
@@ -785,58 +798,104 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean },
-): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; visibleText: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null; noticeDismissals?: NoticeDismissal[] } }> {
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; viewportShot?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean; deadline?: Pick<AcquisitionDeadlineScope, 'signal' | 'assertLive'>;
+    overlayJudgment?: (page: Page, selector: string, url: string) => Promise<ReferenceJudgmentBinding | undefined>;
+    contentJudgment?: (page: Page, selector: string, url: string) => Promise<ReferenceJudgmentBinding | undefined>;
+    imageLookup?: import('../ref/public-network.ts').PublicHostLookup;
+    imageFetch?: (url: string) => Promise<{ status: number; contentType: string; bytes: Buffer }> },
+): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; visibleText: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null; noticeDismissals?: NoticeDismissal[];
+      sourceImage?: string; sourceImageSha256?: string; imageDimensions?: { width: number; height: number } } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
+    const selector = opts.selector ?? await page.evaluate(browserCallback(() =>
+      document.contentType.startsWith('image/') ? 'body > img' : null));
+    opts.deadline?.assertLive();
     if (opts.requireImageElement) {
-      if (!opts.selector || !opts.shotOut) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image and retain its screenshot');
-      const eligible = await page.locator(opts.selector).evaluateAll(elements => {
+      const candidates = await collectGalleryImageCandidates(page);
+      const candidateText = candidates.length === 0 ? 'candidates: none currently meet the loaded, visible 100x100 image criteria'
+        : `candidates: ${candidates.map(candidate => `${candidate.selector} (${Math.round(candidate.width)}x${Math.round(candidate.height)})`).join('; ')}`;
+      if (!opts.selector || !opts.shotOut) throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image and retain its screenshot; ${candidateText}`);
+      const eligible = await page.locator(opts.selector).evaluateAll(browserCallback((elements: Element[]) => {
         if (elements.length !== 1 || !(elements[0] instanceof HTMLImageElement)) return false;
         const image = elements[0];
         const box = image.getBoundingClientRect();
-        const style = getComputedStyle(image);
-        return image.complete && image.naturalWidth >= 100 && image.naturalHeight >= 100
-          && box.width >= 100 && box.height >= 100 && style.visibility === 'visible'
-          && style.display !== 'none' && Number(style.opacity) > 0;
-      });
-      if (!eligible) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify one loaded, visible UI image element, not gallery chrome');
+        if (!image.complete || image.naturalWidth < 100 || image.naturalHeight < 100 || box.width < 100 || box.height < 100) return false;
+        for (let element: Element | null = image; element; element = element.parentElement) {
+          const style = getComputedStyle(element);
+          if (style.visibility === 'hidden' || style.visibility === 'collapse' || style.display === 'none' || Number(style.opacity) <= 0) return false;
+        }
+        return true;
+      }));
+      if (!eligible) throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify exactly one loaded, visible UI image element, not gallery chrome; ${candidateText}`);
     }
     const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
     const selectedContentSelectors = [...(opts.selector ? [opts.selector] : []), ...allowedStateSelectors];
-    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000, selectedContentSelectors);
+    const overlayJudgment = opts.overlayJudgment && ((selector: string, url: string) => opts.overlayJudgment!(page, selector, url));
+    const contentJudgment = opts.contentJudgment && ((selector: string, url: string) => opts.contentJudgment!(page, selector, url));
+    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000, selectedContentSelectors, overlayJudgment, contentJudgment);
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
-    let raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
+    let raw = await extractIrCore(page, httpStatus, resolvedUrl, selector, false);
     if (preparation) await observeCapturePreparation(page, preparation);
-    await assertNotBlocked(page, httpStatus, resolvedUrl, opts.selector ?? null);
-    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
+    await assertNotBlocked(page, httpStatus, resolvedUrl, selector);
+    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors, overlayJudgment, contentJudgment);
     noticeDismissals.push(...laterDismissals);
-    if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
+    if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, selector, false);
     const resumeScripts = await suspendReferenceScriptsForShot(page);
     let shotSaved = false;
     let shotBytes: Buffer | undefined;
     let shotError: string | undefined;
-    if (opts.shotOut && opts.selector) {
-      const el = await page.$(opts.selector);
+    let originalImage: Awaited<ReturnType<typeof import('../ref/native-image-capture.ts')['captureOriginalImage']>> | undefined;
+    if (opts.shotOut && selector) {
+      const imageElement = await page.locator(selector).evaluateAll(browserCallback((elements: Element[]) => {
+        if (elements.length > 1 && elements.every(element => element instanceof HTMLImageElement))
+          throw new Error('DESIGN_IMAGE_SELECTOR_AMBIGUOUS: choose exactly one img selector');
+        return elements.length === 1 && elements[0] instanceof HTMLImageElement;
+      }));
+      if (opts.requireImageElement) {
+        const eligible = await page.locator(selector).evaluateAll(browserCallback((elements: Element[]) => {
+          if (elements.length !== 1 || !(elements[0] instanceof HTMLImageElement)) return false;
+          const image = elements[0];
+          const box = image.getBoundingClientRect();
+          if (!image.complete || image.naturalWidth < 100 || image.naturalHeight < 100 || box.width < 100 || box.height < 100) return false;
+          for (let element: Element | null = image; element; element = element.parentElement) {
+            const style = getComputedStyle(element);
+            if (style.visibility !== 'visible' || style.display === 'none' || Number(style.opacity) <= 0) return false;
+          }
+          return true;
+        }));
+        if (!eligible) {
+          const candidates = await collectGalleryImageCandidates(page);
+          throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: selected image changed before capture; candidates: ${candidates.length ? candidates.map(candidate => `${candidate.selector} (${Math.round(candidate.width)}x${Math.round(candidate.height)})`).join('; ') : 'none currently meet the loaded, visible 100x100 image criteria'}`);
+        }
+      }
+      const el = await page.$(selector);
       if (!el && preparation) throw new Error('prepared reference screenshot target disappeared before capture');
       if (el) {
         if (!opts.adapter) throw new Error('scoped reference screenshot requires a project-write adapter');
-        try { shotBytes = await el.screenshot(); }
+        try {
+          if (imageElement) {
+            const { captureOriginalImage } = await import('../ref/native-image-capture.ts');
+            originalImage = await captureOriginalImage(page, selector, opts.imageLookup, opts.imageFetch);
+            shotBytes = originalImage.bytes;
+          } else shotBytes = await page.screenshot({ fullPage: !opts.viewportShot });
+        }
         catch (error) {
-          if (preparation || !opts.bestEffortShot) throw error;
+          if (imageElement || preparation || !opts.bestEffortShot) throw error;
           shotError = error instanceof Error ? error.message : String(error);
         }
       }
     } else if (opts.shotOut) {
       if (!opts.adapter) throw new Error('reference screenshot requires a project-write adapter');
-      shotBytes = await page.screenshot({ fullPage: true });
+      shotBytes = await page.screenshot({ fullPage: !opts.viewportShot });
     }
-    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
+    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors, overlayJudgment, contentJudgment);
     noticeDismissals.push(...lateDismissals);
-    if (lateDismissals.length && shotBytes) shotBytes = opts.selector
-      ? await page.locator(opts.selector).screenshot()
-      : await page.screenshot({ fullPage: true });
+    if (lateDismissals.length && shotBytes && !originalImage) shotBytes = await page.screenshot({ fullPage: !opts.viewportShot });
     await resumeScripts();
+    if (shotBytes && opts.viewportShot === true && (opts.selector === undefined || opts.selector === null)
+      && isNearUniformBlankCapture(shotBytes)) {
+      throw new Error('REFERENCE_CAPTURE_BLANK: blank full-viewport design capture; inspect another public source or select an intentional visible component');
+    }
     let capturePreparation: CapturePreparationReceipt | undefined;
     if (preparation) {
       const observations = await observeCapturePreparation(page, preparation);
@@ -849,15 +908,16 @@ export async function capturePageForRef(
       };
     }
     const finalUrl = page.url();
-    const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
-    const visibleText = await page.evaluate(() => document.body?.innerText ?? '');
+    const links = await page.locator('a[href]').evaluateAll(browserCallback((elements: Element[]) => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]));
+    const visibleText = await page.evaluate(browserCallback(() => document.body?.innerText ?? ''));
     opts.validateFinalUrl?.(finalUrl, visibleText);
-    if (!preparation && noticeDismissals.length === 0) {
+    if (!preparation && noticeDismissals.length === 0 && !originalImage) {
       if (raw.meta) delete raw.meta.measurementCoverage;
       const motion = await probeMotion(page);
       raw.meta = { ...(raw.meta ?? {}), interaction: await probeInteraction(page), motion };
     }
     // Keep bytes private until all observations have passed, including after the screenshot.
+    opts.deadline?.assertLive();
     if (shotBytes && opts.shotOut && opts.adapter && !opts.deferShotWrite) {
       try {
         await writeScreenshot(async () => shotBytes!, requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.shotOut);
@@ -867,11 +927,131 @@ export async function capturePageForRef(
         shotError = error instanceof Error ? error.message : String(error);
       }
     }
+    opts.deadline?.assertLive();
     return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
+      ...(originalImage ? { sourceImage: originalImage.sourceUrl, sourceImageSha256: originalImage.sourceSha256,
+        imageDimensions: { width: originalImage.width, height: originalImage.height } } : {}),
       ...(noticeDismissals.length ? { noticeDismissals } : {}),
     }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
   }, REFERENCE_CAPTURE_TIMEOUT_MS, true);
+}
+/** DOM-only measurement in the user's browser; no independent headless probes or tab borrowing. */
+export async function captureUserBrowserPageForRef(target: string, viewport: Viewport,
+  opts: { selector?: string | null; shot?: boolean; requireImageElement?: boolean; preparation?: CapturePreparation; viewportShot?: boolean;
+    validateFinalUrl?: (url: string, visibleText: string) => void;
+    driver?: UserBrowserDriver; lookup?: PublicHostLookup; deadline?: Pick<AcquisitionDeadlineScope, 'signal' | 'assertLive'> },
+): Promise<{ raw: RawIr; visibleText: string; shotBytes?: Buffer; capturePreparation?: CapturePreparationReceipt; acquisition: {
+  requestedUrl: string; finalUrl: string; httpStatus: null; links: string[]; imageSha256: string | null;
+  engine: 'user-browser'; httpStatusSource: 'unobserved'; authentication: 'user-browser-session';
+  networkIsolation: 'initial-url-check-only'; getOnlyEnforced: false; captureMethod?: 'full-page' | 'viewport';
+  sourceImage?: string; sourceImageSha256?: string; imageDimensions?: { width: number; height: number };
+} }> {
+  const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
+  if (preparation && preparation.actions.length !== 0)
+    throw new Error('USER_BROWSER_PREPARATION_ACTION_UNSUPPORTED: only zero-action observations are supported');
+  return withUserBrowserPage({ ...(opts.driver ? { driver: opts.driver } : {}),
+    ...(opts.lookup ? { lookup: opts.lookup } : {}), ...(opts.deadline ? { signal: opts.deadline.signal } : {}) }, async page => {
+    await page.resize(viewport.width, viewport.height);
+    await page.navigate(target);
+    await clearUserBrowserChallenge(page, opts.lookup, opts.deadline?.signal, opts.selector !== undefined && opts.selector !== null);
+    if (preparation) await observeUserBrowserPreparation(page, preparation);
+    const selector = opts.selector ?? null;
+    const boxExpression = selector === null ? null : `(async () => {
+      const matches = document.querySelectorAll(${JSON.stringify(selector)});
+      if (matches.length !== 1) {
+        if (matches.length > 1 && [...matches].every(element => element instanceof HTMLImageElement))
+          throw Error('DESIGN_IMAGE_SELECTOR_AMBIGUOUS: choose exactly one img selector');
+        throw Error('reference selector must match exactly one element');
+      }
+      const element = matches[0];
+      if (element instanceof HTMLIFrameElement) throw Error('reference selector matches an opaque iframe');
+      if (${Boolean(opts.requireImageElement)} && !(element instanceof HTMLImageElement))
+        throw Error('DESIGN_GALLERY_IMAGE_REQUIRED: select one loaded UI image');
+      if (element instanceof HTMLImageElement && ${Boolean(opts.shot)}
+        && !(element.complete && element.naturalWidth > 0)) {
+        await new Promise((resolve, reject) => {
+          const finish = (error) => {
+            clearTimeout(deadline);
+            element.removeEventListener('load', loaded);
+            element.removeEventListener('error', failed);
+            if (error) reject(error); else resolve();
+          };
+          const loaded = () => finish();
+          const failed = () => finish(Error('DESIGN_IMAGE_CHANGED: selected image failed to load'));
+          const deadline = setTimeout(() => finish(Error('DESIGN_IMAGE_CHANGED: selected image did not finish loading')), 10000);
+          element.addEventListener('load', loaded, {once: true});
+          element.addEventListener('error', failed, {once: true});
+          element.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
+          if (element.complete && element.naturalWidth > 0) loaded();
+        });
+        if (!element.isConnected || document.querySelector(${JSON.stringify(selector)}) !== element)
+          throw Error('DESIGN_IMAGE_CHANGED: selected image was replaced while loading');
+      } else element.scrollIntoView({block: 'center', inline: 'center', behavior: 'instant'});
+      if (${Boolean(opts.requireImageElement)} && (element.naturalWidth < 100 || element.naturalHeight < 100))
+        throw Error('DESIGN_GALLERY_IMAGE_REQUIRED: select one loaded UI image');
+      const rect = element.getBoundingClientRect(); const style = getComputedStyle(element);
+      if (rect.width <= 0 || rect.height <= 0 || style.display === 'none' || style.visibility !== 'visible'
+        || Number(style.opacity) <= 0) throw Error('reference selector is not visible');
+      if (${Boolean(opts.requireImageElement)} && (rect.width < 100 || rect.height < 100))
+        throw Error('DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image');
+      if (element instanceof HTMLImageElement && ${Boolean(opts.shot)})
+        globalThis[Symbol.for('omd.reference.selectedImage')] = element;
+      return {x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+        viewport: {width: innerWidth, height: innerHeight}, url: location.href, identity: performance.timeOrigin};
+    })()`;
+    if (opts.requireImageElement && (!selector || !opts.shot)) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: select one UI image with a screenshot');
+    if (boxExpression) await page.evaluate<ElementGeometry>(boxExpression);
+    try {
+      const before = await observeUserBrowser(page, opts.lookup);
+      const blocked = detectBlockReason(before.title, before.body.length, null, false);
+      if (before.loginOccludes || blocked && (!blocked.startsWith('near-empty body') || selector === null))
+        throw new Error('OMD Browser reference is blocked or empty');
+      const raw = await page.evaluate<RawIr>(browserEvaluationExpression(extractInPage.toString(), [MAX_NODES, selector]));
+      if (!raw || !Array.isArray(raw.nodes)) throw new Error('OMD Browser DOM measurement unavailable');
+      raw.meta = { ...(raw.meta ?? {}), interaction: null, motion: null,
+        measurementCoverage: { ...USER_BROWSER_UNMEASURED } };
+      let shotBytes: Buffer | undefined;
+      let originalImage: { sourceUrl: string; sourceSha256: string; width: number; height: number } | undefined;
+      if (opts.shot) {
+        if (selector && await page.evaluate<boolean>("globalThis[Symbol.for('omd.reference.selectedImage')] instanceof HTMLImageElement")) {
+          const { captureUserBrowserOriginalImage } = await import('../ref/user-browser-original.ts');
+          const image = await captureUserBrowserOriginalImage(page, selector, opts.lookup, opts.requireImageElement);
+          shotBytes = image.bytes; originalImage = image;
+        } else {
+          const shot = await page.screenshot(!opts.viewportShot);
+          const density = await page.evaluate<{ dpr: number; clientWidth: number }>(`${browserCallback(() => ({
+            dpr: devicePixelRatio, clientWidth: document.documentElement.clientWidth,
+          }))}()`);
+          if (!(density.dpr >= 2) || (opts.viewportShot
+            ? shot.width !== viewport.width * 2 || shot.height !== viewport.height * 2
+            : !(density.clientWidth > 0) || shot.width < density.clientWidth * 2))
+            throw new Error('OMD Browser reference requires a 2x whole-page capture; use the dedicated OMD profile when the user browser is 1x');
+          shotBytes = shot.buffer;
+        }
+      }
+      const after = await observeUserBrowser(page, opts.lookup);
+      const observations = preparation ? await observeUserBrowserPreparation(page, preparation) : undefined;
+      if (JSON.stringify(before) !== JSON.stringify(after)) throw new Error('OMD Browser reference changed during capture');
+      if (originalImage && selector) {
+        const { assertUserBrowserImageIdentity } = await import('../ref/user-browser-original.ts');
+        await assertUserBrowserImageIdentity(page, selector, originalImage.sourceUrl, opts.requireImageElement);
+      }
+      opts.validateFinalUrl?.(after.url, after.visibleText);
+      opts.deadline?.assertLive();
+      return { raw, visibleText: after.visibleText, ...(shotBytes ? { shotBytes } : {}),
+        ...(observations ? { capturePreparation: { schema: 'reference-capture-preparation-receipt-v1' as const,
+          executedActions: [], observations, observedAt: new Date().toISOString(), viewport,
+          notMeasured: ['interaction-probe', 'motion-probe', 'energy-curve'] satisfies CapturePreparationReceipt['notMeasured'] } } : {}),
+        acquisition: { requestedUrl: target, finalUrl: after.url, ...USER_BROWSER_PROVENANCE,
+          links: after.links, imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
+          ...(shotBytes ? { captureMethod: opts.viewportShot && !originalImage ? 'viewport' as const : 'full-page' as const } : {}),
+          ...(originalImage ? { sourceImage: originalImage.sourceUrl, sourceImageSha256: originalImage.sourceSha256,
+            imageDimensions: { width: originalImage.width, height: originalImage.height } } : {}) } };
+    } finally {
+      if (selector && opts.shot) await page.evaluate<void>("delete globalThis[Symbol.for('omd.reference.selectedImage')]").catch(() => {});
+    }
+  });
 }
 /**
  * Captures the load-only canonical motion scene and saves selector-local screenshots
@@ -917,7 +1097,7 @@ export async function captureMotionEvidenceV2(
       adapter.write(path, bytes);
       return { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
     };
-    const animationSampling = await page.evaluate(async ({ selector, timeoutMs }) => {
+    const animationSampling = await page.evaluate(browserCallback(async ({ selector, timeoutMs }) => {
       const roiElement = document.querySelector(selector);
       const relevant = document.getAnimations().filter((animation) => {
         if (animation.playState === 'idle') return false;
@@ -944,18 +1124,18 @@ export async function captureMotionEvidenceV2(
         return { count: 1, endTime };
       }
       return { count: relevant.length, endTime: null };
-    }, { selector: opts.selector, timeoutMs: MOTION_CAPTURE_EVENT_TIMEOUT_MS });
+    }), { selector: opts.selector, timeoutMs: MOTION_CAPTURE_EVENT_TIMEOUT_MS });
     const activeAnimations = animationSampling.count;
     if (activeAnimations > 1) throw new Error('one motion decision rejects multiple concurrent selector-local animations');
-    const nextPaint = async (): Promise<void> => page.evaluate((timeoutMs) => new Promise<void>((resolvePaint, reject) => {
+    const nextPaint = async (): Promise<void> => page.evaluate(browserCallback((timeoutMs) => new Promise<void>((resolvePaint, reject) => {
       const timeout = setTimeout(() => reject(new Error('selector-local paint readiness timed out')), timeoutMs);
       requestAnimationFrame(() => requestAnimationFrame(() => {
         clearTimeout(timeout);
         resolvePaint();
       }));
-    }), MOTION_CAPTURE_EVENT_TIMEOUT_MS);
+    })), MOTION_CAPTURE_EVENT_TIMEOUT_MS);
     const seek = async (timestampMs: number): Promise<void> => {
-      await page.evaluate(({ selector, timestamp }) => {
+      await page.evaluate(browserCallback(({ selector, timestamp }) => {
         const roiElement = document.querySelector(selector);
         const animation = document.getAnimations().find((candidate) => {
           const effect = candidate.effect;
@@ -964,7 +1144,7 @@ export async function captureMotionEvidenceV2(
         });
         if (animation === undefined) throw new Error('selector-local animation disappeared during capture');
         animation.currentTime = timestamp;
-      }, { selector: opts.selector, timestamp: timestampMs });
+      }), { selector: opts.selector, timestamp: timestampMs });
       await nextPaint();
     };
     const transcript: { event: MotionTrigger; timestampMs: number }[] = [{ event: 'load', timestampMs: Date.now() - started }];
@@ -1003,9 +1183,9 @@ export async function captureMotionEvidenceV2(
       if (reducedRoi.width <= 1 || reducedRoi.height <= 1) throw new Error(`reduced-motion ROI selector is outside viewport: ${opts.selector}`);
       const stableFrames: Buffer[] = [];
       for (let frame = 0; frame < 3; frame++) {
-        if (frame > 0) await reducedPage.evaluate(() => new Promise<void>((resolvePaint) => {
+        if (frame > 0) await reducedPage.evaluate(browserCallback(() => new Promise<void>((resolvePaint) => {
           requestAnimationFrame(() => requestAnimationFrame(() => resolvePaint()));
-        }));
+        })));
         stableFrames.push(await reducedPage.screenshot({ clip: reducedRoi }));
       }
       if (computeEnergy(stableFrames).peakEnergy > noiseFloor) throw new Error('fresh reduced-motion page did not remain stable across three frames');
@@ -1294,7 +1474,7 @@ export async function captureRenderedBeatReceipt(
       await onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
         await assertNotBlocked(page, httpStatus, resolvedUrl);
         const raw = await page.evaluate(
-          browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, null`),
+          browserEvaluationExpression(extractInPage.toString(), [MAX_NODES, null]),
         ) as RawIr;
         const observed = ((raw.meta?.renderedBeats as Array<{
           id: string;

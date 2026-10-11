@@ -77,6 +77,22 @@ test('greenfield composition records debt for captures without visual reference 
   assert.equal(brief.blockers.some(blocker => blocker.includes('visual reference evidence')), false);
 });
 
+test('greenfield composition does not demand visual evidence when the board is skipped', () => {
+  const dir = project();
+  const input = JSON.parse(read('test/fixtures/adaptive-flow/medical-new-product.json'));
+  input.strategyDecision.stages = input.strategyDecision.stages.filter((stage: string) =>
+    stage !== 'reference-board' && stage !== 'reference-selection');
+  input.strategyDecision.skips.push(
+    { id: 'reference-board', reason: 'The selected design direction does not require a new reference board.' },
+    { id: 'reference-selection', reason: 'There is no selected board from which to choose.' },
+  );
+  const invocation = publishTestAdaptiveRoute(dir, input);
+  for (const stage of ['composition', 'candidate-generation', 'production'] as const) {
+    const brief = buildBrief(dir, stage, undefined, invocation);
+    assert.equal(brief.blockers.some((blocker) => blocker.includes('visual reference evidence')), false, stage);
+  }
+});
+
 // A capture with a measured principle is usable evidence; one without it is a file path.
 test('selected content grain reaches downstream briefs and stale bytes become explicit debt', () => {
   const dir = project();
@@ -197,6 +213,7 @@ test('production brief blocks missing selected inputs and supplies every present
     '.omd/domain-brief.json',
     '.omd/frame.md',
     '.omd/content-grain.json',
+    '.omd/acquisition-plan.json',
     '.omd/scout.md',
     '.omd/reference-board.json',
     '.omd/reference-pre-selection-v2.json',
@@ -254,6 +271,7 @@ test('candidate generation has a Sketch-owned brief with selected upstream input
     '.omd/domain-brief.json',
     '.omd/frame.md',
     '.omd/content-grain.json',
+    '.omd/acquisition-plan.json',
     '.omd/scout.md',
     '.omd/reference-board.json',
     '.omd/reference-pre-selection-v2.json',

@@ -4,9 +4,14 @@ import { ReferenceBoardResolutionError } from './board-contract.ts';
 import { decodePng } from '../motion/energy.ts';
 import { trustedReferenceImage } from './board-security.ts';
 import { inspectDesignReferenceAdmission } from './design-admission.ts';
+import { requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
 import { loadRefs } from './store.ts';
+import type { ReferenceInfluenceBinding } from './board-contract.ts';
+import { requireReferenceBoardVisualAdmission } from './reference-board-visual-admission.ts';
+import type { Reference } from '../types.ts';
 
-type ImageEvidence = Readonly<{ imagePath: string; provenance: ImageFragmentProvenance }>;
+type ImageEvidence = Readonly<{ imagePath: string; provenance: ImageFragmentProvenance;
+  binding?: ReferenceInfluenceBinding; take?: readonly string[] }>;
 function cropEncodingMetadata(bytes: Buffer): Buffer {
   const metadata = [bytes.subarray(24, 29)];
   for (let offset = 8; offset + 12 <= bytes.length;) {
@@ -36,13 +41,21 @@ function matchesCapture(sourceBytes: Buffer, fragmentBytes: Buffer, crop: ImageF
   return true;
 }
 
-export function requireDesignImageAdmission(root: string, evidence: ImageEvidence): void {
+export function requireDesignImageAdmission(root: string, evidence: ImageEvidence, sourceContractSha256?: string): Reference {
   const references = loadRefs(root, { includeDomain: true });
   const fragmentBytes = readFileSync(trustedReferenceImage(root, evidence.imagePath));
-  const matched = references.some(reference => {
+  const matched = references.find(reference => {
     if (reference.source !== evidence.provenance.sourcePage || !reference.imagePath
       || !inspectDesignReferenceAdmission(root, reference, { references, purpose: 'image-parent' }).eligible) return false;
     return matchesCapture(readFileSync(trustedReferenceImage(root, reference.imagePath)), fragmentBytes, evidence.provenance.cropBox);
   });
-  if (!matched) throw new ReferenceBoardResolutionError('FRAGMENT_SOURCE: retain the actual native design capture; preserve its bytes or the exact declared pixel crop with unchanged PNG format and metadata');
+  if (!matched) throw new ReferenceBoardResolutionError('FRAGMENT_SOURCE: retain the actual native design capture; preserve the complete native image bytes without cropping');
+  if (sourceContractSha256 !== undefined) {
+    if (evidence.binding && evidence.take && evidence.provenance.cropBox === undefined) {
+      requireReferenceBoardVisualAdmission(root, matched, {
+        sourceContractSha256, binding: evidence.binding, take: evidence.take,
+      });
+    } else requireReferenceDirectionAdmission(root, matched, sourceContractSha256, 'direction');
+  }
+  return matched;
 }

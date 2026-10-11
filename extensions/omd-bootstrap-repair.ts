@@ -9,6 +9,7 @@ type BootstrapContinuation = PortablePiContext & Readonly<{
   repairLoop: RepairLoop;
   revision: number;
   pi: PortablePiApi;
+  responseLocale?: 'ko' | 'en';
 }>;
 
 export async function resumeRouteInput(bootstrap: RouteBootstrap, task: BootstrapContinuation) {
@@ -34,13 +35,13 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
     if (!classificationAllowsInputRepair(bootstrap.classificationFailure)) summary += `\nClassification also failed: ${bootstrap.classificationFailure}`;
   }
   if (interrupted()) return;
-  const decision = repairLoop.next(cwd, 'route-input', bootstrap.inputPath, summary, revision);
+  const decision = repairLoop.next(cwd, 'route-input', bootstrap.inputPath, summary, revision, []);
   const retry = repairable && decision.retry && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
   if (retry) {
     const nextArgs = inputValid ? bootstrap.validationArgs.map((arg, index) => index === 1 ? 'classify' : arg) : bootstrap.validationArgs;
     const action = inputValid
       ? 'The current input already passed validation. Publish that same input with the same locale context, then run stage resume and continue the originally authorized workflow.'
-      : `Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)}, then validate it. Continue while the input bytes or structured diagnostics make progress; do not stop because of a fixed retry count.`;
+      : `Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)}, then validate it. Fix the reported fields; three consecutive completed no-progress repairs stop automatic continuation.`;
     pi.sendMessage!({ customType: inputValid ? 'omd-route-classify' : 'omd-route-repair', display: true,
       content: `OMD route-input continuation pass ${decision.pass}. Start this turn with one concise user-visible progress note naming the current input and next command. ${action} Preserve the original user request, facts, delivery mode, risk, scope and required stages. Do not invent evidence, authority or an optional skip to bypass a check. Stop only for repeated no-progress, a missing user fact/authority, or user pause. ${bootstrap.classificationAttempted
         ? 'Classification was already attempted in this task: after validation passes, retry that authorized classification with the same input/context, then stage resume and continue only the original user-authorized workflow.'
@@ -49,7 +50,7 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
           : 'Classification has not been attempted: this repair authorizes input editing and validation only; do not publish a route or start downstream work from this follow-up.'}\nNext OMD command: ${JSON.stringify(nextArgs)}\n${summary}` },
     { triggerTurn: true, deliverAs: 'followUp' });
   }
-  const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
+  const korean = task.responseLocale === 'ko';
   const status = inputValid
     ? korean ? `OMD 실행 계획 입력 검증은 통과했지만 라우트는 아직 등록되지 않았습니다.${retry ? ' 이미 요청한 등록 단계를 다시 시도합니다.' : ' 입력 검증은 후속 설계·개발의 완료를 의미하지 않습니다.'}`
       : `OMD route input validation passed, but no route was published.${retry ? ' Retrying the already-requested classification.' : ' Input validity is not downstream design or application completion.'}`
@@ -67,6 +68,6 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
     : '';
   return { message: { ...message, content: [
     ...(message.content ?? []).filter(part => part.type !== 'text'),
-    { type: 'text', text: `${status}${progress ? `\n${progress}` : ''}\n\n${summary}` },
+    { type: 'text', text: `${decision.stalled ? 'OMD_REPAIR_STALLED: Three consecutive repairs made no material progress.\n' : ''}${status}${progress ? `\n${progress}` : ''}\n\n${summary}` },
   ] } };
 }

@@ -13,9 +13,12 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { STAGES, resolveRunState, type StageId } from '../stage/contract.ts';
 import { formatBrief } from './format.ts';
+import { chosenCopyTone, projection, readTranslation, requireCopyToneReview, type Target } from '../design-language/index.ts';
+import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { detectAppShell, renderTargetHint, type AppShell } from '../stack/shell.ts';
 import { readPersistedRoute, type RouteRecord } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { readSelectedSourceStudy } from '../art-direction/source-study-records.ts';
 import { checkContentGrain, CONTENT_GRAIN_PATH } from '../content-grain/files.ts';
 import { readFrame, type RealityLedger } from '../frame/index.ts';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from '../ref/discovery-plan.ts';
@@ -44,6 +47,7 @@ import { loadRefs, refRecordPath } from '../ref/store.ts';
 import { inspectDesignReferenceAdmission, requiresDesignReferenceAdmission } from '../ref/design-admission.ts';
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { nativeCompletionBrief, type NativeCompletionProcedure } from '../stage/native-completion-brief.ts';
+import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
 import { briefDebtStage, confidenceDebt, mergeConfidenceDebt, readConfidenceDebt, type ConfidenceDebt } from './confidence-debt.ts';
 import { parseReferenceApplication } from '../ref/reference-application.ts';
 import { adaptiveStageOwners, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
@@ -99,6 +103,7 @@ export type BriefCheck = {
 };
 
 export type Brief = {
+  readonly developerCalibration?: ReturnType<typeof currentDeveloperCalibration>;
   readonly direction?: DirectionState;
   readonly conceptProcedure?: Readonly<{ seedOwner: 'omd-art-director'; planOwner: 'omd-art-director'; sourceOwner: 'omd-sketch'; sourceDirectory: '.omd/.cache/sketches/<id>/'; planBeforeSource: true; chooser: 'user' | 'isolated-eye'; steps: readonly string[] }>;
   /** Coordinator-owned entry procedure, not a cached grant or a blind-review input packet. */
@@ -109,6 +114,8 @@ export type Brief = {
     passMeans: 'current-entry-inputs-only';
   }>;
   readonly referenceApplication?: ReferenceApplicationProjection | null;
+  readonly designLanguage?: Readonly<{ sha256: string; targets: readonly Target[]; copyTone: boolean; status: string }> | null;
+  readonly sourceStudy?: ReturnType<typeof readSelectedSourceStudy>;
   readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
   readonly runtimeDesignSystem?: ReturnType<typeof runtimeInventoryStatus> | null;
   readonly stage: BriefStage;
@@ -424,6 +431,25 @@ export function buildBrief(
     })();
 
   const blockers: string[] = [];
+  const sourceStudyRequired = route?.strategy.methods.includes('provisional-source-study')
+    && ['type-proof', 'composition', 'candidate-generation', 'production'].includes(stage);
+  let sourceStudy: Brief['sourceStudy'];
+  if (sourceStudyRequired) {
+    const missing = 'SOURCE_STUDY_REQUIRED: inspect omd study latest before generating again; select a current rendered study before fixing type or composition';
+    if (invocation === undefined) blockers.push(missing);
+    else {
+      try { sourceStudy = readSelectedSourceStudy(root, invocation); }
+      catch { blockers.push(missing); }
+    }
+  }
+  const language = route === null ? null : projection(root, route);
+  const feedbackTranslation = route === null ? null : readTranslation(root, 'feedback', route);
+  const feedbackCopyTone = feedbackTranslation !== null && chosenCopyTone(feedbackTranslation.translation);
+  if (language?.status === 'needs-clarification' && ['art-direction', 'composition', 'production'].includes(stage)) blockers.push('DESIGN_LANGUAGE_AMBIGUOUS: resolve the current picture-backed meaning question before design commitment');
+  if (stage === 'production' && route !== null) {
+    try { requireCopyToneReview(root, route); }
+    catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
+  }
   const inventoryStatus = designInventoryStatus(root);
   const existingDesignSystem = inventoryStatus.status === 'missing' ? null : inventoryStatus;
   const runtimeStatus = runtimeInventoryStatus(root);
@@ -517,7 +543,8 @@ export function buildBrief(
   const referenceDirectory = join(root, '.omd/refs');
   const hasReferenceEvidence = hasReferenceBoard && existsSync(referenceDirectory)
     && readdirSync(referenceDirectory).some((entry) => !entry.startsWith('.'));
-  const greenfieldReferenceConsumer = route?.projectMode === 'greenfield' && judgmentConsumer;
+  const greenfieldReferenceConsumer = route?.projectMode === 'greenfield'
+    && route.strategy.stages.includes('reference-board') && judgmentConsumer;
   if (greenfieldReferenceConsumer && !hasReferenceEvidence) {
     blockers.push(`selected ${stage} input missing: visual reference evidence under .omd/refs/ and .omd/reference-board.json — discover and interpret references before composition`);
   }
@@ -661,6 +688,7 @@ export function buildBrief(
   const allocated = allocateBriefReferences(gathered, coverage);
   return {
     stage,
+    developerCalibration: currentDeveloperCalibration(root, invocation),
     entryGate: {
       command: `omd brief ${stage} --check --json`,
       selected: route === null ? null : (route.strategy.stages as readonly string[]).includes(qualityStage),
@@ -668,6 +696,8 @@ export function buildBrief(
       passMeans: 'current-entry-inputs-only',
     },
     referenceApplication,
+    designLanguage: language === null ? null : { sha256: language.sha256, targets: language.targets, copyTone: language.copyTone, status: language.status },
+    ...(sourceStudy === undefined || stage === 'production' ? {} : { sourceStudy }),
     existingDesignSystem,
     ...(runtimeDesignSystem === null ? {} : { runtimeDesignSystem }),
     owner: native?.owner ?? (route !== null ? adaptiveStageOwners(currentProcess)[qualityStage as AdaptiveStageId] : undefined) ?? definition?.owner ?? OWNER[stage] ?? 'coordinator',
@@ -678,9 +708,10 @@ export function buildBrief(
       chooser: route!.sourceContract.processPolicy!.interactionMode === 'interactive' ? 'user' as const : 'isolated-eye' as const,
       steps: ['minimal seed and shared real content', 'candidate plan before source', 'independent Sketch sources against the committed plan', 'native same-surface/state/view previews', 'candidate packet', 'one current authenticated direction choice'],
     } } : {}),
-    owns: native?.owns ?? (currentProcess && stage === 'candidate-generation'
+    owns: [...(native?.owns ?? (currentProcess && stage === 'candidate-generation'
       ? ['.omd/tokens.json', 'assigned plan/content inputs under .omd/.cache/sketches/; candidate source belongs exclusively to Sketch; current pointers are CLI-owned']
-      : designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact]),
+      : designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact])),
+      ...(stage === 'copy' && (language?.copyTone || feedbackCopyTone) ? ['Reopen Writer copy for the current translated tone, then obtain a fresh CLEAN copy review; Hand never rewrites this text.'] : [])],
     ...(native === undefined ? {} : { procedure: native.procedure }),
     route: route === null ? null : {
       name: route.route,
@@ -724,6 +755,8 @@ export function buildBrief(
       ...(localeDesign?.projection === null || localeDesign === null ? [] : [localeDesign.projection.path]),
       ...(localeDesign?.referenceBinding === null || localeDesign === null ? [] : [localeDesign.referenceBinding.path]),
       ...(copyReviewPresent ? [copyReviewPath] : []),
+      ...(stage === 'production' && existsSync(join(root, '.omd/first-render/review.json'))
+        ? ['.omd/first-render/review.json'] : []),
     ]),
     blockers: entryBlockers,
   };

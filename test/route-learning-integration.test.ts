@@ -31,9 +31,18 @@ function index(root: string, entries: readonly { id: string; surface: string; st
   writeFileSync(join(root, '.omd/learning/rules-index.json'), JSON.stringify({ schema: 'learning-rule-index-v1', updatedAt: now,
     entries: entries.map(({ id, surface, status = 'promoted' }) => {
       const proposition = { id, statement: 'Keep the task object visible.', scope: { surface, route: '/', testedState: 'ready', viewport: { width: 390, height: 844 } } };
-      return { id, status, proposition, blockers: [], evaluatedAt: now, calibration: { predictions: 1, observations: 2, hits: 2, misses: 0, hitRate: 1 },
+      const provenance = ['first', 'second'].map(context => ({
+        runId: `${context}-run`, contextId: `${context}-context`, outcome: 'validated', observedAt: now,
+        decisionGraphPath: '.omd/decision-graph.json', decisionGraphSha256: hash(`fixture-graph:${id}`),
+        observationSha256: hash(`fixture-observation:${id}:${context}`),
+        capture: { path: `.omd/captures/${id}-${context}.png`, sha256: hash(`fixture-capture:${id}:${context}`) },
+        decisionRefs: [{ decisionId: id, decisionSha256: hash(`fixture-decision:${id}`) }],
+      }));
+      return { id, status, proposition, blockers: status === 'contradicted' ? ['contradiction'] : [], evaluatedAt: now,
+        calibration: { predictions: 1, observations: 2, hits: status === 'promoted' ? 2 : 1,
+          misses: status === 'contradicted' ? 1 : 0, hitRate: status === 'promoted' ? 1 : 0.5 },
         ...(status === 'promoted' ? { rule: { schema: 'reusable-scoped-rule-v1', id, statement: proposition.statement, scope: proposition.scope,
-          applicability: 'advisory', authority: 'browser-validated-design-learning', cannotOverride: ['hard-safety-rails', 'model-or-system-instructions', 'user-facts'], provenance: [], promotedAt: now } } : {}) };
+          applicability: 'advisory', authority: 'browser-validated-design-learning', cannotOverride: ['hard-safety-rails', 'model-or-system-instructions', 'user-facts'], provenance, promotedAt: now } } : {}) };
     }) }));
 }
 
@@ -85,14 +94,16 @@ test('malformed learning scope refuses publication without mutation; unavailable
   const published = f.publish();
   assert.equal(published.validatedLearning.status, 'none');
   assert.deepEqual(published.validatedLearning.learningIds, []);
-  assert.ok(published.validatedLearning.reason.includes('malformed'));
+  assert.equal(readFileSync(join(f.root, '.omd/learning/rules-index.json'), 'utf8'), '{}');
   index(f.root, [{ id: 'valid-proposition', surface: 'product-dashboard' }]);
   const malformed = JSON.parse(readFileSync(join(f.root, '.omd/learning/rules-index.json'), 'utf8'));
   malformed.entries[0].rule.id = 'not a rule identifier';
-  writeFileSync(join(f.root, '.omd/learning/rules-index.json'), JSON.stringify(malformed));
+  const malformedBytes = JSON.stringify(malformed);
+  writeFileSync(join(f.root, '.omd/learning/rules-index.json'), malformedBytes);
   const invalidRule = f.publish();
   assert.equal(invalidRule.validatedLearning.status, 'none');
-  assert.ok(invalidRule.validatedLearning.reason.includes('MALFORMED_ADAPTIVE_ROUTE'));
+  assert.deepEqual(invalidRule.validatedLearning.learningIds, []);
+  assert.equal(readFileSync(join(f.root, '.omd/learning/rules-index.json'), 'utf8'), malformedBytes);
   assert.deepEqual(readPersistedRoute(f.root, f.invocation), invalidRule);
 });
 

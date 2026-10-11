@@ -23,6 +23,8 @@ import { parseReferenceClassification, referenceClassificationSha256 } from './r
 import { sourceFeatureWitness } from './feature-measurement.ts';
 import { requireDesignReferenceAdmission, requiresDesignReferenceAdmission } from './design-admission.ts';
 import { requireDesignImageAdmission } from './design-image-admission.ts';
+import { currentReferenceDirectionSourceContract } from './reference-direction-admission.ts';
+import { requireReferenceBoardVisualAdmission } from './reference-board-visual-admission.ts';
 
 export * from './board-contract.ts';
 export { projectReferenceAssembly } from './board-projection.ts';
@@ -37,6 +39,14 @@ const referenceFor = (references: ReadonlyMap<string, Reference>, referenceId: s
 const componentPiece = (root: string, piece: Extract<ReferenceBoardPiece, { readonly sourceKind: 'component-capture' }>, references: ReadonlyMap<string, Reference>): ResolvedComponentCapturePiece => {
   const reference = referenceFor(references, piece.referenceId);
   if (requiresDesignReferenceAdmission(root)) requireDesignReferenceAdmission(root, reference);
+  const sourceContractSha256 = currentReferenceDirectionSourceContract(root);
+  // Historical component captures had no viewport or 2x image contract. They remain readable,
+  // but current board authoring and v8 research publication still require admission.
+  if (sourceContractSha256 !== null && (reference.viewport !== undefined || reference.kind === 'image')) {
+    requireReferenceBoardVisualAdmission(root, reference, {
+      sourceContractSha256, ...(piece.binding === undefined ? {} : { binding: piece.binding }), take: piece.take,
+    });
+  }
   if (reference.kind !== 'component') fail(`reference ${piece.referenceId} must be a component capture`);
   if (reference.selector === undefined || reference.selector.trim() === '') fail(`reference ${piece.referenceId} is missing its selector`);
   if (reference.blueprint === undefined || reference.blueprint.selector !== reference.selector) fail(`reference ${piece.referenceId} is missing a matching blueprint`);
@@ -84,7 +94,11 @@ const resolvePiece = (root: string, piece: ReferenceBoardPiece, references: Read
     case 'image-fragment': {
       const observed = imageFragments.resolve(root, piece);
       const resolved = validatedImageFragmentPiece(root, piece, observed);
-      if (requiresDesignReferenceAdmission(root)) requireDesignImageAdmission(root, { imagePath: observed.imagePath, provenance: resolved.provenance });
+      const sourceContractSha256 = currentReferenceDirectionSourceContract(root);
+      if (requiresDesignReferenceAdmission(root) || sourceContractSha256 !== null) requireDesignImageAdmission(root,
+        { imagePath: observed.imagePath, provenance: resolved.provenance,
+          ...(piece.binding === undefined ? {} : { binding: piece.binding }), take: piece.take },
+        sourceContractSha256 !== null ? sourceContractSha256 : undefined);
       return resolved;
     }
     case 'classified-reference': return classifiedPiece(piece, references);

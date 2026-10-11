@@ -13,8 +13,9 @@ function host(f: Fixture) {
   const hooks = new Map<string, PortablePiHook>(), sent: string[] = [], commands: string[][] = [];
   let tool: PortablePiTool | undefined;
   let hold: { started: ReturnType<typeof signal>; release: ReturnType<typeof signal> } | undefined;
-  omdExtension({ on: (name, hook) => { hooks.set(name, hook); }, registerCommand() {}, registerTool(t) { tool = t; }, sendMessage(m) { sent.push(m.customType); },
-    async exec(_command, argv) {
+  omdExtension({ on: (name, hook) => { hooks.set(name, hook); }, registerCommand() {}, registerTool(t) { if (t.name === 'omd_cli') tool = t; }, sendMessage(m) { sent.push(m.customType); },
+    execOwned(command, args, options) { return this.exec(command, args, options); },
+    async exec(_command, argv, _options) {
       const args = argv.slice(1); commands.push(args);
       if (hold && args[0] === 'route' && args[1] === 'show') { hold.started.resolve(); await hold.release.promise; return { stdout: '{}', stderr: '', code: 0, killed: false }; }
       if (args[0] === 'stage') return { stdout: JSON.stringify(nextStageWork(f.root, pack, f.invocation)), stderr: '', code: 0, killed: false };
@@ -87,8 +88,13 @@ test('queued acquisition cannot cross a typed direction pause and authorized sel
   await hold.started.promise;
   const before = snapshot(f.root), queued = h.run(['ref', 'advance', '--json']);
   const refused = assert.rejects(queued, /NEEDS_USER_DIRECTION|CANCELLED/);
-  await h.input('I choose B'); hold.release.resolve(); await reading; await refused;
-  assert.deepEqual(snapshot(f.root), before);
+  await h.input('I choose B');
+  const afterInput = snapshot(f.root);
+  const unchangedEvidence = (rows: ReturnType<typeof snapshot>) => rows.filter(([path]) =>
+    !path?.endsWith('/.omd/user-turn.json') && !path?.includes('/.omd/user-turns/'));
+  assert.deepEqual(unchangedEvidence(afterInput), unchangedEvidence(before));
+  hold.release.resolve(); await reading; await refused;
+  assert.deepEqual(snapshot(f.root), afterInput);
   assert.equal(h.commands.some(c => c[0] === 'ref'), false);
   write(f.root, '.omd/.cache/choice.json', JSON.stringify(userChoice(f, packet)));
   await h.run(['candidate', 'select', '--input', '.omd/.cache/choice.json', '--json']);

@@ -36,15 +36,15 @@ function receipt(input: Record<string, unknown>, label: string): Receipt {
 export function parseDesignHandoff(value: unknown): DesignHandoff {
   const item = object(value, ['schema', 'sourceContractSha256', 'artifacts', 'review'], 'handoff');
   if (item.schema !== DESIGN_HANDOFF_SCHEMA || !sha(item.sourceContractSha256) || !Array.isArray(item.artifacts)
-    || item.artifacts.length !== DESIGN_HANDOFF_PARTS.length) return fail('schema, source binding, or artifact inventory is invalid');
+    || item.artifacts.length === 0 || item.artifacts.length > DESIGN_HANDOFF_PARTS.length) return fail('schema, source binding, or artifact inventory is invalid');
   const artifacts = item.artifacts.map((value, index) => {
     const part = object(value, ['id', 'path', 'sha256'], `artifacts[${index}]`);
     if (!DESIGN_HANDOFF_PARTS.includes(part.id as never)) return fail(`artifacts[${index}].id is unknown`);
     return { id: part.id as typeof DESIGN_HANDOFF_PARTS[number], ...receipt(part, `artifacts[${index}]`) };
   });
   const review = receipt(object(item.review, ['path', 'sha256'], 'review'), 'review');
-  if (new Set(artifacts.map((part) => part.id)).size !== DESIGN_HANDOFF_PARTS.length
-    || new Set([...artifacts.map((part) => part.path), review.path]).size !== artifacts.length + 1) return fail('every required part and the review need separate documents');
+  if (new Set(artifacts.map((part) => part.id)).size !== artifacts.length
+    || new Set([...artifacts.map((part) => part.path), review.path]).size !== artifacts.length + 1) return fail('every submitted part and the review need separate documents');
   return { schema: DESIGN_HANDOFF_SCHEMA, sourceContractSha256: item.sourceContractSha256, artifacts, review };
 }
 

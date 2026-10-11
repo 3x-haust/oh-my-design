@@ -22,6 +22,7 @@ import { testPng } from './helpers/search-execution.ts';
 import { refImagePath } from '../core/ref/store.ts';
 import { decodePng } from '../core/motion/energy.ts';
 import { referenceGrade } from '../core/ref/board-granularity.ts';
+import { requireVisualPresentationImage } from '../core/ref/reference-research-validation.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
 
@@ -103,16 +104,17 @@ test('native gallery discovery keeps wrapper pixels outside refs/design and admi
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
 });
 
-test('a visited gallery may retain only its actual UI image element without cropping', async t => {
+test('a visited gallery image fragment remains blocked until independent direction admission', async t => {
   const { root, gallery, writer, research, board, receipt, refreshBoard } = designAdmissionFixture(t);
   const invocation = publishTestAdaptiveRoute(root, withTestReviewPurposeAuthority(root, inputSkeleton('product-route-input').skeleton));
   refreshSearchesAfterRoute(root, research);
   const source = gallery.source;
   const image = testPng(320, 200, 22);
-  const html = `${directoryHtml('https://visual.example/task')}<img class="actual-ui" src="data:image/png;base64,${image.toString('base64')}" alt="Application screen">`;
+  const imageUrl = 'https://visual.example/actual-screen.png';
+  const html = `${directoryHtml('https://visual.example/task')}<img class="actual-ui" src="${imageUrl}" alt="Application screen">`;
   const shotPath = refImagePath(root, { source, component: 'actual-ui', researchLane: 'design' });
   const { result, visit } = await withBrowser(async browser => {
-    const observed = discoveryBrowser(browser, { url: source, html });
+    const observed = discoveryBrowser(browser, { url: source, html, image: { url: imageUrl, bytes: image } });
     const visit = await captureReferenceNavigation(observed.browser, source, 'design', writer);
     assert.equal(captureLane(root, { source, lane: 'design', selector: '.actual-ui', shot: true }, invocation), 'design');
     await assert.rejects(capturePageForRef(observed.browser, source, { width: 1280, height: 900 }, {
@@ -122,6 +124,8 @@ test('a visited gallery may retain only its actual UI image element without crop
     const result = await capturePageForRef(observed.browser, source, { width: 1280, height: 900 }, {
       selector: '.actual-ui', shotOut: shotPath, adapter: writer,
       requireImageElement: true, deferShotWrite: true,
+      imageLookup: async () => [{ address: '93.184.215.14', family: 4 }],
+      imageFetch: async url => { assert.equal(url, imageUrl); return { status: 200, contentType: 'image/png', bytes: image }; },
     });
     return { result, visit };
   });
@@ -151,7 +155,8 @@ test('a visited gallery may retain only its actual UI image element without crop
   piece.referenceId = imported.id;
   piece.take = ['density'];
   refreshBoard();
-  assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), options),
+    /REFERENCE_DIRECTION_ADMISSION_MISSING/);
 });
 
 test('website gallery wrappers are discovery evidence, not retained visual evidence', t => {
@@ -179,6 +184,35 @@ test('website gallery wrappers are discovery evidence, not retained visual evide
     assert.equal(originalAdmission.code, 'observed-original');
     assert.equal(originalAdmission.discoverySource, wrapper.source);
   });
+});
+
+test('test-050 pattern documentation cannot be chosen as visual direction but remains support evidence', t => {
+  const { root, capture, writer } = designAdmissionFixture(t);
+  for (const url of ['https://design.va.gov/patterns/', 'https://krds.go.kr/html/site/utility/utility_07.html',
+    'https://designsystem.digital.gov/patterns/intro/']) {
+    const item = capture(url, 'support-doc', 'design', 94);
+    saveRef(root, item.ref, writer);
+    const admitted = inspectDesignReferenceAdmission(root, item.ref);
+    assert.equal(admitted.eligible, true, `${url}: ${admitted.code}: ${admitted.reason}`);
+    assert.equal(inspectDesignReferenceAdmission(root, item.ref, { purpose: 'visual-direction' }).eligible, false);
+  }
+  const catalogue = capture('https://www.saasui.design/pattern/dashboard/arrows', 'dashboard-sample', 'design', 99);
+  saveRef(root, catalogue.ref, writer);
+  assert.equal(inspectDesignReferenceAdmission(root, catalogue.ref, { purpose: 'visual-direction' }).eligible, false);
+});
+
+test('test-050 lone portrait confirmation screen cannot impersonate a finished desktop site', () => {
+  const portrait = testPng(1179, 2556);
+  assert.throws(() => requireVisualPresentationImage('finished-product-website', portrait), /portrait single app screen/);
+  assert.doesNotThrow(() => requireVisualPresentationImage('finished-app-flow', portrait));
+});
+
+test('test-048 Muz.li gallery list card cannot be retained as a design reference', t => {
+  const { root, capture, writer } = designAdmissionFixture(t);
+  const listing = capture('https://muz.li/inspiration/dashboard-inspiration/', 'deuce-dashboard-card', 'design', 92);
+  writeFileSync(join(root, '.omd/route.json'), '{}');
+  assert.throws(() => saveRef(root, { ...listing.ref, selector: 'main article:nth-of-type(1)' }, writer),
+    /DESIGN_GALLERY_DISCOVERY_ONLY/);
 });
 
 test('a user marker cannot promote gallery wrapper chrome into retained evidence', t => {
@@ -257,7 +291,7 @@ test('selected discovery retains a gallery fragment derived from its actual nati
   writeFileSync(join(root, '.omd/reference-research.json'), JSON.stringify(research));
   const fragment = persistImageFragment(root, {
     inputPath: gallery.evidence.path,
-    provenance: { sourcePage: gallery.source, captureRegion: 'Task image', cropBox: { x: 0, y: 0, width: 1, height: 1 }, licenseStatus: 'unknown', rightsNotes: 'Study only', capturedAt: '2026-09-21T00:00:00.000Z' },
+    provenance: { sourcePage: gallery.source, captureRegion: 'Task image', licenseStatus: 'unknown', rightsNotes: 'Study only', capturedAt: '2026-09-21T00:00:00.000Z' },
     transfer: { visualRole: 'Task hierarchy', principles: ['Keep the task anchored.'] },
   }, createTestProjectRunInvocation(root));
   const retained = research.designReference.sources[0]; assert.ok(retained);
@@ -273,7 +307,7 @@ test('admission preserves the existing native user-reference contract', t => {
   const { root, capture, writer } = designAdmissionFixture(t);
   const user = capture('https://user.example/reference', 'user', 'design', 9);
   user.ref.origin = 'user'; saveRef(root, user.ref, writer);
-  assert.equal(inspectDesignReferenceAdmission(root, user.ref).code, 'user-provided');
+  assert.equal(inspectDesignReferenceAdmission(root, user.ref).code, 'direct-source');
 });
 
 test('admission rejects a user marker without its native capture', t => {

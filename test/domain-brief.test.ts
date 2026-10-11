@@ -214,17 +214,41 @@ test('validateDomainBrief requires coreObjects to be sourced entries and non-emp
   assert.throws(() => validateDomainBrief({ ...baseBrief(), coreObjects: duplicated }), /repeat a name/);
 });
 
-test('planning intent is confirmed only when the user actually said it', () => {
+test('planning preserves user facts while classified hypotheses remain production-safe', () => {
   const brief = validateDomainBrief(baseBrief());
   assert.deepEqual(unconfirmedPlanningStatements(brief.planning), []);
   assert.doesNotThrow(() => requireConfirmedPlanning(brief.planning));
 
   const hypothesized = validateDomainBrief(changed((draft) => {
     delete draft.planning.businessGoal.userEvidence;
+    draft.planning.businessGoal.disposition = 'non-factual-working-decision';
   }));
   assert.deepEqual(unconfirmedPlanningStatements(hypothesized.planning), ['businessGoal']);
+  assert.doesNotThrow(() => requireConfirmedPlanning(hypothesized.planning));
+
+  const omittedNonGoal = validateDomainBrief(changed((draft) => {
+    delete draft.planning.nonGoals[0]!.userEvidence;
+    draft.planning.nonGoals[0]!.disposition = 'omit-from-production-claims';
+  }));
+  assert.deepEqual(unconfirmedPlanningStatements(omittedNonGoal.planning), ['nonGoals[0]']);
+  assert.doesNotThrow(() => requireConfirmedPlanning(omittedNonGoal.planning));
+});
+
+test('planning refuses unclassified inventions and unprovided scope removals', () => {
+  const unclassified = changed((draft) => {
+    delete draft.planning.businessGoal.userEvidence;
+  });
   assert.throws(
-    () => requireConfirmedPlanning(hypothesized.planning),
+    () => validateDomainBrief(unclassified),
+    (error: unknown) => error instanceof DomainBriefError && error.code === 'UNSOURCED_PLANNING_CLAIM',
+  );
+
+  const scopeRemoval = changed((draft) => {
+    delete draft.planning.nonGoals[0]!.userEvidence;
+    draft.planning.nonGoals[0]!.disposition = 'non-factual-working-decision';
+  });
+  assert.throws(
+    () => validateDomainBrief(scopeRemoval),
     (error: unknown) => error instanceof DomainBriefError && error.code === 'UNSOURCED_PLANNING_CLAIM',
   );
 });
@@ -286,9 +310,9 @@ type MutableBrief = {  surfaces: Array<{ name: string; purpose: string; evidence
   coreObjects: Array<{ name: string; evidence: DomainClaimEvidence[] }>;
   audience: { description: string; evidence: DomainClaimEvidence[] };
   planning: {
-    businessGoal: { text: string; userEvidence?: ExplicitUserEvidence[] };
-    successSignal: { text: string; userEvidence?: ExplicitUserEvidence[] };
-    nonGoals: Array<{ text: string; userEvidence?: ExplicitUserEvidence[] }>;
+    businessGoal: { text: string; userEvidence?: ExplicitUserEvidence[]; disposition?: 'omit-from-production-claims' | 'non-factual-working-decision' };
+    successSignal: { text: string; userEvidence?: ExplicitUserEvidence[]; disposition?: 'omit-from-production-claims' | 'non-factual-working-decision' };
+    nonGoals: Array<{ text: string; userEvidence?: ExplicitUserEvidence[]; disposition?: 'omit-from-production-claims' | 'non-factual-working-decision' }>;
   };
 };
 

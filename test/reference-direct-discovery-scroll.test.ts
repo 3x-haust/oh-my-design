@@ -136,9 +136,15 @@ for (const scenario of [
       const observed = discoveryBrowser(browser, { url: GALLERY_DIRECTORY,
         html: `<p>${'Public list '.repeat(30)}</p><a style="position:absolute;top:1600px" href="${GALLERY_ITEM}">Below fold</a>
           <script>addEventListener('scroll', () => { ${scenario.mutation} }, { once: true });</script>` });
-      await assert.rejects(captureReferenceNavigation(observed.browser, GALLERY_DIRECTORY, 'design',
-        createTestProjectWriteAdapter(root), 'free-gallery'), scenario.error);
-      assert.equal(existsSync(join(root, '.omd/discovery/design/entries')), false);
+      if (scenario.name === 'challenge') {
+        const receipt = await captureReferenceNavigation(observed.browser, GALLERY_DIRECTORY, 'design',
+          createTestProjectWriteAdapter(root), 'free-gallery');
+        assert.ok(receipt.capture.path.startsWith('.omd/discovery/design/entries/'));
+      } else {
+        await assert.rejects(captureReferenceNavigation(observed.browser, GALLERY_DIRECTORY, 'design',
+          createTestProjectWriteAdapter(root), 'free-gallery'), scenario.error);
+        assert.equal(existsSync(join(root, '.omd/discovery/design/entries')), false);
+      }
     });
   });
 }

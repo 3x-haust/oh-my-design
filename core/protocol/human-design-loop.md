@@ -6,6 +6,8 @@ profile, decision-linked browser context, and validated-learning context. The us
 owns role, stage, and optional-method order within their actual dependencies; this protocol does not
 supply a universal sequence.
 
+`protocol/design-language.md` defines coordinator-owned translation of casual requests into scoped measurable targets and reference-search mechanisms. A picture-backed question clarifies meaning only; it is not routine candidate approval. Current translation is a prerequisite to affected design commitment, and a current feedback translation requires measured movement before refinement closure.
+
 `protocol/design-practice.md` defines how the selected work practices the motto "AI that designs
 like a human": uncertainty-led tests, evidence-aware framing, independent alternatives, reflection,
 critique, and scoped learning. It is a source-free method contract, not an additional stage gate.
@@ -23,7 +25,10 @@ Reference discovery is selected from task need, uncertainty, and existing eviden
 discovery researches the named unresolved decision and stops at coverage. A justified skip uses and
 records sufficient existing evidence. No route has a universal capture or candidate quota.
 
-Every research or data-gathering step — the framer's subject research and cited-evidence gathering, the scout's reference, gallery, and domain research — issues its independent searches, captures, and lookups in parallel, not one at a time. A serial gathering pass is a defect to avoid: gather concurrently, then reconcile.
+When `parallel-reference-acquisition` is selected, its Scout/Writer wave contract applies.
+Otherwise, parallelize independent searches, captures and lookups where useful, while preserving
+actual data dependencies and the selected execution waves. Sequential research is not an
+automatic defect and does not implicitly select an optional parallel method.
 
 ## Surface outcomes and execution requirements
 
@@ -52,8 +57,9 @@ classification in a fresh authorized route, then reissue all affected contracts 
 
 ## Domain analysis
 
-Domain analysis is a mandatory stage: every route selects it, and no skip reason removes it. It
-records `.omd/domain-brief.json` (`domain-brief-v1`, validated by `omd domain check`). This step
+When the route selects domain analysis, it records `.omd/domain-brief.json`
+(`domain-brief-v1`, validated by `omd domain check`). A selected domain stage keeps its owner and
+checks; an unselected optional stage does not become mandatory by omission. This step
 identifies the domain, its canonical surfaces, its core objects, and its audience, and emits the
 scout's two-role reference queries (component design and top-tier craft). Every surface, object, and
 audience claim carries its source as `observed`, `user-provided`, or `inferred`, and a claim resting
@@ -63,8 +69,9 @@ code. The full contract is `protocol/domain-analysis.md`.
 
 ## Stack routing
 
-Default to plain HTML/CSS/JS: a landing, marketing, or content page is a static page and needs no
-framework. Reach for a framework (React + Vite + TypeScript, or another) only when the user explicitly
+Default new web source to HTML/CSS and strict TypeScript, without a framework when a landing,
+marketing, or content page does not need one. Compile browser TypeScript to JavaScript; do not ship
+uncompiled TypeScript. Reach for a framework (React + Vite + TypeScript, or another) only when the user explicitly
 asks for one or the surface is a genuinely stateful application (dashboard, console, CRUD, editor).
 Always build in an existing repository's stack instead of replacing it — a package manifest, a build
 config, or files the user points at. A bare `index.html`/`.css`/`.js` with no manifest, next to an
@@ -78,6 +85,29 @@ Immediately after scaffold/dependency resolution, resolve every newly introduced
 against the exact installed versions, parse generated configuration with its owning tool, and run
 focused typecheck, build, and test-discovery. Repeat this smoke verification after every
 dependency, dependency-API, or configuration change; retain the full final verification.
+
+### Production code principles
+
+For new web implementations, configure TypeScript with `strict: true` and run its type checker.
+Do not use `any`, unsafe assertions to escape a type error, `@ts-ignore`, or `@ts-expect-error`.
+Preserve an existing project's stack and conventions instead of imposing a migration. For existing
+JavaScript, use its established type-checking setup or checked JavaScript where applicable.
+For other stacks, use the language's type checker/compiler and module conventions; do not force
+TypeScript or web tooling onto them.
+
+Separate UI/components, business rules, storage, external integrations, and tests where their
+responsibilities or reasons for change differ. Components render state and delegate business and
+I/O work; domain rules should be testable without rendering the UI. Keep related single-purpose
+code together. Do not put the entire application in one file, impose arbitrary line-count splits,
+create pass-through layers, or require an empty folder for every responsibility.
+Write and verify coherent modules incrementally rather than buffering the entire application in
+one giant source-write call.
+
+Before handback, run the actual type checker, tests related to the changed behavior, the production
+build, and the affected entry point or user flow. Syntax parsing such as `node --check` is not type
+checking; a build alone is not functional verification. Report exact commands, results, and anything
+that could not run. Use existing evidence publishers for executed checks and browser observations;
+an unrun command, configured script, or pending result is not passing evidence.
 
 ## State boundary
 
@@ -218,6 +248,9 @@ reopens unaccepted choices and generation conditioning; it does not silently tur
 into a target or infer a quiet register. Preserve facts and explicit invariants, not accidental style.
 
 When visual reference discovery is selected, the scout treats curated design galleries and inspiration sources — for example Pinterest, Dribbble, Mobbin, Behance, Land-book, Godly, Savee, and equivalent boards — as an admissible category alongside domain and competitor evidence. It gathers only enough high-craft evidence to settle the named visual decision, measures each retained item into the canonical multi-axis synthesis (macro layout, density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion), and keeps local captures under `.omd/refs/`. Current makers inspect selected rights-allowed whole-screen images with actual analysis and per-surface application through the validated handoff; optional crops supplement their parent. Unselected/withheld pixels remain unavailable, and blind reviewers receive no external reference images or maker rationale. Legacy selected-assembly projections retain their historical semantics. Build only the named relationships with the destination's own copy, assets, and tokens, and record attribution. Build for coverage, not counts, and report no capture quota.
+
+
+Retained current visual directions still require the authenticated isolated Eye admission defined by reference-assembly. Scout analysis cannot self-authorize a direction. The authorized maker handoff may carry selected rights-allowed whole-screen originals and actual analysis; blind reviewers remain source-isolated.
 Award showcases (Awwwards, FWA, GDWEB) and their case studies are part of this category, and are load-bearing for a `marketing` surface in the showpiece register: they show how high-craft structure, section rhythm, and signature motion are actually built, and the FWA/Awwwards case write-up (concept, stack, motion approach) is studied alongside the hero capture, not skipped for a screenshot. Study award work for principle and craft filtered through the subject's own identity anchor; never clone a famous showcase.
 
 When the brief names a real, existing subject, reference research begins by establishing what that subject actually is — a web search plus the linked repository/README and any wordmark or brand the source already ships — and fixes the subject's own identity anchor (its real palette and motif) before any gathering lane runs. That anchor governs the colour and motif of every enumerated direction and is never outvoted by category evidence: a palette or motif that is the product category's default (a dev tool rendered in terminal green) rather than the subject's own identity is the convergence-to-the-mean failure, even when every deterministic gate passes.
@@ -450,6 +483,16 @@ When the brief names `omd ref handoff <role> --json`, supply its complete curren
 selected reference projection. The read-only export contract is in `protocol/reference-assembly.md`;
 a digest receipt alone contains no feature content.
 
+When `provisional-source-study` is selected on native Pi, the isolated `omd-study` author may
+inspect only the selected complete originals delivered by its one-use host evidence tool.
+It receives no filesystem or production grant. Its bounded HTML handback is host-rendered and
+published as provisional first-party material, not approval. Typesetter, Composer and Sketch
+receive only the source-free `omd study show --json` projection and its named first-party
+source/captures. They do not receive private set records, source packets, author rationale or
+unselected alternatives. Composer fingerprints `Source study SHA-256`; selected input missing
+or stale blocks stage entry. This first-party exception does not permit raw external screenshots
+in those roles, and no study enters blind final review.
+
 For marketing copy, Writer and copy-editor Eye use `theory/web-copy.md` alongside the current
 copy contract. A user rejection of copy reopens the writer's message choice even if its
 previous structural check or review passed. Route research through cited voice/copy evidence
@@ -623,8 +666,8 @@ failure and acceptance criteria—never numeric scores, another candidate or ren
 render/source, or candidate/selector rationale.
 
 A fresh selector reviews the replacement set. This is the sole recovery round: if no
-replacement passes, do not retry again. Reframe and stop with visible evidence, or pause only
-when the configured structure checkpoint explicitly requires a human decision. Never create
+replacement passes, do not retry again. Reframe and stop with visible evidence and the unresolved
+criteria; do not turn a normal run into a developer interview. Never create
 an automatic retry loop or choose a failing candidate.
 
 The glance receives only squint renders. It never sees sharp renders,
@@ -639,12 +682,9 @@ The sharp eye receives only sanitized multi-axis observed rules, adaptations, an
 
 ## Divergence and checkpoints
 
-Current-process divergence and its single direction checkpoint follow Current human-design process.
-The following four-proof structural ritual is retained only for explicit historical routes.
+Current-process divergence and its single direction checkpoint follow Current human-design process. Choose concept/study count from consequential unresolved relationships, not a quota or register. A current selected target may justify one faithful candidate with recorded remaining risks; a simple brief alone does not settle direction. The following four-proof structural ritual is retained only for explicit historical routes.
 
-Historical structural divergence is conditional, not ceremonial: default to two independent sketches;
-use three for showpiece work or high structural uncertainty/impact. Skip only when structure
-is already supplied (for example, a Figma frame or explicit visual target), and record why.
+Historical structural divergence is conditional, not ceremonial. When multiple axes are required, they test genuinely different governing macro-layout relationships rather than cosmetic reskins.
 Divergence is measured, not assumed: the candidate set must realize genuinely different macro-layout families — a different top-level spatial organization, or a different placement and orientation of the dominant anchor and reading path — never one stacked single-column flow reskinned with different margins, column width, type scale, or spacing. A candidate set that collapses to a single macro-layout family has not diverged; the blind selector, which sees every candidate render, treats it as a contract-level no-winner (the Candidate axes were not genuinely different) and returns it to a fresh composer to re-derive divergent axes, even when one candidate would otherwise pass.
 Every sketch produces four proofs: fixed desktop 1280x900, fixed mobile 390x844, full-page
 desktop continuity, and full-page mobile continuity. Full-page evidence is supplemental and
@@ -657,6 +697,17 @@ approved typography inside the production container at desktop and mobile. Each 
 checkpoint names the tested criterion, a concrete observation, and an evidenced `revise`, `retain`,
 or `reframe` decision. Retain preserves a design whose observed criteria hold; reframe returns a
 contradicted assumption to its upstream owner. Neither requires an invented defect or cosmetic change.
+
+The native early Eye makes an explicit judgment for each design-quality axis in each fixed
+viewport, bound to the inspected capture. Numeric diagnostics remain advisory. Functional clarity
+and reference fidelity do not compensate for weak beauty, generic character or poor composition;
+the selected first-party target can itself require reframing. Each nonpassing axis carries a
+localized finding and an AI-selected repair scope. Direction returns to the coordinator,
+composition to Composer, type to Typesetter, copy to Copywriter and surface implementation to
+Hand. A resolved prior finding needs a current capture-bound observation; unresolved criteria keep
+their identities and observable requirements. Empty findings without those judgments are not
+approval, and earlier review formats remain history rather than current acceptance.
+
 Use `omd craft checkpoint <phase> --render <project-png> --observed "..." --decision
 revise|retain|reframe --criterion "..." --reason "..."`; revise additionally requires `--changed`.
 Explicit decisions bind the inspected PNG bytes. Historical change-only notes remain readable, but
@@ -664,9 +715,7 @@ neither kind is a final acceptance receipt. Actual revisions still need fresh af
 under the selected visual-observation or trusted repair contract. Reframing changes no scope or
 upstream artifact by itself, and never clears a failed gate. A typed reflection skip
 creates no craft-checkpoint artifact but never removes browser evidence, final evidence, or
-independent review. Legacy checkpoint none/concept/structure/both remains readable but does not
-authorize autonomous direction. New directionPolicy defaults interactive; only real user/host
-invocation authority can grant autonomous selection.
+independent review. Native Pi production has no human design approval checkpoint, and the legacy .omd/config.json checkpoint setting cannot enable developer evaluation. New directionPolicy defaults interactive; only real user/host invocation authority can grant autonomous selection. Explicit host-only developer-evaluation mode may add separate post-render interviews, but those interviews are not production prerequisites or approval evidence.
 When composition is selected, the hand receives its selected candidate and composition
 contract, runs `omd composition --check` before its first production write and again before
 ship, and records any deliberate deviation with visible evidence. A changed selected frame,
