@@ -206,10 +206,12 @@ test('search wording alone never asserts page access', () => {
 
 test('only observed known-provider redirect links can discover a destination', () => {
   const target = 'https://www.pinterest.com/pin/123/';
-  assert.ok(observedSearchTargets({ links: [`https://duckduckgo.com/l/?uddg=${encodeURIComponent(target)}`] }).includes(target));
-  assert.ok(observedSearchTargets({ links: [`https://www.google.com/url?q=${encodeURIComponent(target)}`] }).includes(target));
-  assert.ok(observedSearchTargets({ links: [`https://www.bing.com/ck/a?u=a1${Buffer.from(target).toString('base64url')}`] }).includes(target));
-  assert.ok(!observedSearchTargets({ links: [`https://unrelated.example/l/?uddg=${encodeURIComponent(target)}`] }).includes(target));
+  const targetHref = new URL(target).href;
+  const observedHrefs = (links: string[]) => new Set(observedSearchTargets({ links }).map((link) => new URL(link).href));
+  assert.equal(observedHrefs([`https://duckduckgo.com/l/?uddg=${encodeURIComponent(target)}`]).has(targetHref), true);
+  assert.equal(observedHrefs([`https://www.google.com/url?q=${encodeURIComponent(target)}`]).has(targetHref), true);
+  assert.equal(observedHrefs([`https://www.bing.com/ck/a?u=a1${Buffer.from(target).toString('base64url')}`]).has(targetHref), true);
+  assert.equal(observedHrefs([`https://unrelated.example/l/?uddg=${encodeURIComponent(target)}`]).has(targetHref), false);
 });
 test('similarity navigation remains rooted in a successful search, never an unrooted cycle', t => {
   const root = fixture(t);

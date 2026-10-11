@@ -12,10 +12,11 @@ export function extractDuckDuckGoLeadUrls(html: string): readonly string[] {
     try {
       const decoded = candidate.replace(/&amp;/gu, '&');
       const link = new URL(decoded, url);
-      const target = link.hostname.endsWith('duckduckgo.com') && link.searchParams.has('uddg')
+      const target = (link.hostname === 'duckduckgo.com' || link.hostname.endsWith('.duckduckgo.com')) && link.searchParams.has('uddg')
         ? link.searchParams.get('uddg')! : link.href;
       const parsed = publicDiscoveryUrl(target);
-      if (new URL(parsed).hostname.endsWith('duckduckgo.com') || new URL(parsed).port) return [];
+      const destination = new URL(parsed);
+      if (destination.hostname === 'duckduckgo.com' || destination.hostname.endsWith('.duckduckgo.com') || destination.port) return [];
       return [parsed];
     } catch { return []; }
   }))].slice(0, 30);

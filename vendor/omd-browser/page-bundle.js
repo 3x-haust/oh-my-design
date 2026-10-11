@@ -302,8 +302,8 @@
 		if (attr === null) return void 0;
 		return attr.toLowerCase() === "true";
 	}
-	/** Escape double quotes and newlines in text. */
-	const escapeSnapshotText = (text) => text.replace(/"/g, "\\\"").replace(/\n/g, "\\n");
+	/** Encode text for a double-quoted snapshot string. */
+	const escapeSnapshotText = (text) => JSON.stringify(text).slice(1, -1);
 	/** Replace consecutive whitespace characters with a single space and trim the result. */
 	const normalizeWhitespace = (text) => text.trim();
 	function shouldInsertSpaceBetween(left, right) {
@@ -404,7 +404,7 @@
 		const labels = [];
 		const id = element.getAttribute("id");
 		if (id) {
-			const forLabels = element.ownerDocument.querySelectorAll(`label[for="${id.replace(/"/g, "\\\"")}"]`);
+			const forLabels = element.ownerDocument.querySelectorAll(`label[for="${CSS.escape(id)}"]`);
 			labels.push(...Array.from(forLabels));
 		}
 		let parent = element.parentElement;

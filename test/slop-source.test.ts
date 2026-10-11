@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
-  mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync,
+  mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -82,6 +82,18 @@ const detectorCases: Array<{
     negative: 'function F(){ const onSubmit=async(e)=>{ e.preventDefault(); await fetch("/api",{method:"POST"}); setTimeout(()=>setS("success"),300); }; return <form onSubmit={onSubmit} />; }',
   },
 ];
+
+for (const [id, source] of [
+  ['mid-sentence-break', '<h1>Complete.<span title=">not visible"></span><br>Next sentence.</h1>'],
+  ['decorative-ordinal-run', ['01', '02', '03'].map(value => `<b class="ordinal-display"><span title=">${value}"></span></b>`).join('')],
+] as const) {
+  test(`${id}: markup-like attribute values are not visible content`, t => {
+    const root = temp();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    write(root, 'surface.html', source);
+    assert.ok(!ids(root).includes(id));
+  });
+}
 
 for (const fixture of detectorCases) {
   test(`${fixture.id}: compound source context is a candidate`, () => {

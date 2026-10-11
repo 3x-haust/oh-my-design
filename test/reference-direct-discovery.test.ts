@@ -335,14 +335,16 @@ test('global navigation is captured without a service-role inference', async t =
     <a href="https://service.example/nhs-services">NHS services</a></nav></header>
     <main><h1>Medicines A to Z</h1><p>Browse medicines and prescription information, compare dosage instructions, and prepare questions for your clinician before placing an order. Review the details carefully with your care team.</p></main>`;
   const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
-  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links.includes('https://service.example/about'));
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links
+    .some((link) => new URL(link).href === new URL('https://service.example/about').href));
 });
 
 test('main navigation is captured without a relevance verdict', async t => {
   const html = `<main><nav><a href="https://service.example/about">About Us</a></nav>
     <h1>Medicines A to Z</h1><p>Browse medicines and prescription information, compare dosage instructions, and prepare questions for your clinician before placing an order. Review the details carefully with your care team.</p></main>`;
   const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
-  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links.includes('https://service.example/about'));
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links
+    .some((link) => new URL(link).href === new URL('https://service.example/about').href));
 });
 
 test('a support task described in main keeps its primary-navigation path', async t => {
@@ -365,7 +367,8 @@ test('Apply navigation wording alone does not assert task fit', async t => {
   const html = `<header><nav><a href="https://recipes.example/apply">Apply</a></nav></header>
     <main><h1>Apple pie recipes</h1><p>Choose fresh apples, prepare the pastry, bake the filling, and compare several dessert recipes for a family gathering. Serve each slice warm with a spoonful of cream. Keep the remaining slices in a cool container until tomorrow.</p></main>`;
   const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
-  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links.includes('https://recipes.example/apply'));
+  assert.ok(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links
+    .some((link) => new URL(link).href === new URL('https://recipes.example/apply').href));
 });
 
 test('page-content task links precede a contextual primary-navigation link', async t => {

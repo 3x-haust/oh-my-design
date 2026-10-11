@@ -129,7 +129,15 @@ test('unregistered visual locators in task prose do not cross the maker boundary
   } };
   const projected = makerContext(context.root, { ...route, sourceContract },
     { input: parseMakerInput(input), invocation: context.invocation });
-  assert.equal(JSON.stringify(projected.context).includes('https://unregistered-reference.invalid/original'), false);
+  const forbiddenUrl = new URL('https://unregistered-reference.invalid/original');
+  assert.doesNotThrow(() => JSON.stringify(projected.context, (_key, value) => {
+    if (typeof value === 'string') {
+      for (const match of value.matchAll(/https?:\/\/[^\s]+/g)) {
+        assert.notEqual(new URL(match[0]).href, forbiddenUrl.href);
+      }
+    }
+    return value;
+  }));
 });
 
 test('read context refuses private records and cannot expand the write grant', t => {

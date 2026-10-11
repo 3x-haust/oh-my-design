@@ -79,6 +79,13 @@ test('HTTP fallback extracts only result anchors and public redirect destination
   assert.throws(() => parseLeadQuery({ lane: 'domain', query: 'service', url: 'https://localhost' }), /REFERENCE_SEARCH_UNAVAILABLE/);
 });
 
+test('provider redirects require an exact provider host or its subdomain', () => {
+  const impostor = 'https://notduckduckgo.com/result?uddg=https%3A%2F%2Fexample.com%2Foutside';
+  assert.deepEqual(extractDuckDuckGoLeadUrls(`<a class="result__a" href="${impostor}">result</a>`), [impostor]);
+  assert.deepEqual(extractDuckDuckGoLeadUrls('<a class="result__a" href="https://html.duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fservice">result</a>'),
+    ['https://example.com/service']);
+});
+
 test('market-observed-page is additive for v8; historical contracts cannot acquire that basis', () => {
   const source = { id: 'one', url: 'https://example.com/', evidence: { sha256: 'a'.repeat(64) } };
   const lane = { localSources: [{ sourceId: 'one', evidenceSha256: source.evidence.sha256, scope: 'service',

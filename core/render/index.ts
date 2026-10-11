@@ -156,7 +156,7 @@ async function assertNotBlocked(
   // No caller-controlled bypass: only a live, explicitly scoped component can
   // resolve the weak short-body signal. HTTP and challenge signals still win.
   if (reason?.startsWith('near-empty body') && selector !== null) {
-    const measured = await page.locator(selector).evaluateAll(browserCallback((elements) => {
+    const measured = await page.locator(selector).evaluateAll(browserCallback((elements: Element[]) => {
       const element = elements[0];
       if (!(element instanceof HTMLElement) || element === document.body
         || element === document.documentElement) return false;
@@ -606,8 +606,8 @@ function checkReducedMotionInPage(): boolean {
  */
 async function probeMotion(page: import('playwright').Page): Promise<MotionMeasurement | null> {
   const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
-  const snapshotExpression = browserEvaluationExpression(captureMotionSnapshot.toString(), '');
-  const reducedMotionExpression = browserEvaluationExpression(checkReducedMotionInPage.toString(), '');
+  const snapshotExpression = browserEvaluationExpression(captureMotionSnapshot.toString());
+  const reducedMotionExpression = browserEvaluationExpression(checkReducedMotionInPage.toString());
   try {
     type Snap = Array<{ duration: number; easing: string; properties: string[]; playState: string }>;
 
@@ -777,7 +777,7 @@ async function extractIrCore(
   }
   await assertSelectorIsMeasurableDom(page, selector);
   const raw = await page.evaluate(
-    browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector ?? null)}, ${JSON.stringify(detail)}`),
+    browserEvaluationExpression(extractInPage.toString(), [MAX_NODES, selector ?? null, detail]),
   ) as RawIr;
   const interaction = probe ? await probeInteraction(page) : null;
   const motion = probe ? await probeMotion(page) : null;
@@ -815,7 +815,7 @@ export async function capturePageForRef(
       const candidateText = candidates.length === 0 ? 'candidates: none currently meet the loaded, visible 100x100 image criteria'
         : `candidates: ${candidates.map(candidate => `${candidate.selector} (${Math.round(candidate.width)}x${Math.round(candidate.height)})`).join('; ')}`;
       if (!opts.selector || !opts.shotOut) throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image and retain its screenshot; ${candidateText}`);
-      const eligible = await page.locator(opts.selector).evaluateAll(browserCallback(elements => {
+      const eligible = await page.locator(opts.selector).evaluateAll(browserCallback((elements: Element[]) => {
         if (elements.length !== 1 || !(elements[0] instanceof HTMLImageElement)) return false;
         const image = elements[0];
         const box = image.getBoundingClientRect();
@@ -852,7 +852,7 @@ export async function capturePageForRef(
         return elements.length === 1 && elements[0] instanceof HTMLImageElement;
       }));
       if (opts.requireImageElement) {
-        const eligible = await page.locator(selector).evaluateAll(browserCallback(elements => {
+        const eligible = await page.locator(selector).evaluateAll(browserCallback((elements: Element[]) => {
           if (elements.length !== 1 || !(elements[0] instanceof HTMLImageElement)) return false;
           const image = elements[0];
           const box = image.getBoundingClientRect();
@@ -1007,7 +1007,7 @@ export async function captureUserBrowserPageForRef(target: string, viewport: Vie
       const blocked = detectBlockReason(before.title, before.body.length, null, false);
       if (before.loginOccludes || blocked && (!blocked.startsWith('near-empty body') || selector === null))
         throw new Error('OMD Browser reference is blocked or empty');
-      const raw = await page.evaluate<RawIr>(browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector)}`));
+      const raw = await page.evaluate<RawIr>(browserEvaluationExpression(extractInPage.toString(), [MAX_NODES, selector]));
       if (!raw || !Array.isArray(raw.nodes)) throw new Error('OMD Browser DOM measurement unavailable');
       raw.meta = { ...(raw.meta ?? {}), interaction: null, motion: null,
         measurementCoverage: { ...USER_BROWSER_UNMEASURED } };
@@ -1474,7 +1474,7 @@ export async function captureRenderedBeatReceipt(
       await onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
         await assertNotBlocked(page, httpStatus, resolvedUrl);
         const raw = await page.evaluate(
-          browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, null`),
+          browserEvaluationExpression(extractInPage.toString(), [MAX_NODES, null]),
         ) as RawIr;
         const observed = ((raw.meta?.renderedBeats as Array<{
           id: string;

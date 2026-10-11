@@ -1,5 +1,6 @@
 import { lstatSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
+import { parseFragment, type DefaultTreeAdapterMap } from 'parse5';
 
 export const SLOP_SOURCE_SCHEMA_VERSION = '1.0';
 export const SLOP_SOURCE_MAX_BYTES = 512 * 1024;
@@ -178,13 +179,22 @@ function candidate(
   };
 }
 
+function markupText(source: string): string {
+  const visit = (node: DefaultTreeAdapterMap['node']): string => {
+    if (node.nodeName === '#text' && 'value' in node) return node.value;
+    if ('tagName' in node && ['script', 'style'].includes(node.tagName)) return '';
+    return 'childNodes' in node ? node.childNodes.map(visit).join('') : '';
+  };
+  return visit(parseFragment(source));
+}
+
 function detectMidSentenceBreak(source: string, path: string): SlopSourceCandidate | null {
   const element = /<(h1|h2|p)\b[^>]*>([\s\S]*?)<\/\1\s*>/gi;
   for (const match of source.matchAll(element)) {
     const body = match[2]!;
     const bodyOffset = match.index! + match[0].indexOf(body);
     for (const br of body.matchAll(/<br\s*\/?>/gi)) {
-      const visibleBefore = body.slice(0, br.index).replace(/<[^>]+>/g, '').trimEnd();
+      const visibleBefore = markupText(body.slice(0, br.index)).trimEnd();
       if (!visibleBefore || /[.!?。！？…:;]\s*$/.test(visibleBefore)) continue;
       return candidate('mid-sentence-break', path, source, bodyOffset + br.index!, [
         `element:${match[1]!.toLowerCase()}`, 'break:before-sentence-end',
@@ -303,7 +313,7 @@ function detectOrdinalRun(source: string, path: string): SlopSourceCandidate | n
     const treatment = /(?:display[-_ ]?(?:number|ordinal)|(?:number|ordinal)[-_ ]?display|decorative[-_ ]?ordinal|chapter[-_ ]?index)/i.test(attrs)
       || (/step[-_ ]?(?:number|index)/i.test(attrs) && /font[-_ ]?display/i.test(attrs));
     if (!treatment) continue;
-    const ordinal = body.replace(/<[^>]+>/g, '').match(/\b(01|02|03)\b/)?.[1];
+    const ordinal = markupText(body).match(/\b(01|02|03)\b/)?.[1];
     if (ordinal && !found.has(ordinal)) found.set(ordinal, match.index!);
   }
   if (found.size === 3) return candidate('decorative-ordinal-run', path, source, found.get('03')!, [

@@ -240,7 +240,7 @@ test('default board resolution retains fragment provenance while its assembly ex
   assert.equal(rawPiece.provenance.sourcePage, 'https://private.example/pin/one');
   const serialized = JSON.stringify(assembly);
   for (const privateValue of [stored.id, stored.sha256, stored.imagePath, 'private.example', 'cdn.gallery.example', 'capture.png']) {
-    assert.doesNotMatch(serialized, new RegExp(privateValue.replace(/[.]/g, '\\.')));
+    assert.doesNotMatch(serialized, new RegExp(privateValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
   assert.deepEqual(assembly.candidates.map((candidate) => {
     const transfer = candidate.pieces[0]?.transfer;

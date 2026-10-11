@@ -167,16 +167,16 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     for (let index = 0; index < await dialogs.count(); index++) {
       const dialog = dialogs.nth(index);
       if (!await dialog.isVisible()) continue;
-      const plausiblePopup = await dialog.evaluate(browserCallback(element => element.matches('[role="dialog"], [role="alertdialog"], dialog[open]')
+      const plausiblePopup = await dialog.evaluate(browserCallback((element: Element) => element.matches('[role="dialog"], [role="alertdialog"], dialog[open]')
         || ['fixed', 'absolute'].includes(getComputedStyle(element).position)));
       if (!plausiblePopup) continue;
-      const backdrop = await dialog.evaluate(browserCallback(element => /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`)));
+      const backdrop = await dialog.evaluate(browserCallback((element: Element) => /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`)));
       if (backdrop) continue;
       const box = await dialog.boundingBox();
       const viewport = page.viewportSize();
       if (!box || !viewport || box.x >= viewport.width || box.y >= viewport.height
         || box.x + box.width <= 0 || box.y + box.height <= 0) continue;
-      const intentional = await dialog.evaluate(browserCallback((element, selectors) => {
+      const intentional = await dialog.evaluate(browserCallback((element: Element, selectors: readonly string[]) => {
         for (const selector of selectors) {
           try { if (element.matches(selector) || element.querySelector(selector) !== null) return true; }
           catch { continue; }
@@ -199,7 +199,7 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
       return dismissals;
     }
     const dialog = dialogs.nth(visibleIndex);
-    const info = await dialog.evaluate(browserCallback(element => {
+    const info = await dialog.evaluate(browserCallback((element: Element) => {
       const heading = element.querySelector('h1,h2,h3,[class*="header"],[class*="title"]');
       return {
         title: (element.getAttribute('aria-label') || heading?.textContent || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160),
@@ -215,7 +215,7 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     for (let index = 0; index < await controls.count(); index++) {
       const control = controls.nth(index);
       if (!await control.isVisible()) continue;
-      const info = await control.evaluate(browserCallback(element => ({
+      const info = await control.evaluate(browserCallback((element: Element) => ({
         name: (element.getAttribute('aria-label') || element.getAttribute('title') || element.textContent || '').replace(/\s+/g, ' ').trim(),
         href: element.getAttribute('href'), type: element.getAttribute('type'), form: element.closest('form') !== null,
       })));
@@ -225,7 +225,7 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     }
     if (closeIndex < 0) obstruction(`notice has no safe close control: ${title}`);
     const beforeUrl = page.url();
-    const selector = await dialog.evaluate(browserCallback(element => {
+    const selector = await dialog.evaluate(browserCallback((element: Element) => {
       const parts: string[] = [];
       let current: Element | null = element;
       while (current && current !== document.documentElement) {

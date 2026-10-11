@@ -40,7 +40,7 @@ export async function observeUserBrowserPreparation(
   if (preparation.actions.length !== 0)
     throw new Error('USER_BROWSER_PREPARATION_ACTION_UNSUPPORTED: only zero-action observations are supported');
   const value = await page.evaluate<unknown>(browserEvaluationExpression(
-    observeInPage.toString(), JSON.stringify(preparation.assertions)));
+    observeInPage.toString(), [preparation.assertions]));
   if (!Array.isArray(value) || value.length !== preparation.assertions.length
     || value.some((row: unknown, index: number) => {
       const expected = preparation.assertions[index];

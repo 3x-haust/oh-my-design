@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
 import { readFile, readdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
@@ -9,6 +10,26 @@ test('committed driver loads offline from its verified sibling bundle', async ()
   const driver = await loadUserBrowserDriver();
   assert.equal(typeof driver.userBrowserBridgeDoctor, 'function');
   assert.equal(typeof driver.connectUserBrowserSession, 'function');
+});
+test('committed driver avoids host compilation while retaining CDP page execution', async () => {
+  const root = resolve(import.meta.dirname, '..');
+  const text = await readFile(resolve(root, 'vendor/omd-browser/index.js'), 'utf8');
+  assert.match(text, /Runtime\.(?:evaluate|callFunctionOn)/);
+  const driver = await loadUserBrowserDriver();
+  assert.equal(typeof driver.connectUserBrowserSession, 'function');
+  execFileSync(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    let compilations = 0;
+    const blocked = () => { compilations++; throw new Error('Host compilation is disabled'); };
+    globalThis.Function = new Proxy(Function, { apply: blocked, construct: blocked });
+    const { HostHelloSchema } = await import('./vendor/omd-browser/index.js');
+    const value = { protocol: 1, type: 'hello', role: 'host', connectionId: 'test-connection',
+      hostName: 'com.omowright.cloakbridge', hostVersion: '0.1.0',
+      events: [], commands: [], maxMessageBytes: 1024 };
+    assert.equal(HostHelloSchema.safeParse(value).success, true);
+    assert.equal(HostHelloSchema.safeParse({ ...value, maxMessageBytes: 0 }).success, false);
+    assert.equal(compilations, 0);
+  `], { cwd: root, timeout: 30000, stdio: 'pipe' });
 });
 test('bundled driver and OMD code carry no upstream branding outside bridge protocols', async () => {
   const root = resolve(import.meta.dirname, '..');

@@ -64,7 +64,7 @@ async function safeClick(page: Page, selector: string, origin: string,
   const control = page.locator(selector);
   await control.waitFor({ state: 'visible', timeout: 3000 });
   if (await control.count() !== 1) return fail('ambiguous click target');
-  const info = await control.evaluate(browserCallback(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
+  const info = await control.evaluate(browserCallback((node: Element) => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
   // A verified judgment authorizes meaning; structural transport restrictions below remain hard.
   const binding = await actionJudgment?.(page, selector, page.url());
   if (binding && binding.subjectId !== `${page.url()}#${selector}`) return fail('action judgment targets another control or document');
@@ -78,7 +78,7 @@ async function safeClick(page: Page, selector: string, origin: string,
   }
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
   if (info.tag === 'BUTTON' && hasSuspendedReferenceScripts(page)) return fail('same-document scripted action is unavailable after visual-only notice suppression; record a bounded gap or inspect another public source');
-  const current = await control.evaluate(browserCallback(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
+  const current = await control.evaluate(browserCallback((node: Element) => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), form: node.closest('form') !== null, expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') })));
   if (JSON.stringify(current) !== JSON.stringify(info) || await control.count() !== 1
     || binding?.context.documentSha256 !== hash(await page.content()) || binding?.subjectId !== `${page.url()}#${selector}`)
     return fail('action control or document changed since the judgment');

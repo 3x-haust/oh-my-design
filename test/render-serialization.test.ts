@@ -2,6 +2,34 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import { browserEvaluationExpression } from '../core/render/index.ts';
+import { browserCallback } from '../core/ref/browser-evaluation.ts';
+
+test('page argument data cannot become executable source', () => {
+  const value = '"); globalThis.injected = true; ("';
+  const context = {};
+  const expression = browserEvaluationExpression('value => value', [value]);
+  assert.equal(runInNewContext(expression, context), value);
+  assert.equal(Reflect.has(context, 'injected'), false);
+});
+
+test('page arguments preserve undefined separately from null', () => {
+  const expression = browserEvaluationExpression('(a, b, c) => `${typeof a}:${b}:${c}`', [undefined, null, 2]);
+  assert.equal(runInNewContext(expression, {}), 'undefined:null:2');
+});
+
+test('callback serialization never executes an overridden source string on the host', () => {
+  const key = '__omdCallbackHostExecution';
+  const callback = () => 7;
+  Object.defineProperty(callback, 'toString', {
+    value: () => `() => 0); }, (globalThis["${key}"] = true), function(...args) { return (() => 0`,
+  });
+  try {
+    const wrapped = browserCallback(callback);
+    assert.equal(Reflect.has(globalThis, key), false);
+    assert.equal(wrapped(), 7);
+    assert.equal(runInNewContext(`(${wrapped.toString()})()`, {}), 7);
+  } finally { Reflect.deleteProperty(globalThis, key); }
+});
 
 function isIsolatedReferenceError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'name' in error && error.name === 'ReferenceError';
@@ -14,7 +42,7 @@ test('Given a transpiled page function with __name When it is wrapped for browse
   assert.equal(runInNewContext('typeof __name', context), 'undefined');
 
   // When: the source becomes a browser evaluation expression.
-  const expression = browserEvaluationExpression(source, JSON.stringify('measured'));
+  const expression = browserEvaluationExpression(source, ['measured']);
 
   // Then: the wrapper supplies only the supported local helper and returns the page value.
   assert.equal(runInNewContext(expression, context), 'measured');
@@ -25,7 +53,7 @@ test('Given an unknown legal helper identifier When it executes in the isolated 
   const source = 'function pageCallback() { return __1; }';
 
   // When: the page-like realm executes the serialized callback.
-  const expression = browserEvaluationExpression(source, '');
+  const expression = browserEvaluationExpression(source);
 
   // Then: the missing helper stays unbound rather than receiving a permissive global shim.
   assert.throws(() => runInNewContext(expression, {}), isIsolatedReferenceError);
@@ -36,7 +64,7 @@ test('Given helper-shaped text, comments, and property names When it is wrapped 
   const source = 'function pageCallback() { const obj = { __futureHelper: "property" }; /* __futureHelper */ const quoted = "__futureHelper"; return `${obj.__futureHelper}:${quoted}`; }';
 
   // When: the page-like realm evaluates its serialized function.
-  const expression = browserEvaluationExpression(source, '');
+  const expression = browserEvaluationExpression(source);
 
   // Then: property access, comments, and quoted text do not trigger wrapper policy.
   assert.equal(runInNewContext(expression, {}), 'property:__futureHelper');
