@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { browserTaskOutcomeContract } from '../brief/task-outcome.ts';
 import { finalReviewResponseContract } from './final-review-response-contract.ts';
+import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
 
 import {
   artDirectionSha256,
@@ -266,6 +267,7 @@ export function finalRenderReviewerPacket(input: Readonly<{
       designAxes: route.sourceContract.designAxes,
       requiredOutcomes: route.requiredOutcomes,
       prohibitedOutcomes: route.prohibitedOutcomes,
+      developerCalibration: currentDeveloperCalibration(root, input.invocation),
     }),
     observationProjection: Object.freeze({
       schema: 'design-quality-observation-projection-v1' as const,

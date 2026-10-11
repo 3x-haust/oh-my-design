@@ -26,20 +26,17 @@ export function deriveLocaleDesignRoute(context: LocaleDesignContext, contextSha
       reason: 'The user requested language and script mechanics without a market-aesthetic claim.',
     });
   }
-  if (context.marketRegion === null) {
+  if (context.marketRegion === null || context.audience === null) {
+    const withheld = [
+      ...(context.marketRegion === null ? ['market region'] : []),
+      ...(context.audience === null ? ['target audience and task'] : []),
+    ];
     return Object.freeze({
-      ...base, decision: 'ask', requiredEvidence: Object.freeze([]),
-      question: Object.freeze({ id: 'market-region', field: 'marketRegion', prompt: 'Which market or region is this surface for?' }),
+      ...base, decision: 'mechanics-only',
+      requiredEvidence: Object.freeze(['script-mechanics', 'target-language-type-proof']),
+      question: null,
       marketFitClaim: 'withheld',
-      reason: 'Market-grounded design cannot infer a market from the surface language or locale.',
-    });
-  }
-  if (context.audience === null) {
-    return Object.freeze({
-      ...base, decision: 'ask', requiredEvidence: Object.freeze([]),
-      question: Object.freeze({ id: 'target-audience', field: 'audience', prompt: 'Who is the target audience, and what task are they trying to complete?' }),
-      marketFitClaim: 'withheld',
-      reason: 'Market-grounded design needs an audience and task before it can interpret market evidence.',
+      reason: `Locale mechanics may continue, but market-fit claims are withheld because no explicit ${withheld.join(' or ')} authority was provided.`,
     });
   }
   return Object.freeze({

@@ -130,9 +130,14 @@ async function prompt(request) {
       if (delivered.includes(forbidden)) throw new Error(`Maker context leaked ${forbidden}`);
     }
     if (packet.evidence.context.taskOutcome.mustHave.length === 0) throw new Error('Maker task was narrowed');
+    const deliveredImages = result.content.filter(item => item.type === 'image');
+    if (deliveredImages.length !== packet.evidence.renders.length
+      || deliveredImages.some((image, index) => sha256(Buffer.from(image.data, 'base64'))
+        !== packet.evidence.renders[index].captureSha256)) {
+      throw new Error('Incomplete maker image delivery');
+    }
     if (mode === 'maker-images') {
-      const images = result.content.filter(item => item.type === 'image');
-      if (images.length !== 6 || images.some((image, index) => sha256(Buffer.from(image.data, 'base64'))
+      if (deliveredImages.length !== 6 || deliveredImages.some((image, index) => sha256(Buffer.from(image.data, 'base64'))
         !== packet.evidence.renders[index].captureSha256)) throw new Error('Incomplete first-party image delivery');
     }
   }

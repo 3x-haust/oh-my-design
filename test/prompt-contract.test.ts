@@ -714,7 +714,7 @@ test('the domain-analysis contract names both reference roles, the source rule, 
   assert.match(doc, /never designs.*writes? (?:production )?code|never designs, scaffolds, or writes production code/i);
   assert.match(doc, /UNSOURCED_DOMAIN_CLAIM/);
   assert.match(doc, /UNSOURCED_PLANNING_CLAIM/);
-  assert.match(doc, /Planning is asked, not researched/i);
+  assert.match(doc, /Planning continues without invented authority/i);
 });
 test('reference-assembly names the two roles and gates role-② craft by measured reproduction', () => {
   const ra = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');

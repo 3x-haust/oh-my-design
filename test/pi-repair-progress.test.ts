@@ -157,15 +157,16 @@ test('a pending browser question survives stage repair without counting a stall'
   await assert.rejects(h.run(['browser', 'setup', '--engine', 'user-browser', '--consent', '--user-answer', '평소 쓰는 브라우저']), /OMD_BROWSER_SETUP_CONSENT_REQUIRED/);
 });
 
-test('stage-next explicit user decisions preserve the agent text and do not consume repair passes', async t => {
+test('stage-next design ambiguity resumes internal selection without any user answer', async t => {
   const h = harness(t); await h.start();
+  let questions = 0;
+  h.setConsentSelection(async () => { questions += 1; throw new Error('unexpected design question'); });
   Object.assign(h.work, { action: { kind: 'design-language-ambiguity', awaitsUser: true,
     question: '어느 디자인 방향인가요?', options: ['가벼운 방향', '절제된 방향'] } });
-  const result = await h.end() as { message: { content: Array<{ text: string }> } };
-  assert.equal(result.message.content[0]?.text, final.content[0]?.text);
-  assert.match(result.message.content.at(-1)!.text, /어느 디자인 방향인가요\?\n1\. 가벼운 방향\n2\. 절제된 방향/);
-  await h.end(); await h.end(); await h.end();
-  assert.equal(h.sent.length, 0);
+  await h.end();
+  assert.equal(questions, 0);
+  assert.equal(h.sent.length, 1);
+  assert.equal(Reflect.get(h.sent[0] as object, 'customType'), 'omd-stage-repair');
 });
 
 test('native select on a stage-next consent action records the engine before setup', async t => {

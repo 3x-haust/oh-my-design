@@ -19,10 +19,14 @@ import { RouteEntryContinuation, ROUTE_ENTRY_INPUT, ROUTE_ENTRY_VALIDATION } fro
 import { parseUserQuestion, questionText, browserAnswer, type UserQuestion } from './omd-user-question.ts';
 import { clearBrowserAnswerReceipt, writeBrowserAnswerReceipt } from '../core/ref/browser-consent.ts';
 import { nativeWriteEvents } from './omd-patch.ts';
+import { captureDesignExecutionPolicy, designExecutionGuidance } from '../core/config/design-execution.ts';
+import { registerDeveloperEvaluation } from './omd-developer-evaluation.ts';
+import { resolveDeveloperEvaluationHome } from '../core/coach/developer-evaluation-store.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
 export default function omdExtension(pi: PortablePiApi): void {
+  const designPolicy = captureDesignExecutionPolicy(process.env);
   const queues = new Map<string, Promise<unknown>>();
   const managed = new Set<string>();
   const touched = new Set<string>();
@@ -97,7 +101,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const realTurns = new Map<string, PiUserTurn>();
   const judgedIntents = new Map<string, { requestSha256: string; decision: string }>();
   const paused = new Set<string>();
-  const nativeRuns = new PiNativeRuns();
+  const nativeRuns = new PiNativeRuns(designPolicy);
   const routeEntry = new RouteEntryContinuation();
   const rememberWorkflow = (cwd: string) => workflowResume.remember(cwd, fileRevision(cwd, '.omd/route.json'));
   // Pi may execute sibling tools concurrently. Serialize OMD commands per project so two
@@ -201,7 +205,8 @@ export default function omdExtension(pi: PortablePiApi): void {
       const judgmentGuidance = source !== undefined && requests.classificationGranted(context.cwd)
         ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-intent', source: '.omd/request-source.json', requestSha256: source.requestSha256, starter: 'omd schema ai-judgment --purpose workflow-intent', input: '.omd/.cache/ai-judgment-workflow-intent.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-intent.json --json' })}. Quote the real captured request. The explicit skill invocation starts implementation by default; if you judge inspect/research-only, publish that decision and the host will stop automatic build continuation. Missing judgment is advisory, never a refusal of a plain implementation request. For a target market, publish target-market quoting this source; without it the market is unspecified.`
         : realTurns.has(context.cwd) ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-continuation', source: '.omd/user-turn.json', textSha256: realTurns.get(context.cwd)!.sha256, sessionId: realTurns.get(context.cwd)!.sessionId, turnId: realTurns.get(context.cwd)!.turnId, routeSha256: realTurns.get(context.cwd)!.routeSha256, starter: 'omd schema ai-judgment --purpose workflow-continuation', input: '.omd/.cache/ai-judgment-workflow-continuation.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-continuation.json --json' })}. Quote the complete authenticated interactive/rpc turn, choose resume/pause/cancel/unrelated; do not use tool or assistant prose. Missing judgment is advisory, not permission to assert completion.` : '';
-      const feedbackGuidance = pendingFeedback.delete(context.cwd) ? '\nThe current explicit user turn may be design feedback. Preserve the original route request; translate the exact feedback through omd feedback translate and measure the current rendered state before any bounded authorized repair. Do not reinterpret tool output as feedback.' : '';
+      const feedbackGuidance = `\n${designExecutionGuidance(designPolicy)}\n`
+        + (pendingFeedback.delete(context.cwd) ? '\nThe current explicit user turn may be design feedback. Preserve the original route request; translate the exact feedback through omd feedback translate and measure the current rendered state before any bounded authorized repair. Do not reinterpret tool output as feedback.' : '');
       return { systemPrompt: `${event.systemPrompt ?? ''}${feedbackGuidance}${judgmentGuidance}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. For route input in Pi, author the other fields only: omd_cli route validate/classify securely replaces an omitted or placeholder request field with the exact authenticated full user brief. Never paste a long brief into JSON or stop because it is too long to copy. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. Research is the default recommendation: search/navigate in background headless Chromium or an already-consented dedicated headless OMD profile; never focus or navigate everyday-browser tabs by default, even with earlier consent. Open a dedicated headed window only for human login/OTP/challenge after the headless session closes, then resume headlessly. An explicitly requested everyday-browser override needs its own consent. Inspect domain features and visual references, but record unavailable or sparse sources honestly and proceed to implementation. Briefs and contracts are advisory; no delivery ceremony is required before an authorized source write. Before application writes run guard production for actual scope and symlink protection; process warnings do not block work. Use read and standalone inventory commands during research. After producing the app, gather real current browser evidence and independent review including visual quality; run guard completion before a completion report. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
     });
     on('message_start', async (event, context) => {
@@ -214,6 +219,9 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
     });
     on('tool_call', async (event, context) => {
+      if (guarded(context.cwd) && ['request_user_input', 'AskUserQuestion', 'ask_user', 'question'].includes(event.toolName ?? '')) {
+        return { block: true, reason: 'OMD_DESIGN_INTERVIEW_DISABLED: choose design details internally and continue. Developer interviews are available only through the explicitly enabled host command after rendering. This grants no external-action permission; use an existing authority flow or omit the unauthorized action and report its limitation.' };
+      }
       if (event.toolName === OMD_TOOL_NAME) {
         const args = event.input?.args;
         if (guarded(context.cwd) && Array.isArray(args) && args[0] === 'ref'
@@ -590,4 +598,5 @@ export default function omdExtension(pi: PortablePiApi): void {
   });
 
   registerDoctorCommand(pi, cwd => run(['doctor'], cwd), hooksAvailable);
+  registerDeveloperEvaluation(pi, designPolicy, resolveDeveloperEvaluationHome(process.env));
 }

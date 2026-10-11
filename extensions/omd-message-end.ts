@@ -133,18 +133,22 @@ function parseStageWork(text: string): StageWorkPointer | null {
   const materialProgressIdentities = typeof progress === 'object' && progress !== null ? stringList(Reflect.get(progress, 'materialProgressIdentities')) : [];
   const owner = Reflect.get(value, 'owner');
   const action = Reflect.get(value, 'action');
+  const autonomousReading = action !== null && typeof action === 'object'
+    && Reflect.get(action, 'kind') === 'design-language-ambiguity';
   const next = Reflect.get(value, 'next');
   const observed = referenceWork(Reflect.get(value, 'referenceWork'));
   const recovering = observed?.status === 'exhausted';
   const recoveryArgs = ['ref', 'discover-batch', '--input', '.omd/.cache/reference-recovery-batch.json', '--recovery', '--json'];
-  const instruction = recovering
+  const instruction = autonomousReading
+    ? 'Choose the strongest grounded design reading internally from the current request, content, project system and references. Publish chosenId and decision through language translate. Record the harness as decision maker, never a user answer. Developer interviews are separate from production.'
+    : recovering
     ? 'Read omd schema reference-discovery-batch. Author the recovery batch with new qualified sources or materially changed acquisition strategies justified by the signed failures and exclusions. Preserve both research lanes and evidence requirements; unchanged failed commands are not recovery. Publish it with the named command, inspect captured sources, then recompute stage next.'
     : Reflect.get(value, 'instruction');
   return {
     stage,
     owner: typeof owner === 'string' ? owner : `${stage} owner`,
-    action: recovering ? 'replan-discovery' : typeof action === 'string' ? action : 'repair-output',
-    next: recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : `omd brief ${stage} --check --json`,
+    action: autonomousReading ? 'resolve-design-reading' : recovering ? 'replan-discovery' : typeof action === 'string' ? action : 'repair-output',
+    next: autonomousReading ? 'omd schema design-language-input' : recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : `omd brief ${stage} --check --json`,
     instruction: typeof instruction === 'string' ? instruction : 'Perform the owned work, then recompute stage next.',
     problems: stringList(Reflect.get(value, 'problems')),
     entryBlockers: stringList(Reflect.get(value, 'entryBlockers')),

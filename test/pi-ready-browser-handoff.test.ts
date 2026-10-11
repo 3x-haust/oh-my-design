@@ -27,7 +27,7 @@ test('ready bundled Aside bridge asks once before a profile-backed reference act
   assert.equal(readUserBrowserConsent(home), null, 'profile consent is not user-browser consent');
   assert.equal(await readyBridgeQuestion(home, async () => ready, undefined, false), null, 'background browsing needs no everyday-browser consent');
   assert.equal((await readyBridgeQuestion(home, async () => ready, undefined, true))?.kind, 'browser-consent');
-  const calls: string[][] = []; const messages: Array<{ customType?: string; content?: string }> = [];
+  const calls: string[][] = []; const messages: Array<{ customType?: string; content?: unknown }> = [];
   const choices: string[][] = [];
   const driver: UserBrowserDriver = {
     userBrowserBridgeDoctor: async () => ({ ready: true, cli: { installed: true }, daemon: { running: true },

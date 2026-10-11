@@ -164,6 +164,7 @@ type ExecOptions = Readonly<{
 
 export type PortablePiContext = PiHostContext & Readonly<{ signal?: AbortSignal; browserConsentHome?: string; ui?: {
   select?(title: string, options: string[]): Promise<string | undefined>;
+  input?(title: string, placeholder?: string): Promise<string | undefined>;
   notify?(message: string, level?: 'info' | 'warning' | 'error'): void;
 } }>;
 
@@ -211,7 +212,9 @@ export type PortablePiApi = Readonly<{
   /** Test seam for an owned runner; production always uses the process-group supervisor. */
   execOwned?(command: string, args: readonly string[], options: ExecOptions): Promise<ExecResult>;
   on?(event: 'before_agent_start' | 'tool_call' | 'tool_result' | 'message_start' | 'message_end' | 'session_start' | 'input', handler: PortablePiHook): void;
-  sendMessage?(message: { customType: string; content: string; display: boolean }, options: { triggerTurn: boolean; deliverAs: 'followUp' }): void;
+  sendMessage?(message: { customType: string; content: string | Array<
+    { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>; display: boolean },
+    options: { triggerTurn: boolean; deliverAs: 'followUp' }): void | Promise<void>;
 }>;
 
 function boundedOutput(result: ExecResult, args: readonly string[]): string {

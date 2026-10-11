@@ -592,8 +592,8 @@ failure and acceptance criteria—never numeric scores, another candidate or ren
 render/source, or candidate/selector rationale.
 
 A fresh selector reviews the replacement set. This is the sole recovery round: if no
-replacement passes, do not retry again. Reframe and stop with visible evidence, or pause only
-when the configured structure checkpoint explicitly requires a human decision. Never create
+replacement passes, do not retry again. Reframe and stop with visible evidence and the unresolved
+criteria; do not turn a normal run into a developer interview. Never create
 an automatic retry loop or choose a failing candidate.
 
 The glance receives only squint renders. It never sees sharp renders,
@@ -644,8 +644,9 @@ neither kind is a final acceptance receipt. Actual revisions still need fresh af
 under the selected visual-observation or trusted repair contract. Reframing changes no scope or
 upstream artifact by itself, and never clears a failed gate. A typed reflection skip
 creates no craft-checkpoint artifact but never removes browser evidence, final evidence, or
-independent review. Human approval checkpoints are separate:
-`.omd/config.json` defaults to `checkpoint: none`; concept, structure, or both are opt-in.
+independent review. Native Pi production has no human design approval checkpoint.
+The legacy `.omd/config.json` checkpoint setting cannot enable developer evaluation;
+only explicit host configuration enables its separate post-render interview.
 When composition is selected, the hand receives its selected candidate and composition
 contract, runs `omd composition --check` before its first production write and again before
 ship, and records any deliberate deviation with visible evidence. A changed selected frame,

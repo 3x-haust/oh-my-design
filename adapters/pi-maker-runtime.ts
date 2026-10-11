@@ -207,7 +207,9 @@ export async function runPiMaker(input: PiMakerInput) {
     });
     if (proof.evidenceSha256 !== packetSha256 || proof.sessionId !== sessionId || proof.nonce !== roleNonce
       || proof.childPid === processPid) throw new PiReviewerError('maker-consumed-packet-mismatch');
-    const handback = parseMakerHandback(piParse(final, 'maker-final-json'), { bindings: prepared.bindings, paths: prepared.input.paths });
+    const handback = parseMakerHandback(piParse(final, 'maker-final-json'), {
+      bindings: prepared.bindings, paths: prepared.input.paths, referenceImages: prepared.referenceImages,
+    });
     await rpc.finish();
     getNativePiRun(input.invocation, input.root);
     const taskSha256 = piHash(MAKER_TASK);

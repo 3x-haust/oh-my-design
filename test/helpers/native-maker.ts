@@ -10,6 +10,7 @@ import { createTestNativePiInvocation } from '../../core/runtime/native-pi-run.t
 import { createProjectWriteAdapter } from '../../core/runtime/project-write.ts';
 import { contractSha256, deliveryReceipt } from '../../core/stage/contract.ts';
 import { copyDeckSha256 } from '../../core/copy/index.ts';
+import type { DeveloperEvaluationSnapshot } from '../../core/coach/developer-evaluation-contract.ts';
 
 export const repo = fileURLToPath(new URL('../..', import.meta.url));
 export const packRoot = join(repo, 'core');
@@ -18,7 +19,7 @@ export const nodePath = realpathSync(process.execPath);
 export const input = { schema: 'native-maker-input-v1', role: 'omd-hand', candidateId: null,
   paths: ['src/copy/confirmation.ts', 'src/copy/label.ts'], readPaths: [], axis: null };
 
-export function fixture(t: TestContext, mode = 'success') {
+export function fixture(t: TestContext, mode = 'success', calibration?: DeveloperEvaluationSnapshot) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-maker-test-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const prior = process.env.PI_STUDY_FIXTURE_MODE;
@@ -27,7 +28,7 @@ export function fixture(t: TestContext, mode = 'success') {
     if (prior === undefined) delete process.env.PI_STUDY_FIXTURE_MODE;
     else process.env.PI_STUDY_FIXTURE_MODE = prior;
   });
-  const invocation = createTestNativePiInvocation({ root, host: {
+  const invocation = createTestNativePiInvocation({ root, ...(calibration === undefined ? {} : { calibration }), host: {
     nodePath, nodeSha256: sha256(readFileSync(nodePath)), cliPath, cliSha256: sha256(readFileSync(cliPath)),
     provider: mode === 'provider-projection' ? 'chatgpt-subscription' : 'fixture-provider',
     model: 'fixture-maker-model', thinkingLevel: 'high', parentSessionId: 'source-aware-parent',

@@ -28,13 +28,20 @@ function repair(value: ReturnType<typeof fixture>) {
 function harness(cwd: string, exec?: PortablePiApi['exec']) {
   const hooks = new Map<string, PortablePiHook>();
   const calls: string[][] = [];
-  const sent: Array<Parameters<NonNullable<PortablePiApi['sendMessage']>>> = [];
+  const sent: Array<[
+    { customType: string; content: string; display: boolean },
+    Parameters<NonNullable<PortablePiApi['sendMessage']>>[1],
+  ]> = [];
   let tool!: PortablePiTool;
   let writeSequence = 0;
   omdExtension({
     on: (name, hook) => { hooks.set(name, hook); },
     registerTool: value => { tool = value; }, registerCommand() {},
-    sendMessage: (...args) => { sent.push(args); },
+    sendMessage: (message, options) => {
+      assert.equal(typeof message.content, 'string');
+      if (typeof message.content !== 'string') throw new Error('bootstrap emits text, not images');
+      sent.push([{ ...message, content: message.content }, options]);
+    },
     execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(command, args, options) {
       calls.push(args.slice(1));

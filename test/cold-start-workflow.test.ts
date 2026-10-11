@@ -205,6 +205,7 @@ test('cold start traverses real CLI framing, independent research/copy entry and
 test('planning gaps are named early, cannot be inferred away, and no-progress recovery resets only on real input', async t => {
   const cwd = project(t), h = harness(cwd); await h.start();
   const brief = domain(); delete (brief.planning.successSignal as { userEvidence?: unknown }).userEvidence;
+  Object.assign(brief.planning.successSignal, { disposition: 'omit-from-production-claims' });
   await h.author('.omd/domain-brief.json', brief);
   const checked = JSON.parse(await h.command(['domain', 'check', '--json']));
   assert.deepEqual(checked.unconfirmedPlanning, ['successSignal']);
@@ -263,6 +264,7 @@ test('fresh-stage correction stops for a concrete user question and abort; help 
   assert.equal(await h.emit('message_end', { message: final }), undefined);
   await h.start();
   const brief = domain(); delete (brief.planning.nonGoals[0] as { userEvidence?: unknown }).userEvidence;
+  Object.assign(brief.planning.nonGoals[0]!, { disposition: 'omit-from-production-claims' });
   await h.author('.omd/domain-brief.json', brief);
   const asks = { ...final, content: [{ type: 'text', text: '실제 제출을 제외한 데모만 구현하면 될까요?' }] };
   const held = await h.emit('message_end', { message: asks }) as { message: typeof final };
@@ -286,12 +288,15 @@ test('atomic frame input also works over the publisher stdin transport without a
 test('design-only fresh work keeps open planning questions without forcing production confirmation or application writes', async t => {
   const cwd = project(t), h = harness(cwd); await h.start('design-route-input');
   const brief = domain(); delete (brief.planning.successSignal as { userEvidence?: unknown }).userEvidence;
+  Object.assign(brief.planning.successSignal, { disposition: 'omit-from-production-claims' });
   await h.author('.omd/domain-brief.json', brief);
   const work = JSON.parse(await h.command(['stage', 'next', '--json']));
   assert.equal(work.deliveryMode, 'design-only');
   assert.equal(work.stage, 'reference-board');
   assert.equal(work.action, 'acquire-reference');
-  assert.deepEqual(work.planning, [{ field: 'successSignal', text: 'Inspect confirmation' }]);
+  assert.deepEqual(work.planning, [{
+    field: 'successSignal', text: 'Inspect confirmation', disposition: 'omit-from-production-claims',
+  }]);
   await h.emit('message_end', { message: final });
   assert.equal(h.sent.length, 0, 'unverified workflow intent does not start automatic repair');
   const blocked = await h.emit('tool_call', { toolName: 'write', input: { path: 'package.json' } }) as { block: boolean };

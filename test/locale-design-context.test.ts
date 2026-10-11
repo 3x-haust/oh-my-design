@@ -45,22 +45,26 @@ test('context keeps conversation, surface locale, and explicit market independen
 
 test('bare locale may infer mechanics script but never market', () => {
   const routed = routeLocaleDesignContext(context({ surfaceLocale: 'zh', marketRegion: null }));
-  assert.equal(routed.decision, 'ask');
+  assert.equal(routed.decision, 'mechanics-only');
   assert.equal(routed.mechanics.explicitRegion, null);
   assert.equal(routed.mechanics.likelyScript, 'Hans');
   assert.equal(routed.mechanics.scriptSource, 'likely-subtag');
   assert.equal(routed.context.marketRegion, null);
-  assert.deepEqual(localeDesignRouteFindings(routed), [{
-    id: 'LOCALE_DESIGN_MARKET_REQUIRED', message: 'Which market or region is this surface for?',
-  }]);
+  assert.equal(routed.marketFitClaim, 'withheld');
+  assert.equal(routed.question, null);
+  assert.match(routed.reason, /no explicit market region authority/);
+  assert.deepEqual(localeDesignRouteFindings(routed), []);
 });
 
-test('market ambiguity takes priority, then audience, and complete context researches', () => {
+test('missing market or audience defaults to mechanics-only while complete context researches', () => {
   const missingBoth = routeLocaleDesignContext(context({ marketRegion: null, audience: null }));
-  assert.equal(missingBoth.question?.field, 'marketRegion');
+  assert.equal(missingBoth.decision, 'mechanics-only');
+  assert.equal(missingBoth.question, null);
+  assert.match(missingBoth.reason, /market region or target audience and task/);
   const missingAudience = routeLocaleDesignContext(context({ audience: null }));
-  assert.equal(missingAudience.question?.field, 'audience');
-  assert.deepEqual(localeDesignRouteFindings(missingAudience).map((finding) => finding.id), ['LOCALE_DESIGN_AUDIENCE_REQUIRED']);
+  assert.equal(missingAudience.decision, 'mechanics-only');
+  assert.equal(missingAudience.question, null);
+  assert.deepEqual(localeDesignRouteFindings(missingAudience), []);
   const complete = routeLocaleDesignContext(context());
   assert.equal(complete.decision, 'research');
   assert.equal(complete.question, null);
@@ -113,15 +117,16 @@ test('malformed, unknown, inherited, accessor, invisible, and duplicate input fa
   for (const value of cases) assert.throws(() => parseLocaleDesignContext(value), LocaleDesignContextError);
 });
 
-test('CLI is a real data surface: unresolved context exits nonzero and complete context clears', () => {
+test('CLI continues mechanics-only for missing authority and researches complete context', () => {
   const directory = mkdtempSync(join(tmpdir(), 'omd-locale-design-'));
   const path = join(directory, 'context.json');
   writeFileSync(path, `${JSON.stringify(context({ marketRegion: null }))}\n`);
   const ask = spawnSync(process.execPath, [CLI, 'locale', 'plan', '--input', path, '--json'], { encoding: 'utf8' });
-  assert.equal(ask.status, 1, ask.stderr);
+  assert.equal(ask.status, 0, ask.stderr);
   const askResult = JSON.parse(ask.stdout);
-  assert.equal(askResult.route.decision, 'ask');
-  assert.deepEqual(askResult.findings.map((finding: { id: string }) => finding.id), ['LOCALE_DESIGN_MARKET_REQUIRED']);
+  assert.equal(askResult.route.decision, 'mechanics-only');
+  assert.equal(askResult.route.marketFitClaim, 'withheld');
+  assert.deepEqual(askResult.findings, []);
 
   writeFileSync(path, `${JSON.stringify(context())}\n`);
   const research = spawnSync(process.execPath, [CLI, 'locale', 'plan', '--input', path, '--json'], { encoding: 'utf8' });
@@ -138,6 +143,7 @@ test('the canonical skeleton cannot promote its example locale or placeholder in
   assert.equal(routed.context.surfaceLocale, 'ja-JP');
   assert.equal(routed.context.marketRegion, null);
   assert.equal(routed.context.audience, null);
-  assert.equal(routed.decision, 'ask');
-  assert.deepEqual(localeDesignRouteFindings(routed).map((finding) => finding.id), ['LOCALE_DESIGN_MARKET_REQUIRED']);
+  assert.equal(routed.decision, 'mechanics-only');
+  assert.equal(routed.marketFitClaim, 'withheld');
+  assert.deepEqual(localeDesignRouteFindings(routed), []);
 });

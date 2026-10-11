@@ -60,12 +60,14 @@ test('no-context routes retain canonical bytes without injecting locale context'
   }
 });
 
-test('clarification cannot enter adaptive production', () => {
-  const ask = routeLocaleDesignContext(context({ marketRegion: null, audience: null }));
-  assert.throws(
-    () => routeAdaptiveFlow(fixture('synth-marketing'), undefined, ask),
-    (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_CLARIFICATION_REQUIRED',
-  );
+test('missing market authority continues without questions or a cultural-fit claim', () => {
+  const mechanics = routeLocaleDesignContext(context({ marketRegion: null, audience: null }));
+  const route = routeAdaptiveFlow(fixture('synth-marketing'), undefined, mechanics);
+  assert.equal(route.sourceContract.localeDesign?.decision, 'mechanics-only');
+  assert.equal(route.sourceContract.localeDesign?.marketFitClaim, 'withheld');
+  assert.equal(route.sourceContract.localeDesign?.question, null);
+  assert.equal(route.sourceContract.localeDesign?.context.marketRegion, null);
+  assert.equal(route.sourceContract.localeDesign?.context.audience, null);
 });
 
 test('market research routes without a judgment remain advisory and do not infer meaning from excerpts', () => {

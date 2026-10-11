@@ -10,6 +10,8 @@ import { HOST_PAYLOAD_AUTHORIZATION_PURPOSES, type HostPayloadAuthorizationPurpo
 import type { CurrentRunIdentity, ProjectRunInvocation } from './invocation.ts';
 import { claimNonce, mintSelfSignedReceipt, signNativeObservation, verifyNativeObservation, verifySelfSignedReceipt } from './self-signed-activation.ts';
 import { observedProcessExecutableSha256 } from './process-executable.ts';
+import { parseDesignExecutionPolicy, type DesignExecutionPolicy } from '../config/design-execution.ts';
+import { parseDeveloperEvaluationSnapshot, type DeveloperEvaluationSnapshot } from '../coach/developer-evaluation-contract.ts';
 import { NativePiAuthorityError, nativePiDigest, nativePiDirectory, nativePiObject, nativePiRunId,
   nativePiRuntimeSha256, parseNativePiHost, parseNativePiRun, publishNativePiRun, readNativePiFile, readSignedNativePiRun,
   type NativePiHost, type NativePiRun, type NativePiRunInput } from './native-pi-run-record.ts';
@@ -144,11 +146,13 @@ export function requireNativePiPayload(invocation: ProjectRunInvocation, root: s
     runId: run.runId, projectRoot: run.projectRoot, purpose, payloadSha256 })
     || !verifyNativeObservation(root, 'pi-derived-payload', nativePiDigest(canonicalRouteJson(payload)), signature)) throw new NativePiAuthorityError('derived payload approval mismatch');
 }
-export function createTestNativePiInvocation(input: Readonly<{ root: string; host: NativePiHost; current?: CurrentRunIdentity }>): ProjectRunInvocation {
+export function createTestNativePiInvocation(input: Readonly<{ root: string; host: NativePiHost; current?: CurrentRunIdentity; designPolicy?: DesignExecutionPolicy; calibration?: DeveloperEvaluationSnapshot }>): ProjectRunInvocation {
   if (!genuineTestProcess()) throw new NativePiAuthorityError('test authority requires the repository Node test runner');
   const host = parseNativePiHost(input.host);
   const current = input.current ?? { buildSha256: nativePiDigest('test-build'), loadedSkillSha256: nativePiDigest('test-skill'), briefSha256: nativePiDigest('test-brief') };
-  const identity = { ...current, projectRoot: realpathSync(input.root), runtimeSha256: nativePiDigest('test-runtime'), host };
+  const identity = { ...current, projectRoot: realpathSync(input.root), runtimeSha256: nativePiDigest('test-runtime'), host,
+    ...(input.designPolicy === undefined ? {} : { designPolicy: parseDesignExecutionPolicy(input.designPolicy) }),
+    ...(input.calibration === undefined ? {} : { calibration: parseDeveloperEvaluationSnapshot(input.calibration) }) };
   const run = Object.freeze({ ...identity, runId: nativePiRunId(identity) });
   issuedRuns.add(run); testRuns.add(run);
   return issueInvocation({ run, expiresAt: Date.now() + 15 * 60 * 1000, runtimeRoot: null });

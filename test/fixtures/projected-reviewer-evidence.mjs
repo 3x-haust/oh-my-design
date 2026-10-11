@@ -29,6 +29,9 @@ export async function projectedReviewerEvidence(bridge, config, sessionId, syste
   ] };
   const delivered = await handlers.get('before_provider_request')({ payload }, context);
   const message = delivered.input.find(part => part.role === 'user');
-  if (!message) throw new Error('Full evidence was not delivered');
-  return { result, packetText: message.content[0].text };
+  const deliveredText = message?.content[0]?.text;
+  if (typeof deliveredText !== 'string' || !deliveredText.includes('"schema":"native-maker-transport-v1"')) {
+    throw new Error('Full evidence was not delivered');
+  }
+  return { result, packetText: deliveredText.split('\n')[0] };
 }

@@ -10,6 +10,7 @@ import { inspectDesignReferenceAdmission, isRetainedReferencePath } from '../ref
 import { trustedReferenceImage } from '../ref/board-security.ts';
 import { copyDeckSha256, validateCurrentCopyReview } from '../copy/index.ts';
 import lexiconData from '../theory/design-language.lexicon.v1.json' with { type: 'json' };
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 
 export const METRICS = ['group-gap', 'container-padding', 'heading-body-ratio', 'body-line-height', 'corner-radius', 'weight-difference', 'motion-duration'] as const;
 export type Metric = typeof METRICS[number];
@@ -109,6 +110,9 @@ export function readTranslation(root: string, kind: Input['kind'], route?: { req
 export function publishTranslation(root: string, invocation: ProjectRunInvocation, writer: ProjectWriteAdapter, kind: Input['kind'], value: unknown): TranslationPointer {
   const route = readPersistedRoute(root, invocation);
   const translation = parseInput(value, kind, route.request, route.sourceContractSha256);
+  if (isNativePiInvocation(invocation) && translation.status === 'needs-clarification') {
+    fail('DESIGN_LANGUAGE_AUTONOMOUS_SELECTION_REQUIRED: choose the strongest grounded reading with chosenId and decision; developer interviews run separately after rendering');
+  }
   const previous = readTranslation(root, kind);
   const sameContext = previous?.translation.request === route.request
     && previous.translation.sourceContractSha256 === route.sourceContractSha256;
@@ -130,9 +134,10 @@ export function publishTranslation(root: string, invocation: ProjectRunInvocatio
   }
   const chosen = translation.readings.find(reading => reading.id === translation.chosenId);
   const deckPath = join(root, '.omd/copy-deck.md');
-  const published = chosen !== undefined && isCopyToneReading(chosen)
+  const resolved = chosen !== undefined && isCopyToneReading(chosen)
     ? { ...translation, copyDeckAtTranslationSha256: existsSync(deckPath) ? copyDeckSha256(readFileSync(deckPath)) : null }
     : translation;
+  const published = isNativePiInvocation(invocation) ? { ...resolved, decisionActor: 'harness' } : resolved;
   const bytes = `${canonicalJson(published)}\n`;
   const sha256 = digest(bytes);
   const recordPath = `.omd/design-language/records/sha256-${sha256}.json`;

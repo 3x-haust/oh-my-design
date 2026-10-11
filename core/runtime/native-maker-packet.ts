@@ -18,6 +18,7 @@ export type PreparedNativeMaker = Readonly<{
   input: MakerInput;
   bindings: MakerBindings;
   imageCount: number;
+  referenceImages: readonly string[];
 }>;
 export type NativeMakerContext = Readonly<{
   root: string; invocation: ProjectRunInvocation; packRoot: string; input: unknown; signal?: AbortSignal;
@@ -92,7 +93,9 @@ export function prepareNativeMaker(context: NativeMakerContext): PreparedNativeM
       responseTemplate: { schema: MAKER_HANDBACK, fixedBindings: bindings,
         files: input.paths.map(path => ({ path, content: null })) } },
   }));
-  const prepared = Object.freeze({ packet, input, bindings, imageCount: visual.renders.length });
+  const referenceImages = Object.freeze(visual.renders
+    .filter(render => render.role === 'selected-reference-original').map(render => render.pngBase64));
+  const prepared = Object.freeze({ packet, input, bindings, imageCount: visual.renders.length, referenceImages });
   preparations.set(prepared, { root, invocation, packetSha256: sha256(packet) });
   return prepared;
 }

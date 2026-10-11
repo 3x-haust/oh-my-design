@@ -41,6 +41,28 @@ not a reference admission or production artifact. Host-rendered source/captures 
 Typesetter, Composer and Sketch through the source-free selected-study projection. Raw packets,
 source identities and private execution records do not. See `theory/imagegen.md#provisional-source-studies`.
 
+When the adaptive route selects reference-board work, the native Pi maker also receives selected
+originals by default through its one-use evidence tool. The host revalidates the current selection,
+board/assembly/projection bindings, admitted whole-image bytes, SHA-256 digest and PNG dimensions,
+deduplicates exact bytes, and delivers at most three originals without cropping or downsampling.
+Opaque image labels replace source URLs and private project paths. A source-free guidance document
+binds each delivered or omitted selected slot to its destination component/route, task IDs, captured
+state limit when one exists, and the selected take/avoid/adaptation. It states the exact maximum,
+unique selected count, delivered count and omitted count. Missing, malformed, changed or stale
+selected evidence refuses maker preparation; a route that does not select reference-board work
+continues without attempting to recover or consume reference originals.
+
+This private maker access does not change evaluator isolation, source ownership, rights or shipping
+rules. Originals remain observation evidence: the maker may transfer only the bounded selected
+guidance and must not ship, embed, re-encode, trace, crop or otherwise reuse pixels, source copy,
+branding, names, logos or proprietary content. Screenshots do not establish DOM, behavior or
+destination capability. Public maker receipts, production source, handoff artifacts and final chat never expose
+the originals, source URLs or private evidence paths, and final/fidelity review remains independent
+of maker input and mandatory. The maker response parser and the pre-write publisher both refuse exact supplied
+reference-image bytes embedded in returned source with `reference-image-shipping-forbidden`.
+This byte check does not claim to detect every transformed image or semantic copy; those remain
+subject to the observation-only contract and independent rendered review.
+
 Isolated Eye classifies the visible surface before judging its quality. The
 `discovery-list` category describes a gallery, search result, or directory of
 reference candidates, not an ordinary working list in a finished product.

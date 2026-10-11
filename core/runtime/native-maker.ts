@@ -21,7 +21,9 @@ export function publishNativeMaker(context: NativeMakerContext & Readonly<{
   try {
     const fresh = prepareNativeMaker(context);
     if (!fresh.packet.equals(prepared.packet)) makerFail('stale-route-or-source-baseline');
-    const handback = parseMakerHandback(result.handback, { bindings: prepared.bindings, paths: prepared.input.paths });
+    const handback = parseMakerHandback(result.handback, {
+      bindings: prepared.bindings, paths: prepared.input.paths, referenceImages: prepared.referenceImages,
+    });
     for (const file of handback.files) {
       const target = validateProjectWritePath(root, file.path);
       const stat = lstatSync(target, { throwIfNoEntry: false });

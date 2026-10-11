@@ -275,7 +275,7 @@ const DOMAIN_BRIEF: InputSkeleton = {
   constraints: [
     'Author domain fields and publish with domain set after checked domain entry. The publisher binds request from the authenticated current route; omit request in the publisher input instead of retyping or summarizing a long brief. Directly authored final briefs still require the exact route request.',
     'Preserve every explicitly requested screen and task. A short summary or a preferred screen count never removes user scope; enumerate up to 64 canonical surfaces and their meaningful states.',
-    'domain check validates structure, not planning confirmation. Each planning statement needs its own genuine userEvidence before production. Check the original request first; ask only for facts it does not supply. Do not silently invent prototype-only non-goals or copy the placeholders as evidence.',
+    'domain check validates structure, not invented confirmation. Attach genuine userEvidence where the original request supports the statement. Otherwise supply disposition: omit-from-production-claims or non-factual-working-decision. An unprovided non-goal may only be omitted from claims, never remove requested scope. Do not ask a design question or copy placeholders as evidence.',
     'referenceQueries seeds visual research only. Keep comparable-service names, eligibility rules, institutional requirements and verified capabilities in the separate domain research lane; they do not become component design queries or aesthetic endorsements.',
     'component queries name the information relationship or visual task state to inspect in a populated finished product; craft queries name an actual interaction or motion question. Search across domains for beautiful task-fitting screens rather than requiring the destination industry, country or institution to supply the visual direction.',
     'mood queries must honor the complete request and authenticated user guidance, including explicit palette, material and style exclusions. A calm, trustworthy or readable service does not imply warm paper, cream, beige or editorial styling. Keep an unsupported mood open rather than inventing one.',
@@ -308,7 +308,7 @@ const DOMAIN_BRIEF: InputSkeleton = {
         userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: '<message or artifact>', excerpt: '<what the user actually said>' }],
       },
       successSignal: {
-        text: '<the observable change that means it worked; omit userEvidence to leave it an open hypothesis>',
+        text: '<the observable change that means it worked; replace absent userEvidence with an explicit non-factual disposition>',
         userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: '<message or artifact>', excerpt: '<the actual success criterion the user supplied>' }],
       },
       nonGoals: [{ text: '<what this release deliberately does not do>',
@@ -1312,7 +1312,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
     constraints: ['Preserve exact current route request/source hash; text is the exact user phrase, not a summary.',
       'Use one to three scoped readings with registered metric/unit, stable destination selector, route, state, viewport, interval, intended direction and positive minimum delta.',
       'Lexicon origins bind entryId, readingId, revision and sha256; model-proposed origins use the same measurable targets. English keywords name actual mechanisms, not generic adjectives.',
-      'If materially distinct readings remain, chosenId=null and provide one Korean question with two or three admitted, retained design-reference thumbnails bound to native acquisition image digests. No arbitrary local PNGs.',
+      'Choose the strongest grounded reading with chosenId and decision. Native Pi production never publishes a design question or waits for a preference answer; its separate explicit developer evaluation command collects comparisons after rendering. A chosen reading is a harness decision, not user approval.',
       'Visual feedback requires --page to capture the current native baseline. A copy-tone reading (warm/copy-tone or role: copy-tone) instead reopens Writer: no --page, changed copy deck and CLEAN current copy review are required before feedback check or production.'],
     skeleton: { schema: 'design-language-input-v1', kind, text: '<exact user phrase>', request: '<complete original route request>', sourceContractSha256: '0'.repeat(64),
       readings: [{ id: 'spacing', labelKo: '묶음 간격 늘리기', origin: { kind: 'model-proposed' },

@@ -87,22 +87,28 @@ across many sites rather than hunting the one correct competitor. Three conseque
 - Explore by **similarity**, not by rewriting the query: the next good capture usually comes from a
   capture already kept.
 - **planning** — `{ businessGoal, successSignal, nonGoals[] }`, why this work exists and what would
-  make it succeed. Each statement is `{ text }` alone, or `{ text, userEvidence[] }` when the user
-  actually said it.
+  make it succeed. A user-stated fact is `{ text, userEvidence[] }`. An unprovided statement is
+  `{ text, disposition }`, where `disposition` is `omit-from-production-claims` or
+  `non-factual-working-decision`.
 
-### Planning is asked, not researched
+### Planning continues without invented authority
 
-Search cannot tell you the user's business goal, so planning is either stated by them or explicitly
-left open:
+Search cannot tell you the user's business goal. A normal run does not stop to ask design-planning
+questions; it classifies what was not provided and continues without promoting it into user authority:
 
 - A statement carrying `userEvidence` (the same `ExplicitUserEvidence` shape as
   `protocol/evidence-claims.md`: `kind`, `source`, `reference`, `excerpt`) is confirmed.
-- A statement with no `userEvidence` is a **hypothesis**. It is lawful to record, and it is not a
-  basis for production: while any hypothesis remains, `requireConfirmedPlanning` fails the gate with
-  `UNSOURCED_PLANNING_CLAIM`, so the run asks the user instead of inventing a business goal.
+- `omit-from-production-claims` records an open hypothesis while excluding it from shipped claims.
+- `non-factual-working-decision` records a run-owned planning choice. Downstream work must label it
+  as a working decision, never as something the user said.
+- An unprovided `nonGoals[]` entry may only use `omit-from-production-claims`. A working decision
+  cannot remove an explicit requirement or silently narrow scope.
+- A statement with neither genuine `userEvidence` nor an explicit disposition fails with
+  `UNSOURCED_PLANNING_CLAIM`. Fabricated evidence is never a substitute.
 
 Domain facts come from observation; planning comes from the user. Conflating the two is how a run
-produces a confident answer to a question nobody asked.
+produces a confident answer to a question nobody asked. Classified hypotheses preserve that
+boundary without putting the run into an await state.
 
 ### Every claim carries its source
 

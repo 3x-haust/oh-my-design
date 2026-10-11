@@ -15,6 +15,12 @@ export function formatBrief(brief: Brief): string {
     'Nonzero stops entry. Passing proves current prerequisites only, not completion.',
   ]);
   section('owns', brief.owns);
+  if (brief.developerCalibration) section('calibration', [
+    `snapshot: ${brief.developerCalibration.snapshotSha256}`,
+    brief.developerCalibration.precedence,
+    brief.developerCalibration.limitation,
+    ...brief.developerCalibration.cases.map(example => JSON.stringify(example)),
+  ]);
   if (brief.existingDesignSystem) section('existing UI', [
     `${brief.existingDesignSystem.path} — ${brief.existingDesignSystem.status}; ${brief.existingDesignSystem.observations} observations, ${brief.existingDesignSystem.gaps} gaps`,
     'Observed, not approved. Preserve existing tokens/components by default; read .omd/design-system-decisions.md if present and record intentional departures. Inspect coverage gaps before reuse.',

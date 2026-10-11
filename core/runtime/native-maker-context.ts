@@ -14,6 +14,7 @@ import { readCurrentCulturalDesignProfile } from '../locale/cultural-profile-fil
 import { deriveTrustedEvaluationPlanFromProject } from './trusted-evaluation-plan.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { parseFunctionalRequirements } from '../completeness/index.ts';
+import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
 
 export type MakerDocument = Readonly<{ path: string; content: string }>;
 type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -144,6 +145,7 @@ export function makerContext(root: string, route: RouteRecord, owner: Readonly<{
     evaluatorPlan: route.gates.includes('greenfield-task-flow-benchmark')
       ? deriveTrustedEvaluationPlanFromProject({ root, invocation }) : null,
     transfer: handoff,
+    developerCalibration: currentDeveloperCalibration(root, invocation),
     axis: input.axis,
   });
   return {

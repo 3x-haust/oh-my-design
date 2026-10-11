@@ -175,8 +175,8 @@ test('no signal at all adopts a direction and says so rather than inventing a pr
     referenceQueries: { component: ['x'], craft: ['y'], mood: ['zzz'] },
     coreObjects: [{ name: 'thing', evidence }],
     planning: {
-      businessGoal: { text: 'let visitors find a record' },
-      successSignal: { text: 'they find it' },
+      businessGoal: { text: 'let visitors find a record', disposition: 'non-factual-working-decision' },
+      successSignal: { text: 'they find it', disposition: 'non-factual-working-decision' },
       nonGoals: [],
     },
   });

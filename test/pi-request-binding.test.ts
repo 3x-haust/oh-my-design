@@ -35,7 +35,11 @@ function host(cwd: string, afterExec?: () => void) {
   let tool: PortablePiTool | undefined;
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {},
-    sendMessage: message => { sent.push(message); },
+    sendMessage: message => {
+      assert.equal(typeof message.content, 'string');
+      if (typeof message.content !== 'string') throw new Error('request binding emits text, not images');
+      sent.push({ ...message, content: message.content });
+    },
     registerTool: value => { tool = value; },
     execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args, options) {

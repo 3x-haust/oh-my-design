@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { sha256 } from '../core/ref/board-artifacts.ts';
+import { readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
 import { publishAdaptiveRoute } from '../core/route/adaptive-route-persistence.ts';
 import { prepareNativeMaker } from '../core/runtime/native-maker-packet.ts';
 import { runPiMaker } from '../adapters/pi-maker-runtime.ts';
@@ -22,6 +22,11 @@ import { runNativeEvaluation } from '../core/runtime/native-evaluation.ts';
 import { runNativeFinalReview } from '../core/runtime/native-final-publication.ts';
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
 import { currentMakerSource } from '../core/runtime/native-maker-state.ts';
+import { installNativeFidelityReferences } from './helpers/native-reference-fidelity.ts';
+import { makerVisuals } from '../core/runtime/native-maker-visuals.ts';
+import { readPersistedRoute } from '../core/route/index.ts';
+
+const handInput = { ...input, schema: 'native-maker-input-v1' as const, role: 'omd-hand' as const };
 
 test('fresh maker receives host-built first-party context and imports authorized multi-file source', async t => {
   // Given a source-aware parent with unrelated ambient records.
@@ -47,6 +52,79 @@ test('delivered maker packet excludes ambient history, raw briefs and verdict re
   // Then the fixture rejects forbidden sentinels and observes the full required outcome.
   assert.equal(result.receipt.role, 'omd-hand');
   assert.deepEqual(JSON.parse(prepared.packet.toString('utf8')).evidence.context.taskOutcome, context.routeInput.taskOutcome);
+});
+
+function selectedReferenceRoute(context: ReturnType<typeof fixture>) {
+  const routeInput = context.routeInput;
+  routeInput.strategyDecision.stages.splice(1, 0, 'frame', 'acquisition', 'scout', 'reference-board');
+  routeInput.strategyDecision.roles.push('omd-framer', 'omd-scout');
+  routeInput.strategyDecision.executionWaves.splice(1, 0, {
+    id: 'references', mode: 'concurrent', roles: ['omd-framer', 'omd-scout'],
+  });
+  routeInput.strategyDecision.skips = routeInput.strategyDecision.skips.filter(
+    (skip: { id: string }) => !['frame', 'acquisition', 'scout', 'reference-board', 'reference-selection'].includes(skip.id));
+  publishAdaptiveRoute(context.root, routeInput, context.writer, context.invocation);
+}
+
+test('Hand visual evidence includes selected original bytes and bounded observation-only guidance', t => {
+  const context = fixture(t);
+  installNativeFidelityReferences(t, context.root);
+  selectedReferenceRoute(context);
+
+  const visual = makerVisuals({
+    root: context.root, invocation: context.invocation, route: readPersistedRoute(context.root, context.invocation),
+    maker: handInput,
+  });
+  const originals = visual.renders.filter((render: { role: string }) =>
+    render.role === 'selected-reference-original');
+  assert.equal(originals.length, 1);
+  const original = originals[0];
+  assert.ok(original);
+  assert.deepEqual(Object.keys(original).sort(),
+    ['captureSha256', 'height', 'path', 'pngBase64', 'role', 'width']);
+  assert.match(original.path, /^selected-reference-original-\d+\.png$/);
+  assert.equal(original.path.includes('.omd/'), false);
+  assert.equal(sha256(Buffer.from(original.pngBase64, 'base64')), original.captureSha256);
+
+  const guidanceFile = visual.documents.find((document: { path: string }) =>
+    document.path === 'selected-reference-guidance.json');
+  assert.ok(guidanceFile);
+  const guidance = JSON.parse(guidanceFile.content);
+  assert.deepEqual(guidance.limits, {
+    maximumOriginals: 3,
+    selectedUniqueOriginals: 1,
+    deliveredOriginals: 1,
+    omittedOriginals: 0,
+  });
+  assert.deepEqual(guidance.references[0].taskIds, ['T1']);
+  assert.equal(guidance.references[0].stateLimit, null);
+  assert.deepEqual(guidance.references[0].take, ['structure']);
+  assert.equal(guidance.references[0].avoid, 'Do not copy branding.');
+  assert.equal(guidance.references[0].adaptation, 'Use local tokens.');
+  assert.match(guidance.usageLimits.join(' '), /do not ship|copy pixels|copy source text/i);
+  assert.equal(JSON.stringify(guidance).includes('visual.example'), false);
+  assert.equal(JSON.stringify(guidance).includes('.omd/refs'), false);
+});
+
+test('selected reference evidence is ignored only when the route does not select reference work', t => {
+  const context = fixture(t);
+  installNativeFidelityReferences(t, context.root);
+  const board = readReferenceBoardArtifacts(context.root);
+  const selected = board.raw.candidates.find(candidate => candidate.id === 'selected');
+  const original = selected?.pieces[0]?.evidence.kind === 'classified-reference'
+    ? null : selected?.pieces[0]?.evidence.imagePath;
+  assert.ok(original);
+  writeFileSync(join(context.root, original), 'malformed selected original');
+  assert.doesNotThrow(() => makerVisuals({
+    root: context.root, invocation: context.invocation, route: readPersistedRoute(context.root, context.invocation),
+    maker: handInput,
+  }));
+
+  selectedReferenceRoute(context);
+  assert.throws(() => makerVisuals({
+    root: context.root, invocation: context.invocation, route: readPersistedRoute(context.root, context.invocation),
+    maker: handInput,
+  }), /selected original image changed|PNG|image/i);
 });
 
 for (const mode of ['wrong-model', 'thinking-drift', 'prehistory', 'extra-tool', 'ambient-system', 'extra-file', 'evidence-drift']) {
@@ -177,8 +255,8 @@ test('integrated Sketch imports its owned files without publishing candidate sel
   assert.throws(() => currentMakerSource(context.root, context.invocation, 'sketch-other'), /current-owner-files/);
 });
 
-for (const mode of ['maker-images', 'missing-image']) {
-  test(`Hand ${mode === 'maker-images' ? 'receives every' : 'refuses missing'} approved complementary candidate image`, async t => {
+for (const mode of ['maker-images', 'provider-projection', 'missing-image']) {
+  test(`Hand ${mode === 'missing-image' ? 'refuses missing' : 'receives every'} approved complementary candidate image${mode === 'provider-projection' ? ' through provider projection' : ''}`, async t => {
     // Given a real coordinator selection publisher with six first-party captures.
     const context = fixture(t, mode);
     candidateRoute(context);
@@ -192,7 +270,7 @@ for (const mode of ['maker-images', 'missing-image']) {
     // When Hand actually consumes the packet through native RPC.
     const execution = makeNativeSource(context);
     // Then complete image delivery is necessary for source publication.
-    if (mode === 'maker-images') assert.equal((await execution).receipt.role, 'omd-hand');
+    if (mode !== 'missing-image') assert.equal((await execution).receipt.role, 'omd-hand');
     else {
       await assert.rejects(execution, /maker-images-not-delivered/);
       assert.equal(readFileSync(join(context.root, 'src/copy/confirmation.ts'), 'utf8'), 'export const confirmation = "old";');

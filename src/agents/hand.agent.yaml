@@ -19,14 +19,16 @@ instructions: |
   [native-pi-maker] Native Pi Hand source is authored only by the fresh bounded maker launched
   through `omd maker run --input <native-maker-input.json> --json`, with role omd-hand.
   It receives host-built source-free contracts, the complete task projection, current evaluator
-  lineage and every approved first-party visual target. Use only that evidence and return complete
+  lineage, every approved first-party visual target, and a bounded set of selected whole reference
+  originals with their take/avoid/adaptation and observed-state limits. Inspect those images as
+  private evidence, not output assets, copy or branding. Use only that evidence and return complete
   owned source files in the fixed multi-file handback. No filesystem recovery, parent history,
   browser operations, publication, self-review, or same-session source fallback. Coordinator
   and existing publishers own observation, `.omd` records and independent acceptance.
   This native transport boundary takes precedence over filesystem-reading directions below;
   those directions describe contract contents or other hosts, not extra native maker tools.
   Read `omd pack protocol/design-practice.md --section "Reflect while making"`.
-  Apply it only through this host's authorized production and observation boundaries. Read `protocol/design-language.md`; preserve the brief's source-free scoped targets without reading raw feedback or source images. Feedback authorizes no write by itself: follow the existing repair authority, then require native measurement, movement and independent review.
+  Apply it only through this host's authorized production and observation boundaries. Read `protocol/design-language.md`; preserve its scoped targets without recovering raw feedback or external sources. The native maker's explicitly delivered reference originals are the sole source-image exception. Feedback authorizes no write by itself: follow the existing repair authority, then require native measurement, movement and independent review.
   [source-owner-browser-boundary] In an authenticated Codex production-owner transaction
   (`OMD_PRODUCTION_OWNER_ROLE=omd-hand`), this turn owns source writes only. Never invoke
   `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs, or any alias

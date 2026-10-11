@@ -12,6 +12,7 @@ export function parseUserQuestion(text: string): UserQuestion | null {
     ? Reflect.get(referenceWork, 'action') : Reflect.get(value, 'action');
   if (!action || typeof action !== 'object') return null;
   const kind = Reflect.get(action, 'kind');
+  if (kind === 'design-language-ambiguity') return null;
   const question = Reflect.get(action, 'question') ?? Reflect.get(value, 'question');
   const awaitsUser = Reflect.get(action, 'awaitsUser') === true || Reflect.get(value, 'awaitsUser') === true || kind === 'browser-consent';
   const rawOptions = Reflect.get(action, 'options') ?? Reflect.get(value, 'options');

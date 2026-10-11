@@ -12,7 +12,7 @@ import { publishAdaptiveRoute, readPersistedRoute } from '../core/route/adaptive
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { runNativeEvaluation } from '../core/runtime/native-evaluation.ts';
 import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
-import { readCurrentObservationV2 } from '../core/runtime/observation.ts';
+import { readCurrentObservationV2, observationV2Sha256 } from '../core/runtime/observation.ts';
 import { parseTrustedBrowserReceipt } from '../core/runtime/trusted-browser-receipt.ts';
 import { deriveTrustedEvaluationIdentity } from '../core/runtime/trusted-evaluation-contract.ts';
 import { deriveTrustedEvaluationPlanFromProject } from '../core/runtime/trusted-evaluation-plan.ts';
@@ -24,6 +24,9 @@ import { makerEvaluationLineage } from '../core/runtime/native-maker-evaluation.
 import { publishDesignJudgment } from '../core/design/judgment-files.ts';
 import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import { runFirstRenderReview } from '../core/design/first-render-review.ts';
+import { finalRenderReviewerPacket } from '../core/runtime/final-render-review.ts';
+import type { DeveloperEvaluationSnapshot } from '../core/coach/developer-evaluation-contract.ts';
+import { calibrationFixture } from './helpers/developer-calibration.ts';
 
 const runtimeRoot = fileURLToPath(new URL('..', import.meta.url));
 const packRoot = join(runtimeRoot, 'core');
@@ -32,6 +35,7 @@ const request = 'Build a shipment evidence review workspace';
 
 function fixture(t: TestContext, options: Readonly<{
   broken?: boolean; mixedPhases?: boolean; unrelatedOutcome?: boolean; composition?: boolean;
+  calibration?: DeveloperEvaluationSnapshot;
 }> = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-native-evaluation-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -40,7 +44,8 @@ function fixture(t: TestContext, options: Readonly<{
   const cliPath = options.composition
     ? fileURLToPath(new URL('fixtures/pi-reviewer-rpc.mjs', import.meta.url))
     : join(runtimeRoot, 'bin/omd.mjs');
-  const invocation = createTestNativePiInvocation({ root, current: {
+  const invocation = createTestNativePiInvocation({ root,
+    ...(options.calibration === undefined ? {} : { calibration: options.calibration }), current: {
     ...local.current, buildSha256: build.buildSha256, loadedSkillSha256: build.sourceSkillSha256,
   }, host: { nodePath: process.execPath, nodeSha256: hash(readFileSync(process.execPath)),
     cliPath, cliSha256: hash(readFileSync(cliPath)), provider: 'openai-codex', model: 'gpt-6-luna',
@@ -71,7 +76,9 @@ function fixture(t: TestContext, options: Readonly<{
       completionEvidence: ['Evidence reviewed'], strategyFreedom: ['Choose a readable layout'] },
   }, writer, invocation);
   const route = readPersistedRoute(root, invocation);
-  writeFrame(root, { entrySurface: parseEntrySurfaceContract({
+  writeFrame(root, {
+    ...(options.calibration === undefined ? {} : { uxSurface: 'product', uxTask: request }),
+    entrySurface: parseEntrySurfaceContract({
     schema: 'entry-surface-contract-v1', entryPath: 'index.html',
     prerequisiteTaskId: 'inspect-evidence', dependentTaskId: 'request-review',
     purposeText: 'Review shipment evidence', workObjectAnchorText: 'Shipment CX-204', nextActionName: null,
@@ -172,6 +179,29 @@ test('native evaluation executes the project-derived plan and publishes source-b
   assert.ok(receipt.transcript.some(row => row.startsWith('action-click:')));
   assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
   assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'run-independent-review');
+});
+
+test('blind reviewer consumes pinned developer calibration after real browser evaluation', async t => {
+  const calibration = calibrationFixture({
+    route: '/index.html', surface: 'product', task: hash(request),
+  });
+  const value = fixture(t, { calibration });
+  const result = await runNativeEvaluation(value);
+  assert.equal(result.ok, true);
+  const bytes = finalRenderReviewerPacket({
+    root: value.root, invocation: value.invocation,
+    packetInput: { schema: 'adaptive-final-render-reviewer-packet-input-v1',
+      observationSha256s: [observationV2Sha256(result.observation)] },
+  });
+  const packet = JSON.parse(bytes.toString('utf8'));
+  const consumed = packet.evidence.context.developerCalibration;
+  assert.equal(consumed.snapshotSha256, calibration.digest);
+  assert.equal(consumed.cases.length, 1);
+  assert.deepEqual(consumed.cases[0].developerSignal, { comparisonChoice: 'b', satisfaction: 'satisfied' });
+  assert.equal(consumed.cases[0].advisorySource, 'model-interpretation');
+  assert.equal(packet.evidence.renders.length > 0, true);
+  assert.equal(Object.hasOwn(packet.evidence, 'references'), false);
+  assert.equal(Object.hasOwn(packet.evidence, 'source'), false);
 });
 
 test('native evaluation accepts a complete outcome-bound browser plan without frame or benchmark documents', async t => {

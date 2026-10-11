@@ -1,8 +1,12 @@
 # Oh My Design
 
-**AI that designs like a human.** OMD turns a design request into questions, evidence, alternatives,
-real material, and rendered tests. The model chooses useful methods, then revises, retains, or
-reframes its choices according to what it observes.
+**AI that designs like a human.** Give OMD one request. It researches, chooses a direction,
+builds, renders and repairs internally rather than asking you to select references or approve
+each draft. Account access and external-action permissions remain separate.
+
+Native Pi now shares one production engine between autonomous execution and explicitly enabled
+developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md).
+Technical integration is tested; better first-output satisfaction still requires real held-out ratings.
 
 [한국어](README.ko.md)
 

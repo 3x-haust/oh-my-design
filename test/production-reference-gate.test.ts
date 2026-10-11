@@ -9,6 +9,7 @@ import { checkProductionReadiness } from '../core/runtime/production-reference-g
 import { checkBriefEntry } from '../core/brief/entry.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { contractSha256, deliveryReceipt } from '../core/stage/contract.ts';
+import { nextStageWork } from '../core/stage/next.ts';
 import { copyDeckSha256 } from '../core/copy/index.ts';
 import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
@@ -104,6 +105,39 @@ test('valid copy-only inputs pass without forcing skipped research, type, candid
   assert.deepEqual(result.blockers, []);
   assert.equal(result.ok, true);
   assert.equal(checkProductionReadiness(root, invocation, pack, 'src/unrequested.ts').ok, false);
+});
+
+test('classified unprovided planning continues without fabricated claims or an await state', () => {
+  const { root, invocation } = readyCopyProject();
+  const brief = JSON.parse(readFileSync(join(root, '.omd/domain-brief.json'), 'utf8'));
+  brief.planning = {
+    businessGoal: { text: 'Improve confirmation clarity', disposition: 'non-factual-working-decision' },
+    successSignal: { text: 'The confirmation is understandable', disposition: 'omit-from-production-claims' },
+    nonGoals: [{ text: 'No layout changes', disposition: 'omit-from-production-claims' }],
+  };
+  write(root, '.omd/domain-brief.json', JSON.stringify(brief));
+  const result = checkProductionReadiness(root, invocation, pack, 'src/copy/confirmation.ts');
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.blockers, []);
+  assert.deepEqual(result.warnings, [
+    'non-factual working decision: businessGoal',
+    'planning omitted from production claims: successSignal',
+    'planning omitted from production claims: nonGoals[0]',
+  ]);
+  const work = nextStageWork(root, pack, invocation);
+  assert.deepEqual(work.planning, [
+    { field: 'businessGoal', text: 'Improve confirmation clarity', disposition: 'non-factual-working-decision' },
+    { field: 'successSignal', text: 'The confirmation is understandable', disposition: 'omit-from-production-claims' },
+    { field: 'nonGoals[0]', text: 'No layout changes', disposition: 'omit-from-production-claims' },
+  ]);
+  assert.ok(work.progress.validatedStages.includes('domain'));
+  assert.doesNotMatch(work.instruction, /\b(?:ask|question|await)\b/i);
+
+  brief.planning.businessGoal = { text: 'Invented user goal' };
+  write(root, '.omd/domain-brief.json', JSON.stringify(brief));
+  const unsafe = checkProductionReadiness(root, invocation, pack, 'src/copy/confirmation.ts');
+  assert.equal(unsafe.ok, false);
+  assert.match(unsafe.blockers.join('\n'), /planning: .*explicit disposition/);
 });
 
 test('stage entry connects selected procedure to actual current validation, not a cached successful brief', () => {

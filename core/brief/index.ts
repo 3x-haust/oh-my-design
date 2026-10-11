@@ -47,6 +47,7 @@ import { loadRefs, refRecordPath } from '../ref/store.ts';
 import { inspectDesignReferenceAdmission, requiresDesignReferenceAdmission } from '../ref/design-admission.ts';
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { nativeCompletionBrief, type NativeCompletionProcedure } from '../stage/native-completion-brief.ts';
+import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -115,6 +116,7 @@ export type BriefCheck = {
 };
 
 export type Brief = {
+  readonly developerCalibration?: ReturnType<typeof currentDeveloperCalibration>;
   /** Coordinator-owned entry procedure, not a cached grant or a blind-review input packet. */
   readonly entryGate: Readonly<{
     command: string;
@@ -640,6 +642,7 @@ export function buildBrief(
   }
   return {
     stage,
+    developerCalibration: currentDeveloperCalibration(root, invocation),
     entryGate: {
       command: `omd brief ${stage} --check --json`,
       selected: route === null ? null : (route.strategy.stages as readonly string[]).includes(qualityStage),

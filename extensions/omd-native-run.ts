@@ -1,6 +1,9 @@
 import { readPiRequest } from './omd-request-source.ts';
 import { ensureNativePiRun, stageNativePiCommand } from '../core/runtime/native-pi-run.ts';
 import { fileURLToPath } from 'node:url';
+import { captureDesignExecutionPolicy, type DesignExecutionPolicy } from '../core/config/design-execution.ts';
+import { openDeveloperEvaluationStore, readDeveloperEvaluationSnapshot, resolveDeveloperEvaluationHome,
+  type DeveloperEvaluationSnapshot } from '../core/coach/developer-evaluation-store.ts';
 
 export type PiHostContext = Readonly<{
   cwd: string;
@@ -13,8 +16,15 @@ type PreparedCommand = Readonly<{ args: readonly string[]; dispose(): void }>;
 
 export class PiNativeRuns {
   private readonly hosts = new Map<string, ObservedHost>();
+  private readonly designPolicy: DesignExecutionPolicy;
+  private readonly evaluationHome = resolveDeveloperEvaluationHome(process.env);
+  private readonly evaluationSnapshotId = process.env.OMD_EVALUATION_SNAPSHOT;
+  private readonly calibrations = new Map<string, DeveloperEvaluationSnapshot>();
+  constructor(designPolicy: DesignExecutionPolicy = captureDesignExecutionPolicy(process.env)) {
+    this.designPolicy = designPolicy;
+  }
 
-  clear(): void { this.hosts.clear(); }
+  clear(): void { this.hosts.clear(); this.calibrations.clear(); }
 
   observe(context: PiHostContext): void {
     if (context.model === undefined) return;
@@ -31,8 +41,16 @@ export class PiNativeRuns {
     }
     const host = this.hosts.get(cwd);
     if (host === undefined || readPiRequest(cwd) === undefined) return { args, dispose() {} };
+    let calibration = this.calibrations.get(cwd);
+    if (calibration === undefined && this.evaluationSnapshotId !== undefined) {
+      calibration = readDeveloperEvaluationSnapshot(openDeveloperEvaluationStore({
+        directory: this.evaluationHome, projectRoot: cwd, namespace: 'real',
+      }), this.evaluationSnapshotId);
+      this.calibrations.set(cwd, calibration);
+    }
     const run = ensureNativePiRun({ root: cwd, runtimeRoot,
-      loadedSkillPath: fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url)), ...host });
+      loadedSkillPath: fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url)),
+      designPolicy: this.designPolicy, ...(calibration === undefined ? {} : { calibration }), ...host });
     const command = stageNativePiCommand({ run, runtimeRoot, argv: args });
     return { args: command.argv, dispose: command.dispose };
   }

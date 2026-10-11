@@ -57,7 +57,11 @@ function domainBrief(request = 'Study the service') {
     surfaces: ['home', 'detail'].map(name => ({ name, purpose: `Complete the ${name} task`, evidence })),
     coreObjects: [{ name: 'request', evidence }], audience: { description: 'service applicants', evidence },
     referenceQueries: { component: ['task list'], craft: ['feedback transition'], mood: ['focused workspace'] },
-    planning: { businessGoal: { text: 'Reduce preparation effort' }, successSignal: { text: 'Complete a request' }, nonGoals: [{ text: 'No official submissions' }] } };
+    planning: {
+      businessGoal: { text: 'Reduce preparation effort', disposition: 'non-factual-working-decision' },
+      successSignal: { text: 'Complete a request', disposition: 'non-factual-working-decision' },
+      nonGoals: [{ text: 'No official submissions', disposition: 'omit-from-production-claims' }],
+    } };
 }
 
 function filledApplication(root: string, options: { expectedSourceContractSha256: string; benchmarkRequired: boolean }) {

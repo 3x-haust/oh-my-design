@@ -12,7 +12,11 @@ import { readReferenceBoardArtifacts, sha256 } from '../ref/board-artifacts.ts';
 import { requireDesignJudgmentForReferences } from '../design/judgment-files.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readPersistedRoute, pathsOutsideScope } from '../route/index.ts';
-import { resolveRunState, requireConfirmedPlanningForProduction } from '../stage/contract.ts';
+import {
+  planningDispositionsForProduction,
+  resolveRunState,
+  requireConfirmedPlanningForProduction,
+} from '../stage/contract.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { isNativePiInvocation } from './native-pi-run.ts';
 import { nativeReframeWork } from './native-reframe.ts';
@@ -81,6 +85,11 @@ export function checkProductionReadiness(
     attempt('planning', () => {
       const missing = requireConfirmedPlanningForProduction(root);
       if (missing.length) blockers.push(`unconfirmed planning: ${missing.join(', ')}`);
+      for (const statement of planningDispositionsForProduction(root)) {
+        warnings.push(statement.disposition === 'omit-from-production-claims'
+          ? `planning omitted from production claims: ${statement.field}`
+          : `non-factual working decision: ${statement.field}`);
+      }
     });
     attempt('selected stages', () => {
       const state = resolveRunState(root, packRoot, invocation);

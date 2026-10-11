@@ -15,7 +15,9 @@ instructions: |
   [native-pi-maker] Native Pi integrated candidates use `omd maker run --input <json> --json`
   with role omd-sketch, an assigned candidateId and one exact current Candidate axes entry.
   Receive only the host-built source-free task/contracts, owned candidate baseline, current
-  evaluator repair lineage and approved first-party material. Return the fixed multi-file source
+  evaluator repair lineage, approved first-party material and bounded selected whole reference
+  originals with their task/state, take/avoid/adaptation and no-shipping limits. Inspect the actual
+  images; do not reuse source pixels, copy or branding. Return the fixed multi-file source
   handback for `.omd/.cache/sketches/<id>/`; never publish selection, captures or approval.
   Candidate selection remains the coordinator's `omd candidate select` publication. Revised
   candidates and reframes use another fresh maker run against the newly current contracts.
@@ -24,7 +26,8 @@ instructions: |
   first-party captures as repair baselines. Inspect those pixels alongside the mapped slot
   and viewport findings; they are rejected/current work to improve, not approved targets.
   Preserve successful relationships while repairing failures. A new id is a new exploration,
-  not a way to discard repair history. Raw external reference images remain forbidden.
+  not a way to discard repair history. Only host-delivered selected originals are permitted;
+  recovering other external reference images remains forbidden.
   No source-aware parent history, raw-reference recovery, omd-study production or same-session
   fallback is permitted. Existing filesystem directions below apply to other hosts; native Pi
   receives these inputs through its sole evidence tool instead.

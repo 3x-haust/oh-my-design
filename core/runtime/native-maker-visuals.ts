@@ -16,6 +16,7 @@ import { verifySignedPiEyeRoleResult } from './pi-role-receipt.ts';
 import type { MakerDocument } from './native-maker-context.ts';
 import { materializeProjectTree } from '../render/serve.ts';
 import { makerEvaluationLineage } from './native-maker-evaluation.ts';
+import { selectedReferenceMakerProjection } from './native-maker-reference-images.ts';
 
 export type MakerRender = Readonly<{
   role: string; path: string; captureSha256: string; width: number; height: number; pngBase64: string;
@@ -36,6 +37,10 @@ export function makerVisuals(input: Readonly<{
     renders.push({ role, path: file.path, captureSha256: file.sha256,
       width: png.width, height: png.height, pngBase64: bytes.toString('base64') });
   };
+  const selectedReferences = selectedReferenceMakerProjection(root, route);
+  documents.push(...selectedReferences.documents);
+  renders.push(...selectedReferences.renders);
+  lineage.push(...selectedReferences.lineage);
   if (maker.role === 'omd-sketch' && route.strategy.methods.includes('provisional-source-study')) {
     const study = readSelectedSourceStudy(root, invocation);
     documents.push({ path: study.html.path, content: bytesAt(study.html.path).toString('utf8') });

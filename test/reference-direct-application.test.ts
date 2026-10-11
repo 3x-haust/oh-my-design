@@ -16,7 +16,11 @@ function applicationInput(root: string) {
     domain: 'service', summary: 'Task preparation', surfaces: [{ name: 'home', purpose: 'Prepare the task', evidence }],
     coreObjects: [{ name: 'request', evidence }], audience: { description: 'applicants', evidence },
     referenceQueries: { component: ['task list'], craft: ['feedback'], mood: ['focused'] },
-    planning: { businessGoal: { text: 'Reduce effort' }, successSignal: { text: 'Complete preparation' }, nonGoals: [{ text: 'No submissions' }] } }));
+    planning: {
+      businessGoal: { text: 'Reduce effort', disposition: 'non-factual-working-decision' },
+      successSignal: { text: 'Complete preparation', disposition: 'non-factual-working-decision' },
+      nonGoals: [{ text: 'No submissions', disposition: 'omit-from-production-claims' }],
+    } }));
   const draft = referenceApplicationPlan(root, options).input;
   const decision = { coverage: 'direct', gap: null, application: 'Keep task requirements visible.',
     doNotTransfer: 'Do not reuse branding.', reason: 'The work object needs clear hierarchy.' };

@@ -77,16 +77,38 @@ export type DomainReferenceQueries = {
   readonly mood: readonly string[];
 };
 
+export const DOMAIN_PLANNING_DISPOSITIONS = Object.freeze([
+  'omit-from-production-claims',
+  'non-factual-working-decision',
+] as const);
+
+export type DomainPlanningDisposition = (typeof DOMAIN_PLANNING_DISPOSITIONS)[number];
+
 /**
  * Planning intent — why this work exists and what would make it succeed. This is not discoverable:
  * no amount of searching tells you the user's business goal, so it is either stated by the user or
- * it is a hypothesis the run must not silently promote into fact.
+ * it is an explicitly classified hypothesis the run must not silently promote into fact.
  */
-export type DomainPlanningStatement = {
+export type DomainPlanningStatement = Readonly<{
   readonly text: string;
-  /** Present only when the user actually said it; its absence makes this a hypothesis. */
-  readonly userEvidence?: readonly ExplicitUserEvidence[];
-};
+  /** Present only when the user actually said it. */
+  readonly userEvidence: readonly ExplicitUserEvidence[];
+  readonly disposition?: never;
+} | {
+  readonly text: string;
+  readonly userEvidence?: never;
+  /**
+   * Unprovided business facts either stay out of production claims or become an explicitly
+   * non-factual working decision. A working decision never authorizes a scope removal.
+   */
+  readonly disposition: DomainPlanningDisposition;
+}>;
+
+export type UnprovidedPlanningStatement = Readonly<{
+  field: string;
+  text: string;
+  disposition: DomainPlanningDisposition;
+}>;
 
 export type DomainPlanning = {
   readonly businessGoal: DomainPlanningStatement;
@@ -243,10 +265,23 @@ function validatePlanningStatement(value: unknown, label: string): DomainPlannin
   const record = asRecord(value, `${label} must be an object`);
   const keys = Object.keys(record);
   const withEvidence = keys.includes('userEvidence');
-  if (!withEvidence) exactKeys(record, ['text'], `${label} carries an unknown key; a statement without userEvidence is a hypothesis`);
   const text = asNonEmptyString(record.text, `${label}.text must be a non-empty string`);
-  if (!withEvidence) return Object.freeze({ text });
-  return Object.freeze({ text, userEvidence: validateUserEvidence(record.userEvidence, `${label}.userEvidence`) });
+  if (withEvidence) {
+    exactKeys(record, ['text', 'userEvidence'], `${label} has unknown or missing keys`);
+    return Object.freeze({ text, userEvidence: validateUserEvidence(record.userEvidence, `${label}.userEvidence`) });
+  }
+  if (!keys.includes('disposition')) {
+    failUnsourcedPlanning(`${label} without userEvidence requires an explicit disposition`);
+  }
+  exactKeys(record, ['disposition', 'text'], `${label} without userEvidence requires an explicit disposition`);
+  const disposition = asNonEmptyString(record.disposition, `${label}.disposition must be a non-empty string`);
+  if (!DOMAIN_PLANNING_DISPOSITIONS.includes(disposition as DomainPlanningDisposition)) {
+    failUnsourcedPlanning(`${label}.disposition must be ${DOMAIN_PLANNING_DISPOSITIONS.join(' or ')}`);
+  }
+  if (label.startsWith('planning.nonGoals[') && disposition === 'non-factual-working-decision') {
+    failUnsourcedPlanning(`${label} cannot be a non-factual working decision because an unprovided non-goal would remove scope`);
+  }
+  return Object.freeze({ text, disposition: disposition as DomainPlanningDisposition });
 }
 
 function validatePlanning(value: unknown): DomainPlanning {
@@ -261,24 +296,34 @@ function validatePlanning(value: unknown): DomainPlanning {
 }
 
 /**
- * Planning intent is asked, never inferred. A statement the user never made stays a hypothesis — it
- * is lawful in the brief, but it is not a basis for production, so the caller gates on this.
+ * A statement the user never made stays a classified hypothesis. It is visible to the run while
+ * remaining distinguishable from user facts and production claims.
  */
 export function unconfirmedPlanningStatements(planning: DomainPlanning): readonly string[] {
-  const labels: string[] = [];
-  if (planning.businessGoal.userEvidence === undefined) labels.push('businessGoal');
-  if (planning.successSignal.userEvidence === undefined) labels.push('successSignal');
-  planning.nonGoals.forEach((statement, index) => {
-    if (statement.userEvidence === undefined) labels.push(`nonGoals[${index}]`);
-  });
-  return Object.freeze(labels);
+  return Object.freeze(unprovidedPlanningStatements(planning).map((statement) => statement.field));
 }
 
-/** Throws `UNSOURCED_PLANNING_CLAIM` when a run would carry an invented plan into production. */
+export function unprovidedPlanningStatements(planning: DomainPlanning): readonly UnprovidedPlanningStatement[] {
+  const statements: UnprovidedPlanningStatement[] = [];
+  const add = (field: string, statement: DomainPlanningStatement): void => {
+    if (statement.userEvidence !== undefined) return;
+    if (statement.disposition === undefined) {
+      failUnsourcedPlanning(`planning is unclassified for ${field}: attach genuine userEvidence or an explicit non-factual disposition`);
+    }
+    statements.push(Object.freeze({ field, text: statement.text, disposition: statement.disposition }));
+  };
+  add('businessGoal', planning.businessGoal);
+  add('successSignal', planning.successSignal);
+  planning.nonGoals.forEach((statement, index) => add(`nonGoals[${index}]`, statement));
+  return Object.freeze(statements);
+}
+
+/** Throws only when planning is unclassified or would silently remove user scope. */
 export function requireConfirmedPlanning(planning: DomainPlanning): void {
-  const unconfirmed = unconfirmedPlanningStatements(planning);
-  if (unconfirmed.length > 0) {
-    failUnsourcedPlanning(`planning is unconfirmed for ${unconfirmed.join(', ')}: ask the user before production rather than inventing a business goal`);
+  for (const statement of unprovidedPlanningStatements(planning)) {
+    if (statement.field.startsWith('nonGoals[') && statement.disposition !== 'omit-from-production-claims') {
+      failUnsourcedPlanning(`${statement.field} cannot remove scope without explicit user evidence`);
+    }
   }
 }
 

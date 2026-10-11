@@ -35,6 +35,18 @@ test('persisted route enters stage-first continuation after checked owned public
   assert.deepEqual(h.sent, ['omd-stage-repair']);
 });
 
+test('normal OMD blocks generic interview tools without granting external action authority', async t => {
+  const h = harness(t);
+  await h.activate();
+  for (const toolName of ['request_user_input', 'AskUserQuestion', 'ask_user', 'question']) {
+    assert.equal(isBlocked(await h.emit('tool_call', {
+      toolName, input: { question: 'Choose a design direction', options: ['A', 'B'] },
+    })), true);
+  }
+  assert.equal(h.commands.some(args => args[0] === 'browser' && args.includes('--consent')), false);
+  assert.equal(h.sent.length, 0);
+});
+
 test('successful native selected-stage authoring enters the current full workflow', async t => {
   const h = harness(t); await h.activate();
   await h.run(['brief', 'copy', '--check', '--json']);
