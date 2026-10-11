@@ -63,6 +63,10 @@ async function hardenPinnedSource(source) {
   let core = await readFile(corePath, 'utf8');
   core = replaceRequired(core, 'import * as z from "zod";\n',
     'import * as z from "zod";\nz.config({ jitless: true });\n', 'the core Zod import');
+  // OMD exposes session.evaluate, not the unused page/frame compatibility aliases.
+  const legacyEvaluateAll = 'async $$eval(xn,jn,Vn){return await this.locator(xn).evaluateAll(jn,Vn)}';
+  if (core.split(legacyEvaluateAll).length !== 3) throw new Error('Pinned page/frame aliases changed');
+  core = core.replaceAll(legacyEvaluateAll, '');
   await writeFile(corePath, core);
 
   const bridgeSchemasPath = join(source, 'src/bridge-schemas.js');
