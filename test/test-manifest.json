@@ -363,6 +363,7 @@
     "browser": [
       "test/adaptive-final-v2.test.ts",
       "test/browser-evaluation-tsx.test.ts",
+      "test/browser-page-bundle-selector.test.ts",
       "test/browser-zoom-measurement.test.ts",
       "test/candidate-direction-choice.test.ts",
       "test/candidate-reference-native.test.ts",
