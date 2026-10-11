@@ -8,7 +8,8 @@ import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
 import { writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
 import { selectReferenceCandidateV2 } from '../core/ref/reference-selection.ts';
-import { readSelectedReferenceHandoff } from '../core/ref/selected-handoff.ts';
+import { readSelectedReferenceHandoff, projectSelectedVisualCharacter } from '../core/ref/selected-handoff.ts';
+import { designAdmissionFixture } from './helpers/design-admission.ts';
 import type { Invariants } from '../core/types.ts';
 import { createSelectedReferenceFixture } from './helpers/selected-reference-fixture.ts';
 import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
@@ -19,6 +20,18 @@ const INVARIANTS: Invariants = { spacingLadder: [8, 24], radiusLadder: [4], elev
   motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0,
   animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] };
 const evidence = { invariants: INVARIANTS, viewport: { width: 1440, height: 900 } };
+
+test('coordinator selection projects only the chosen visual character to Composer and Hand, never source identity', t => {
+  const { research } = designAdmissionFixture(t);
+  const source = research.designReference.sources[0]!;
+  const projected = projectSelectedVisualCharacter(research.designReference.sources, new Set([source.url]));
+  assert.deepEqual(projected, [source.visualAssessment.selection.appearanceIntent]);
+  assert.equal(JSON.stringify(projected).includes(source.url), false);
+  assert.deepEqual(projectSelectedVisualCharacter(research.designReference.sources, new Set()), []);
+  const forged = structuredClone(research.designReference.sources);
+  forged[0]!.visualAssessment.selection.appearanceIntent = `https://source.example/private`;
+  assert.throws(() => projectSelectedVisualCharacter(forged, new Set([source.url])), /must not expose reference identities/);
+});
 
 test('selected handoff exports canonical measured content and role-bound lineage through the CLI', context => {
   const { root } = createSelectedReferenceFixture(context, evidence);

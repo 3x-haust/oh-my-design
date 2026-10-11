@@ -87,10 +87,12 @@ export function designDiscoveryDirectoryProvider(url: string): string | null {
   const host = referenceServiceHost(url);
   const path = parsed.pathname.replace(/\/+$/, '') || '/';
   if (/\/(?:login|signin|sign-in|signup|sign-up|pricing|plans|checkout|subscribe)(?:\/|$)/i.test(path)) return null;
+  if (host === 'muz.li' && (path === '/' || /^\/inspiration(?:\/[a-z0-9-]+)?$/.test(path))) return 'Muzli';
   if (host === 'siteinspire.com' && (path === '/' || /^\/(?:websites|styles|types|subjects)(?:\/[a-z][a-z0-9-]*)?$/.test(path)
     || /^\/websites\/category\/[a-z][a-z0-9-]*$/.test(path))) return 'Siteinspire';
-  if (host === 'dribbble.com' && (path === '/' || /^\/(?:shots|tags)(?:\/[a-z][a-z0-9-]*)?$/.test(path))) return 'Dribbble';
-  if (host === 'behance.net' && ['/', '/galleries', '/for_you'].includes(path)) return 'Behance';
+  if (host === 'dribbble.com' && (path === '/' || /^\/(?:shots|tags|search)(?:\/[a-z][a-z0-9-]*)?$/.test(path))) return 'Dribbble';
+  if (host === 'behance.net' && (['/', '/galleries', '/for_you'].includes(path)
+    || path === '/search/projects' || path.startsWith('/search/projects/'))) return 'Behance';
   if (/^(?:[a-z]{2}\.)?pinterest\.(?:com|co\.uk|ca|de|fr|jp|co\.kr|com\.au)$/.test(host)
     && (path === '/' || /^\/ideas(?:\/[a-z][a-z0-9-]*\/\d+)?$/.test(path))) return 'Pinterest';
   if (host === 'land-book.com' && (path === '/' || /^\/(?:websites|categories)(?:\/[a-z][a-z0-9-]*)?$/.test(path))) return 'Land-book';

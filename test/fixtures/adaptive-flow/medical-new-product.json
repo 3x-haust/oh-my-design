@@ -139,6 +139,7 @@
       "domain",
       "frame",
       "content-grain",
+      "acquisition",
       "scout",
       "reference-board",
       "reference-selection",
@@ -219,10 +220,6 @@
       {
         "id": "depth",
         "reason": "The selected prototype method externalizes the unresolved safety-flow decisions."
-      },
-      {
-        "id": "acquisition",
-        "reason": "Discovery can target the named safety decisions without a separate acquisition artifact."
       },
       {
         "id": "art-direction",

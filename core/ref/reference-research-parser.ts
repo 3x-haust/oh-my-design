@@ -78,7 +78,7 @@ function evidence(value: unknown, diagnostic: boolean | 'gallery-visit' = false,
   return Object.freeze({ path, sha256: digest(input.sha256, shaError) });
 }
 
-function source(value: unknown, design: boolean, index: number): ResearchSource {
+function source(value: unknown, design: boolean, index: number, current: boolean): ResearchSource {
   const fieldPath = `${design ? 'designReference' : 'domainReference'}.sources[${index}]`;
   const input = record(value, `REFERENCE_RESEARCH_SOURCE_INVALID: ${fieldPath}`);
   exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS,
@@ -92,12 +92,29 @@ function source(value: unknown, design: boolean, index: number): ResearchSource 
     if (!['visual-direction', 'component-support'].includes(input.visualRole as string)) fail('REFERENCE_RESEARCH_VISUAL_ROLE');
     const assessment = record(input.visualAssessment, 'REFERENCE_RESEARCH_VISUAL_ASSESSMENT');
     const axes = ['composition', 'typography', 'density', 'imagery', 'transfer', 'avoid'] as const;
-    exactKeys(assessment, axes, 'REFERENCE_RESEARCH_VISUAL_ASSESSMENT_KEYS');
-    visualAssessment = Object.freeze(Object.fromEntries(axes.map(axis => [axis, text(assessment[axis], `REFERENCE_RESEARCH_VISUAL_${axis.toUpperCase()}`)]))) as ResearchSource['visualAssessment'];
+    const selected = current && input.visualRole === 'visual-direction';
+    if (selected && input.discovery === undefined) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
+    exactKeys(assessment, [...axes, ...(selected || Object.hasOwn(assessment, 'selection') ? ['selection'] : [])], 'REFERENCE_RESEARCH_VISUAL_ASSESSMENT_KEYS');
+    let selection: NonNullable<ResearchSource['visualAssessment']>['selection'];
+    if (selected) {
+      const choice = record(assessment.selection, 'REFERENCE_VISUAL_SELECTION_REQUIRED');
+      exactKeys(choice, ['presentation', 'verdict', 'appearanceIntent', 'reason', 'flowCaptures'], 'REFERENCE_VISUAL_SELECTION_KEYS');
+      if (!['finished-product-website', 'finished-app-flow'].includes(choice.presentation as string) || choice.verdict !== 'emulate'
+        || !Array.isArray(choice.flowCaptures) || Object.keys(choice.flowCaptures).length !== choice.flowCaptures.length
+        || (choice.presentation === 'finished-app-flow' && choice.flowCaptures.length < 1)
+        || (choice.presentation === 'finished-product-website' && choice.flowCaptures.length !== 0)) fail('REFERENCE_VISUAL_SELECTION_REQUIRED');
+      selection = { presentation: choice.presentation as NonNullable<typeof selection>['presentation'], verdict: 'emulate',
+        appearanceIntent: boundedText(choice.appearanceIntent, 'REFERENCE_VISUAL_APPEARANCE_INTENT'),
+        reason: boundedText(choice.reason, 'REFERENCE_VISUAL_SELECTION_REASON'),
+        flowCaptures: choice.flowCaptures.map((item, index) => evidence(item, false, `${fieldPath}.visualAssessment.selection.flowCaptures[${index}]`)) };
+    }
+    visualAssessment = Object.freeze({ ...Object.fromEntries(axes.map(axis => [axis, text(assessment[axis], `REFERENCE_RESEARCH_VISUAL_${axis.toUpperCase()}`)])),
+      ...(selection ? { selection } : {}) }) as ResearchSource['visualAssessment'];
     if (input.discovery !== undefined) {
       const entry = record(input.discovery, 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
       exactKeys(entry, ['url', 'kind', 'access', 'qualityReason', 'evidence', 'capture'], 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_KEYS');
-      if (!['app-gallery', 'web-gallery', 'visual-bookmark', 'user-provided'].includes(entry.kind as string)) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_KIND');
+      if (!['direct-product', 'app-gallery', 'web-gallery', 'visual-bookmark', 'user-provided'].includes(entry.kind as string)
+        || (entry.kind === 'direct-product' && !current)) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_KIND');
       if (entry.access !== 'free') fail('REFERENCE_RESEARCH_DESIGN_FREE_ACCESS_REQUIRED');
       discovery = Object.freeze({
         url: httpsUrl(entry.url), kind: entry.kind as NonNullable<ResearchSource['discovery']>['kind'],
@@ -169,7 +186,7 @@ function lane(value: unknown, options: Readonly<{ keys: readonly string[]; code:
     ...(direct && Object.hasOwn(input, 'discoveryRoots') ? ['discoveryRoots'] : [])], `${code}_KEYS`);
   const roots = Object.hasOwn(input, 'discoveryRoots') ? discoveryRoots(input.discoveryRoots, design) : undefined;
   if (!Array.isArray(input.sources)) fail(`${code}_SOURCE_COVERAGE`);
-  const sources = input.sources.map((value, index) => source(value, design, index));
+  const sources = input.sources.map((value, index) => source(value, design, index, options.current === true));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
   if (!Array.isArray(input.searches) || (!input.searches.length && !roots?.length && !Object.hasOwn(input, 'leads')) || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
   const navigation = input.navigation;

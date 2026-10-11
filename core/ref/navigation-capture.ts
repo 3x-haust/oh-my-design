@@ -10,7 +10,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider, designDiscoveryItemIdentity } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation, captureDomainObservation } from './reference-capture-observation.ts';
-import { collectGalleryImageCandidates } from './gallery-image-candidates.ts';
+import { collectGalleryImageCandidates, prepareNavigationImageCandidates } from './gallery-image-candidates.ts';
 import { readDomainObservation, DOMAIN_OBSERVATION_LIMITATIONS, DOMAIN_OBSERVATION_SCHEMA,
   type DomainObservationReceipt, type DomainObservationRecord } from './domain-observation.ts';
 import { classifyKoreanServiceText } from './market-reference.ts';
@@ -56,7 +56,7 @@ function attemptReason(error: unknown): AttemptReason {
   if (/successful native HTTP/.test(message)) return 'http-failure';
   if (/login form/.test(message)) return 'login-overlay';
   if (/challenge page|Just a moment/i.test(message)) return 'challenge-page';
-  if (/visible followable|same-provider|supported public list/.test(message)) return 'entry-unusable';
+  if (/visible followable|same-provider|supported public list|no visible task text/.test(message)) return 'entry-unusable';
   if (/both bounded captures/.test(message)) return 'unstable-render';
   if (/timeout|timed out/i.test(message)) return 'timeout';
   if (/net::ERR_|ERR_/i.test(message)) return 'network-failure';
@@ -187,7 +187,7 @@ async function captureNavigationWithinDeadline(browser: Browser, source: string,
   let documents: DocumentObserver | undefined;
   const pending: Array<{ path: string; bytes: string | Buffer }> = [];
   try {
-    context = scope.own(await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
+    context = scope.own(await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, serviceWorkers: 'block', acceptDownloads: false,
       proxy: { server: networkProxy.server }, ...(config?.storageState ? { storageState: config.storageState } : {}) }));
     await disableUnproxiedRealtimeTransports(context);
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
@@ -204,6 +204,7 @@ async function captureNavigationWithinDeadline(browser: Browser, source: string,
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
       status = response?.status() ?? null;
       if (!response?.ok()) throw new ReferenceNavigationError('a successful native HTTP capture is required');
+      if (await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
       const observer = documents;
       if (lane === 'domain') {
         let captured = await captureDomainObservation(page, observer);
@@ -242,8 +243,10 @@ async function captureNavigationWithinDeadline(browser: Browser, source: string,
         pending.push({ path: capture.path, bytes });
         return { url, capture };
       }
-      if (await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
-      const galleryCandidatesBefore = entry === undefined && designDiscoveryItemIdentity(page.url()) !== null
+      if (entry === undefined && lane === 'design' && designDiscoveryDirectoryProvider(page.url()) === null)
+        await prepareNavigationImageCandidates(page);
+      const galleryCandidatesBefore = entry === undefined && lane === 'design'
+        && designDiscoveryDirectoryProvider(page.url()) === null
         ? await collectGalleryImageCandidates(page) : [];
       const observe = async () => {
         let captured = await captureDiscoveryObservation(page, observer);
@@ -281,11 +284,17 @@ async function captureNavigationWithinDeadline(browser: Browser, source: string,
       status = observation.httpStatus;
       finalUrl = observation.url;
       links = observation.links;
-      const galleryCandidatesAfter = entry === undefined && designDiscoveryItemIdentity(page.url()) !== null
+      const galleryCandidatesAfter = entry === undefined && lane === 'design'
+        && designDiscoveryDirectoryProvider(page.url()) === null
         ? await collectGalleryImageCandidates(page) : [];
       if (JSON.stringify(galleryCandidatesBefore) !== JSON.stringify(galleryCandidatesAfter))
         throw new ReferenceNavigationError('gallery image candidates changed during capture');
       imageCandidates = galleryCandidatesAfter;
+      // A 2xx placeholder can render identical blank pixels for every gallery URL. It is
+      // not an inspected item; publish a signed unavailable attempt so work-next can move on.
+      if (!observation.visibleText.trim() && (lane !== 'design'
+        || designDiscoveryItemIdentity(page.url()) === null || imageCandidates.length === 0))
+        throw new ReferenceNavigationError('no visible task text in discovery capture', undefined, status);
     } catch (error) {
       if (error instanceof AcquisitionTimeoutError) throw error;
       const message = error instanceof Error ? error.message.replace(/^REFERENCE_DISCOVERY: /, '') : 'native navigation failed';
@@ -301,10 +310,12 @@ async function captureNavigationWithinDeadline(browser: Browser, source: string,
     } as const;
     const unsigned = entry === undefined
       ? { schema: 'reference-navigation-capture-v6' as const, ...common, imageCandidates,
-        observedText: observation.visibleText, taskText: observation.taskText, linkLabels: observation.results }
+        observedText: observation.visibleText.slice(0, 4096).trim(),
+        taskText: observation.taskText.slice(0, 4096).trim(), linkLabels: observation.results }
       : { ...(scroll === undefined ? { schema: 'reference-discovery-entry-v4' as const }
         : { schema: 'reference-discovery-entry-v5' as const, scroll }), method: 'direct-public' as const, entry,
-        ...common, observedText: observation.visibleText, taskText: observation.taskText,
+        ...common, observedText: observation.visibleText.slice(0, 4096).trim(),
+        taskText: observation.taskText.slice(0, 4096).trim(),
         linkLabels: observation.results };
     const record: DiscoveryCaptureRecord = { ...unsigned, signature: signNativeObservation(writer.projectRoot,
       unsigned.schema, discoveryDigest(canonicalJson(unsigned))) };

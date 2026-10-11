@@ -11,6 +11,7 @@ import {
   MANDATORY_STAGE_IDS,
   OPTIONAL_METHOD_IDS,
   OPTIONAL_STAGE_IDS,
+  AdaptiveRouteError,
   failAdaptiveRoute,
   type AdaptiveRouteInput,
   type AdaptiveRouteRecord,
@@ -50,13 +51,20 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
   for (const role of strategy.roles) {
     if (!ADAPTIVE_ROLE_IDS.includes(role as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_ROLE', `unknown role ${role}; allowed: ${ADAPTIVE_ROLE_IDS.join(', ')}`);
   }
+  const requiredRoles = new Set<string>();
   for (const stage of strategy.stages) {
     if (!ADAPTIVE_STAGE_IDS.includes(stage as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE', `unknown stage ${stage}; allowed: ${ADAPTIVE_STAGE_IDS.join(', ')}`);
   }
   // A study makes provisional material for the selected design owners; it owns no stage publication.
   if (strategy.roles.includes('omd-study')
-    && (!strategy.stages.includes('art-direction') || !strategy.stages.includes('composition'))) {
-    return failAdaptiveRoute('REQUIRED_METHOD_MISSING', 'omd-study requires selected art-direction and composition stages');
+    && ((!strategy.methods.includes('provisional-source-study') && !strategy.stages.includes('art-direction'))
+      || !strategy.stages.includes('composition'))) {
+    return failAdaptiveRoute('REQUIRED_METHOD_MISSING', 'omd-study requires composition; studies without provisional-source-study also require art-direction');
+  }
+  if (strategy.methods.includes('provisional-source-study')
+    && (!strategy.roles.includes('omd-study')
+      || ['reference-selection', 'composition'].some(stage => !strategy.stages.includes(stage)))) {
+    return failAdaptiveRoute('REQUIRED_METHOD_MISSING', 'provisional-source-study requires omd-study, reference-selection and composition');
   }
   const skipped = new Set(strategy.skips.map((entry) => entry.id));
   if (MANDATORY_ADAPTIVE_GATES.some((gate) => skipped.has(gate))) return failAdaptiveRoute('HARD_GATE_CANNOT_SKIP');
@@ -82,8 +90,11 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
     const known = ADAPTIVE_STAGE_IDS.find((candidate) => candidate === stage);
     if (known === undefined) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
     const owner = ADAPTIVE_STAGE_OWNERS[known];
-    if (owner.startsWith('omd-') && !strategy.roles.includes(owner)) return failAdaptiveRoute('MODEL_OWNER_REQUIRED');
+    if (owner.startsWith('omd-') && !strategy.roles.includes(owner)) requiredRoles.add(owner);
   }
+  if (requiredRoles.size > 0) throw new AdaptiveRouteError('MODEL_OWNER_REQUIRED',
+    `Add the missing selected-stage owners to strategyDecision.roles and executionWaves: ${[...requiredRoles].join(', ')}. Preserve selected stages; removing them is not this repair.`,
+    [...requiredRoles]);
 }
 
 export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecision): void {
@@ -224,6 +235,14 @@ function checkAdaptiveInput(
 ): void {
   const strategy = input.strategyDecision;
   check('strategyDecision', () => validateAdaptiveStrategyRails(strategy, input.deliveryMode));
+  check('strategyDecision.stages', () => {
+    if (strategy.stages.includes('reference-board')) {
+      validateAdaptiveStageOrder({
+        ...strategy,
+        stages: strategy.stages.filter(stage => ['frame', 'acquisition', 'scout', 'reference-board'].includes(stage)),
+      }, input.deliveryMode);
+    }
+  });
   check('deliveryMode', () => { if (input.deliveryMode === 'design-only') {
     if (input.allowedPaths.length !== 1 || input.allowedPaths[0] !== '.omd/**' || input.namedDependencies.length > 0 || strategy.aiAssets.length > 0) {
       failAdaptiveRoute('DESIGN_ONLY_SCOPE_REQUIRED', 'design-only allows only .omd/** and no application dependencies or shipped assets');
@@ -244,7 +263,7 @@ function checkAdaptiveInput(
   check('localeDesign', () => validateLocaleDesignRoute(input, authority?.marketJudgment));
 }
 
-export type AdaptiveRouteDiagnostic = Readonly<{ path: string; code: string; message: string }>;
+export type AdaptiveRouteDiagnostic = Readonly<{ path: string; code: string; message: string; requiredRoles?: readonly string[] }>;
 
 /** Never edits the input, publishes a route, creates authority, or relaxes a failed check. */
 export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: LocaleDesignRoute): readonly AdaptiveRouteDiagnostic[] {
@@ -257,7 +276,8 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
         : (error.message.split(':')[0] ?? 'MALFORMED_ADAPTIVE_ROUTE');
       // Unexpected exceptions are bugs, not model-repairable input diagnostics.
       if (!/^[A-Z][A-Z0-9_]+$/.test(code)) throw error;
-      diagnostics.push({ path, code, message: error.message === code
+      diagnostics.push({ path, code, ...(error instanceof AdaptiveRouteError && error.requiredRoles !== undefined
+        ? { requiredRoles: error.requiredRoles } : {}), message: error.message === code
         ? `${code}: ${path} has an invalid required shape or enum; run omd schema route-input for its field contract`
         : error.message });
     }

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Browser, Page } from 'playwright';
+import { errors } from 'playwright';
 import { canonicalJson } from './board-artifacts.ts';
 import { publicDiscoveryUrl } from './discovery-record.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
@@ -26,6 +27,12 @@ export async function captureReferenceControlObservation(browser: Browser, root:
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15_000 });
     if (page.url() !== url) throw new Error('REFERENCE_CONTROL_DOCUMENT_CHANGED: inspect the redirected URL separately');
     const target = page.locator(input.selector);
+    if (await target.count() > 1) throw new Error('REFERENCE_CONTROL_TARGET_INVALID');
+    try { await target.waitFor({ state: 'visible', timeout: 5_000 }); }
+    catch (error) {
+      if (error instanceof errors.TimeoutError) throw new Error('REFERENCE_CONTROL_TARGET_INVALID');
+      throw error;
+    }
     if (await target.count() !== 1 || !await target.isVisible()) throw new Error('REFERENCE_CONTROL_TARGET_INVALID');
     const text = (await target.innerText()).trim();
     if (!text) throw new Error('REFERENCE_CONTROL_TEXT_REQUIRED');

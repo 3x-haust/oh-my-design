@@ -74,6 +74,39 @@ the selected design. Respect the existing bounded recovery and publication contr
 
 ## Reflect while making
 
+For newly routed candidate work, visual fidelity is not a showpiece privilege. Compare integrated
+representative surfaces with real copy, approved typography and colour, and responsive composition.
+A restrained product keeps its quiet expression without postponing visual judgment. A grayscale
+study can answer a structural question, but cannot establish a finished visual direction.
+The coordinator's `candidate select` publisher captures the selected first-party HTML at fixed
+1280x900 and 390x844 viewports. Its v2 pointer binds the complete served tree and both PNGs;
+production receives those exact images as design material by default. Changed dependencies or
+capture bytes invalidate the handoff. This exception concerns first-party candidate pixels, never
+Scout-owned external reference pixels or a blind final review's inputs.
+
+With a selected design hypothesis, inspect the first representative implementation before expanding
+its visual system across the product. `first-render check` captures both fixed viewports. On native
+Pi it automatically runs one isolated early Eye through the one-use evidence broker, inheriting the
+host model with the Eye's high effort. One early critique keeps this checkpoint small; the existing
+independent final review remains separate and unchanged. Other hosts inspect both saved captures
+through their preproduction Eye and disclose the actual isolation available.
+For source-only production transactions, settle representative visual questions in the candidate
+stage first; the initial source owner still completes its authorized scope in one transaction.
+The coordinator then captures production and routes corrections through the existing repair owner.
+
+The early Eye returns `retain`, `revise`, or `reframe` with localized visible observations, user
+consequences, and testable repair criteria. Numeric diagnostics stay advisory. `revise` returns to
+the authorized production owner for repair, rebuild and recapture; `reframe` returns the premise to
+Composer. A fresh review must explicitly resolve or preserve each prior criterion. Identical
+capture, build and brief bindings reuse the previous review, including an unfavorable one.
+Each unresolved criterion keeps the authenticated production captures from the review that first
+introduced it. Repeated repair and candidate reselection do not move this baseline. The early Eye
+receives those exact prior pixels separately from the current production and current selected target.
+It judges absolute current quality, target fidelity, and repair progress separately; missing,
+changed, or misbound baseline evidence refuses review publication without replacing the current record.
+The signed early record is not final evidence, task completion, or permission to bypass source
+ownership. Its initial viewport proves only that bounded surface, not unbuilt downstream screens.
+
 At each selected craft checkpoint, compare the real render with its named criterion. Separate the
 visible observation from the judgment and the resulting action. Choose `revise` for a concrete
 defect, `retain` when the evidence supports the existing choice, or `reframe` when the premise is
@@ -86,6 +119,15 @@ dependent work until the required contract is current. A craft reframe note does
 the route, reopen a stage, or authorize a second production owner. On source-only production hosts,
 request the authorized observation through the owner handoff; never claim to have inspected an
 unavailable render or fabricate a checkpoint from source inspection.
+
+At the native candidate fidelity boundary, refinement of the same candidate carries its
+authenticated prior assessment and repair criteria under the same build, brief and reference
+context. The reviewer binds each prior and current slot/viewport capture and classifies the
+relationship as preserved, resolved, regressed or unresolved. These are continuity judgments,
+not a summed beauty score. A formerly passing counterpart can fail on the new pixels; every
+current counterpart must still pass before selection. A changed reference context starts a
+fresh comparison rather than laundering earlier criteria into new authority. Unchanged rejected
+pixels retain their unfavorable result instead of receiving repeated approval attempts.
 
 Treat a failed approach as useful evidence when it actually happened. Never fabricate failure or
 compromise to fill a trade-off record. A selected contract whose required evidence is unavailable

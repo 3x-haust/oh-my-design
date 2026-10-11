@@ -17,8 +17,11 @@ export async function captureFrozenSearchText(page: Page): Promise<Readonly<{
     const frameTree = await session.send('Page.getFrameTree');
     styleSheetId = (await session.send('CSS.createStyleSheet', { frameId: frameTree.frameTree.frame.id })).styleSheetId;
     await session.send('Debugger.pause'); paused = true;
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error('frozen reference capture needs an observed viewport');
     const capture = async (): Promise<Buffer> => Buffer.from((await session.send('Page.captureScreenshot', {
       format: 'png', fromSurface: true, captureBeyondViewport: false,
+      clip: { x: 0, y: 0, width: viewport.width, height: viewport.height, scale: 2 },
     })).data, 'base64');
     await session.send('CSS.setStyleSheetText', { styleSheetId, text: FREEZE_STYLE }); const evidence = await capture();
     await session.send('CSS.setStyleSheetText', { styleSheetId, text: ANALYSIS_STYLE }); const visibleText = await capture();

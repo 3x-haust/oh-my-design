@@ -140,7 +140,8 @@ new score, or claim of human provenance follows from this procedure.
 
 ## Provisional source studies
 
-The native Codex host can delegate one HTML/CSS hypothesis to `omd-study` before approved Frame,
+Where a Codex host actually supplies the explicit native directory grant described below, it can
+delegate one HTML/CSS hypothesis to `omd-study` before approved Frame,
 copy, type or composition artifacts exist. This helper makes material for a selected `art-direction`
 stage; it does not perform or publish that stage. Select the helper explicitly with art direction
 and composition, give it an execution wave before Composer and Hand, and otherwise retain the route's
@@ -157,8 +158,10 @@ with a concise one-line `omd decision <what> --why <why>` before launch. The cou
 in that record; the linked files carry the content units and hypotheses. Do not inline a long
 multiline brief into command arguments or use a post-render rewrite as the pre-generation record.
 Supply only the relevant original content or explicitly authorized demo facts and one hypothesis;
-do not forward raw external references, other studies, winner claims or process instructions as UI
-copy. An unknown capability cannot be turned into study content. If selected external reference work
+do not forward raw external references in the direct-write lane, other studies, winner claims or
+process instructions as UI copy. The Pi evidence-only exception below delivers selected originals
+privately without project read or write authority. An unknown capability cannot become study
+content. If selected external reference work
 is unfinished, these are first-party-only provisional studies, not settled reference-based art direction.
 Later reference, copy, type and composition obligations remain unchanged.
 
@@ -192,6 +195,49 @@ the project-owned rough below. It reconciles the visible relationships with curr
 copy, typography and reference evidence in the normal composition contract. The study cannot approve
 itself or force an unsupported claim downstream. Hand remains the sole production author. Final
 blind Eyes receive no study, author identity or selection rationale.
+
+### Native Pi evidence-only studies
+
+Pi uses `omd schema source-study --json` and
+`omd study create --input <source-study-input.json> --json`, not a fabricated Codex directory grant.
+The input declares the actual destination content, primary action, one to four content-to-form
+hypotheses, and the evidence-based reason for that count before generation. One is lawful when
+the uncertainty warrants one; selecting a source alone does not settle a destination.
+
+The host supplies the current selected complete original images through a one-use private packet.
+Each isolated author inherits the host provider/model and uses the role's declared effort, without
+ambient tools, skills or project context. It returns one bounded self-contained HTML document.
+The author declares a unique work-state readiness selector and, when needed, the control that
+reveals it. The host renders real 1280x900 and 390x844 entry and primary-work views in a fresh
+network-denying sandbox, then
+publishes content-addressed first-party source, captures and authenticated provenance. A failed
+author, blocked external resource or changed evidence cannot publish a study set or selection.
+These studies use inline CSS/SVG and memory-only interaction; this is not a binary-asset generation
+or complete task-flow verification capability.
+
+Missing, ambiguous, obscured or offscreen primary work refuses publication. The host does not
+scroll merely to manufacture entry fitness. An initially visible work region may share its
+initial capture bytes; this does not create independent evidence. Judge the actual work state,
+not only the list from which it is reached. Keep study/storage-limit disclosures outside product
+chrome, in the handback. A hypothesis may reject a source-shaped region with no distinct
+destination information job instead of duplicating content to fill it.
+
+Inspect all returned first-party states. When a hypothesis merits further work, use
+`omd schema source-study-selection --json`, then `omd study select --input <selection.json> --json`.
+`omd study show --json` returns only the selected first-party artifacts and their provisional
+status. Original-image packets and private execution records are not production handoffs.
+`omd study latest --json` recovers a completed unselected set; inspect it before launching
+another generation after a context reset or missing selection pointer.
+Completed child receipts retain runtime duration and reported usage from canonical assistant
+messages, with input, output and cache counters separate. Missing message usage is `null`, not
+zero. Include unselected variants in measured generation cost, do not sum parallel durations
+as wall time, and keep any unmeasured reviewer or supervisor cost outside total-cost claims.
+Use the host study renderer for these untrusted documents, not unrestricted execution.
+
+Selection is a coordinator's provisional choice, not an independent aesthetic verdict. No
+acceptable result means no choice. Composer must reconcile the selected study with current
+copy/type/task obligations; Hand still owns production. Fidelity receipts cannot substitute for
+beauty or human character, and none of these records establish human approval.
 
 ## Carry a selected image into source
 

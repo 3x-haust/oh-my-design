@@ -27,6 +27,15 @@ test('doctor is read-only; setup reports pending human step for supported defaul
     humanStep: 'Relaunch Aside and click Enable', candidates: [{ id: 'aside', label: 'Aside', signals: ['default'] }] });
   assert.equal(installs, 1); assert.equal(connects, 0);
 });
+test('a ready bundled Aside bridge needs consent but no manual onboarding or routine Enable click', async () => {
+  let onboarding = 0;
+  const driver = fake({ userBrowserBridgeDoctor: async () => report(true),
+    userBrowserBridgeOnboard: async () => { onboarding++; throw Error('ready browser must not be onboarded'); } });
+  assert.deepEqual(await installUserBrowserBridge(undefined, driver), { state: 'ready', humanStep: null,
+    candidates: [{ id: 'aside', label: 'Aside', signals: ['default'] }] });
+  assert.equal(onboarding, 0);
+});
+
 test('legacy profile permission never authorizes user browser; overrides win', async () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-browser-consent-'));
   try {
@@ -37,8 +46,12 @@ test('legacy profile permission never authorizes user browser; overrides win', a
     assert.equal(readBrowserConsent(home), 'consented');
     assert.equal(readUserBrowserConsent(home), 'consented');
     const driver = fake({ userBrowserBridgeDoctor: async () => report(true) });
-    assert.equal(await selectReferenceAcquisitionEngine({ mode: 'default' }, { home, driver }), 'user-browser');
-    assert.equal(await selectReferenceAcquisitionEngine({ mode: 'default', storageState: '/state' }, { home, driver }), 'custom-browser');
+    assert.equal(await selectReferenceAcquisitionEngine({ mode: 'default' }, { home, driver, explicitUserBrowser: false }), 'headless');
+    assert.equal(await selectReferenceAcquisitionEngine({ mode: 'profile', profilePath: join(home, '.omd/browser-profile') },
+      { home, driver, explicitUserBrowser: false }), 'omd-profile');
+    assert.equal(await selectReferenceAcquisitionEngine({ mode: 'default' }, { home, driver, explicitUserBrowser: true }), 'user-browser');
+    assert.equal(await selectReferenceAcquisitionEngine({ mode: 'default', storageState: '/state' },
+      { home, driver, explicitUserBrowser: true }), 'custom-browser');
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
 test('unsupported default needs an explicit Chromium-family browser choice', async () => {

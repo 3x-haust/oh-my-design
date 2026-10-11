@@ -5,11 +5,11 @@ import { resolve } from 'node:path';
 import { runOmd, monitorOmdProgress, createOmdProgressId, registerDoctorCommand, structuredToolDiagnostic, OmdCancelledError, type PortablePiApi } from './omd-runtime.ts';
 export { OMD_COMMAND_NAME } from './omd-runtime.ts';
 export type { PortablePiApi, PortablePiCommand, PortablePiEvent, PortablePiHook, PortablePiTool } from './omd-runtime.ts';
-import { classifyPiWrite, hasPiRoute, isMutatingOmdCommand, isPreproductionReadCommand } from './omd-guard.ts';
+import { classifyPiWrite, hasPiRoute, isMutatingOmdCommand, isPreproductionReadCommand, isNativeVerificationCommand } from './omd-guard.ts';
 import { routeValidationArgs, type RouteBootstrap } from './omd-route-bootstrap.ts';
 import { RepairLoop } from './omd-repair-progress.ts';
 import { StageWork, checkNativeStageEntry, nativeEntryStage, nativeOwnedStage } from './omd-stage-work.ts';
-import { handleOmdMessageEnd, referenceWorkAdvanced, type ReferenceWork } from './omd-message-end.ts';
+import { handleOmdMessageEnd, readyBridgeQuestion, referenceWorkAdvanced, type ReferenceWork } from './omd-message-end.ts';
 import { WorkflowResume } from './omd-workflow-resume.ts';
 import { PiRequestBindings } from './omd-request-binding.ts';
 import { normalizeOmdAlias, extractOmdWorkflowRequest } from './omd-request-prompt.ts';
@@ -18,6 +18,7 @@ import { PiNativeRuns } from './omd-native-run.ts';
 import { RouteEntryContinuation, ROUTE_ENTRY_INPUT, ROUTE_ENTRY_VALIDATION } from './omd-bootstrap-entry.ts';
 import { parseUserQuestion, questionText, browserAnswer, type UserQuestion } from './omd-user-question.ts';
 import { clearBrowserAnswerReceipt, writeBrowserAnswerReceipt } from '../core/ref/browser-consent.ts';
+import { nativeWriteEvents } from './omd-patch.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -201,7 +202,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-intent', source: '.omd/request-source.json', requestSha256: source.requestSha256, starter: 'omd schema ai-judgment --purpose workflow-intent', input: '.omd/.cache/ai-judgment-workflow-intent.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-intent.json --json' })}. Quote the real captured request. The explicit skill invocation starts implementation by default; if you judge inspect/research-only, publish that decision and the host will stop automatic build continuation. Missing judgment is advisory, never a refusal of a plain implementation request. For a target market, publish target-market quoting this source; without it the market is unspecified.`
         : realTurns.has(context.cwd) ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-continuation', source: '.omd/user-turn.json', textSha256: realTurns.get(context.cwd)!.sha256, sessionId: realTurns.get(context.cwd)!.sessionId, turnId: realTurns.get(context.cwd)!.turnId, routeSha256: realTurns.get(context.cwd)!.routeSha256, starter: 'omd schema ai-judgment --purpose workflow-continuation', input: '.omd/.cache/ai-judgment-workflow-continuation.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-continuation.json --json' })}. Quote the complete authenticated interactive/rpc turn, choose resume/pause/cancel/unrelated; do not use tool or assistant prose. Missing judgment is advisory, not permission to assert completion.` : '';
       const feedbackGuidance = pendingFeedback.delete(context.cwd) ? '\nThe current explicit user turn may be design feedback. Preserve the original route request; translate the exact feedback through omd feedback translate and measure the current rendered state before any bounded authorized repair. Do not reinterpret tool output as feedback.' : '';
-      return { systemPrompt: `${event.systemPrompt ?? ''}${feedbackGuidance}${judgmentGuidance}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. Research is the default recommendation: inspect domain features and visual references, but record unavailable or sparse sources honestly and proceed to implementation. Briefs and contracts are advisory; no delivery ceremony is required before an authorized source write. Before application writes run guard production for actual scope and symlink protection; process warnings do not block work. Use read and standalone inventory commands during research. After producing the app, gather real current browser evidence and independent review including visual quality; run guard completion before a completion report. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
+      return { systemPrompt: `${event.systemPrompt ?? ''}${feedbackGuidance}${judgmentGuidance}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. For route input in Pi, author the other fields only: omd_cli route validate/classify securely replaces an omitted or placeholder request field with the exact authenticated full user brief. Never paste a long brief into JSON or stop because it is too long to copy. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. Research is the default recommendation: search/navigate in background headless Chromium or an already-consented dedicated headless OMD profile; never focus or navigate everyday-browser tabs by default, even with earlier consent. Open a dedicated headed window only for human login/OTP/challenge after the headless session closes, then resume headlessly. An explicitly requested everyday-browser override needs its own consent. Inspect domain features and visual references, but record unavailable or sparse sources honestly and proceed to implementation. Briefs and contracts are advisory; no delivery ceremony is required before an authorized source write. Before application writes run guard production for actual scope and symlink protection; process warnings do not block work. Use read and standalone inventory commands during research. After producing the app, gather real current browser evidence and independent review including visual quality; run guard completion before a completion report. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
     });
     on('message_start', async (event, context) => {
       if (event.message?.role !== 'user') return;
@@ -215,6 +216,37 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('tool_call', async (event, context) => {
       if (event.toolName === OMD_TOOL_NAME) {
         const args = event.input?.args;
+        if (guarded(context.cwd) && Array.isArray(args) && args[0] === 'ref'
+          && ['advance', 'navigate', 'search', 'discover-batch', 'add', 'add-batch'].includes(args[1] ?? '')) {
+          const question = await readyBridgeQuestion(context.browserConsentHome);
+          if (question) {
+            rememberQuestion(context.cwd, question);
+            const selected = await context.ui?.select?.(question.question, [...question.options]);
+            if (context.signal?.aborted) return { block: true, reason: 'OMD_BROWSER_SETUP_INTERRUPTED' };
+            const answer = selected === undefined ? null : browserAnswer(question, selected);
+            if (answer === 'user-browser' || answer === 'omd-profile') {
+              browserConsentGranted.set(context.cwd, { digest: question.digest, engine: answer });
+              try {
+                const setup = await run(['browser', 'setup', '--engine', answer, '--consent', '--json'], context.cwd, context.signal);
+                const { writeBrowserInterpretation, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+                if (answer === 'omd-profile') writeUserBrowserConsent('skipped-this-run', context.browserConsentHome);
+                writeBrowserInterpretation({ questionDigest: question.digest, userText: selected!, agentInterpretation: answer }, context.browserConsentHome);
+                browserConsentGranted.delete(context.cwd); pendingQuestions.delete(context.cwd);
+                return { block: true, reason: `Browser setup result: ${setup.text}. Retry the native OMD reference action with the consented engine; do not invoke another browser skill or request routine Enable/Use clicks.` };
+              } catch (error) {
+                return { block: true, reason: `Browser setup failed: ${error instanceof Error ? error.message : String(error)}. The chosen consent remains pending for an authorized retry.` };
+              }
+            }
+            if (answer === 'skipped-this-run' || answer === 'never-ask') {
+              const { writeBrowserConsent, writeUserBrowserConsent, writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
+              writeBrowserConsent(answer, context.browserConsentHome); writeUserBrowserConsent(answer, context.browserConsentHome);
+              writeBrowserInterpretation({ questionDigest: question.digest, userText: selected!, agentInterpretation: answer }, context.browserConsentHome);
+              pendingQuestions.delete(context.cwd);
+              return { block: true, reason: 'Browser choice recorded. Retry the native OMD reference action with the public fallback.' };
+            }
+            return { block: true, reason: questionText(question) };
+          }
+        }
         if (Array.isArray(args) && args[0] === 'browser' && ['setup', 'login', 'skip'].includes(args[1] ?? '')
           && !(consentAnswer(context.cwd, args)
             || args[1] !== 'skip' && browserConsentGranted.get(context.cwd)?.digest === pendingQuestions.get(context.cwd)?.digest
@@ -227,44 +259,62 @@ export default function omdExtension(pi: PortablePiApi): void {
         return;
       }
       if (!guarded(context.cwd)) return;
-      const name = event.toolName;
-      if (name !== 'write' && name !== 'edit' && name !== 'bash') return;
-      if (name === 'bash' && isPreproductionReadCommand(event.input?.command)) return;
-      touched.add(context.cwd);
-      let target: string | undefined;
-      if (name !== 'bash') {
-        const classification = classifyPiWrite(context.cwd, event.input?.path);
-        if (classification.kind === 'blocked') return { block: true, reason: `OMD_WRITE_BLOCKED: ${classification.reason} (${classification.path})` };
-        if (classification.kind === 'authoring') {
-          const stage = nativeEntryStage(classification.path);
-          if (stage !== undefined && hasPiRoute(context.cwd)) {
-            const taskEpoch = epoch(context.cwd);
-            try {
-              const selected = await checkNativeStageEntry(stage, args => run(args, context.cwd, context.signal));
-              if (context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { block: true, reason: 'OMD_STAGE_ENTRY_INTERRUPTED' };
-              if (selected) ownedWork.checked(context.cwd, stage); else ownedWork.unselected(context.cwd, stage);
-            } catch (error) {
-              // Entry diagnostics advise the owner; authorized authoring remains available.
-              ownedWork.nativeStarted(context.cwd, event, stage);
-            }
-          }
-          const ownerStage = nativeOwnedStage(classification.path);
-          if (ownerStage !== undefined) ownedWork.nativeStarted(context.cwd, event, ownerStage);
-          if (classification.path.startsWith('.omd/.cache/')) {
-            const paths = authoredInputs.get(context.cwd) ?? new Set<string>();
-            paths.add(classification.path);
-            authoredInputs.set(context.cwd, paths);
-          }
-          rememberMutation(context.cwd, event.toolName, event.toolCallId, classification.path);
-          return;
-        }
-        target = classification.path;
+      if (paused.has(context.cwd)) return;
+      const writes = nativeWriteEvents(event);
+      if (writes === null || event.toolName === 'apply_patch'
+        && writes.some(write => classifyPiWrite(context.cwd, write.input?.path).kind !== 'authoring')) {
+        return { block: true, reason: 'NATIVE_MAKER_REQUIRED: patches may edit only owned authoring inputs. Use omd maker run for candidate/application source and owner publishers for records.' };
       }
-      try {
-        await run(['guard', 'production', ...(target === undefined ? [] : ['--path', target]), '--json'], context.cwd, context.signal);
-        if (name !== 'bash') rememberMutation(context.cwd, event.toolName, event.toolCallId, target, true);
-      } catch (error) {
-        return { block: true, reason: `OMD_PRODUCTION_BLOCKED: ${error instanceof Error ? error.message : String(error)}\nRepair the named design inputs through omd_cli; use read for inspection. Do not bypass with bash, scripts, or a different file tool.` };
+      for (const writeEvent of writes) {
+        const event = writeEvent;
+        const name = event.toolName === 'apply_patch' ? 'write' : event.toolName;
+        if (name !== 'write' && name !== 'edit' && name !== 'bash') {
+          if (typeof name === 'string' && [
+            'read', 'grep', 'find', 'ls', 'glob', 'todo', 'tool_search', 'web_search', 'webfetch',
+            'create_goal', 'get_goal', 'update_goal',
+            'request_user_input', 'lsp_diagnostics', 'lsp_goto_definition', 'lsp_find_references',
+            'lsp_symbols', 'lsp_prepare_rename', 'ast_grep_search',
+          ].includes(name)) return;
+          return { block: true, reason: 'NATIVE_MAKER_REQUIRED: general execution, delegation and unclassified tools cannot author managed source. Use omd_cli for owned actions or an admitted inspection tool.' };
+        }
+        if (name === 'bash' && isPreproductionReadCommand(event.input?.command)) return;
+        touched.add(context.cwd);
+        let target: string | undefined;
+        if (name !== 'bash') {
+          const classification = classifyPiWrite(context.cwd, event.input?.path);
+          if (classification.kind === 'blocked') return { block: true, reason: `OMD_WRITE_BLOCKED: ${classification.reason} (${classification.path})` };
+          if (classification.kind === 'authoring') {
+            const stage = nativeEntryStage(classification.path);
+            if (stage !== undefined && hasPiRoute(context.cwd)) {
+              const taskEpoch = epoch(context.cwd);
+              try {
+                const selected = await checkNativeStageEntry(stage, args => run(args, context.cwd, context.signal));
+                if (context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { block: true, reason: 'OMD_STAGE_ENTRY_INTERRUPTED' };
+                if (selected) ownedWork.checked(context.cwd, stage); else ownedWork.unselected(context.cwd, stage);
+              } catch (error) {
+                // Entry diagnostics advise the owner; authorized authoring remains available.
+                ownedWork.nativeStarted(context.cwd, event, stage);
+              }
+            }
+            const ownerStage = nativeOwnedStage(classification.path);
+            if (ownerStage !== undefined) ownedWork.nativeStarted(context.cwd, event, ownerStage);
+            if (classification.path.startsWith('.omd/.cache/')) {
+              const paths = authoredInputs.get(context.cwd) ?? new Set<string>();
+              paths.add(classification.path);
+              authoredInputs.set(context.cwd, paths);
+            }
+            rememberMutation(context.cwd, event.toolName, event.toolCallId, classification.path);
+            continue;
+          }
+          target = classification.path;
+        }
+        try {
+          await run(['guard', 'production', ...(target === undefined ? [] : ['--path', target]), '--json'], context.cwd, context.signal);
+          if (name === 'bash' && isNativeVerificationCommand(event.input?.command)) return;
+          return { block: true, reason: 'NATIVE_MAKER_REQUIRED: current readiness is not source-owner authority. Use omd schema native-maker then omd maker run --input <json> --json. The coordinator cannot author production through write, edit, bash or scripts.' };
+        } catch (error) {
+          return { block: true, reason: `OMD_PRODUCTION_BLOCKED: ${error instanceof Error ? error.message : String(error)}\nRepair the named design inputs through omd_cli; use read for inspection. Do not bypass with bash, scripts, or a different file tool.` };
+        }
       }
     });
     on('tool_result', async (event, context) => {
@@ -276,17 +326,20 @@ export default function omdExtension(pi: PortablePiApi): void {
           if (question) rememberQuestion(context.cwd, question);
         }
       }
-      ownedWork.nativeFinished(context.cwd, event);
-      const key = mutationKey(event.toolName, event.toolCallId, event.input?.path);
-      const group = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
-      const mutation = group?.entries.shift();
-      if (group && event.isError !== false) group.failed = true;
-      const settled = group !== undefined && group.entries.length === 0;
-      if (key !== undefined && settled) pendingMutations.get(context.cwd)?.delete(key);
-      if (mutation && settled && !group.failed && group.baseline !== fileRevision(context.cwd, mutation.path)) {
-        bumpRevision(context.cwd);
-        if (group.production) productionAttempted.add(context.cwd);
-        if (ownedWork.started(context.cwd)) rememberWorkflow(context.cwd);
+      for (const writeEvent of nativeWriteEvents(event) ?? []) {
+        const event = writeEvent;
+        ownedWork.nativeFinished(context.cwd, event);
+        const key = mutationKey(event.toolName, event.toolCallId, event.input?.path);
+        const group = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
+        const mutation = group?.entries.shift();
+        if (group && event.isError !== false) group.failed = true;
+        const settled = group !== undefined && group.entries.length === 0;
+        if (key !== undefined && settled) pendingMutations.get(context.cwd)?.delete(key);
+        if (mutation && settled && !group.failed && group.baseline !== fileRevision(context.cwd, mutation.path)) {
+          bumpRevision(context.cwd);
+          if (group.production) productionAttempted.add(context.cwd);
+          if (ownedWork.started(context.cwd)) rememberWorkflow(context.cwd);
+        }
       }
     });
     on('message_end', async (event, context) => {
@@ -294,7 +347,11 @@ export default function omdExtension(pi: PortablePiApi): void {
       const message = event.message;
       if (message?.role === 'assistant' && message.stopReason === 'stop') lastStops.set(context.cwd, randomBytes(16).toString('hex'));
       if (paused.has(context.cwd)) return { message };
-      const entryAuthorized = !hasPiRoute(context.cwd) && requests.classificationGranted(context.cwd) && ownedWork.token(context.cwd) !== undefined;
+      // Todo/goal bookkeeping may discard the owned-work token before the model's final
+      // stop. The authenticated full-workflow request, not that transient token, authorizes
+      // route-input authoring; route publication remains bound to the captured request.
+      const entryAuthorized = !hasPiRoute(context.cwd) && requests.classificationGranted(context.cwd)
+        && !requests.hasPendingInput(context.cwd);
       if ((!touched.has(context.cwd) && !entryAuthorized && !pendingQuestions.has(context.cwd)) || message?.role !== 'assistant' || message.stopReason !== 'stop'
         || message.content?.some(part => part.type === 'toolCall')) return;
       pendingMutations.delete(context.cwd);
@@ -328,6 +385,10 @@ export default function omdExtension(pi: PortablePiApi): void {
               try {
                 const setup = await run(['browser', 'setup', '--engine', answer, '--consent', '--json'], context.cwd, context.signal);
                 const { writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
+                if (answer === 'omd-profile') {
+                  const { writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+                  writeUserBrowserConsent('skipped-this-run', context.browserConsentHome);
+                }
                 writeBrowserInterpretation({ questionDigest: pendingQuestion.digest, userText: choice, agentInterpretation: answer }, context.browserConsentHome);
                 browserConsentGranted.delete(context.cwd);
                 pendingQuestions.delete(context.cwd);
@@ -419,6 +480,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (guarded(context.cwd) && params.args[0] === 'recipe' && params.args[1] === 'add') {
         touched.add(context.cwd);
         await run(['guard', 'production', '--json'], context.cwd, signal);
+        throw new Error('NATIVE_MAKER_REQUIRED: use omd maker run for production source; recipe inspection remains available');
       }
       let result: Awaited<ReturnType<typeof run>>;
       try {
@@ -450,11 +512,16 @@ export default function omdExtension(pi: PortablePiApi): void {
                 const turn = realTurns.get(context.cwd);
                 const signed = readPiUserTurn(context.cwd);
                 const routeSha256 = fileRevision(context.cwd, '.omd/route.json');
+                const judgmentContext: unknown = Reflect.get(judgment, 'context');
+                const requestSha256: unknown = typeof judgmentContext === 'object' && judgmentContext !== null
+                  ? Reflect.get(judgmentContext, 'requestSha256') : undefined;
                 if (turn && signed && turn.sha256 === signed.sha256 && turn.text === signed.text
                   && turn.turnId === signed.turnId && turn.sessionId === signed.sessionId
                   && turn.afterStopId === lastStops.get(context.cwd) && signed.afterStopId === turn.afterStopId
                   && turn.routeSha256 === routeSha256 && typeof decision === 'string') {
-                  if (workflowResume.acceptCheckedTurn(context.cwd, routeSha256, decision)) {
+                  if (typeof requestSha256 === 'string'
+                    && workflowResume.acceptCheckedTurn(context.cwd, routeSha256, decision)
+                    && requests.resume(context.cwd, requestSha256)) {
                     workflowStarted.add(context.cwd); touched.add(context.cwd); paused.delete(context.cwd);
                   } else {
                     workflowStarted.delete(context.cwd); ownedWork.delete(context.cwd); paused.add(context.cwd);
@@ -492,7 +559,10 @@ export default function omdExtension(pi: PortablePiApi): void {
           touched.add(context.cwd);
           if (ownedWork.started(context.cwd)) rememberWorkflow(context.cwd);
         }
-        if (params.args[0] === 'recipe' && params.args[1] === 'add') productionAttempted.add(context.cwd);
+        if (params.args[0] === 'maker' && params.args[1] === 'run') {
+          productionAttempted.add(context.cwd);
+          touched.add(context.cwd);
+        }
         if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
           && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) {
           freshRoutes.add(context.cwd);

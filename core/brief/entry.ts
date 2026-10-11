@@ -6,6 +6,7 @@ import { stageArtifactProblems } from '../stage/output.ts';
 import type { AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { checkNativeBrowserEvidence } from '../stage/native-completion.ts';
+import { requireResolvedNativeReframe } from '../runtime/native-reframe.ts';
 
 /** Explicit coordinator entry check. Ordinary brief inspection remains available when blocked. */
 export function checkBriefEntry(root: string, stage: BriefStage, packRoot: string, invocation: ProjectRunInvocation): Brief {
@@ -27,6 +28,10 @@ export function checkBriefEntry(root: string, stage: BriefStage, packRoot: strin
   }
   if (stage === 'production' || (stage === 'browser-evidence' && isNativePiInvocation(invocation))) {
     blockers.push(...checkProductionReadiness(root, invocation, packRoot).blockers);
+  }
+  if (stage === 'browser-evidence' && isNativePiInvocation(invocation)) {
+    try { requireResolvedNativeReframe(root, invocation); }
+    catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
   }
   if ((stage === 'independent-review' || stage === 'review') && isNativePiInvocation(invocation)
     && brief.route?.deliveryMode !== 'design-only') {

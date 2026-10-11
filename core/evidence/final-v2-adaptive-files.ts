@@ -10,6 +10,9 @@ import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
 import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
 import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
+import { validateCurrentOutcomeAssessments } from '../runtime/native-outcome-review.ts';
+import { validateCurrentReferenceFidelityAssessments } from '../runtime/native-reference-fidelity.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { validateFinalV2ContentFitCurrentness } from './final-v2-content-fit.ts';
 import {
   aggregateDesignQualityContracts,
@@ -162,7 +165,18 @@ function execution(
   let parsed: unknown; try { parsed = JSON.parse(bytes.toString('utf8')); } catch { return fail(`${lane} execution is not JSON`); }
   const hasFindings = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
     && Reflect.has(parsed, 'findings');
-  const item = fields(parsed, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(lane === 'blindLane' ? ['designQuality'] : []), ...(hasFindings ? ['findings'] : []), 'isolationReceiptSha256', 'observationSha256s', 'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${lane} execution`);
+  const hasOutcomeAssessments = lane === 'protocolLane' && typeof parsed === 'object' && parsed !== null
+    && Reflect.has(parsed, 'outcomeAssessments');
+  const hasReferenceFidelityAssessments = lane === 'fidelityLane' && typeof parsed === 'object' && parsed !== null
+    && Reflect.has(parsed, 'referenceFidelityAssessments');
+  const item = fields(parsed, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(lane === 'blindLane' ? ['designQuality'] : []), ...(hasFindings ? ['findings'] : []), ...(hasOutcomeAssessments ? ['outcomeAssessments'] : []), ...(hasReferenceFidelityAssessments ? ['referenceFidelityAssessments'] : []), 'isolationReceiptSha256', 'observationSha256s', 'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${lane} execution`);
+  if (lane === 'protocolLane') {
+    const terminal = expected.observations.at(-1) ?? fail('terminal observation missing');
+    validateCurrentOutcomeAssessments(root, invocation, terminal, item.get('outcomeAssessments'));
+  }
+  if (lane === 'fidelityLane' && (isNativePiInvocation(invocation) || hasReferenceFidelityAssessments)) {
+    validateCurrentReferenceFidelityAssessments(root, invocation, expected.observations, item.get('referenceFidelityAssessments'));
+  }
   const reviewer = text(item.get('reviewerId'), `${lane} reviewerId`);
   const executionSchema = lane === 'blindLane'
     ? 'adaptive-final-reviewer-execution-v2'

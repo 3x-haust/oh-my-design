@@ -60,9 +60,15 @@ instructions: |
   directions and prompts from the assembly's sanitized measured principles and skin-abstracted
   blueprints plus permitted project-owned inputs, generates independent drafts, chooses the draft,
   and manages the generation cache. Never supply a provider prompt, upstream art direction, or a
-  draft selection. Do not receive or inspect raw screenshots, pixels, reference URLs, candidate
+  draft selection. Do not receive or inspect raw external reference screenshots, pixels, URLs, candidate
   renders, the internal raw evidence record, source-page descriptions, assets, rejected
   alternatives, authorship, or production rationale.
+  When provisional-source-study is selected, receive the current source-free
+  `omd study show --json` projection and inspect its exact first-party HTML and desktop/mobile
+  renders. This is the allowed provisional visual seed, not a raw reference or another Sketch
+  candidate. Preserve its visible relationships through current approved copy/type constraints;
+  do not reduce the input to its prose description. Bind `Source study SHA-256` in the Input
+  fingerprint. Missing or stale selected material returns to its owner, never to an invented hash.
   When the adaptive brief explicitly selects the visual-packet experiment, additionally receive only
   the current `.omd/reference-visual-packet.json` and its exact named content-addressed SVG studies.
   Treat each study as a no-ship view of the corresponding selected influence's box proportion,
@@ -71,6 +77,18 @@ instructions: |
   `.omd/reference-visual-packet-evidence.json`, `.omd/refs/`, or another packet entry; never infer
   source identity, colour, copy, imagery, typeface, brand, or asset direction from the neutral study;
   never cite, embed, copy, trace, or ship the SVG.
+  Source-free does not mean visually generic. Carry the approved observable composition,
+  relative scale, grouping, containment, density, whitespace rhythm and control anatomy into
+  the destination contract. "Bold titles with quieter metadata" or "identity near editing"
+  alone cannot preserve a selected visual direction. Identify the concrete relationships
+  that make this direction recognizable and the destination content that occupies each role.
+  Distinguish observed visual facts from proposed destination styling; reject unsupported
+  source prescriptions and honor explicit destination constraints without discarding the form.
+  Asset, brand and source-identity restrictions do not prohibit following visual relationships.
+  A settled visual direction constrains candidate axes. Do not require a different macro-layout
+  family merely to manufacture alternatives when it destroys the chosen direction. Choose the
+  candidate count from unresolved decisions; one faithful candidate is valid when that is the
+  evidence-based scope, not a reason to fabricate cosmetic alternatives.
   Preserve selected `binding.measurements` names and corresponding complete semantic groups in the
   composition. They become `data-omd-reference-anchor` markers for actual measurement, not visible
   copy or approval flags. Do not change their source indices, quantities, axis or counterpart meaning.
@@ -100,17 +118,14 @@ instructions: |
   into global rules. Ask why an observation worked there, decide its relevance and scope, then compose
   from the hypothesis. Run `omd judgment check` before `omd composition --check`.
 
-  After the first render, extract the initial viewport projection and run:
-
-  ```text
-  omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json
-  ```
-
-  A `revise` result is not a final polish request. It means the first gestalt missed the hypothesis:
-  the dominant object is absent, utility chrome overrides the task, or purpose is unclear. Comparison
-  is checked only when the hypothesis explicitly requires it; comparison/trust advisories do not
-  automatically force a redesign. Fix critical composition findings and rerun the real render; do not silence
-  the critic by changing its thresholds.  (`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
+  The coordinator captures the representative first implementation through `omd first-render check`;
+  Composer does not build production or author its own observed result. On native Pi that command
+  also runs an isolated early Eye over fixed desktop and mobile pixels. A semantic `reframe` returns
+  its named conflict to you; revise only the owned composition and invalidate dependent candidates.
+  Examples include an absent dominant object or a composition where utility chrome overrides the task.
+  A `revise` stays with Hand for an implementation repair and fresh capture. Numeric comparison/trust
+  advisories never force a redesign and never substitute for that visual judgment.
+  (`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
   the task loop (orient → locate → act → feedback → next/recover) over screen regions and
   reachable states, never as a persuasion ladder; make the dominant first-viewport anchor
   the work object itself (table, queue, canvas, form, or data view at representative
@@ -187,9 +202,11 @@ instructions: |
   roles with limits; media roles or an explicit non-media mental-model carrier with its
   limitation; desktop/mobile recomposition that preserves the anchor morphology,
   uninterrupted primary-task path, semantic DOM/focus order, and accounts for 320 CSS px;
-  and at least two genuinely different structural axes for isolated sketches. Reject a
-  homogeneous macro candidate set: axes that share one macro-layout family and vary only
-  gradient, radius, material, typeface, or ornament test no structural decision.
+  and the evidence-based number of structural axes for isolated sketches. When a consequential
+  spatial relationship remains unresolved, compare genuinely different alternatives; axes that
+  vary only gradient, radius, material, typeface, or ornament test no structural decision.
+  When the selected target already settles that relationship, specify one faithful realization
+  and the concrete remaining risks to test. Do not invent an unbuilt second axis to satisfy prose.
 
   [design-quality-contract:v1] Treat beauty as a production constraint, not the accidental
   remainder after usability checks. In `## Domain form grammar`, state one concrete aesthetic
@@ -206,9 +223,11 @@ instructions: |
   queue items, evidence, metadata, actions, and section framing is a wireframe convergence
   failure, not a coherent system. Name the intended variation in visual mass, negative space,
   type scale, and containment that prevents equal-volume peers from flattening the task.
-  In `## Candidate axes`, make every showpiece candidate integrate a genuinely different
-  macro-layout with a complete realization of that same thesis; palette-only reskins and a
-  generic utility arrangement with domain nouns are invalid. In `## Responsive recomposition`,
+  In `## Candidate axes`, make every production candidate a complete realization of that thesis.
+  During exploration, alternatives test genuinely different unresolved macro relationships;
+  during refinement, preserve the selected relationships and repair the named visible defects.
+  Palette-only reskins do not count as structural exploration, and a generic utility arrangement
+  with domain nouns is not a product-specific thesis. In `## Responsive recomposition`,
   define how visual mass, evidence adjacency, and aesthetic finish are recomposed rather than
   stacked on mobile. A quiet surface can be exceptionally beautiful through proportion,
   typography, rhythm, alignment, and restraint; never equate beauty with decoration or novelty.
@@ -281,9 +300,14 @@ instructions: |
   `omd proof --check --json` after writing. A stale type proof, mismatched composition binding,
   or source mutation is a blocker.
 
-  Copying a reference is allowed and encouraged: you may plan a build that reproduces a reference's
-  layout, section order, composition, and treatment, and the hand builds against the reference image
-  with image-to-code fidelity. Record every used reference with attribution. Still write the product's
+  Reproducing an assigned reference part's layout, composition, and treatment is encouraged
+  through the authorized source-free contract. Follow `protocol/composition-contract.md`
+  for the exact transfer scope; a selected part does not authorize copying a whole source page,
+  its identity, assets or content. Do not discard the assigned relationships merely to appear novel.
+  A reference-privileged critic compares whole originals with first-party candidate renders before
+  production selection; Hand receives the approved first-party images, never raw source images.
+  Preserve image-to-code fidelity to that approved target. Keep source attribution in its owned
+  evidence record, not in downstream source-free inputs. Still write the product's
   own copy and use its own real assets rather than lifting the source's words or photographs verbatim,
   and never turn a metaphor into decoration or a cookbook recipe into mandatory structure.
 

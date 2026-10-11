@@ -13,6 +13,8 @@ import { clearReferenceNotices, hasSuspendedReferenceScripts, prepareSuppressedR
 import { referenceDecision, type ReferenceJudgmentBinding } from './judgment-policy.ts';
 
 type Receipt = { path: string; sha256: string };
+type NetworkRestriction = Readonly<{ method: string; origin: string; path: string; navigation: boolean;
+  resourceType: string; phase: 'before-action' | 'after-action' }>;
 type StepInput = { screenId: string; state: string; clicks: string[]; assertions: ViewAssertion[] };
 type Input = { schema: 'reference-flow-input-v1'; sourceId: string; flowId: string; url: string; viewport: { width: number; height: number }; steps: StepInput[] };
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
@@ -103,6 +105,8 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
   const startedAt = new Date().toISOString();
   const steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals: NoticeDismissal[] }[] = [];
   const blocked: string[] = [];
+  const networkRestrictions: NetworkRestriction[] = [];
+  let actionStarted = false;
   let limitation: string | null = null;
   try {
     await inspectionDeadline(async own => {
@@ -110,7 +114,14 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     await context.route('**/*', route => {
       const request = route.request(), url = new URL(request.url());
       if (!['GET', 'HEAD'].includes(request.method()) || (request.isNavigationRequest() && url.origin !== origin)
-        || !['https:', 'data:'].includes(url.protocol)) { blocked.push('non-read-only or cross-service request'); return route.abort(); }
+        || !['https:', 'data:'].includes(url.protocol)) {
+        networkRestrictions.push({ method: request.method(), origin: url.origin, path: url.pathname,
+          navigation: request.isNavigationRequest(), resourceType: request.resourceType(),
+          phase: actionStarted ? 'after-action' : 'before-action' });
+        if (request.isNavigationRequest() || actionStarted || !['https:', 'data:'].includes(url.protocol))
+          blocked.push('non-read-only or cross-service request');
+        return route.abort();
+      }
       return route.continue();
     });
     await context.routeWebSocket('**/*', socket => { blocked.push('WebSocket unavailable in read-only reference research'); socket.close(); });
@@ -124,7 +135,10 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
       input.steps[0]!.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector), 1000, [], overlay);
     for (const [index, step] of input.steps.entries()) {
       const beforeUrl = page.url();
-      for (const selector of step.clicks) await safeClick(page, selector, origin, actionJudgment);
+      for (const selector of step.clicks) {
+        actionStarted = true;
+        await safeClick(page, selector, origin, actionJudgment);
+      }
       const allowedStateSelectors = step.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector);
       const noticeDismissals = [...(index === 0 ? initialDismissals : []), ...await clearReferenceNotices(page, allowedStateSelectors, index === 0 ? 0 : 400, allowedStateSelectors, overlay)];
       await assertViewState(page, step.assertions);
@@ -149,7 +163,7 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     }
     }, 120000);
   } catch (error) { limitation = (error instanceof Error ? error.message : String(error)).slice(0, 2000); }
-  const record = { schema: 'reference-flow-execution-v1', input, startedAt, completedAt: new Date().toISOString(), status: limitation === null ? 'completed' : 'blocked', limitation, steps };
+  const record = { schema: 'reference-flow-execution-v1', input, startedAt, completedAt: new Date().toISOString(), status: limitation === null ? 'completed' : 'blocked', limitation, steps, networkRestrictions };
   const digest = hash(canonicalJson(record));
   const execution = save('executions', `${canonicalJson({ ...record, signature: signNativeObservation(root, 'reference-flow-v1', digest) })}\n`, 'json');
   return { execution, ...record, limitations: 'Only these public navigation/disclosure states were executed; no authenticated or transactional controls tested.' };
@@ -178,5 +192,5 @@ export function readLiveReferenceFlow(rootInput: string, receipt: Receipt) {
     const png = decodePng(read(step.capture, 'captures', 'png'));
     if (png.width !== input.viewport.width || png.height !== input.viewport.height) return fail('native capture viewport differs');
   }
-  return record as { schema: string; input: Input; status: 'completed' | 'blocked'; limitation: string | null; steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals?: NoticeDismissal[] }[] };
+  return record as { schema: string; input: Input; status: 'completed' | 'blocked'; limitation: string | null; networkRestrictions?: readonly NetworkRestriction[]; steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals?: NoticeDismissal[] }[] };
 }

@@ -59,9 +59,45 @@ test('real follow-up turn is required for a signed continuation and resumes the 
   const file = join(h.cwd, 'continuation.json'); writeFileSync(file, JSON.stringify(judgment));
   const published = await h.command(['ai-judgment', 'publish', '--input', file, '--json']);
   assert.equal(published.receipt.schema, 'ai-judgment-record-v1');
+  const routeInput = join(h.cwd, 'route-input.json');
+  writeFileSync(routeInput, JSON.stringify(fixture()));
+  const routeBefore = readFileSync(join(h.cwd, '.omd/route.json'), 'utf8');
+  const validated = await h.command(['route', 'validate', '--input', routeInput, '--json']);
+  assert.equal(validated.ok, true);
+  assert.equal(readPiRequest(h.cwd)?.recordSha256, h.source.recordSha256);
+  assert.equal(readFileSync(join(h.cwd, '.omd/route.json'), 'utf8'), routeBefore);
   await h.emit('message_end', final);
   assert.ok(h.calls.some(args => args[0] === 'stage' && args[1] === 'next'));
+  const nextTurn = 'Inspect a different task without continuing this implementation.';
+  await h.emit('input', { source: 'rpc', text: nextTurn });
+  await h.emit('before_agent_start', { prompt: nextTurn });
+  await assert.rejects(h.command(['route', 'validate', '--input', routeInput, '--json']), /OMD_REQUEST_BINDING/);
+  assert.equal(readFileSync(join(h.cwd, '.omd/route.json'), 'utf8'), routeBefore);
 });
+
+for (const decision of ['pause', 'cancel'] as const) {
+  test(`signed ${decision} does not restore suspended route binding`, async t => {
+    const h = host(t);
+    await h.emit('message_end', final);
+    const text = `Current task decision: ${decision}.`;
+    await h.emit('input', { source: 'rpc', text });
+    await h.emit('before_agent_start', { prompt: text });
+    const turn = readPiUserTurn(h.cwd)!;
+    const routeBytes = readFileSync(join(h.cwd, '.omd/route.json'), 'utf8');
+    const judgment = { schema: 'ai-judgment-v1', purpose: 'workflow-continuation', subjectId: turn.turnId,
+      context: h.requestContext, decision, reason: 'Current task decision',
+      quotes: [{ source: { kind: 'user-turn', sessionId: turn.sessionId, turnId: turn.turnId, sha256: turn.sha256 },
+        field: 'text', itemId: null, text: turn.text }], evidence: [],
+      payload: { routeSha256: requestDigest(routeBytes) } };
+    const file = join(h.cwd, 'continuation.json');
+    writeFileSync(file, JSON.stringify(judgment));
+    await h.command(['ai-judgment', 'publish', '--input', file, '--json']);
+    const routeInput = join(h.cwd, 'route-input.json');
+    writeFileSync(routeInput, JSON.stringify(fixture()));
+    await assert.rejects(h.command(['route', 'validate', '--input', routeInput, '--json']), /OMD_REQUEST_BINDING/);
+    assert.equal(readFileSync(join(h.cwd, '.omd/route.json'), 'utf8'), routeBytes);
+  });
+}
 
 test('tool and assistant text cannot become a signed real continuation turn', async t => {
   const h = host(t);

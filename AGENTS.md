@@ -55,6 +55,10 @@ the broker. A coordinator, role task, or installed agent profile must not invent
 - Native Codex provisional HTML studies use the optional `omd-study` helper, not a replacement
   production owner or approval stage. `core/theory/imagegen.md#provisional-source-studies` owns
   its input, directory grant, pre-generation decision, render, and downstream-use contract.
+- Native Pi source-aware studies use an isolated evidence-only author and bounded HTML handback,
+  not the Codex directory grant. Only that author receives complete selected originals; public
+  delivery contains first-party source/captures. Provisional selection is not aesthetic approval.
+  The selected method must precede type/composition and refuse missing or stale downstream input.
 - `new-product` and `new-marketing` are distinct reference-discovery needs. Greenfield product work
   can require a task-flow benchmark; a marketing launch does not impersonate a product workflow.
 - A prompt-only greenfield marketing brief that demands a product difference but supplies no

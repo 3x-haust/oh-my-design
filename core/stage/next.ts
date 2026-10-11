@@ -7,7 +7,7 @@ import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/do
 import { resolveRunState } from './contract.ts';
 import { stageArtifactProblems } from './output.ts';
 import { referenceResearchWork } from './reference-work.ts';
-import { referenceDiscoveryWork } from '../ref/discovery-work.ts';
+import { referenceDiscoveryWork, type ReferenceDiscoveryAction } from '../ref/discovery-work.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { nativeCompletionWork } from './native-completion.ts';
@@ -30,10 +30,10 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   }
   const outputs = state.stages.map(s => ({ ...s, problems: stageArtifactProblems(root, s.stage, invocation),
     entry: checkBriefEntry(root, s.stage, packRoot, invocation) }));
-  const incomplete = outputs.find(s => s.stage === 'reference-board' && !s.present && route.references.decision === 'discover');
+  const incomplete = outputs.find(s => s.problems.length > 0);
   let discoveryWork: ReturnType<typeof referenceDiscoveryWork> | null = null;
   let referenceLimitation: string | null = null;
-  if (incomplete) {
+  if (incomplete?.stage === 'reference-board' && route.references.decision === 'discover') {
     try { discoveryWork = referenceDiscoveryWork(root, route); }
     catch (error) { referenceLimitation = error instanceof Error ? error.message : String(error); }
   }
@@ -70,7 +70,18 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       .map(s => s.stage) },
     action: stage === null ? route.deliveryMode === 'design-only' ? 'review-design-handoff' : 'implement-or-evaluate'
       : discoveryWork?.action?.kind === 'replan-discovery' ? 'replan-reference-discovery'
-        : discoveryWork?.status === 'action' ? 'acquire-reference'
+        : discoveryWork?.status === 'action' && discoveryWork.action !== null
+          ? ({
+            'browser-consent': 'browser-consent',
+            'collect-leads': 'collect-leads',
+            'direct-entry': 'acquire-reference',
+            'follow-link': 'acquire-reference',
+            'publish-board': 'author-output',
+            'replan-discovery': 'replan-reference-discovery',
+            'retain-reference': 'retain-reference',
+            'review-candidates': 'review-candidates',
+            search: 'acquire-reference',
+          } satisfies Readonly<Record<ReferenceDiscoveryAction['kind'], string>>)[discoveryWork.action.kind]
         : discoveryWork?.status === 'exhausted' ? 'resolve-external-blocker'
           : incomplete?.present ? 'repair-output' : 'author-output',
     problems: stage === null ? [] : stageArtifactProblems(root, stage, invocation),
@@ -90,6 +101,7 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     ...(research ?? interpretation ?? {}),
     ...(native === null ? {} : { ...native, entryBlockers: nativeBrief?.blockers ?? [],
       schemas: nativeBrief?.schemas ?? [], contracts: nativeBrief?.contracts ?? [], judgedBy: nativeBrief?.judgedBy ?? [],
-      ...(nativeBrief?.procedure === undefined ? {} : { procedure: nativeBrief.procedure }) }),
+      ...('procedure' in native ? { procedure: native.procedure }
+        : nativeBrief?.procedure === undefined ? {} : { procedure: nativeBrief.procedure }) }),
   };
 }

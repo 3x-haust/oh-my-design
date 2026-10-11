@@ -62,7 +62,7 @@ function harness(cwd: string) {
     route.request = domain().request;
     if (deep) {
       const strategy = route.strategyDecision as { stages: string[]; roles: string[]; executionWaves: object[] };
-      strategy.stages = ['domain', 'frame', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review'];
+      strategy.stages = ['domain', 'frame', 'acquisition', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review'];
       strategy.roles = ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye'];
       strategy.executionWaves = [
         { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
@@ -77,6 +77,11 @@ function harness(cwd: string) {
     await author('.omd/.cache/route-input.json', route);
     await command(['route', 'validate', '--input', '.omd/.cache/route-input.json', '--json']);
     await command(['route', 'classify', '--input', '.omd/.cache/route-input.json', '--json']);
+    await author('.omd/.cache/acquisition-plan.json', {
+      schema: 'reference-acquisition-plan-v1', owner: 'omd-framer',
+      zones: [{ id: 'confirmation', kind: 'region', job: 'Inspect the labelled confirmation.', required: true }],
+    });
+    await command(['acquisition', 'set', '--input', '.omd/.cache/acquisition-plan.json']);
     await deliver('domain'); await enter('domain');
   };
   return { emit, sent, calls, command, author, enter, deliver, start };
@@ -137,7 +142,6 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   await h.author('.omd/domain-brief.json', domain());
   assert.equal(JSON.parse(await h.command(['domain', 'check', '--json'])).unconfirmedPlanning.length, 0);
   await h.enter('frame');
-  // A bare skill invocation is not a verified workflow-intent judgment.
   await h.emit('message_end', { message: final });
   assert.equal(h.sent.length, 0);
   assert.ok(!h.calls.some(c => c[0] === 'guard' && c[1] === 'completion'));
@@ -221,6 +225,22 @@ test('planning gaps are named early, cannot be inferred away, and no-progress re
 test('only closed read-only inventory syntax is exempt from the source gate', () => {
   for (const s of ["pwd && rg --files --hidden -g '!node_modules' -g '!.git' | head -80", 'rg --files --hidden | head -200']) assert.equal(isPreproductionReadCommand(s), true, s);
   for (const s of ["rg --files --pre evil | head -80", "rg --files -g '$(touch x)'", "rg --files | head -80 > x", "pwd && rg --files\nnode x", "rg --files | head -80; touch x"]) assert.equal(isPreproductionReadCommand(s), false, s);
+});
+
+test('verified current intent authorizes automatic recovery without granting source writes', async t => {
+  const cwd = project(t), h = harness(cwd);
+  await h.start();
+  const envelope: unknown = JSON.parse(await h.command(['schema', 'ai-judgment', '--purpose', 'workflow-intent', '--json']));
+  assert.ok(typeof envelope === 'object' && envelope !== null);
+  const judgment: unknown = Reflect.get(envelope, 'skeleton');
+  assert.ok(typeof judgment === 'object' && judgment !== null);
+  Reflect.set(judgment, 'decision', 'implement');
+  Reflect.set(judgment, 'reason', 'The captured request explicitly asks to build a labelled local demo.');
+  await h.author('.omd/.cache/intent.json', judgment);
+  await h.command(['ai-judgment', 'publish', '--input', '.omd/.cache/intent.json', '--json']);
+  await h.emit('message_end', { message: final });
+  assert.ok(h.calls.some(args => args[0] === 'stage' && args[1] === 'next'));
+  assert.equal(existsSync(join(cwd, 'src')), false);
 });
 
 test('a domain brief for a different request stays with its owner and earns no stage progress', async t => {

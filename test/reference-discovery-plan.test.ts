@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { routeLocaleDesignContext } from '../core/locale/design-context.ts';
 import { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } from '../core/ref/discovery-plan.ts';
+import { expandedDiscoveryInputs } from '../core/ref/discovery-recovery.ts';
+import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
@@ -43,6 +45,27 @@ test('request language does not force named local searches', t => {
   input.taskOutcome.goal = '혜택 탐색';
   const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(input));
   assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs, []);
+});
+
+test('ordinary product discovery searches finished products before optional galleries', t => {
+  const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(fixture('medical-new-product')));
+  assert.ok(plan.designSourcePolicy.nativeSearchInputs.length > 0);
+  assert.ok(plan.designSourcePolicy.nativeSearchInputs.every(input =>
+    new URL(input.url).hostname === 'www.google.com' && input.query.endsWith('finished product app')));
+  assert.deepEqual(plan.designSourcePolicy.nativeEntryInputs, [],
+    'the default product route must not open inaccessible gallery homepages');
+});
+
+test('product recovery searches finished products with another provider before galleries', t => {
+  const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(fixture('medical-new-product')));
+  const withObservedParts = { ...plan, lanes: plan.lanes.map(lane =>
+    lane.id === 'design-reference' ? { ...lane, querySeeds: ['benefits workspace'] } : lane) };
+  const expanded = expandedDiscoveryInputs(withObservedParts, 'design');
+  assert.ok(expanded.length > 1);
+  assert.ok(expanded[0]?.query.endsWith('finished product app'));
+  const alternate = expanded[1];
+  assert.ok(alternate);
+  assert.equal(new URL(alternate.url).hostname, 'www.bing.com');
 });
 
 test('Korean-language service admission measures all visible scripts, not a small translated label', () => {
@@ -129,7 +152,7 @@ test('a one-sentence balanced marketing route investigates craft and motion with
   assert.equal(route.strategy.methods.includes('motion-one'), false);
 });
 
-test('search decisions are the current owned acquisition questions, not guessed generic sections', t => {
+test('visual acquisition questions remain decisions and never become domain searches', t => {
   const root = project(t);
   const question = 'How does a patch example preserve its labels while a connection changes?';
   writeFileSync(join(root, '.omd/acquisition-plan.json'), JSON.stringify({
@@ -141,9 +164,15 @@ test('search decisions are the current owned acquisition questions, not guessed 
       falsifier: 'The changed connection becomes detached from its labels.',
     }],
   }));
-  const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(fixture()));
+  const route = routeAdaptiveFlow(fixture());
+  const plan = buildReferenceDiscoveryPlan(root, route);
   assert.deepEqual(plan.decisions.map(decision => decision.zoneId), ['patch-example']);
-  assert.deepEqual(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds, [question]);
+  assert.deepEqual(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds, []);
+  assert.deepEqual(expandedDiscoveryInputs(plan, 'domain'), []);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.lane, 'domain');
+  assert.equal(work.action?.input?.query, route.sourceContract.taskOutcome.goal);
+  assert.equal(plan.decisions[0]?.question, question);
   const decision = plan.decisions[0];
   assert.ok(decision);
   assert.equal(decision.state, 'A labeled connection example changes after interaction.');
@@ -175,11 +204,16 @@ test('restrained discovery and sufficient existing evidence do not manufacture a
   restrainedRoute.designAxes.expressiveDesignNeed = 'restrained';
   const restrainedPlan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(restrainedRoute));
   assert.equal(restrainedPlan.lanes.some(lane => lane.id === 'design-reference'), true, 'design reference is the second required lane');
-  assert.deepEqual(restrainedPlan.galleryDirectories, ['WWIT', 'SaaSUI', 'Mobbin', 'Page Flows', 'Pinterest', 'Dribbble', 'Behance', 'UI Bowl']);
-  assert.equal(restrainedPlan.designSourcePolicy.searchQueries.some(query => query.includes('site:siteinspire.com/')), false,
-    'product UI discovery must not fall back to a marketing-gallery search');
-  assert.ok(restrainedPlan.designSourcePolicy.searchQueries.some(query => query.includes('site:mobbin.com/explore/screens/')));
-  assert.ok(restrainedPlan.designSourcePolicy.searchQueries.some(query => query.includes('site:pageflows.com/screens/')));
+  assert.deepEqual(restrainedPlan.galleryDirectories, ['Siteinspire', 'Mobbin', 'Page Flows', 'Pinterest', 'Behance']);
+  const firstDesignSearch = restrainedPlan.designSourcePolicy.nativeSearchInputs[0];
+  assert.equal(new URL(firstDesignSearch!.url).hostname, 'www.google.com',
+    'finished-product candidates are searched before gallery listings');
+  assert.equal(firstDesignSearch?.queryParam, 'q');
+  assert.equal(restrainedPlan.designSourcePolicy.searchQueries[0], firstDesignSearch?.query);
+  assert.ok(restrainedPlan.designSourcePolicy.nativeSearchInputs.every(input =>
+    new URL(input.url).hostname === 'www.google.com'), 'ordinary product work searches original products directly');
+  assert.equal(restrainedPlan.designSourcePolicy.searchQueries.some(query => query.startsWith('site:')), false);
+  assert.deepEqual(restrainedPlan.designSourcePolicy.nativeEntryInputs, []);
   assert.equal(restrainedPlan.designSourcePolicy.domainOutput, '.omd/refs/domain/research.json');
   assert.equal(restrainedPlan.designSourcePolicy.designOutput, '.omd/refs/design/research.json');
   assert.match(restrainedPlan.designSourcePolicy.fallback, /Do not purchase/);
@@ -200,7 +234,9 @@ test('stale domain queries cannot steer the current request', t => {
     surfaces: [{ name: 'Landing', purpose: 'Decide whether to adopt', evidence: [{ status: 'observed', reference: 'https://example-instrument.com' }] }],
     coreObjects: [{ name: 'Instrument', evidence: [{ status: 'user-provided', reference: 'user-message' }] }],
     audience: { description: 'Musicians', evidence: [{ status: 'user-provided', reference: 'user-message' }] },
-    referenceQueries: { component: ['patch controls'], craft: ['expressive interaction case study'], mood: ['analog warmth, patched panel, low glow'] },
+    referenceQueries: { component: ['synthesizer product launch patch controls navigation and settings', 'patch controls'],
+      craft: ['expressive interaction case study'],
+      mood: ['analog warmth, patched panel, low glow', 'instrument glow'] },
     planning: {
       businessGoal: {
         text: 'decide whether to adopt the instrument',
@@ -215,9 +251,26 @@ test('stale domain queries cannot steer the current request', t => {
   };
   writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify(domain));
   const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(input));
+  assert.equal(plan.marketReferencePolicy.marketRegion, null);
+  assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(search => search.query), [domain.domain],
+    'an unscoped market still searches the observed domain, not an implementation task sentence');
+  assert.equal(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds[0], domain.domain);
   // The visual lane searches PART keywords — the felt-direction queries plus the component names —
   // because a designer finds a direction by searching the parts, not by naming the product.
   assert.deepEqual(plan.lanes.find(lane => lane.id === 'design-reference')?.querySeeds, [...domain.referenceQueries.mood, ...domain.referenceQueries.component]);
+  const productSearches = plan.designSourcePolicy.nativeSearchInputs
+    .filter(input => new URL(input.url).hostname === 'www.google.com').map(input => input.query);
+  assert.equal(productSearches[0], 'patch controls finished website',
+    'begin with a short component query instead of an exact product description');
+  assert.ok(productSearches.includes('instrument glow finished website'));
+  assert.ok(productSearches.includes('synthesizer product launch patch controls navigation and settings finished website'));
+  writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify({
+    ...domain, referenceQueries: { ...domain.referenceQueries,
+      component: ['application preparation work surface'], mood: ['welcoming'] },
+  }));
+  assert.equal(buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(input))
+    .designSourcePolicy.nativeSearchInputs[0]?.query, 'application preparation work surface finished website',
+    'typed component searches precede a shorter mood adjective');
   const exactRequest = `\n${input.request}\n`;
   writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify({ ...domain, request: exactRequest }));
   assert.equal(buildReferenceDiscoveryPlan(root, routeAdaptiveFlow({ ...input, request: exactRequest })).request, exactRequest,

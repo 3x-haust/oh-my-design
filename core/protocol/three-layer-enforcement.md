@@ -2,6 +2,10 @@
 
 Applies to the current user-authorized OMD route, not unrelated repository work. A selected
 stage is mandatory; an explicit route skip remains a skip. Repetition alone is not enforcement.
+Missing, stale, malformed, or rejected selected prerequisites remain production blockers, never
+advisory warnings. `brief` inspection remains available; `brief --check` and `guard production`
+return a failing exit code when their selected prerequisite checks fail. Explicitly skipped stages
+and advisory visual warnings do not create mandatory inputs.
 
 ## Layer 1 — declaration
 
@@ -12,6 +16,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects. Current design research compares at least two independent visual-direction source families, distinct gallery items and distinct PNG evidence, and carries both into the board. Repeated pages, crops, aliases or captures from one product count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
+| Visual candidate admission | A selected design capture begins as an unapproved complete-original candidate. Independently signed Eye `direction` must precede byte-identical publication under refs/design and any accepted-family count; support/reject remain diagnostics. Preserve signed prior verdicts, bound task/capture/image and the 8 MiB serialized packet limit across incremental reviews; never crop or silently re-review the same pixels. | `ref add`/`add-batch` candidate-only publication; `ref direction-review --json` signed promotion; `ref work-next` counts only current direction families; board/research/application/handoff refusal |
 | Reference capture quality | Every declared public feature screen is captured in a signed native flow at a viewport that visibly contains its asserted state. A fixed full-viewport app container needs a selected visible feature, not inferred safety from its navigation or recovery controls. Informational notices are visually suppressed without invoking their close controls before retained pixels; consent, unknown, or unclosable obstructions are gaps, not visual evidence. Interaction probes cannot change the saved initial-state image. | `omd benchmark record`/`check`; `ref add`/`add-batch` capture refusal; current v3 evidence validation |
 | Korean reference scope | A Korean-language task brief starts Korean-service reference discovery without asserting a Korean cultural style. Predominantly Korean-language source UI can qualify regardless of domain suffix. Foreign-only domain captures require validated published local-domain research; editable captures and `--from-user` alone do not unlock fallback. Design-gallery pixels remain judged by the research provenance gate. A blocked Korean provider redirects discovery to another Korean operator and public transport. | `omd ref discover-plan --json`; `ref add`/`add-batch` market admission; v7 market coverage |
 | Executed discovery | Host search results are unsigned leads, not acquisition evidence. Retained non-user entries require separate signed destination observations. | `omd ref leads add|search --input <json>` and `omd ref navigate`; current research publication/currentness checks |
@@ -19,9 +24,12 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Rendered reference use | Every screen criterion has current desktop/mobile capture judgments; unresolved or stale results cannot complete. | Source seal binds the application; `omd ref apply-review-check --json`; terminal preflight |
 | Design language | Current exact-request translation binds measurable targets to stage brief, composition fingerprint/rows and production entry; pending ambiguity blocks design commitment. Current feedback requires native baseline, passing movement and independent review before refinement closure. Seed taste ranges remain advisory. | `omd language translate|check`; `omd feedback translate|check`; `DESIGN_LANGUAGE_*`, `FEEDBACK_*`; refinement checkpoint and completion preflight; see `protocol/design-language.md` |
 | Current copy and design inputs | Selected copy, current copy review, type proof, composition and candidate selection must exist and satisfy their applicable checks before source work. A PRD or stub is not their replacement. | Production readiness and its current-artifact validators |
+| Recognizable reference fidelity | Selected visual direction must survive into the first-party target and production, not collapse into generic hierarchy or task relationships. Actual whole pixels inform AI judgment; hashes and geometry do not decide aesthetic meaning. | Native candidate selection/readiness and image-bound final fidelity assessments |
 | Source ownership | Only the authorized owner and paths may change. A recipe is a source write too. | Pi write/edit boundary; routed `recipe add` inside the CLI |
 | Review closure | Inspect rendered findings, repair confirmed issues or record supported exclusions, and recheck the same scope. A new unreviewed scan cannot clear an old issue. | Slop review closure and final evidence preflight |
 | Truthful completion | Report only the verified delivery mode. A design handoff is not an implemented app; same-session review is not independent review. | `omd guard completion --json`; Pi final-message boundary |
+| Behavioral acceptance | Browser assertion execution is not semantic outcome acceptance. Existing independent protocol reviewers assess each original requirement against its actual executed plan and captures; shared evidence never substitutes for an unsupported behavior. | Native v2 executed-plan receipts; protocol `outcomeAssessments` publication; current adaptive final execution validation |
+| Zone-scoped visual evidence | Independent excellent, compatible evidence may authorize only its current named acquisition zone and static axes. It never upgrades global support or grants overall appearance intent, motion, behavior, or a direction-family count. All required zones remain required. | `ref direction-review --input <zone-input.json>`; signed zone lineage; exact board authoring/resolution scope checks; global admission predicates remain unchanged |
 
 ## Layer 2 — procedure
 
@@ -62,8 +70,9 @@ action. For `collect-leads`, use the host web search tool and register caller-re
 `omd ref leads add --input <json>`; these unsigned leads cannot satisfy evidence. `omd ref advance
 --json` executes one eligible destination navigation and records its signed observation or failure
 before the pointer is recomputed. A visited gallery item is still only discovery:
-Scout inspects its actual UI image or observed original, retains useful evidence with `ref add`, and
-authors the board with `ref board --input`. An unsuitable inspected item receives a CLI-owned
+ Scout inspects its actual UI image or observed original, stages a full-size candidate with `ref add`,
+ follows `review-candidates` to run independent Eye admission, and only then authors a board
+ from approved directions with `ref board --input`. An unsuitable inspected item receives a CLI-owned
 `ref exclude` decision bound to its exact current native visit and a specific observed reason;
 an exclusion is judgment, not proof that a provider was unavailable. If every planned public path
 has current signed unavailable attempts or explicitly excluded observed candidates, keep the board
@@ -95,6 +104,29 @@ For selected candidates, enter the Sketch stage and dispatch the isolated candid
 owns its assigned directory, not the selection pointer. The coordinator records the actual rendered
 selection, reads `schema candidate-selection`, and publishes it through `candidate select`. A legacy
 folder name, missing pointer or changed candidate bytes never completes this selected stage.
+For native Pi reference-based work, `candidate select` compares the fixed initial first-party pair
+and declared complementary state pairs with
+the complete settled used originals through an isolated critic before changing the pointer.
+The publisher executes each declared local action/assertion plan at both fixed viewports and
+binds the observed state images to the same candidate source tree. Each used slot and viewport
+needs one appropriate observed counterpart, not correspondence with every unrelated state.
+An expanded editor hiding the collection calls for an overview capture, not artificial compression
+of the product. Failed actions, assertions or source/image currentness checks publish no selection.
+A rejection persists concrete source-free repair criteria and leaves the prior selection unchanged.
+Repair the candidate, or return a source-free contract conflict to Composer; do not discard the
+reference, invent a styling exemption, or substitute generic usability for its visible character.
+Production readiness independently requires the current accepted review, so hand-writing a pointer
+does not bypass this prerequisite. Source, image, selected-reference or destination-context drift
+invalidates the applicable approval. Reference-free and explicitly skipped routes do not gain this gate.
+
+After initial production, the early critic compares current production with the exact approved
+first-party target images. Final native fidelity reviews name the visible counterpart for each
+used visual slot and viewport using current original/target image digests. Correspondence is scoped:
+an unrelated dialog need not imitate a list, but every used slot still needs an observed counterpart.
+Independent AI assesses recognizable form and justified destination adaptations; publication and
+persisted consumers reject missing, insufficient, unrecognizable or wrongly bound assessments.
+The source-free boundary prohibits raw-source delivery to production, not faithful visual treatment.
+Non-native hosts keep their authorized Eye procedure and cannot claim native attestation.
 
 At each selected stage:
 

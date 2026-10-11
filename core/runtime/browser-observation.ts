@@ -129,12 +129,15 @@ export function designDecisionSha256(value: DesignDecision): string { return has
 export function browserObservationSha256(value: BrowserObservationCore): string {
   return hash(canonicalJson({ schema: value.schema, testedUrl: value.testedUrl, testedState: value.testedState, viewport: value.viewport, observableResult: value.observableResult, decisionRefs: value.decisionRefs }));
 }
-function validate(value: unknown, decisionGraphBytes: Uint8Array, required: boolean): BrowserObservationSet | undefined {
+type DecisionGraphSource = Uint8Array | ((sha256: string) => Uint8Array);
+function validate(value: unknown, decisionGraphSource: DecisionGraphSource, required: boolean): BrowserObservationSet | undefined {
   const evidence = fields(value, [], 'observation.evidence', false);
   if (!evidence.has('browserObservations')) return required ? fail('MISSING_DECISION_LINK', 'final observation is missing browser decision links') : undefined;
   const set = fields(evidence.get('browserObservations'), ['schema', 'decisionGraphSha256', 'observations'], 'browserObservations');
   if (set.get('schema') !== BROWSER_OBSERVATION_SET_SCHEMA) fail('MALFORMED_BROWSER_OBSERVATION', 'browserObservations.schema is invalid');
-  if (digest(set.get('decisionGraphSha256'), 'browserObservations.decisionGraphSha256') !== hash(decisionGraphBytes)) fail('STALE_DECISION_GRAPH', 'browser observations do not bind the current decision graph bytes');
+  const decisionGraphSha256 = digest(set.get('decisionGraphSha256'), 'browserObservations.decisionGraphSha256');
+  const decisionGraphBytes = typeof decisionGraphSource === 'function' ? decisionGraphSource(decisionGraphSha256) : decisionGraphSource;
+  if (decisionGraphSha256 !== hash(decisionGraphBytes)) fail('STALE_DECISION_GRAPH', 'browser observations do not bind the current decision graph bytes');
   let graphInput: unknown;
   try { graphInput = JSON.parse(Buffer.from(decisionGraphBytes).toString('utf8')); } catch { return fail('MALFORMED_BROWSER_OBSERVATION', 'decision graph is not JSON'); }
   const checked = validateDecisionGraph(graphInput);
@@ -149,8 +152,8 @@ function validate(value: unknown, decisionGraphBytes: Uint8Array, required: bool
   }
   return Object.freeze({ schema: BROWSER_OBSERVATION_SET_SCHEMA, decisionGraphSha256: hash(decisionGraphBytes), observations: Object.freeze(observations) });
 }
-export function validateBrowserObservationDecisionLinks(value: unknown, decisionGraphBytes: Uint8Array, required = false): BrowserObservationSet | undefined {
-  try { return validate(value, decisionGraphBytes, required); } catch (error) {
+export function validateBrowserObservationDecisionLinks(value: unknown, decisionGraphSource: DecisionGraphSource, required = false): BrowserObservationSet | undefined {
+  try { return validate(value, decisionGraphSource, required); } catch (error) {
     if (error instanceof BrowserObservationDecisionLinkError) throw error;
     return fail('MALFORMED_BROWSER_OBSERVATION', 'browser observation input could not be inspected safely');
   }

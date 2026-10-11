@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 export const PI_REVIEWER_TOOL = 'read_reviewer_evidence';
 export const PI_REVIEWER_EVENT_PREFIX = 'OMD_PI_REVIEWER_EVENT:';
 export const PI_REVIEWER_BRIDGE_SCHEMA = 'omd-pi-reviewer-bridge-v1';
-export type PiReviewerLane = 'blindLane' | 'fidelityLane' | 'protocolLane';
+export type PiReviewerLane = 'blindLane' | 'fidelityLane' | 'protocolLane' | 'referenceAdmission' | 'firstRender' | 'candidateFidelity';
 export type PiReviewerHostContext = Readonly<{
   nodePath: string; nodeSha256: string; cliPath: string; cliSha256: string;
   provider: string; model: string; thinkingLevel: string; parentSessionId: string;
@@ -19,7 +19,16 @@ export type PiEvidenceContent = Readonly<{ type: 'text'; text: string }>
 export class PiReviewerError extends Error {
   override readonly name = 'PiReviewerError';
   readonly code: string;
-  constructor(code: string) { super(`PI_REVIEWER_REJECTED:${code}`); this.code = code; }
+  constructor(code: string, diagnostic?: Readonly<Record<string, unknown>>) {
+    const detail = diagnostic === undefined ? '' : `:${JSON.stringify({
+      type: typeof diagnostic.type === 'string' ? diagnostic.type : undefined,
+      event: typeof diagnostic.event === 'string' ? diagnostic.event : undefined,
+      error: typeof diagnostic.error === 'string' ? diagnostic.error.slice(0, 2_000) : undefined,
+      reason: typeof diagnostic.reason === 'string' ? diagnostic.reason.slice(0, 2_000) : undefined,
+    })}`;
+    super(`PI_REVIEWER_REJECTED:${code}${detail}`);
+    this.code = code;
+  }
 }
 export const piHash = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 export function piRecord(value: unknown, label: string): Record<string, unknown> {

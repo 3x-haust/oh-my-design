@@ -208,9 +208,9 @@ export function adaptiveBehaviorContract(
           ...ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityFloors,
         }),
         aggregation: ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityAggregation,
-        candidateMode: expressiveDesignNeed === 'showpiece'
-          ? 'integrated-visual'
-          : 'structural',
+        // Restraint controls expression, not whether visual quality is tested.
+        // Structural studies remain useful experiments, not the selected production target.
+        candidateMode: 'integrated-visual',
         evidence: ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityEvidence,
         fidelityCanSubstitute:
           ADAPTIVE_BEHAVIOR_POLICY.visual.fidelityCanSubstituteDesignQuality,

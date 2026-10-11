@@ -13,6 +13,7 @@ import { readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
 import { readDomainObservation } from '../core/ref/domain-observation.ts';
 import { assertPublicNetworkUrl, createPublicNetworkProxy, publicIpAddress } from '../core/ref/public-network.ts';
+import { AcquisitionTimeoutError } from '../core/ref/acquisition-deadline.ts';
 import { loadRefs } from '../core/ref/store.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -76,7 +77,7 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     assert.equal(value.observed.contextOptions.length, 1);
     const contextOptions = value.observed.contextOptions[0]!;
     assert.deepEqual({ ...contextOptions, proxy: undefined }, {
-      viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false, proxy: undefined,
+      viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, serviceWorkers: 'block', acceptDownloads: false, proxy: undefined,
     });
     assert.match(contextOptions.proxy?.server ?? '', /^http:\/\/127\.0\.0\.1:\d+$/);
     assert.equal(value.observed.closed(), 1);
@@ -173,6 +174,28 @@ test('public network validation refuses private DNS answers and reserved address
       { address, family: address.includes(':') ? 6 : 4 },
     ]), /non-public/);
   }
+});
+
+test('the CONNECT proxy supports concurrent deadline and final cleanup', async () => {
+  const proxy = await createPublicNetworkProxy();
+  await Promise.all([proxy.close(), proxy.close()]);
+  await proxy.close();
+  const client = connect(Number(new URL(proxy.server).port), '127.0.0.1');
+  try {
+    const [error] = await once(client, 'error');
+    assert.ok(error instanceof Error && 'code' in error);
+    assert.equal(error.code, 'ECONNREFUSED');
+  } finally { client.destroy(); }
+});
+
+test('the CONNECT proxy final cleanup preserves the original acquisition timeout', async () => {
+  const proxy = await createPublicNetworkProxy();
+  const timeout = new AcquisitionTimeoutError(60_000, 'ref navigate');
+  await proxy.close();
+  await assert.rejects(async () => {
+    try { throw timeout; }
+    finally { await proxy.close(); }
+  }, error => error === timeout);
 });
 
 test('the CONNECT proxy pins the socket to the exact validated DNS answer', async t => {

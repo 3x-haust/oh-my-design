@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 
 export const TRUSTED_BROWSER_RECEIPT_SCHEMA = 'trusted-browser-receipt-v1' as const;
+export const TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA = 'trusted-browser-receipt-v2' as const;
 
 export type TrustedBrowserReceiptErrorCode =
   | 'MALFORMED_TRUSTED_BROWSER_RECEIPT';
@@ -26,7 +27,8 @@ export type TrustedBrowserCapture = Readonly<{
 }>;
 
 export type TrustedBrowserReceipt = Readonly<{
-  schema: typeof TRUSTED_BROWSER_RECEIPT_SCHEMA;
+  schema: typeof TRUSTED_BROWSER_RECEIPT_SCHEMA | typeof TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA;
+  executionPlanSha256?: string;
   runId: string;
   routeSha256: string;
   sourceContractSha256: string;
@@ -76,7 +78,7 @@ const ENTRY_SURFACE_KEYS = new Set([
   'status',
 ]);
 const CODE = /^[a-z0-9]+(?:[-:][a-z0-9]+)*$/;
-const TRANSCRIPT = /^(?:(?:action-click|action-fill|assertion-pass|assertion-fail):[a-f0-9]{64}|(?:access|safety)-finding:[a-z0-9]+(?:[-:][a-z0-9]+)*|rendered-copy-review:(?:1280x900|390x844):[A-Za-z0-9_-]{1,10924})$/;
+const TRANSCRIPT = /^(?:action-reload|(?:action-click|action-fill|assertion-pass|assertion-fail):[a-f0-9]{64}|(?:access|safety)-finding:[a-z0-9]+(?:[-:][a-z0-9]+)*|rendered-copy-review:(?:1280x900|390x844):[A-Za-z0-9_-]{1,10924})$/;
 
 function malformed(): never {
   throw new TrustedBrowserReceiptError('MALFORMED_TRUSTED_BROWSER_RECEIPT');
@@ -116,14 +118,15 @@ function digest(value: unknown): string {
 
 export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceipt {
   const candidate = input as Record<string, unknown> | null;
+  const executionBound = candidate?.schema === TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA;
+  const keys = new Set(candidate !== null && typeof candidate === 'object'
+    && Object.hasOwn(candidate, 'entrySurface') ? ENTRY_TOP_KEYS : TOP_KEYS);
+  if (executionBound) keys.add('executionPlanSha256');
   const receipt = record(
     input,
-    candidate !== null && typeof candidate === 'object'
-      && Object.hasOwn(candidate, 'entrySurface')
-      ? ENTRY_TOP_KEYS
-      : TOP_KEYS,
+    keys,
   );
-  if (receipt.schema !== TRUSTED_BROWSER_RECEIPT_SCHEMA
+  if ((!executionBound && receipt.schema !== TRUSTED_BROWSER_RECEIPT_SCHEMA)
     || typeof receipt.runId !== 'string' || receipt.runId === ''
     || !Array.isArray(receipt.outcomeResults) || receipt.outcomeResults.length === 0
     || !Array.isArray(receipt.captures) || receipt.captures.length === 0) return malformed();
@@ -197,7 +200,8 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
     });
   });
   return Object.freeze({
-    schema: TRUSTED_BROWSER_RECEIPT_SCHEMA,
+    schema: executionBound ? TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA : TRUSTED_BROWSER_RECEIPT_SCHEMA,
+    ...(executionBound ? { executionPlanSha256: digest(receipt.executionPlanSha256) } : {}),
     runId: receipt.runId,
     routeSha256: digest(receipt.routeSha256),
     sourceContractSha256: digest(receipt.sourceContractSha256),

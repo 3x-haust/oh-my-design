@@ -18,7 +18,8 @@ export type DesignReferenceAdmission = Readonly<{
 }>;
 type AdmissionOptions = Readonly<{
   references?: readonly Reference[];
-  purpose?: 'retained' | 'discovery' | 'image-parent';
+  purpose?: 'retained' | 'discovery' | 'image-parent' | 'visual-direction';
+  candidate?: Readonly<{ capture: Buffer; image: Buffer }>;
 }>;
 const digest = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -33,6 +34,12 @@ const galleryItem = (source: string): string | null => {
 const sameGalleryItem = (source: string, finalUrl: string): boolean => {
   const sourceItem = galleryItem(source);
   return sourceItem !== null && sourceItem === galleryItem(finalUrl);
+};
+const DOCUMENTATION_ORIGINS = new Set(['design.va.gov', 'krds.go.kr', 'designsystem.digital.gov',
+  'saasui.design', 'uibowl.io']);
+export const isDocumentationReferenceOrigin = (source: string): boolean => {
+  try { return DOCUMENTATION_ORIGINS.has(new URL(source).hostname.toLowerCase().replace(/^www\./, '')); }
+  catch { return false; }
 };
 const host = (source: string): string | null => {
   try { return referenceServiceHost(source) || null; } catch (error) { if (error instanceof TypeError) return null; throw error; }
@@ -63,14 +70,15 @@ export function requiresDesignReferenceAdmission(root: string): boolean {
   }
 }
 
-function nativeCapture(root: string, reference: Reference): DesignReferenceAdmission | null {
+function nativeCapture(root: string, reference: Reference, candidate?: AdmissionOptions['candidate']): DesignReferenceAdmission | null {
   if (reference.researchLane !== 'design') return rejected('lane', 'Retain a separate design-lane capture; archival lane labels do not establish visual provenance.');
   const path = refRecordPath(root, reference);
   if (!isRetainedReferencePath(relative(root, path), 'design') || !reference.imagePath || !isRetainedReferencePath(reference.imagePath, 'design')) {
     return rejected('purpose', 'A retained design capture and its PNG must belong to the design reference namespace.');
   }
   try {
-    const raw: unknown = JSON.parse(readContainedRegularFile(root, path, 'retained design capture').toString('utf8'));
+    const raw: unknown = JSON.parse((candidate?.capture
+      ?? readContainedRegularFile(root, path, 'retained design capture')).toString('utf8'));
     if (!object(raw) || ['reference-navigation-capture-v1', 'reference-navigation-capture-v2', 'reference-navigation-capture-v3', 'reference-navigation-capture-v4',
       'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3', 'reference-discovery-entry-v4', 'reference-discovery-entry-v5'].includes(raw.schema as string)
       || raw.schema === 'reference-search-execution-v1' || raw.schema === 'reference-search-execution-v2'
@@ -89,7 +97,8 @@ function nativeCapture(root: string, reference: Reference): DesignReferenceAdmis
         && (typeof acquisition.httpStatus !== 'number' || acquisition.httpStatus < 200 || acquisition.httpStatus >= 300))) {
       return rejected('capture', 'A successful native capture bound to the actual source and image is required.');
     }
-    if (digest(readFileSync(trustedReferenceImage(root, reference.imagePath))) !== acquisition.imageSha256) return rejected('capture', 'The retained image differs from the image bound by its native acquisition.');
+    if (digest(candidate?.image ?? readFileSync(trustedReferenceImage(root, reference.imagePath))) !== acquisition.imageSha256)
+      return rejected('capture', 'The retained image differs from the image bound by its native acquisition.');
   } catch (error) {
     if (error instanceof Error) return rejected('capture', error.message);
     throw error;
@@ -115,24 +124,27 @@ function domainConflict(root: string, reference: Reference, references: readonly
 
 /** Inspect without mutating archival records; list/tidy and all retained consumers share this policy. */
 export function inspectDesignReferenceAdmission(root: string, reference: Reference, options: AdmissionOptions = {}): DesignReferenceAdmission {
-  const invalid = nativeCapture(root, reference);
+  const invalid = nativeCapture(root, reference, options.candidate);
   if (invalid) return invalid;
   const references = options.references ?? loadRefs(root, { includeDomain: true });
   const acquisition = reference.acquisition;
   if (!acquisition) return rejected('capture', 'Native acquisition is missing.');
+  if (options.purpose === 'visual-direction'
+    && (isDocumentationReferenceOrigin(reference.source) || isDocumentationReferenceOrigin(acquisition.finalUrl)))
+    return rejected('purpose', 'This known design-system documentation origin belongs to accessibility/component support, not finished-product visual direction. Inspect an actual released site or app instead.');
   // Shared service families are lawful evidence, but never independent corroboration.
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
   const sourceProvider = provider(reference.source);
   const finalProvider = provider(acquisition.finalUrl);
   if (sourceProvider !== null || finalProvider !== null) {
-    if (sourceProvider === null) return rejected('discovery', 'The capture redirected into a gallery wrapper; retain the observed original or exact useful image/crop instead.');
+    if (sourceProvider === null) return rejected('discovery', 'The capture redirected into a gallery wrapper; retain the observed original or exact whole original image instead.');
     if (finalProvider === null) return rejected('discovery', 'The gallery item redirected away from its inspectable entry; capture the original under its own source URL.');
     if (!sameGalleryItem(reference.source, acquisition.finalUrl)) return rejected('discovery', 'The gallery item redirected to a different concrete item.');
     if (reference.kind === 'image' && reference.selector) {
       return { eligible: true, code: 'gallery-image', reason: 'The retained capture is a selected UI image element from a separately visited gallery item.', discoverySource: reference.source };
     }
     if ((options.purpose ?? 'retained') === 'retained') {
-      return rejected('discovery', `${sourceProvider} is discovery provenance; follow its observed original or import the exact useful image/crop before retaining visual evidence.`);
+      return rejected('discovery', `${sourceProvider} is discovery provenance; follow its observed original or import the exact whole original image before retaining visual evidence.`);
     }
     return { eligible: true, code: 'gallery', reason: 'Successful native capture of a supported gallery item.', discoverySource: reference.source };
   }

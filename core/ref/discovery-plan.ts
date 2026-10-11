@@ -70,7 +70,7 @@ export type ReferenceDiscoveryPlan = Readonly<{
   motionEvidenceRequired: boolean;
   sourcePolicy: 'current-search-or-direct-public-then-live-inspection';
   queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes';
-  transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection';
+  transferPolicy: 'coordinator-selected-finished-product-art-direction-through-source-free-composer-and-hand-handoff';
   skipReason: string | null;
 }>;
 
@@ -117,13 +117,22 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     : marketSearchLabels(marketRegion, surfaceLocale);
   const marketLabel = searchLabels.at(-1) ?? null;
   const domain = locale?.context.domain ?? domainResearch.domain ?? route.sourceContract.taskOutcome.goal;
-  const domainQueries = marketRegion === null ? [] : [...marketDomainQueries(marketRegion, surfaceLocale, domain)];
+  const domainQueries = marketRegion === null
+    ? (domainResearch.domain === null ? [] : [domain])
+    : [...marketDomainQueries(marketRegion, surfaceLocale, domain)];
   const comparableLeads: string[] = []; // Domain-specific sources are agent-selected after observation.
-  const baseDesignQuery = [...queries.component, ...queries.mood][0] ?? (marketing ? 'typography' : 'app interface');
-  const designQueries = marketRegion === null ? [] : marketDesignQueries(marketRegion, surfaceLocale, domain, baseDesignQuery, marketing);
+  const designParts = [...new Set([
+    ...queries.component.toSorted((left, right) => left.trim().split(/\s+/u).length - right.trim().split(/\s+/u).length),
+    ...queries.mood,
+  ])];
+  const baseDesignQuery = designParts[0] ?? (marketing ? 'typography' : 'app interface');
+  const designQueries = marketRegion === null ? designParts
+    : (designParts.length ? designParts : [baseDesignQuery])
+      .flatMap(part => marketDesignQueries(marketRegion, surfaceLocale, domain, part, marketing));
   const translatedDesignQueries = marketRegion === null ? mechanisms.map(keyword => `${baseDesignQuery} ${keyword}`)
     : marketDesignQueries(marketRegion, surfaceLocale, domain, baseDesignQuery, marketing, mechanisms);
   const designQuery = designQueries[0] ?? baseDesignQuery;
+  const finishedQuery = (query: string): string => `${query} finished ${marketing ? 'website' : 'product app'}`;
   const domainSearchInputs: DomainSearchInput[] = [];
   for (const query of domainQueries) {
     const url = new URL('https://www.google.com/search');
@@ -138,14 +147,11 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Website composition, typography, rhythm; follow the entry to the live site.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Visual-direction discovery; open the pin and trace its original, not just a thumbnail.' },
   ] : [
-    { name: 'WWIT', url: 'https://wwit.design/', purpose: 'Public Korean app-screen archive; open one named app and select its real UI screen image, not the archive wrapper.' },
-    { name: 'SaaSUI', url: 'https://www.saasui.design/pattern/dashboard', purpose: 'Free public screenshots from shipped product interfaces; inspect a specific application screen, never the category wrapper.' },
-    { name: 'Mobbin', url: 'https://mobbin.com/explore/screens', purpose: 'Public product-screen examples by task and pattern; retain a concrete screen, not the directory.' },
+    { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Visually excellent finished websites; inspect the full original live site and select its actual visual character.' },
+    { name: 'Mobbin', url: 'https://mobbin.com/explore/screens', purpose: 'Finished released app flows; inspect multiple distinct real screens from the same product, not a pattern list or one confirmation state.' },
     { name: 'Page Flows', url: 'https://pageflows.com/screens/', purpose: 'Public product screens and flow steps; retain a concrete screen and inspect surrounding flow context.' },
-    { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'App UI/component discovery; verify screen provenance and target viewport before retaining.' },
-    { name: 'Dribbble', url: 'https://dribbble.com/', purpose: 'Public app UI shots by pattern; distinguish concepts from released screens, no paid download needed.' },
-    { name: 'Behance', url: 'https://www.behance.net/', purpose: 'Public product case-study screen sequences; inspect actual screen images, not only presentation covers.' },
-    { name: 'UI Bowl', url: 'https://uibowl.io/', purpose: 'Optional public app screens only; do not require or purchase the paid MCP.' },
+    { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Discover finished websites and released app flows; trace each pin to original full-size screens, not a mood thumbnail.' },
+    { name: 'Behance', url: 'https://www.behance.net/', purpose: 'Discover visually exceptional shipped-product case studies; inspect multiple actual app screens and original product where available.' },
   ];
   const motionDiscovery = motionEvidenceRequired;
   const decisions = (plan?.zones ?? []).filter(zone => zone.required).map(zone => {
@@ -164,15 +170,16 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   if (discovering) {
     lanes.push({
       id: 'domain-reference',
-      purpose: 'Find at least three comparable services from independent operator families and inspect their task flows: information architecture, domain vocabulary, states, and actionable sequence. Multiple pages or subdomains under one operator count once.',
-      querySeeds: [...domainQueries, ...comparableLeads, ...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
-      evidence: [...(marketLabel === null ? [] : [`comparable services actively serving ${marketLabel}`]), 'three independent service families', 'live similar-service task flows', 'domain objects and states', 'paired-viewport anatomy', 'zone-bound native capture'],
+      purpose: 'Compare real services from independent operators serving the requested task: audience, eligibility/prerequisites, content and data objects, end-to-end steps across online/offline/support channels, recovery, limits and friction. Contrast what works and fails against exact user-requested outcomes; propose specialization as a hypothesis until user/task evidence validates it. Multiple pages under one operator count once.',
+      querySeeds: [...domainQueries, ...comparableLeads],
+      evidence: [...(marketLabel === null ? [] : [`comparable services actively serving ${marketLabel}`]), 'independent operator comparisons', 'signed current visible task text and links', 'audience, eligibility and data objects', 'end-to-end online/offline/support/recovery steps and observed limits', 'request-quoted adopt/avoid and uncertain differentiation'],
     });
     lanes.push({
       id: 'design-reference',
-      purpose: 'Find visual direction across many sites: layout rhythm, density, type, colour, material, and component craft.',
-      querySeeds: [...new Set([...designQueries, ...translatedDesignQueries, ...mechanisms, ...querySeeds('mood', [...queries.mood, ...queries.component])])],
-      evidence: [...(marketLabel === null ? [] : [`visual direction from products or design sources serving ${marketLabel}`]), 'actual product screens or exact UI images, never gallery wrapper pages', 'several candidates before narrowing', 'measured layout and type parts'],
+      purpose: 'Inspect real aesthetically beautiful finished websites and released multi-screen app flows for hierarchy, density, interactions and desktop/mobile usability appropriate to the requested task. Select a visual character after judging beauty AND task/UX fit independently of domain similarity; never copy source pixels. Documentation, catalogues, one-off confirmations and functional relevance alone are not visual direction.',
+      querySeeds: [...new Set([...(marketRegion === null ? [...queries.mood, ...queries.component] : designQueries),
+        ...translatedDesignQueries, ...mechanisms, ...querySeeds('mood', [...queries.mood, ...queries.component])])],
+      evidence: [...(marketLabel === null ? [] : [`visual direction from finished products serving ${marketLabel}`]), 'full finished website or multiple screens from a released app', 'separate aesthetic and task/UX-fit acceptance/rejection', 'selected visual character and composition for desktop/mobile destination', 'several visually distinct candidates before narrowing'],
     });
   }
   if (discovering && motionDiscovery) lanes.push({
@@ -217,21 +224,28 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       designOutput: '.omd/refs/design/research.json',
       candidates: Object.freeze(galleryCandidates),
       searchQueries: Object.freeze(!discovering ? [] : [...new Set([...(designQueries.length === 0 ? [designQuery] : designQueries), ...translatedDesignQueries])].flatMap(query => [
-        `site:pinterest.com/pin/ ${query}`,
-        `${marketing ? 'site:siteinspire.com/websites/' : 'site:mobbin.com/explore/screens/'} ${query}`,
-        ...(!marketing ? [`site:pageflows.com/screens/ ${query}`, `site:dribbble.com/shots/ ${query}`, `site:behance.net/gallery/ ${query}`] : []),
+        finishedQuery(query),
+        ...(marketing ? [`site:pinterest.com/pin/ ${query}`, `site:siteinspire.com/websites/ ${query}`] : []),
       ])),
       nativeSearchInputs: Object.freeze(!discovering ? [] : [...new Set([...(designQueries.length === 0 ? [designQuery] : designQueries), ...translatedDesignQueries])]
-        .flatMap(query => gallerySearchInputs(query, marketing ? 'marketing' : 'product'))),
-      nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
+        .flatMap(query => {
+          const search = new URL('https://www.google.com/search');
+          search.searchParams.set('q', finishedQuery(query));
+          return [{ lane: 'design' as const, query: finishedQuery(query), url: search.href, queryParam: 'q' as const },
+            ...(marketing ? gallerySearchInputs(query, 'marketing') : [])];
+        })),
+      nativeEntryInputs: Object.freeze(marketing ? galleryCandidates.map(candidate =>
+        Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url })) : []),
       domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
-      fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6/v7 research put the native root plus your reason in discoveryRoots, follow observed links and visit the concrete gallery item with ref navigate --lane design; keep that visit under discovery. Retain its observed original with ref add or capture one loaded UI img element with ref add <item-url> --lane design --selector <img-css>; cropping is not required. A list or wrapper page is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
+      fallback: marketing
+        ? 'Use actual search results or inspect a public gallery list only to find an original finished website. Retain the whole original at native resolution, never a list thumbnail or cropped screenshot. Use the OMD-owned browser for permitted login or challenge. Do not purchase, start a trial, install an MCP, or claim a blocked source was inspected.'
+        : 'Search several finished-product sites with public task content, then open their original product URLs and inspect populated desktop/mobile states. A gallery is optional lead discovery only after direct products fail, never a retained design reference. Stage whole 2x captures for independent Eye review; only approved directions are retained. Use the OMD-owned browser for permitted login or challenge. Do not purchase, start a trial, install an MCP, or claim a blocked source was inspected.',
     }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,
     sourcePolicy: 'current-search-or-direct-public-then-live-inspection',
     queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes',
-    transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection',
+    transferPolicy: 'coordinator-selected-finished-product-art-direction-through-source-free-composer-and-hand-handoff',
     skipReason: discovering ? null : route.sourceContract.referenceDiscovery.skipReason,
   });
 }

@@ -13,9 +13,19 @@ instructions: |
   candidates, production, or a verdict. The coordinator owns the art-direction decision and
   captures your source after you finish. This is provisional decision material, not a shipped page.
 
-  Start only when the native Codex host explicitly supplies OMD_STUDY_OUTPUT_DIR and identifies
-  that exact directory in its task wrapper. Other hosts without this grant do not support this
-  source-only lane; return the missing capability without inventing a directory or authority.
+  Native Pi has a separate evidence-only lane through `omd study create`. Its isolated process
+  receives only the source-owned task and a one-use packet containing real destination content
+  and complete selected original images. Inspect those pixels privately; transfer composition
+  and treatment, never source identity, text or assets. Return the bounded JSON handback with
+  one complete index.html; do not use filesystem tools or publish records. The host validates,
+  renders in a network-denying sandbox, and publishes provisional first-party results. Use
+  in-memory interaction state, not local storage, external assets or network requests.
+  The following filesystem instructions apply only to the explicit Codex direct-write grant,
+  not to the Pi evidence-only lane.
+
+  Start that direct-write lane only when the native Codex host explicitly supplies
+  OMD_STUDY_OUTPUT_DIR and identifies that exact directory in its task wrapper. A host without
+  either supported grant must report the missing capability, not invent a directory or authority.
   Write index.html and any local study assets only inside that directory. Never write production,
   another study, .omd records, or package/host configuration. Do not publish through OMD CLI,
   capture with a browser, access the network, or delegate work. No package installation is needed.
@@ -25,7 +35,9 @@ instructions: |
   real content, the proposed content-to-form relationship, an observable consequence, the primary
   action, and desktop/mobile viewports. Return an exact missing input if these are absent. Do not
   wait for or create Frame, Writer, Typesetter, Scout, or Composer records. Do not read the
-  coordinator skill, raw external references, unselected studies, or unrelated project records.
+  coordinator skill, unselected studies, or unrelated project records. The Codex direct-write
+  grant does not permit raw external references; Pi may inspect only the selected originals
+  delivered through its one-use evidence packet, never by reading reference files directly.
   You may inspect an explicitly supplied selected preview image. For a bounded repair, the task may
   additionally name ONE selected native study in this project as a read-only baseline, with its completed role-result
   path, exact entry path and SHA-256. Verify those supplied identities before using its source and
@@ -65,6 +77,8 @@ instructions: |
   local state and recovery, keyboard access, and visible focus. This remains a study, not proof
   that the final product's whole flow works. Do not shrink important content merely to fit a box.
 
-  Return the exact index.html path, the content-to-form relationship implemented, and any concrete
+  For the direct-write grant, return the exact index.html path, the content-to-form relationship implemented, and any concrete
   unresolved constraint. Do not assign scores, pick a winner, claim browser validation, or say the
   production design is complete. Do not write explanatory study labels into the page itself.
+  Pi instead returns the exact source-owned JSON handback. Selecting either kind of study is
+  provisional: it does not establish human approval, beauty, fidelity, or a settled production target.

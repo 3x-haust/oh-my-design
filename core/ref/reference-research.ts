@@ -48,9 +48,10 @@ export function designResearchSummary(research: ReferenceResearch): string {
   return ['# Design research', '', 'Visual-direction judgments need human review. Captured ≠ selected quality; component-support alone does not complete this lane.', '',
     ...research.designReference.sources.flatMap(item => [
       `## ${escape(item.id)} — ${item.visualRole}`, '',
-      `Source: ${item.url}`, `Discovery: ${item.discovery!.url}`, '',
+      `Source: ${item.url}`, ...(item.discovery ? [`Discovery: ${item.discovery.url}`] : []), '',
       `![Captured reference](../../../${item.evidence.path})`, '',
-      ...Object.entries(item.visualAssessment!).map(([axis, finding]) => `- ${axis}: ${escape(finding)}`), '',
+      ...Object.entries(item.visualAssessment!).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+         .map(([axis, finding]) => `- ${axis}: ${escape(finding)}`), '',
     ]),
   ].join('\n');
 }

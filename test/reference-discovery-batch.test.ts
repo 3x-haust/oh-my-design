@@ -11,10 +11,79 @@ import { readSearchExecution } from '../core/ref/search-execution.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { directoryHtml, GALLERY_DIRECTORY, GALLERY_ITEM } from './helpers/discovery-capture.ts';
+import { advanceReferenceDiscoveryWork } from '../core/ref/discovery-advance.ts';
+import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
+import { publishSearchLeads } from '../core/ref/search-leads.ts';
+import { routeAdaptiveFlow } from '../core/route/index.ts';
+import { routeInput } from './helpers/discovery-work.ts';
+import { readDomainObservation } from '../core/ref/domain-observation.ts';
 
 const search = { kind: 'search', input: { lane: 'design', query: 'task panels',
   url: 'https://www.google.com/search?q=task+panels', queryParam: 'q' } } as const;
 const navigate = { kind: 'navigate', source: GALLERY_DIRECTORY, lane: 'design', entry: 'free-gallery' } as const;
+
+for (const failedIndices of [[0], [1], [0, 1, 2]]) {
+test(`default advance preserves failures ${failedIndices.join(',')} and binds the representative receipt`, async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-advance-batch-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const route = routeAdaptiveFlow(routeInput());
+  const initial = referenceDiscoveryWork(root, route);
+  assert.ok(initial.action?.input);
+  const urls = ['https://www.bokjiro.go.kr/service/', 'https://www.gov.kr/benefits/', 'https://wis.seoul.go.kr/services/'];
+  const writer = createTestProjectWriteAdapter(root);
+  publishSearchLeads(writer, route.sourceContractSha256, {
+    schema: 'reference-search-leads-v1', lane: 'domain', query: initial.action.input.query,
+    urls, provider: 'host', tool: 'web_search', observedAt: new Date().toISOString(),
+  });
+  await withBrowser(async browser => {
+    let active = 0;
+    let maxActive = 0;
+    const shared = new Proxy(browser, { get(target, property) {
+      if (property !== 'newContext') return Reflect.get(target, property, target);
+      return async (...args: Parameters<typeof browser.newContext>) => {
+        const context = await target.newContext(...args);
+        active++;
+        maxActive = Math.max(maxActive, active);
+        context.on('close', () => { active--; });
+        const newPage = context.newPage.bind(context);
+        context.newPage = async () => {
+          const page = await newPage();
+          await page.route('**/*', request => request.fulfill({
+            status: failedIndices.includes(urls.indexOf(request.request().url())) ? 403 : 200,
+            contentType: 'text/html; charset=utf-8',
+            body: '<main><h1>복지 서비스 신청 안내</h1><p>신청 대상과 필요한 서류를 확인하고 준비하는 공식 안내입니다.</p><a href="/details">신청 상세</a></main>',
+          }));
+          return page;
+        };
+        return context;
+      };
+    } });
+    const result = await advanceReferenceDiscoveryWork(root, route, writer, shared);
+    assert.ok(maxActive > 1);
+    assert.deepEqual(result.outcomes?.map(item => item.ok), urls.map((_, index) => !failedIndices.includes(index)), JSON.stringify(result.outcomes));
+    const failedIndex = failedIndices[0];
+    assert.notEqual(failedIndex, undefined);
+    const failed = result.outcomes?.find((_, index) => index === failedIndex);
+    assert.ok(failed?.kind === 'navigate' && failed.attempt);
+    const firstIndex = urls.findIndex((_, index) => !failedIndices.includes(index));
+    if (firstIndex < 0) {
+      assert.equal(result.outcome, 'unavailable');
+      assert.deepEqual(result.receipt, failed.attempt);
+      assert.equal(result.work.progress.domainFamilies, 0);
+    } else {
+      const first = result.outcomes?.[firstIndex];
+      assert.ok(first?.kind === 'navigate' && first.receipt);
+      assert.equal(first.source, urls[firstIndex]);
+      assert.equal(result.outcome, 'observed');
+      assert.deepEqual(result.receipt, first.receipt.capture);
+      const observation = readDomainObservation(root, first.receipt);
+      assert.ok(observation.taskText?.includes('복지 서비스'), JSON.stringify(observation));
+    }
+    assert.equal(result.work.progress.designFamilies, 0);
+    assert.equal(active, 0);
+  });
+});
+}
 
 test('discovery batch rejects invalid items before starting a browser', () => {
   assert.throws(() => parseDiscoveryBatchInput([search, { ...navigate, source: 'http://127.0.0.1/' }]));

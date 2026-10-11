@@ -1,4 +1,5 @@
 import type { RouteRecord } from '../route/index.ts';
+import type { Browser } from 'playwright';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { referenceDiscoveryWork, type ReferenceDiscoveryWork } from './discovery-work.ts';
 import { publishFailedAttempt, readReferenceDiscoveryAttempt, ReferenceNavigationError } from './navigation-capture.ts';
@@ -7,6 +8,7 @@ import { withAcquisitionDeadline, NAVIGATION_BUDGET_MS, AcquisitionTimeoutError 
 import { executeReferenceSearch, executeUserBrowserSearch, readSearchExecution } from './search-execution.ts';
 import { readReferenceBrowserConfig } from './browser-config.ts';
 import { withBrowser } from '../render/index.ts';
+import { runDiscoveryBatch, type DiscoveryBatchOutcome } from './discovery-batch.ts';
 
 export type ReferenceDiscoveryAdvance = Readonly<{
   schema: 'reference-discovery-advance-v1';
@@ -14,14 +16,38 @@ export type ReferenceDiscoveryAdvance = Readonly<{
   receipt: Readonly<{ path: string; sha256: string }>;
   previousWorkSha256: string;
   work: ReferenceDiscoveryWork;
+  outcomes?: readonly DiscoveryBatchOutcome[];
 }>;
 
 export async function advanceReferenceDiscoveryWork(root: string, route: RouteRecord,
-  writer: ProjectWriteAdapter): Promise<ReferenceDiscoveryAdvance> {
+  writer: ProjectWriteAdapter, batchBrowser: Browser | null = null): Promise<ReferenceDiscoveryAdvance> {
   const before = referenceDiscoveryWork(root, route);
   const action = before.action;
   if (before.status !== 'action' || action === null || action.lane === null) {
     throw new Error('REFERENCE_DISCOVERY_ADVANCE: no native acquisition action is pending');
+  }
+  if (action.kind === 'follow-link' && action.batchUrls !== undefined && action.batchUrls.length > 1) {
+    const lane = action.lane;
+    const batchUrls = action.batchUrls;
+    const batch = await withAcquisitionDeadline({ budgetMs: NAVIGATION_BUDGET_MS, phase: 'ref advance independent sources' },
+      scope => runDiscoveryBatch(batchBrowser, root,
+        batchUrls.map(source => ({ kind: 'navigate' as const, source, lane })), writer, scope));
+    let receipt: ReferenceDiscoveryAdvance['receipt'] | undefined;
+    let observed = false;
+    for (const item of batch.outcomes) {
+      if (item.kind !== 'navigate') continue;
+      if (item.ok && item.receipt !== undefined && !observed) {
+        receipt = item.receipt.capture;
+        observed = true;
+      } else if (receipt === undefined && item.attempt !== undefined) receipt = item.attempt;
+    }
+    if (receipt === undefined) throw new Error(`REFERENCE_DISCOVERY_ADVANCE: no batch receipt: ${JSON.stringify(batch.outcomes)}`);
+    return {
+      schema: 'reference-discovery-advance-v1',
+      outcome: observed ? 'observed' : 'unavailable',
+      receipt, previousWorkSha256: before.workSha256, outcomes: batch.outcomes,
+      work: referenceDiscoveryWork(root, route),
+    };
   }
   let receipt: Readonly<{ path: string; sha256: string }>;
   let outcome: ReferenceDiscoveryAdvance['outcome'];
@@ -68,6 +94,7 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
     case 'browser-consent':
       throw new Error('REFERENCE_DISCOVERY_ADVANCE: ask the browser-consent question before acquisition');
     case 'retain-reference':
+    case 'review-candidates':
     case 'publish-board':
     case 'replan-discovery':
       throw new Error('REFERENCE_DISCOVERY_ADVANCE: visual judgment or board authorship is required; native acquisition cannot publish a reference');

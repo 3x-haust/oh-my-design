@@ -116,7 +116,7 @@ function fixtureWithSelectedUpstreamStages(): unknown {
     'omd-framer', 'omd-scout',
   ]);
   Reflect.set(strategy, 'stages', [
-    'domain', 'frame', 'scout', 'reference-board', 'copy', 'production',
+    'domain', 'frame', 'acquisition', 'scout', 'reference-board', 'copy', 'production',
     'browser-evidence', 'independent-review',
   ]);
   Reflect.set(strategy, 'executionWaves', [
@@ -126,7 +126,7 @@ function fixtureWithSelectedUpstreamStages(): unknown {
     { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
     { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
   ]);
-  const selected = new Set(['frame', 'scout', 'reference-board']);
+  const selected = new Set(['frame', 'acquisition', 'scout', 'reference-board']);
   Reflect.set(
     strategy,
     'skips',

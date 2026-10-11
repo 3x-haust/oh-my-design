@@ -1,0 +1,1 @@
+import '../../../../bin/omd.ts';

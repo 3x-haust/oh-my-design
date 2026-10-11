@@ -13,6 +13,7 @@ import { parseSlopScope } from '../slop/review.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { decodePng } from '../motion/energy.ts';
+import { PNG } from 'pngjs';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 
 const PATH = '.omd/first-render-critic.json';
@@ -30,14 +31,29 @@ export async function publishFirstRenderCheck(root: string, page: string, input:
   const surface = parseFirstRenderSurface(input);
   const sourceSha256 = sources(root);
   const buildSha256 = servedProjectTreeSha256(root, scope.page);
-  const bytes = await withBrowser(browser => withLocalView(browser, root, scope, page => page.screenshot({ fullPage: true, timeout: 5000 })));
-  const capture = { path: `.omd/first-render/captures/${hash(bytes)}.png`, sha256: hash(bytes) };
-  writer.writeContentAddressed(capture.path, bytes);
+  const captures = await withBrowser(async browser => {
+    const results = [];
+    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+      const bytes = await withLocalView(browser, root, { ...scope, viewport }, async page => {
+        await page.evaluate(async () => {
+          await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          await Promise.all(document.getAnimations().filter(animation =>
+            animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished));
+        });
+        return page.screenshot({ fullPage: false, timeout: 5000 });
+      });
+      const path = `.omd/first-render/captures/${hash(bytes)}.png`;
+      writer.writeContentAddressed(path, bytes);
+      results.push({ path, sha256: hash(bytes), viewport, fullPage: false as const });
+    }
+    return results;
+  });
+  const capture = captures[0] ?? fail('desktop capture missing');
   if (sourceSha256 !== sources(root) || buildSha256 !== servedProjectTreeSha256(root, scope.page)
     || !isDeepStrictEqual(hypothesis, readDesignJudgment(root)?.hypothesis)) return fail('inputs changed during capture');
-  const native = { schema: 'first-render-check-v2', page: scope.page, sourceSha256, buildSha256, capture,
+  const native = { schema: 'first-render-check-v3', page: scope.page, sourceSha256, buildSha256, capture, captures,
     surface, report: critiqueFirstRender(hypothesis, surface), interpretation: 'agent-authored-not-attested' };
-  const record = { ...native, signature: signNativeObservation(root, 'first-render-v2', hash(canonicalJson(native))) };
+  const record = { ...native, signature: signNativeObservation(root, 'first-render-v3', hash(canonicalJson(native))) };
   const reportSha256 = hash(canonicalJson(record));
   const body = `${JSON.stringify({ ...record, reportSha256 }, null, 2)}\n`;
   writer.writeContentAddressed(`.omd/first-render/reports/${reportSha256}.json`, body);
@@ -53,11 +69,12 @@ export function checkFirstRenderEvidence(root: string) {
   }
   const bytes = read(root, PATH);
   const { reportSha256, ...record } = JSON.parse(bytes.toString('utf8'));
-  if (record.schema !== 'first-render-check-v2' || typeof reportSha256 !== 'string'
+  if (!['first-render-check-v2', 'first-render-check-v3'].includes(record.schema) || typeof reportSha256 !== 'string'
     || !/^[a-f0-9]{64}$/.test(reportSha256) || hash(canonicalJson(record)) !== reportSha256) return fail('report schema or digest is invalid');
   if (!bytes.equals(read(root, `.omd/first-render/reports/${reportSha256}.json`))) return fail('immutable report differs');
   const { signature, ...native } = record;
-  if (typeof signature !== 'string' || !verifyNativeObservation(root, 'first-render-v2', hash(canonicalJson(native)), signature)) return fail('native capture signature invalid');
+  if (typeof signature !== 'string' || !verifyNativeObservation(root,
+    record.schema === 'first-render-check-v3' ? 'first-render-v3' : 'first-render-v2', hash(canonicalJson(native)), signature)) return fail('native capture signature invalid');
   const scope = pageScope(record.page);
   if (record.sourceSha256 !== sources(root) || record.buildSha256 !== servedProjectTreeSha256(root, scope.page)) return fail('source/build changed');
   const hypothesis = readDesignJudgment(root)?.hypothesis ?? fail('hypothesis is missing');
@@ -67,6 +84,20 @@ export function checkFirstRenderEvidence(root: string) {
   const capture = read(root, record.capture.path);
   if (hash(capture) !== record.capture.sha256) return fail('capture bytes changed');
   decodePng(capture);
+  if (record.schema === 'first-render-check-v3') {
+    if (!Array.isArray(record.captures) || record.captures.length !== 2
+      || !isDeepStrictEqual(record.capture, record.captures[0])) return fail('desktop/mobile capture set invalid');
+    for (const [index, item] of record.captures.entries()) {
+      const viewport = index === 0 ? { width: 1280, height: 900 } : { width: 390, height: 844 };
+      if (!item || !isDeepStrictEqual(item.viewport, viewport) || item.fullPage !== false
+        || typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256)
+        || item.path !== `.omd/first-render/captures/${item.sha256}.png`) return fail('viewport capture binding invalid');
+      const bytes = read(root, item.path);
+      if (hash(bytes) !== item.sha256) return fail('capture bytes changed');
+      const image = PNG.sync.read(bytes);
+      if (image.width !== viewport.width || image.height !== viewport.height) return fail('fixed viewport dimensions invalid');
+    }
+  }
   if (record.report.verdict !== 'retain') return fail('critical findings remain');
-  return record;
+  return { ...record, reportSha256 };
 }

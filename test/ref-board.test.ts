@@ -201,7 +201,7 @@ test('reference board requires each image fragment to exist in the persisted rec
 test('reference board projects only sanitized transfer from an injected image-fragment resolver', (context) => {
   // Given: a valid local image plus raw fragment provenance.
   const directory = root(context); const entry = capture(directory, 'fragment-image'); const board = manifest([candidate('fragment', 'fragment-1', [piece('fragment-1', { sourceKind: 'image-fragment' })])]);
-  const resolver: ImageFragmentResolver = { resolve(_root, input) { return { ...input, imagePath: relative(directory, entry.image), provenance: { sourcePage: 'https://private.example/page', sourceImage: 'https://private.example/image.png', captureRegion: 'hero', cropBox: { x: 0, y: 0, width: 20, height: 10 }, licenseStatus: 'allowed', rightsNotes: 'Internal record.', capturedAt: '2026-07-18T00:00:00.000Z' }, transfer: { visualRole: 'atmosphere', principles: ['Use as a local abstract accent.'], geometry: { width: 20, height: 10, aspectRatio: 2 } } }; } };
+  const resolver: ImageFragmentResolver = { resolve(_root, input) { return { ...input, imagePath: relative(directory, entry.image), provenance: { sourcePage: 'https://private.example/page', sourceImage: 'https://private.example/image.png', captureRegion: 'hero', licenseStatus: 'allowed', rightsNotes: 'Internal record.', capturedAt: '2026-07-18T00:00:00.000Z' }, transfer: { visualRole: 'atmosphere', principles: ['Use as a local abstract accent.'], geometry: { width: 20, height: 10, aspectRatio: 2 } } }; } };
 
   // When: a resolver supplies the typed fragment record.
   const output = projectReferenceAssembly(resolveReferenceBoard(directory, parseReferenceBoard(board), resolver)); const outputPiece = output.candidates[0]?.pieces[0];

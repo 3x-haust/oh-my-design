@@ -21,10 +21,11 @@ export type BrowserConnector = Readonly<{
 }>;
 
 export async function selectReferenceAcquisitionEngine(config: ReferenceBrowserConfig,
-  options: { home?: string; driver?: UserBrowserDriver } = {}): Promise<'cdp' | 'custom-browser' | 'user-browser' | 'omd-profile' | 'headless'> {
+  options: { home?: string; driver?: UserBrowserDriver; explicitUserBrowser?: boolean } = {}): Promise<'cdp' | 'custom-browser' | 'user-browser' | 'omd-profile' | 'headless'> {
   if (config.cdpUrl) return 'cdp';
   if (config.executablePath || config.storageState) return 'custom-browser';
-  if (readUserBrowserConsent(options.home) === 'consented'
+  if ((options.explicitUserBrowser ?? process.env.OMD_REFERENCE_BROWSER_ENGINE === 'user-browser')
+    && readUserBrowserConsent(options.home) === 'consented'
     && (await userBrowserDoctor(undefined, options.driver)).state === 'ready') return 'user-browser';
   return config.mode === 'profile' ? 'omd-profile' : 'headless';
 }

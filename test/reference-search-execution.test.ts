@@ -68,6 +68,12 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     assert.deepEqual(execution.results, [{ url: 'https://www.pinterest.com/pin/123/', text: 'Proxy-only design entry' }]);
     assert.deepEqual(observed, [input.url]);
     assert.equal(validateSearchCoverage(root, 'design', [input.query], [receipt], execution.links).executed, 1);
+    status = 429;
+    const challengedReceipt = await executeReferenceSearch(proxy, input, writer);
+    const challenged = readSearchExecution(root, challengedReceipt, 'design');
+    assert.equal(challenged.status, 'blocked', 'test-045 Google HTTP 429 is a challenge, not a usable result');
+    assert.match(challenged.error ?? '', /hand off/);
+    assert.equal(validateSearchCoverage(root, 'design', [input.query], [challengedReceipt], []).failed, 1);
     status = 403;
     const failed = await executeReferenceSearch(proxy, input, writer);
     assert.equal(readSearchExecution(root, failed, 'design').status, 'http-error');
@@ -81,7 +87,7 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     assert.equal(readSearchExecution(root, unjudged, 'design').status, 'empty-observation');
     assert.equal(existsSync(join(root, '.omd/refs')), false, 'failed search evidence also stays outside retained references');
   });
-  assert.equal(contextOptions.length, 4);
+  assert.equal(contextOptions.length, 5);
   for (const options of contextOptions as { proxy?: { server?: string } }[]) {
     assert.match(options.proxy?.server ?? '', /^http:\/\/127\.0\.0\.1:\d+$/);
   }

@@ -102,6 +102,35 @@ test('a nonterminating repository rule remains bounded', () => {
   assert.throws(() => check(ir, stuck), /STUCK-001.*timed out/);
 });
 
+test('node-only rule evaluation does not clone the entire IR', (t) => {
+  const clone = globalThis.structuredClone;
+  let graphClones = 0;
+  t.mock.method(globalThis, 'structuredClone', <T>(value: T, options?: Parameters<typeof structuredClone>[1]): T => {
+    if (value === ir) graphClones += 1;
+    return clone(value, options);
+  });
+  const rules: Rule[] = [{ id: 'NODE-ONLY', layer: 1, category: 'system', severity: 'warn',
+    when: 'node.parent === null', value: 'node.id', assert: 'value === node.id', message: 'x' }];
+  assert.deepEqual(check(ir, rules), []);
+  assert.equal(graphClones, 0);
+});
+
+test('rule IR mutations and reassignment stay isolated between expressions', () => {
+  const before = structuredClone(ir);
+  const rootName = JSON.stringify(must(ir.nodes[0], 'root node').name);
+  const rules: Rule[] = [
+    { id: 'IR-MUTATION', layer: 1, category: 'system', severity: 'warn',
+      when: "node.parent === null && (ir.nodes[0].name = 'when-local', true)",
+      value: "(ir.nodes[0].name = 'value-local', ir.nodes[0].name)",
+      assert: `value === 'value-local' && ir.nodes[0].name === ${rootName}`, message: 'x' },
+    { id: 'IR-REASSIGNMENT', layer: 1, category: 'system', severity: 'warn',
+      when: 'node.parent === null', value: '(ir = null, ir)',
+      assert: 'value === null && ir.nodes.length > 0', message: 'x' },
+  ];
+  assert.deepEqual(check(ir, rules), []);
+  assert.deepEqual(ir, before);
+});
+
 test('team rules can reference frame concepts (Layer 2)', () => {
   const teamRule: Rule[] = [{
     id: 'BRAND-014',

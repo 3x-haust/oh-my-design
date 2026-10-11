@@ -125,6 +125,8 @@ interface Opts {
   /** Source page URL for a mood capture. */
   source?: string;
   selector?: string;
+  contentSelector?: string;
+  text?: string;
   image?: boolean;
   filmstrip?: boolean;
   squint?: boolean;
@@ -270,6 +272,7 @@ const ALIASES: Record<string, keyof Opts> = {
   'entry-surface': 'entrySurface',
   'owner-receipt': 'ownerReceipt',
   'user-answer': 'userAnswer',
+  'content-selector': 'contentSelector',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -1032,8 +1035,11 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const lane = captureLane(process.cwd(), intent, invocation);
   const validateFinalUrl = captureFinalUrlGuard(process.cwd(), [{ ...intent, lane }], invocation);
   const adapter = projectWriterFromActivation(opts, 'omd ref add');
+  const { requiresDesignReferenceAdmission } = await import('../core/ref/design-admission.ts');
+  const stageDesign = lane === 'design' && requiresDesignReferenceAdmission(process.cwd());
 
   if (opts.image) {
+    if (stageDesign) throw new Error('REFERENCE_CANDIDATE_IMAGE_REQUIRED: inspect and capture the complete original image before independent visual review');
     const path = saveRef(process.cwd(), {
       researchLane: lane,
       source: target,
@@ -1065,23 +1071,24 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const { refImagePath } = await import('../core/ref/store.ts');
   // A reference always keeps its image. `--shot` used to be the only way to get one, so a reference
   // gathered without it could never be re-examined: the measured ladders survive, the screen that
-  // produced them does not. Scope the capture to the selector when one was given, and capture the
-  // page otherwise, which is still the evidence behind the numbers.
+  // produced them does not. A selector measures one component, but the retained pixels are always
+  // the whole 2x screen or the selected image's complete native-resolution original.
   const absShot = opts.noShot
     ? undefined
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
   const { withAcquisitionDeadline, REF_ADD_BUDGET_MS } = await import('../core/ref/acquisition-deadline.ts');
   const { readReferenceBrowserConfig, selectReferenceAcquisitionEngine } = await import('../core/ref/browser-config.ts');
   const engine = await selectReferenceAcquisitionEngine(readReferenceBrowserConfig());
-  if (engine === 'user-browser' && preparation) throw new Error('OMD Browser does not automate reference preparation; use an explicit browser override');
   const { raw, shotBytes, shotError, capturePreparation, acquisition, visibleText, energyCurve } = await withAcquisitionDeadline(
     { budgetMs: engine === 'user-browser' ? 180_000 : REF_ADD_BUDGET_MS, phase: 'ref add' }, async scope => {
       if (engine === 'user-browser') {
         const captured = await captureUserBrowserPageForRef(target, captureViewport, {
           deadline: scope, selector: opts.selector ?? null, shot: Boolean(absShot), requireImageElement: galleryImage,
+          viewportShot: lane === 'design',
+          ...(preparation ? { preparation } : {}),
           validateFinalUrl: (url, visibleText) => validateFinalUrl(0, url, visibleText),
         });
-        return { ...captured, shotError: undefined, capturePreparation: undefined, energyCurve: null };
+        return { ...captured, shotError: undefined, energyCurve: null };
       }
       return withBrowser(async browser => {
         scope.assertLive();
@@ -1089,12 +1096,13 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
           deadline: scope,
           selector: opts.selector ?? null,
           requireImageElement: galleryImage,
+          viewportShot: lane === 'design',
           validateFinalUrl: (url, visibleText) => validateFinalUrl(0, url, visibleText),
           ...(absShot ? { shotOut: absShot, adapter, deferShotWrite: true } : {}),
           ...(preparation ? { preparation } : {}),
           bestEffortShot: preparation === undefined && !galleryImage,
         });
-        const energyCurve = opts.noEnergy || galleryImage || captured.acquisition.noticeDismissals?.length
+        const energyCurve = opts.noEnergy || galleryImage || captured.acquisition.sourceImage || captured.acquisition.noticeDismissals?.length
           ? null : await captureEnergy(target, { viewport: captureViewport, browser });
         scope.assertLive();
         return { ...captured, energyCurve };
@@ -1102,8 +1110,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     });
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
+  const imageReference = galleryImage || acquisition.sourceImage !== undefined;
+  if (imageReference && opts.blueprint) throw new Error('DESIGN_IMAGE_ONLY: original image pixels cannot supply an inner-UI DOM blueprint');
 
-  const slopViolations = galleryImage ? [] : check(ir, loadRules(join(root, 'core', 'rules', 'builtin')), { categories: ['slop'] });
+  const slopViolations = imageReference ? [] : check(ir, loadRules(join(root, 'core', 'rules', 'builtin')), { categories: ['slop'] });
   const slopCount = slopViolations.length;
   const slopIds = [...new Set(slopViolations.map((v) => v.id))];
 
@@ -1116,22 +1126,21 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     console.error(`blueprint: ${blueprint.nodes.length} nodes captured`);
   }
 
-  const { commitCapturedReference } = await import('../core/ref/capture-commit.ts');
-  const committed = commitCapturedReference(adapter, absShot, shotBytes, imagePath => {
+  const reference = (imagePath?: string): import('../core/types.ts').Reference => {
     const imageOmittedReason = imagePath !== undefined
       ? undefined
       : opts.noShotReason ?? (shotError === undefined ? 'the capture produced no image' : `capture failed: ${shotError}`);
-    return saveRef(process.cwd(), {
+    return {
       researchLane: lane,
       acquisition,
       ...(isKoreanLanguageServiceText(visibleText) ? { visibleKoreanText: true as const } : {}),
       source: target,
       component,
-      kind: galleryImage ? 'image' : opts.selector ? 'component' : 'page',
+      kind: imageReference ? 'image' : opts.selector ? 'component' : 'page',
       capturedAt: new Date().toISOString(),
       ...(opts.selector ? { selector: opts.selector } : {}),
       ...(opts.slot ? { slot: opts.slot } : {}),
-      invariants: galleryImage ? null : invariants,
+      invariants: imageReference ? null : invariants,
       principles: [],
       slopCount,
       ...(opts.fromUser ? { origin: 'user' as const } : {}),
@@ -1141,17 +1150,30 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
       ...(imagePath !== undefined ? { imagePath } : {}),
       viewport: captureViewport,
       ...(capturePreparation ? { capturePreparation } : {}),
-    }, adapter);
-  });
+    };
+  };
+  const { commitCapturedReference } = await import('../core/ref/capture-commit.ts');
+  const { stageDesignCandidate } = await import('../core/ref/reference-candidate.ts');
+  const committed = stageDesign
+    ? (() => {
+      if (!absShot || !shotBytes) throw new Error('REFERENCE_CANDIDATE_IMAGE_REQUIRED');
+      const candidate = stageDesignCandidate(process.cwd(), reference(relative(adapter.projectRoot, absShot)), shotBytes, adapter);
+      return { value: candidate.path, imagePath: candidate.imagePath };
+    })()
+    : commitCapturedReference(adapter, absShot, shotBytes, imagePath =>
+      saveRef(process.cwd(), reference(imagePath), adapter));
   const path = committed.value;
   if (committed.imagePath) console.error(`shot: ${committed.imagePath}`);
+  if (lane === 'design' && acquisition.imageDimensions
+    && Math.max(acquisition.imageDimensions.width, acquisition.imageDimensions.height) < 1200)
+    console.error(`warning: ${stageDesign ? 'candidate' : 'retained'} original is ${acquisition.imageDimensions.width}x${acquisition.imageDimensions.height}; prefer another full-resolution original (long side >=1200px), never crop or enlarge the thumbnail`);
   if (shotError) console.error(`shot skipped: ${shotError}`);
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
   console.error(`slop findings: ${slopCount}${slopCount > 0 ? `  [${slopIds.join(', ')}]` : ''}`);
 
   const signal = designSignal(invariants, blueprint);
-  if (!galleryImage && signal.score < LOW_SIGNAL) {
+  if (!imageReference && signal.score < LOW_SIGNAL) {
     console.error(
       `warning: low design signal (${signal.score} — missing: ${signal.missing.join(', ')}).\n`
       + 'Measured DOM evidence is insufficient; this is not a visual-quality judgment.\n'
@@ -2431,6 +2453,7 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
 
   const outDir = opts.out ?? join(process.cwd(), 'src', 'omd');
   const invocation = invocationFromActivation(opts, 'omd recipe add');
+  if (nativePiInvocation !== undefined) throw new Error('NATIVE_MAKER_REQUIRED: use omd maker run for native production; recipe show remains available');
   const result = installRecipe(packRoot, name, {
     stack,
     outDir,
@@ -2493,6 +2516,74 @@ async function cmdRefDiscoveryExclude(opts: Opts): Promise<never> {
   const { referenceDiscoveryWork } = await import('../core/ref/discovery-work.ts');
   const result = { schema: 'reference-discovery-exclusion-publication-v1', receipt,
     work: referenceDiscoveryWork(process.cwd(), route) };
+  process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`);
+  process.exit(0);
+}
+
+async function cmdRefDirectionReview(opts: Opts): Promise<never> {
+  const command = 'omd ref direction-review';
+  if (opts._.length) throw new Error(`usage: ${command} [--input <reference-zone-review-input.json>] [--json]`);
+  const invocation = invocationFromActivation(opts, command);
+  const { readPersistedRoute } = await import('../core/route/index.ts');
+  const route = readPersistedRoute(process.cwd(), invocation);
+  if (route.references.decision !== 'discover') throw new Error('REFERENCE_DIRECTION_REVIEW_NOT_SELECTED');
+  if (opts.input) {
+    const { reviewReferenceZone } = await import('./reference-zone-command.ts');
+    const record = await reviewReferenceZone(process.cwd(), inputJson(opts.input, command), {
+      invocation, writer: projectWriterFromActivation(opts, command),
+      sourceContractSha256: route.sourceContractSha256, task: route.request,
+    });
+    process.stdout.write(`${JSON.stringify({
+      path: '.omd/reference-zone-admission.json', admission: record.admission,
+    }, null, opts.json ? undefined : 2)}\n`);
+    process.exit(0);
+  }
+  const { loadRefs } = await import('../core/ref/store.ts');
+  const { inspectDesignReferenceAdmission } = await import('../core/ref/design-admission.ts');
+  const { loadDesignCandidates } = await import('../core/ref/reference-candidate.ts');
+  const { readReferenceDiscoveryExclusions } = await import('../core/ref/discovery-exclusion.ts');
+  const excludedSources = new Set(readReferenceDiscoveryExclusions(process.cwd(), route.sourceContractSha256)
+    .filter(item => item.decision.researchLane === 'design').map(item => item.decision.source));
+  const candidates = loadDesignCandidates(process.cwd()).filter(item => !excludedSources.has(item.reference.source));
+  const referencesById = new Map(loadRefs(process.cwd(), { includeDomain: true })
+    .filter(reference => reference.researchLane === 'design').map(reference => [JSON.stringify([reference.source, reference.component]), reference]));
+  for (const candidate of candidates) {
+    const reference = candidate.reference;
+    const id = JSON.stringify([reference.source, reference.component]);
+    const current = referencesById.get(id);
+    if (!current || reference.capturedAt >= current.capturedAt) referencesById.set(id, reference);
+  }
+  const references = [...referencesById.values()].filter(reference => {
+    const candidate = candidates.find(item => item.reference.source === reference.source
+      && item.reference.component === reference.component && item.reference.capturedAt === reference.capturedAt);
+    return reference.imagePath !== undefined && inspectDesignReferenceAdmission(process.cwd(), reference,
+      { ...(candidate ? { candidate } : {}), purpose: 'visual-direction' }).eligible;
+  });
+  if (references.length === 0) throw new Error('REFERENCE_DIRECTION_CAPTURE_REQUIRED');
+  const { planReferenceDirectionReview, publishReferenceDirectionAdmission } = await import('../core/ref/reference-direction-admission.ts');
+  const plan = planReferenceDirectionReview(process.cwd(), {
+    sourceContractSha256: route.sourceContractSha256, task: route.request, references,
+  });
+  const packet = plan.packet;
+  if (packet === null) {
+    const result = { path: '.omd/reference-direction-admission.json', reviewed: 0,
+      carried: plan.carried, pending: 0, complete: true, packetBytes: 0 };
+    process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`);
+    process.exit(0);
+  }
+  const { runPiReferenceAdmissionReviewer } = await import('../adapters/pi-reviewer-runtime.ts');
+  const { withNativeCommandSignal } = await import('./native-command-signal.ts');
+  const reviewer = await withNativeCommandSignal(signal => runPiReferenceAdmissionReviewer({
+    root: process.cwd(), invocation, packet, signal,
+  }));
+  const record = publishReferenceDirectionAdmission(process.cwd(), packet, reviewer, invocation,
+    projectWriterFromActivation(opts, command));
+  const result = { path: '.omd/reference-direction-admission.json', captureSetSha256: record.captureSetSha256,
+    reviewed: plan.selected, carried: plan.carried, pending: plan.pending, complete: plan.pending === 0,
+    packetBytes: packet.byteLength,
+    directions: record.admissions.filter(item => item.verdict === 'direction').length,
+    supports: record.admissions.filter(item => item.verdict === 'support').length,
+    rejected: record.admissions.filter(item => item.verdict === 'reject').length };
   process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`);
   process.exit(0);
 }
@@ -3389,9 +3480,10 @@ async function cmdSchema(name: string | undefined, opts: Opts): Promise<never> {
     process.exit(0);
   }
   if (name === 'ai-judgment') {
-    if (typeof opts.purpose !== 'string' || opts._.length) throw new Error('usage: omd schema ai-judgment --purpose <workflow-intent|workflow-continuation|target-market> [--json]');
+    if (typeof opts.purpose !== 'string' || opts._.length
+      || (opts.purpose === 'design-language-reading' && !opts.input)) throw new Error('usage: omd schema ai-judgment --purpose <workflow-intent|workflow-continuation|target-market|design-language-reading> [--input <design-language-input.json>] [--json]');
     const { judgmentStarter } = await import('./judgment-command.ts');
-    const entry = judgmentStarter(process.cwd(), opts.purpose, invocationFromActivation(opts, 'omd schema ai-judgment'));
+    const entry = judgmentStarter(process.cwd(), opts.purpose, invocationFromActivation(opts, 'omd schema ai-judgment'), opts.input);
     if (opts.json) process.stdout.write(JSON.stringify(entry));
     else console.log(`${entry.name} -> ${entry.path}\nvalidated by: ${entry.command}\nallowed decisions: ${entry.decisions.join(', ')}\n${JSON.stringify(entry.skeleton, null, 2)}`);
     process.exit(0);
@@ -3556,20 +3648,17 @@ async function cmdCue(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
-function cmdCandidate(mode: string | undefined, opts: Opts): never {
+async function cmdCandidate(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode !== 'select' || !opts.input || opts._.length > 0) {
     throw new Error('usage: omd candidate select --input <candidate-selection-pointer.json> [--json]');
   }
   const pointer = validateCandidateSelectionPointer(inputJson(opts.input, 'omd candidate select'));
   resolveCandidateSelection(process.cwd(), pointer);
-  const writer = projectWriterFromActivation(opts, 'omd candidate select');
-  writer.mkdir('.omd/.cache/sketches');
-  writer.write(CANDIDATE_SELECTION_POINTER_PATH, `${JSON.stringify(pointer, null, 2)}\n`);
+  const invocation = invocationFromActivation(opts, 'omd candidate select');
+  const { selectReviewedCandidate } = await import('../core/brief/candidate-reference-review.ts');
+  const result = await selectReviewedCandidate(process.cwd(), invocation, pointer);
   if (opts.json) {
-    process.stdout.write(JSON.stringify({
-      path: CANDIDATE_SELECTION_POINTER_PATH,
-      directory: pointer.directory,
-    }));
+    process.stdout.write(JSON.stringify(result));
   } else {
     console.log(CANDIDATE_SELECTION_POINTER_PATH);
   }
@@ -3749,6 +3838,24 @@ async function cmdRefControlObserve(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+async function cmdRefCookieControl(opts: Opts): Promise<never> {
+  if (!opts.url || !opts.selector || !opts.text || opts._.length
+    || Object.keys(opts).some(key => !['_', 'url', 'selector', 'text', 'contentSelector', 'json'].includes(key)))
+    throw new Error('usage: omd ref cookie-control --url <public-https-url> --selector <button> --text <exact-visible-text> [--content-selector <reference-content>] --json');
+  const { readReferenceBrowserConfig } = await import('../core/ref/browser-config.ts');
+  const config = readReferenceBrowserConfig();
+  if (config.mode !== 'profile') throw new Error('REFERENCE_COOKIE_CONTROL_CONSENT_REQUIRED: consented OMD profile required (no CDP or user browser)');
+  const { runReferenceCookieControl } = await import('../core/ref/cookie-control.ts');
+  const { withBrowser } = await import('../core/render/index.ts');
+  const result = await withBrowser(browser => runReferenceCookieControl(browser, {
+    url: opts.url!, selector: opts.selector!, text: opts.text!,
+    ...(opts.contentSelector === undefined ? {} : { contentSelector: opts.contentSelector }),
+  }),
+    undefined, { reference: true, config });
+  console.log(JSON.stringify(result));
+  process.exit(0);
+}
+
 async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'record') {
     if (!opts.input) throw new Error('usage: omd benchmark record --input <reference-flow-input.json> [--judgment <signed-control-judgment>]... [--json]');
@@ -3875,7 +3982,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const allowed = new Set<string>(ART_DIRECTION_CHECK_INPUT_KEYS);
   if (Object.keys(payload).some((key) => !allowed.has(key))) throw new Error('ART_DIRECTION_CALLER_DECISION_FORBIDDEN: evaluator choices, scores, and motion sources must remain inside the evaluator bytes');
   const { alternatives, references, eligibility, evaluatorAssessment, evaluatorResult, beats, invocation, route, implementationLane, fallbackPath, performanceAccessibilityBudget } = payload;
-  const run = activationInputPath(opts) === undefined
+  const run = nativePiInvocation === undefined && activationInputPath(opts) === undefined
     ? validateProjectRunInvocation(invocation)
     : invocationFromActivation(opts, command);
   if (evaluatorAssessment === undefined || evaluatorResult === undefined) throw new Error('ART_DIRECTION_EVALUATOR_AUTHORIZATION_REQUIRED: evaluator assessment and result payloads are required');
@@ -4540,14 +4647,17 @@ async function cmdBrowser(mode: string | undefined, opts: Opts): Promise<never> 
     console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-setup-v2', engine: 'user-browser', state: 'ready' }) : 'browser login completed');
     process.exit(0);
   }
-  const { launchBrowserProfileLogin } = await import('../core/ref/browser-profile.ts');
+  const { launchBrowserProfileLogin, profileLoginResult } = await import('../core/ref/browser-profile.ts');
   const outcome = await launchBrowserProfileLogin({ sites: urls });
+  const result = profileLoginResult(outcome);
   if (outcome === 'closed') {
     writeBrowserConsent('consented');
     if (opts.userAnswer !== undefined) clearBrowserAnswerReceipt();
   }
-  console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-setup-v1', outcome, consent: readBrowserConsent() }) : `browser setup: ${outcome}`);
-  process.exit(outcome === 'closed' ? 0 : 1);
+  console.log(opts.json ? JSON.stringify({ schema: 'omd-browser-setup-v1', outcome, consent: readBrowserConsent(),
+    ...(result.limitation ? { limitation: result.limitation } : {}) })
+    : `browser setup: ${outcome}${outcome === 'timeout' ? '; no human login completed; continue public research without the profile' : ''}`);
+  process.exit(result.exitCode);
 }
 
 async function cmdDoctor(): Promise<never> {
@@ -5117,7 +5227,7 @@ async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
   if (!opts.check) writeBrief(process.cwd(), brief, projectWriter(invocation));
   if (opts.json) process.stdout.write(JSON.stringify(brief));
   else process.stdout.write(formatBrief(brief));
-  process.exit(0);
+  process.exit(opts.check && brief.blockers.length > 0 ? 1 : 0);
 }
 
 /** `omd status --files` — what this project actually holds, by what it is for. */
@@ -5255,6 +5365,13 @@ async function cmdJudgment(mode: string | undefined, opts: Opts): Promise<never>
 
 /** `omd first-render check --page <local-build.html> --input <first-render-surface.json>` — current rendered gestalt. */
 async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'review') {
+    const { runFirstRenderReview } = await import('../core/design/first-render-review.ts');
+    const reviewed = await runFirstRenderReview(process.cwd(), invocationFromActivation(opts, 'omd first-render review'));
+    if (opts.json) process.stdout.write(JSON.stringify(reviewed));
+    else console.log(`first render: ${reviewed.decision}; ${reviewed.next}`);
+    process.exit(reviewed.decision === 'retain' ? 0 : 1);
+  }
   if (mode !== 'check' || opts.input === undefined || opts.page === undefined) {
     throw new Error('usage: omd first-render check --page <local-build.html> --input <first-render-surface.json> [--json]');
   }
@@ -5264,13 +5381,18 @@ async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<nev
   }
   const writer = projectWriterFromActivation(opts, 'omd first-render check');
   const checked = await publishFirstRenderCheck(process.cwd(), opts.page, inputJson(opts.input, 'omd first-render check'), writer);
+  const { runFirstRenderReview } = await import('../core/design/first-render-review.ts');
+  const visualReview = nativePiInvocation === undefined ? null
+    : await runFirstRenderReview(process.cwd(), nativePiInvocation);
   const report = checked.report;
-  if (opts.json) process.stdout.write(JSON.stringify(checked));
+  if (opts.json) process.stdout.write(JSON.stringify({ ...checked, visualReview,
+    next: visualReview?.next ?? 'inspect-both-captures-with-preproduction-eye' }));
   else {
     console.log(`first render: ${report.verdict} (${report.findings.length} finding${report.findings.length === 1 ? '' : 's'})`);
     for (const finding of report.findings) console.log(`  [${finding.severity}] ${finding.id}: ${finding.message}`);
+    if (visualReview) console.log(`visual review: ${visualReview.decision}; ${visualReview.next}`);
   }
-  process.exit(report.verdict === 'retain' ? 0 : 1);
+  process.exit(visualReview === null || visualReview.decision === 'retain' ? 0 : 1);
 }
 
 /** Advisory interchangeability read of the copy deck. Non-gating; always exit 0. */
@@ -5450,8 +5572,10 @@ function usage(): never {
     + '  Browser acquisition: explicit CDP / custom browser / storage state > consented and ready user-browser > dedicated OMD profile > headless. User-browser redirects and subresources are not isolated.\n'
     + '  ref discover-plan [--json]                  derive automatic search lanes from the current task; no user URLs required\n'
     + '  ref work-next [--json]                     show the next evidence-bound acquisition or board action\n'
-    + '  ref advance [--json]                       execute one bounded native reference acquisition attempt\n'
+    + '  ref advance [--json]                       acquire current sources (up to four independent observed URLs)\n'
     + '  ref exclude <observed-url> --lane ...     record a judged-unusable captured item and continue discovery\n'
+     + '  ref direction-review                       review fresh originals/2x PNGs; retain signed directions and component support\n'
+     + '  ref direction-review --input <zone.json>    independently review one retained original for an exact static acquisition zone\n'
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
     + '  ref research-check                         inspect both lanes and verify every claimed source and judgment\n'
     + '  ref search --input <json>                  execute a public query GET and record actual links/capture or failure\n'
@@ -5468,6 +5592,7 @@ function usage(): never {
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
     + '  ref navigate <url> --lane domain|design     capture a discovery hop; add --entry public-directory|free-gallery for an explicit direct root\n'
     + '  ref control-observe --url <https-url> --selector <control>  sign a read-only control and document observation before agent judgment\n'
+    + '  ref cookie-control --url <https-url> --selector <button> --text <exact-visible-text> [--content-selector <reference-content>]  clear a selected cookie overlay in the consented headless OMD profile\n'
     + '  ref list [--lane domain|design] [--json]     inspect separate capture inventories\n'
     + '  ref distance <page> [--selected [--gate]] [--json]  compare all refs, or selected destination selectors\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
@@ -5552,6 +5677,7 @@ function usage(): never {
     + '  complete publish --input <completeness-run.json>  publish a current immutable zero-finding completeness receipt\n'
     + '  completion typography-applicability --ir <rendered-ir.json> --activation <host-issued-invocation.json>  publish immutable Korean display applicability\n'
     + '  guard production [--path <file>] [--json]  validate selected inputs before application writes\n'
+    + '  maker run --input <native-maker.json> [--json]  fresh source-free native Pi Sketch/Hand\n'
     + '  guard completion [--json]  selected inputs plus delivery-mode-specific terminal gate\n'
     + '  completion preflight [--activation <host-issued-invocation.json>] [--json]  terminal evidence gate; retains reviewer authorization\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
@@ -5859,11 +5985,13 @@ async function main(): Promise<never> {
     if (sub === 'tidy') return cmdRefTidy(opts);
     if (sub === 'navigate') return cmdRefNavigate(opts);
     if (sub === 'control-observe') return cmdRefControlObserve(opts);
+    if (sub === 'cookie-control') return cmdRefCookieControl(opts);
     if (sub === 'discover-batch') return cmdRefDiscoveryBatch(opts);
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'work-next') return cmdRefDiscoveryWork('next', opts);
     if (sub === 'advance') return cmdRefDiscoveryWork('advance', opts);
     if (sub === 'exclude') return cmdRefDiscoveryExclude(opts);
+    if (sub === 'direction-review') return cmdRefDirectionReview(opts);
     if (sub === 'research-set') return cmdRefResearch('set', opts);
     if (sub === 'research-check') return cmdRefResearch('check', opts);
     if (sub === 'search') return cmdRefSearch(opts);
@@ -5901,7 +6029,7 @@ async function main(): Promise<never> {
     if (sub === 'mood') return cmdRefMood(args[2], parseArgs(args.slice(3)));
     if (sub === 'gates') return cmdRefGates(opts);
     const { closestNames } = await import('../core/schema/suggestions.ts');
-    const names = ['tidy', 'navigate', 'control-observe', 'discover-batch', 'discover-plan', 'work-next', 'advance', 'exclude', 'research-set', 'research-check', 'search', 'leads', 'apply-plan', 'apply-set', 'apply-check', 'apply-review-plan', 'apply-review-set', 'apply-review-check', 'add', 'add-batch', 'board', 'locale-bind', 'locale-bind-check', 'list', 'distance', 'principles', 'show', 'check', 'verify', 'v2-check', 'usage', 'usage-check', 'influence-proof', 'visual-packet', 'visual-packet-check', 'import-image', 'candidates', 'select', 'handoff', 'audit', 'granularity', 'mood', 'gates'];
+    const names = ['tidy', 'navigate', 'control-observe', 'cookie-control', 'discover-batch', 'discover-plan', 'work-next', 'advance', 'exclude', 'direction-review', 'research-set', 'research-check', 'search', 'leads', 'apply-plan', 'apply-set', 'apply-check', 'apply-review-plan', 'apply-review-set', 'apply-review-check', 'add', 'add-batch', 'board', 'locale-bind', 'locale-bind-check', 'list', 'distance', 'principles', 'show', 'check', 'verify', 'v2-check', 'usage', 'usage-check', 'influence-proof', 'visual-packet', 'visual-packet-check', 'import-image', 'candidates', 'select', 'handoff', 'audit', 'granularity', 'mood', 'gates'];
     throw new Error(`unknown ref command ${sub ?? ''}; ${closestNames(sub ?? '', names).map(name => `did you mean: omd ref ${name}?`).join(' ') || 'run omd help'}`);
   }
 
@@ -5999,6 +6127,26 @@ async function main(): Promise<never> {
   if (cmd === 'completion') return cmdCompletion(sub, parseArgs(args.slice(2)));
   if (cmd === 'guard') return cmdGuard(sub, parseArgs(args.slice(2)));
   if (cmd === 'art-direction') return cmdArtDirection(sub, parseArgs(args.slice(2)));
+  if (cmd === 'maker') {
+    if (nativePiInvocation === undefined) throw new Error('NATIVE_PI_AUTHORITY: maker requires an authenticated native Pi invocation');
+    const opts = parseArgs(args.slice(2));
+    if (opts._.length || !opts.input) throw new Error('usage: omd maker run --input <native-maker-input.json> [--json]');
+    const { nativeMakerCommand } = await import('./native-maker-command.ts');
+    const result = await nativeMakerCommand(sub, { root: process.cwd(), packRoot: join(root, 'core'),
+      input: inputJson(opts.input, 'omd maker input'), invocation: invocationFromActivation(opts, 'omd maker run') });
+    console.log(JSON.stringify(result));
+    process.exit(0);
+  }
+  if (cmd === 'study') {
+    if (nativePiInvocation === undefined) throw new Error('NATIVE_PI_AUTHORITY: study commands require an authenticated native Pi invocation');
+    const opts = parseArgs(args.slice(2));
+    if (opts._.length) throw new Error('usage: omd study create|select --input <json> [--json]; omd study show --json');
+    const { sourceStudyCommand } = await import('./source-study-command.ts');
+    const result = await sourceStudyCommand(sub, opts.input === undefined ? undefined : inputJson(opts.input, 'omd study input'),
+      { root: process.cwd(), invocation: invocationFromActivation(opts, `omd study ${sub ?? ''}`) });
+    console.log(JSON.stringify(result));
+    process.exit(0);
+  }
   if (cmd === 'schema') return cmdSchema(sub, parseArgs(args.slice(2)));
   if (cmd === 'grain') return cmdGrain(args.slice(1));
   if (cmd === 'stage') return cmdStage(sub, parseArgs(args.slice(2)));

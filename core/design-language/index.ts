@@ -109,8 +109,10 @@ export function readTranslation(root: string, kind: Input['kind'], route?: { req
 export function publishTranslation(root: string, invocation: ProjectRunInvocation, writer: ProjectWriteAdapter, kind: Input['kind'], value: unknown): TranslationPointer {
   const route = readPersistedRoute(root, invocation);
   const translation = parseInput(value, kind, route.request, route.sourceContractSha256);
-  const previous = readTranslation(root, kind, route);
-  if (previous?.translation.status === 'needs-clarification') {
+  const previous = readTranslation(root, kind);
+  const sameContext = previous?.translation.request === route.request
+    && previous.translation.sourceContractSha256 === route.sourceContractSha256;
+  if (sameContext && previous?.translation.status === 'needs-clarification') {
     if (translation.answerTo !== previous.sha256 || translation.chosenId === null || canonicalJson(translation.readings) !== canonicalJson(previous.translation.readings)
       || translation.text !== previous.translation.text || !previous.translation.question?.options.some(o => o.readingId === translation.chosenId)) fail('DESIGN_LANGUAGE_AMBIGUOUS');
   } else if (translation.answerTo !== null) fail('DESIGN_LANGUAGE_AMBIGUOUS');

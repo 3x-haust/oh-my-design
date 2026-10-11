@@ -7,6 +7,26 @@ export type DomainFetchResult = Readonly<{ kind: 'observation'; finalUrl: string
   | { kind: 'fallback'; reason: string }>;
 export type DomainFetchTransport = (url: string, signal: AbortSignal) => Promise<DomainFetchResult>;
 
+export function observeDomainHtml(html: string, url: string, status: number): DomainFetchResult {
+  if (/<input[^>]*type\s*=\s*["']?password/i.test(html)) {
+    return { kind: 'fallback', reason: 'Authentication inputs require rendered visibility observation' };
+  }
+  const observation = extractStaticHtml(html, url);
+  if (observation.observedText.replace(/\s/g, '').length < 200
+    || (observation.taskText.length < 80 && observation.shell)) return { kind: 'fallback', reason: 'JS-rendered app shell or insufficient static text' };
+  return { kind: 'observation', finalUrl: url, status, observation };
+}
+
+export async function readDomainHtmlBody(body: AsyncIterable<Uint8Array> | null): Promise<Buffer> {
+  const chunks: Uint8Array[] = []; let size = 0;
+  if (body) for await (const chunk of body) {
+    size += chunk.length;
+    if (size > 4_194_304) throw new Error('domain HTML exceeds size limit');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 export const fetchDomainHtml: DomainFetchTransport = async (source, signal) => {
   const proxy = await createPublicNetworkProxy();
   const dispatcher = new ProxyAgent(proxy.server);
@@ -28,23 +48,15 @@ export const fetchDomainHtml: DomainFetchTransport = async (source, signal) => {
       }
       if (response.status < 200 || response.status >= 300) { await response.body?.cancel(); throw new Error(`domain HTTP ${response.status}`); }
       if (!/html/i.test(response.headers.get('content-type') ?? '')) { await response.body?.cancel(); throw new Error('domain response is not HTML'); }
-      const chunks: Uint8Array[] = []; let size = 0;
+      let htmlBytes: Buffer;
       try {
-        if (response.body) for await (const chunk of response.body) {
-          size += chunk.length;
-          if (size > 1_048_576) throw new Error('domain HTML exceeds size limit');
-          chunks.push(chunk);
-        }
+        htmlBytes = await readDomainHtmlBody(response.body);
       } finally { if (!response.bodyUsed) await response.body?.cancel(); }
       const charset = /charset\s*=\s*["']?([^;"'\s]+)/i.exec(response.headers.get('content-type') ?? '')?.[1] ?? 'utf-8';
       let html: string;
-      try { html = new TextDecoder(charset, { fatal: true }).decode(Buffer.concat(chunks)); }
+      try { html = new TextDecoder(charset, { fatal: true }).decode(htmlBytes); }
       catch { throw new Error('unsupported or invalid domain HTML charset'); }
-      if (/<input[^>]*type\s*=\s*["']?password/i.test(html)) throw new Error('login form blocked domain acquisition');
-      const observation = extractStaticHtml(html, url);
-      if (observation.observedText.replace(/\s/g, '').length < 200
-        || (observation.taskText.length < 80 && observation.shell)) return { kind: 'fallback', reason: 'JS-rendered app shell or insufficient static text' };
-      return { kind: 'observation', finalUrl: url, status: response.status, observation };
+      return observeDomainHtml(html, url, response.status);
     }
     throw new Error('domain redirect limit exceeded');
   } finally { await dispatcher.close(); await proxy.close(); }

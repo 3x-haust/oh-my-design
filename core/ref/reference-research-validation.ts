@@ -4,11 +4,13 @@ import { readReferenceBoardArtifacts } from './board-artifacts.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { parseImageFragmentRecord } from './image-fragment-parser.ts';
 import { trustedDiscoveryImage, trustedReferenceImage } from './board-security.ts';
-import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
-import { validateSearchCoverage, type ObservedNavigation } from './search-execution.ts';
+import { designDiscoveryDirectoryProvider, designDiscoveryItemIdentity, designDiscoveryProvider,
+  referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { observedNavigationTargets, readSearchCoverage, validateSearchCoverage,
+  type ObservedNavigation } from './search-execution.ts';
 import { readResearchDiscoveryRoots, validateDiscoveryCoverage } from './discovery-coverage.ts';
 import { currentReferenceEvidenceAfter, readCurrentDiscoveryNavigation } from './discovery-record.ts';
-import { isRetainedReferencePath, requireDesignReferenceAdmission } from './design-admission.ts';
+import { isDocumentationReferenceOrigin, isRetainedReferencePath, requireDesignReferenceAdmission } from './design-admission.ts';
 import { loadRefs } from './store.ts';
 import { requireDesignImageAdmission } from './design-image-admission.ts';
 import { refIdentity } from './identity.ts';
@@ -21,6 +23,13 @@ import { assertCurrentMarketCapture, validateMarketReferenceCoverage } from './m
 import { referenceCaptureTimestamp } from './reference-capture-time.ts';
 import { parseTaskFlowBenchmark, taskFlowBenchmarkSha256, validateTaskFlowBenchmarkEvidence } from './task-flow-benchmark.ts';
 import { fail, httpsUrl, record, type ReferenceResearch, type ResearchEvidence, type ValidationOptions } from './reference-research-contract.ts';
+import { currentReferenceDirectionSourceContract, requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
+
+export function requireVisualPresentationImage(presentation: 'finished-product-website' | 'finished-app-flow', image: Buffer): void {
+  if (presentation === 'finished-product-website' && image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    && image.readUInt32BE(20) >= 1200 && image.readUInt32BE(16) < image.readUInt32BE(20) * .85)
+    fail('REFERENCE_VISUAL_SELECTION_REQUIRED: a portrait single app screen is not a finished desktop website; inspect its actual multi-screen flow');
+}
 
 export function readReferenceResearchFileBytes(root: string, path: string, code: string): Buffer {
   const projectRoot = resolve(root);
@@ -40,7 +49,7 @@ function verifyEvidence(root: string, item: ResearchEvidence): void {
   }
 }
 
-function verifyCapture(root: string, item: { url: string; evidence: ResearchEvidence; capture: ResearchEvidence }, lane: 'domain' | 'design', purpose: 'retained' | 'navigation' = 'retained'): Record<string, unknown> {
+export function verifyCapture(root: string, item: { url: string; evidence: ResearchEvidence; capture: ResearchEvidence }, lane: 'domain' | 'design', purpose: 'retained' | 'navigation' = 'retained'): Record<string, unknown> {
   for (const receipt of [item.evidence, item.capture]) {
     if (!(receipt.path.startsWith(`.omd/refs/${lane}/`) || (purpose === 'navigation' && receipt.path.startsWith(`.omd/discovery/${lane}/`)))) fail('REFERENCE_RESEARCH_LANE_PATH_REQUIRED');
     if (purpose === 'retained' && !isRetainedReferencePath(receipt.path, lane)) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
@@ -59,7 +68,7 @@ function verifyCapture(root: string, item: { url: string; evidence: ResearchEvid
     requireDesignImageAdmission(root, fragment);
   } else if (captured.source !== item.url || captured.imagePath !== item.evidence.path || captured.researchLane !== lane
     || typeof captured.capturedAt !== 'string' || !Number.isFinite(Date.parse(captured.capturedAt))
-    || !['page', 'component'].includes(captured.kind as string)) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
+    || !['page', 'component', 'image'].includes(captured.kind as string)) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
   if (captured.schemaVersion !== 'image-fragment-v1') {
     const acquisition = record(captured.acquisition, 'REFERENCE_RESEARCH_ACQUISITION_REQUIRED');
     if (acquisition.requestedUrl !== item.url || typeof acquisition.finalUrl !== 'string'
@@ -86,6 +95,20 @@ function currentNavigation(root: string, item: { url: string; evidence: Research
 
 export function validateReferenceResearch(root: string, research: ReferenceResearch, options: ValidationOptions): void {
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
+  const admissionSourceContract = currentReferenceDirectionSourceContract(root);
+  if (research.schema === 'reference-research-v8' && admissionSourceContract !== null) {
+    if (admissionSourceContract !== options.expectedSourceContractSha256) fail('REFERENCE_DIRECTION_ADMISSION_STALE');
+    const retained = loadRefs(root, { includeDomain: true });
+    for (const source of research.designReference.sources) {
+      const reference = source.evidence.path.startsWith('.omd/refs/design/fragments/')
+        ? requireDesignImageAdmission(root, parseImageFragmentRecord(verifyCapture(root, source, 'design')))
+        : retained.find(item => item.researchLane === 'design' && item.source === source.url
+          && item.imagePath === source.evidence.path);
+      if (!reference) fail('REFERENCE_DIRECTION_ADMISSION_MISSING');
+      requireReferenceDirectionAdmission(root, reference, admissionSourceContract,
+        source.visualRole === 'visual-direction' ? 'direction' : 'support');
+    }
+  }
   if (research.schema === 'reference-research-v8') for (const lane of ['domain', 'design'] as const) {
     for (const receipt of research[lane === 'domain' ? 'domainReference' : 'designReference'].leads ?? [])
       readSearchLeads(root, receipt, lane, research.sourceContractSha256);
@@ -147,10 +170,33 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   for (const item of research.designReference.sources) {
     const discovery = item.discovery;
     const source = verifyCapture(root, item, 'design');
+    const parent = source.schemaVersion === 'image-fragment-v1'
+      ? requireDesignImageAdmission(root, parseImageFragmentRecord(source))
+      : references.find(ref => ref.researchLane === 'design' && ref.source === item.url && ref.imagePath === item.evidence.path);
+    if (!parent) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
     if (['reference-research-v7', 'reference-research-v8'].includes(research.schema) && item.visualRole === 'visual-direction') {
       const acquisition = source.acquisition as Record<string, unknown> | undefined;
       const finalUrl = typeof acquisition?.finalUrl === 'string' ? acquisition.finalUrl : item.url;
       finalDesignSourceFamilies.add(referenceServiceFamily(finalUrl));
+    }
+    const visualSelection = item.visualAssessment?.selection;
+    if (research.schema === 'reference-research-v8' && item.visualRole === 'visual-direction') {
+      if (!visualSelection) fail('REFERENCE_VISUAL_SELECTION_REQUIRED: inspect a finished website or multi-screen app visually, reject documentation and pattern catalogues, and author a specific appearance intent');
+      if (isDocumentationReferenceOrigin(item.url) || isDocumentationReferenceOrigin(String((source.acquisition as Record<string, unknown> | undefined)?.finalUrl ?? item.url)))
+        fail('REFERENCE_VISUAL_SELECTION_REQUIRED: design-system documentation is component support, not a finished-product visual direction');
+      const image = readReferenceResearchFileBytes(root, item.evidence.path, 'REFERENCE_VISUAL_SELECTION_REQUIRED');
+      requireVisualPresentationImage(visualSelection.presentation, image);
+      requireDesignReferenceAdmission(root, parent, { references, purpose: 'visual-direction' });
+      const seen = new Set([item.evidence.sha256]);
+      for (const receipt of visualSelection.flowCaptures) {
+        verifyEvidence(root, receipt);
+        const related = references.find(ref => ref.researchLane === 'design' && ref.imagePath === receipt.path
+          && referenceServiceFamily(ref.acquisition?.finalUrl ?? ref.source) === referenceServiceFamily(item.url));
+        if (!related || !related.acquisition || related.acquisition.imageSha256 !== receipt.sha256
+          || !isRetainedReferencePath(receipt.path, 'design') || seen.has(receipt.sha256)) fail('REFERENCE_VISUAL_FLOW_EVIDENCE_REQUIRED: cite distinct inspected screens from one provider; Scout must judge whether they form the same finished app flow');
+        requireDesignReferenceAdmission(root, related, { references });
+        seen.add(receipt.sha256);
+      }
     }
     if (localMarketSources.design.has(item.id)) assertCurrentMarketCapture(referenceCaptureTimestamp(source), 'DESIGN');
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
@@ -158,16 +204,28 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     else fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
     if (!discovery) {
       observe('design', item.url, source);
-      const reference = references.find(ref => ref.researchLane === 'design' && ref.source === item.url && ref.component === source.component);
-      if (!reference) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
-      requireDesignReferenceAdmission(root, reference, { references });
+      requireDesignReferenceAdmission(root, parent, { references });
       continue;
     }
-    const galleryVisit = discovery.capture.path.startsWith('.omd/discovery/design/navigation/');
-    if (galleryVisit) currentNavigation(root, {
+    const nativeVisit = discovery.capture.path.startsWith('.omd/discovery/design/navigation/');
+    const visit = nativeVisit ? currentNavigation(root, {
       url: discovery.url, evidence: discovery.evidence, capture: discovery.capture,
-    });
-    const entry = verifyCapture(root, discovery, 'design', galleryVisit ? 'navigation' : 'retained');
+    }) : null;
+    const entry = verifyCapture(root, discovery, 'design', nativeVisit ? 'navigation' : 'retained');
+    if (discovery.kind === 'direct-product') {
+      const retained = record(source.schemaVersion === 'image-fragment-v1' ? parent.acquisition : source.acquisition,
+        'REFERENCE_RESEARCH_DIRECT_PRODUCT_PROVENANCE_REQUIRED');
+      if (visit === null || discovery.url !== item.url || visit.finalUrl !== retained.finalUrl
+        || designDiscoveryProvider(discovery.url) !== null || designDiscoveryDirectoryProvider(discovery.url) !== null
+        || designDiscoveryProvider(visit.finalUrl) !== null || designDiscoveryDirectoryProvider(visit.finalUrl) !== null
+        || domainHosts.has(serviceIdentity(discovery.url)) || domainHosts.has(serviceIdentity(visit.finalUrl)))
+        fail('REFERENCE_RESEARCH_DIRECT_PRODUCT_PROVENANCE_REQUIRED');
+    } else if (research.schema === 'reference-research-v8' && discovery.kind !== 'user-provided') {
+      const identity = designDiscoveryItemIdentity(discovery.url);
+      if (identity === null || designDiscoveryItemIdentity(httpsUrl(record(entry.acquisition,
+        'REFERENCE_RESEARCH_GALLERY_ITEM_REQUIRED').finalUrl)) !== identity)
+        fail('REFERENCE_RESEARCH_GALLERY_ITEM_REQUIRED');
+    }
     observe('design', item.url, source);
     observe('design', discovery.url, entry);
     // Entry provider and lane independence are recommendations; signed capture identity remains checked.
@@ -178,7 +236,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     }
     for (const [captured, url, purpose] of [[source, item.url, 'retained'], [entry, discovery.url, 'discovery']] as const) {
       if (captured.schemaVersion === 'image-fragment-v1') continue;
-      if (purpose === 'discovery' && galleryVisit) continue;
+      if (purpose === 'discovery' && nativeVisit) continue;
       const reference = references.find(ref => ref.researchLane === 'design' && ref.source === url && ref.component === captured.component);
       if (!reference) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
       requireDesignReferenceAdmission(root, reference, { references, purpose });
@@ -190,7 +248,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     const sourceUrls = lane === 'domain' ? entry.sources.map(item => item.url)
       : research.designReference.sources.flatMap(item => item.discovery && item.discovery.kind !== 'user-provided' ? [item.discovery.url] : []);
     const allowUnmatched = !['reference-research-v7', 'reference-research-v8'].includes(research.schema) || marketCoverage?.marketRegion == null;
-    if (research.schema === 'reference-research-v8' && entry.leads?.length && !entry.searches.length && !directRoots[lane].length) {
+    if (research.schema === 'reference-research-v8' && entry.leads?.length && !directRoots[lane].length) {
       const leadUrls = new Set(entry.leads.flatMap(receipt => readSearchLeads(root, receipt, lane, research.sourceContractSha256).urls));
       const visits = lane === 'design' ? [
         ...(research.designReference.navigation ?? []).map(hop => currentNavigation(root, hop)),
@@ -199,8 +257,10 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
       ] : research.domainReference.sources.flatMap(source =>
         'observations' in source ? source.observations.map(receipt => readDomainObservation(root, receipt)) : []);
       const roots = visits.filter(visit => leadUrls.has(visit.url));
-      if (sourceUrls.some(url => !roots.some(root => root.url === url || root.links.includes(url))
-        && !visits.some(visit => visit.url === url && roots.some(root => root.links.includes(visit.url)))))
+      const search = readSearchCoverage(root, { lane, queries: entry.queries, receipts: entry.searches, allowUnmatched });
+      const reached = observedNavigationTargets([...search.targets, ...roots.map(root => root.url)],
+        [...visits, ...navigation[lane]]);
+      if (sourceUrls.some(url => !reached.has(url)))
         fail('REFERENCE_LEAD_OBSERVATION_REQUIRED');
       continue;
     }
@@ -220,8 +280,15 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     const sourceUrl = piece.sourceKind === 'component-capture' ? piece.reference.source : piece.provenance.sourcePage;
     if (!raw || !('imagePath' in raw.evidence) || !('imageSha256' in raw.evidence)) fail('REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE');
     const image = raw.evidence;
-    if (!research.designReference.sources.some(item => item.url === sourceUrl && retainedIdentities.get(item.id) === piece.referenceId
-        && item.evidence.path === image.imagePath && item.evidence.sha256 === image.imageSha256)) fail('REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE: every visual board piece must bind a qualified retained source and its image');
+    const scopedSupport = research.schema === 'reference-research-v8'
+      && admissionSourceContract !== null && piece.binding !== undefined;
+    if (!research.designReference.sources.some(item => (item.visualRole === 'visual-direction'
+        || scopedSupport && item.visualRole === 'component-support')
+        && item.url === sourceUrl && item.evidence.sha256 === image.imageSha256
+        && (piece.sourceKind === 'image-fragment'
+          || retainedIdentities.get(item.id) === piece.referenceId && item.evidence.path === image.imagePath))) {
+      fail(`REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE: ${candidate.id}/${piece.slotId} must bind a qualified retained source at ${sourceUrl} with image ${image.imageSha256}`);
+    }
   }
 
   if (options.benchmarkRequired && research.domainReference.benchmarkSha256 === null)

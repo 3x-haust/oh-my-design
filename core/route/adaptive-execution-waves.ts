@@ -37,6 +37,14 @@ export function validateAdaptiveExecutionWaves(strategy: Pick<AdaptiveStrategyDe
   }
   const studyWave = waveByRole.get('omd-study');
   if (studyWave !== undefined) {
+    if (strategy.methods.includes('provisional-source-study')) {
+      const scoutWave = waveByRole.get('omd-scout');
+      const typeWave = waveByRole.get('omd-typesetter');
+      if ((scoutWave !== undefined && scoutWave >= studyWave)
+        || (typeWave !== undefined && typeWave <= studyWave)) {
+        return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', 'source-aware study follows selected Scout work and precedes Typesetter');
+      }
+    }
     for (const consumer of deliveryMode === 'design-only' ? ['omd-composer'] : ['omd-composer', 'omd-hand']) {
       const consumerWave = waveByRole.get(consumer);
       if (consumerWave === undefined || consumerWave <= studyWave) {

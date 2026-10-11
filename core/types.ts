@@ -586,7 +586,8 @@ export interface Reference {
     engine?: import('./ref/acquisition-engine.ts').AcquisitionEngine;
     httpStatusSource?: 'response' | 'unobserved'; authentication?: 'user-browser-session';
     networkIsolation?: 'initial-url-check-only'; getOnlyEnforced?: false;
-    captureMethod?: 'viewport-crop' | 'full-page'; captureGeometry?: import('./ref/acquisition-png.ts').ElementGeometry };
+    captureMethod?: 'viewport' | 'viewport-crop' | 'full-page'; captureGeometry?: import('./ref/acquisition-png.ts').ElementGeometry;
+    sourceImage?: string; sourceImageSha256?: string; imageDimensions?: { width: number; height: number } };
   visibleKoreanText?: true;
   source: string;
   component: string;

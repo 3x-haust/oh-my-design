@@ -35,6 +35,7 @@ import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { stageArtifactProblems } from '../core/stage/output.ts';
+import { persistImageFragment } from '../core/ref/image-fragment.ts';
 
 const SOURCE_SHA = 'a'.repeat(64);
 const digest = (bytes: string | Buffer): string => createHash('sha256').update(bytes).digest('hex');
@@ -150,7 +151,7 @@ function fixture(t: { after(fn: () => void): void }) {
         id: 'design-a', url: source, observedAt: '2026-09-19',
         decision: 'hero hierarchy', finding: 'display and proof stay in one measured group',
         visualRole: 'visual-direction',
-        visualAssessment: { composition: 'Single anchored work object', typography: 'Clear heading/body contrast', density: 'Compact controls with section space', imagery: 'No decorative image', transfer: 'Adapt the work-object hierarchy', avoid: 'Do not copy brand colours or service claims' },
+        visualAssessment: { selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Clear anchored workspace', reason: 'Complete site visually inspected', flowCaptures: [] }, composition: 'Single anchored work object', typography: 'Clear heading/body contrast', density: 'Compact controls with section space', imagery: 'No decorative image', transfer: 'Adapt the work-object hierarchy', avoid: 'Do not copy brand colours or service claims' },
         evidence: { path: relative(root, imagePath), sha256: digest(PNG) },
         capture: receipt(capturePath),
         discovery: { url: gallerySource, kind: 'app-gallery', access: 'free', qualityReason: 'The compact task heading and readable type suit the target viewport.', evidence: receipt(galleryImage), capture: receipt(galleryCapture) },
@@ -195,6 +196,37 @@ test('two-track reference research binds separate live evidence and the current 
     expectedSourceContractSha256: SOURCE_SHA,
     benchmarkRequired: false,
   }), /REFERENCE_RESEARCH_BOARD_STALE/);
+});
+
+test('research publication binds an imported whole-image board piece to its retained original', t => {
+  const { root, research, boardPath, writer } = fixture(t);
+  const original = research.designReference.sources[0];
+  assert.ok(original);
+  const fragment = persistImageFragment(root, {
+    inputPath: original.evidence.path,
+    provenance: { sourcePage: original.url, captureRegion: 'Complete retained original',
+      capturedAt: '2026-09-19T00:00:00.000Z', licenseStatus: 'unknown',
+      rightsNotes: 'Private reference; no source pixels ship.' },
+    transfer: { visualRole: 'Work object hierarchy', principles: ['Keep the task object primary.'] },
+  }, createTestProjectRunInvocation(root));
+  const board = JSON.parse(readFileSync(boardPath, 'utf8'));
+  board.candidates[0].pieces[0].sourceKind = 'image-fragment';
+  board.candidates[0].pieces[0].referenceId = fragment.id;
+  writer.write('.omd/reference-board.json', JSON.stringify(board));
+  research.designReference.boardSha256 = digest(readFileSync(boardPath));
+  const options = { expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false };
+  publishReferenceResearch(root, research, options, writer);
+  const retained = readFileSync(join(root, DESIGN_REFERENCES_PATH));
+  assert.equal(readPublishedReferenceResearch(root).designReference.sources[0]?.evidence.path, original.evidence.path);
+  assert.notEqual(fragment.imagePath, original.evidence.path);
+  assert.equal(fragment.sha256, original.evidence.sha256);
+  assert.notEqual(fragment.id, refIdentity(original.url, 'hero'));
+  const rejected = structuredClone(research);
+  const support = rejected.designReference.sources[0];
+  assert.ok(support);
+  support.visualRole = 'component-support';
+  assert.throws(() => publishReferenceResearch(root, rejected, options, writer), /BOARD_SOURCE_COVERAGE/);
+  assert.deepEqual(readFileSync(join(root, DESIGN_REFERENCES_PATH)), retained);
 });
 
 test('gallery similarity hops require native current captures rooted in a real search receipt', t => {
@@ -260,6 +292,9 @@ test('design discovery requires free inspectable provenance and a specific quali
     research.designReference.sources[0]!.discovery.kind = kind;
     assert.doesNotThrow(() => parseReferenceResearch(research));
   }
+  research.designReference.sources[0]!.discovery.kind = 'unobserved-product';
+  assert.throws(() => parseReferenceResearch(research), /DESIGN_DISCOVERY_KIND/);
+  research.designReference.sources[0]!.discovery.kind = 'app-gallery';
   research.designReference.sources[0]!.discovery.access = 'paid';
   assert.throws(() => parseReferenceResearch(research), /FREE_ACCESS_REQUIRED/);
   research.designReference.sources[0]!.discovery.access = 'free';
@@ -306,7 +341,7 @@ test('support-only design research and absent visual observations fail; recorded
   assert.doesNotThrow(() => parseReferenceResearch(research));
 });
 
-test('board candidates cannot use only support evidence while visual direction sits unused', t => {
+test('board candidates cannot use support-only evidence while visual direction sits unused', t => {
   const value = designAdmissionFixture(t);
   const support = value.capture('https://support.example/task', 'support', 'design', 41);
   const gallery = value.capture('https://dribbble.com/shots/22334455-Support-pattern', 'support-gallery', 'design', 42, [support.source]);
@@ -314,7 +349,7 @@ test('board candidates cannot use only support evidence while visual direction s
     id: 'support', url: support.source, observedAt: new Date().toISOString().slice(0, 10),
     decision: 'Supporting component anatomy', finding: 'Compact controls preserve room for the primary task.',
     evidence: support.evidence, capture: support.capture, visualRole: 'component-support',
-    visualAssessment: { composition: 'Compact supporting region', typography: 'Small labels remain legible',
+    visualAssessment: { selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Clear anchored workspace', reason: 'Complete site visually inspected', flowCaptures: [] }, composition: 'Compact supporting region', typography: 'Small labels remain legible',
       density: 'Dense secondary controls', imagery: 'No decorative imagery', transfer: 'Adapt control grouping', avoid: 'Do not copy branding' },
     discovery: { url: gallery.source, kind: 'app-gallery', access: 'free',
       qualityReason: 'The inspected controls are a useful secondary component reference.', evidence: gallery.evidence, capture: gallery.capture },
@@ -322,9 +357,9 @@ test('board candidates cannot use only support evidence while visual direction s
   value.research.designReference.searches = [testSearchReceipt(value.root, 'design', 'visual task', [value.gallery.source, gallery.source])];
   value.board.candidates[0]!.pieces[0]!.referenceId = refIdentity(support.source, 'support');
   value.refreshBoard();
-  assert.doesNotThrow(() => validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
+  assert.throws(() => validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
     expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
-  }));
+  }), /REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE/);
 });
 
 test('redirecting a gallery capture back to the domain cannot defeat lane isolation', t => {
@@ -562,7 +597,9 @@ test('missing surfaces, wrong-lane references, empty reasons and unsupported dir
   const f = applicationFixture(t);
   const publish = (value: unknown) => publishReferenceApplication(f.root, value, f.options, f.writer);
   const missing = structuredClone(f.application); missing.screens.pop();
-  assert.doesNotThrow(() => publish(missing));
+  assert.throws(() => publish(missing), /missing domain surface/);
+  f.writer.write(REFERENCE_APPLICATION_PATH, `${JSON.stringify(missing)}\n`);
+  assert.throws(() => checkReferenceApplication(f.root, f.options), /missing domain surface/);
   const wrong = structuredClone(f.application); wrong.screens[0]!.design.referenceIds = ['domain-a'];
   assert.throws(() => publish(wrong), /wrong-lane/);
   const empty = structuredClone(f.application); empty.screens[0]!.domain.reason = '';

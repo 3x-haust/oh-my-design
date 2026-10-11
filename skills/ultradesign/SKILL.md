@@ -44,6 +44,60 @@ On Codex, `omd ...` means `"$OMD_NODE_EXECUTABLE" "$OMD_CLI_PATH" ...` and `omd-
 
 ## Adaptive route
 
+### Create visual form before freezing contracts
+
+For new or redesigned visual work whose destination is not yet settled, first create and inspect
+finished-looking first-party visual material. A selected third-party reference or a fidelity pass
+does not settle the destination. Use the supported image-first lane when it fits the task.
+On native Pi, when image generation is unavailable or its observed drafts cannot represent the
+real content, default to `provisional-source-study`: select `omd-study`, reference-selection
+and composition. Place Study after selected Scout work and before Typesetter,
+Composer and Hand. Do not reserve this route for showpiece work or silently replace it with prose.
+The provisional form study does not require the separate quiet/confident/showpiece evaluator
+stage. Select art-direction only when independently needed and supported; otherwise record its
+skip. If selected, its existing evaluator-authorization requirements remain mandatory.
+
+Read `theory/imagegen.md#provisional-source-studies`, obtain `omd schema source-study --json`,
+and author the actual content, distinct hypotheses and count reason before `omd study create`.
+Hypotheses remain falsifiable. Name the distinct information job of each transferred region;
+do not require a source-shaped block when it only repeats destination data, or copy affordances
+that imply actions the product does not have.
+After an interrupted turn, inspect `omd study latest --json` before generating again; an
+unselected completed set needs inspection and choice, not another identical generation.
+The native author alone sees selected originals in its isolated one-use packet; it has no
+project-write or production authority. Inspect both entry and actual primary-work renders at
+desktop and mobile; an initial collection alone cannot settle an editor or interaction hypothesis.
+Do not defer that comparison until after type or composition is fixed. Choose
+with `omd study select` only when an actual direction merits further work; rejecting all is valid.
+Do not call a provisional selection beautiful, human-approved, or a completed product.
+
+Deliver only `omd study show --json` and its named first-party source/captures to Typesetter,
+Composer and Sketch. Never forward private set/role records or original-image packets. Let the
+chosen visual material inform type and composition, not the reverse. Composer binds its current
+`Source study SHA-256`; missing/stale selected input blocks later entry. Hand receives the later
+approved candidate, and blind final Eyes never receive the study or its selection rationale.
+An already settled current target can use its narrower existing route with an explicit reason.
+
+### Route publication and execution
+
+Before freezing source scope or beginning reference acquisition, inspect the real build scripts and
+renderer configuration. Resolve the concrete local rendered/evaluator entry and its output directory,
+not only `src/**` and `tests/**`. Include that actual output scope in the initial authenticated route;
+do not assume a generic Vite `dist/` directory. Bind the same entry in the framer's entry-surface
+contract or the applicable explicit lifecycle manifest and check the renderer/readiness handoff before
+production. A late output-path correction legitimately invalidates dependent reference/study lineage;
+never suppress that currentness failure or relabel old receipts to avoid replay.
+
+Before first route publication, map every supplied surface, recovery, lifecycle
+state, cross-screen invariant, and end-to-end journey into explicit acceptance.
+Broad screen summaries or representative happy paths do not preserve a long brief.
+Put typecheck, tests, build, source seal, and independent review in
+`taskOutcome.executionRequirements`, not browser-visible completion claims.
+For design discovery, write `referenceQueries` around visual information roles
+in finished personal/product screens, not the destination's specialized business
+rules. Keep those rules in domain research and outcome falsifiers. Batch independent
+known sources and use the current returned action rather than replaying setup.
+
 On Codex use `omd-codex exec -C <project> ...` (or `oh-my-design codex exec ...`) with opaque read-only
 `OMD_ACTIVATION_PATH` when the current host actually supplies that launcher. Never manufacture or reuse Codex activation.
 Pi and the local CLI use `omd_cli`/`omd` without `--activation`. The Pi extension binds the original
@@ -58,17 +112,37 @@ or replace an old review's hash after a writer revision. The report format belon
 The Codex role/owner commands above apply only when that broker is available, never to Pi.
 Pi uses available native delegation with the user's model. Its `review run` transport launches
 isolated native Pi reviewers with that observed model; a launch failure is not a same-session review.
-On Pi without a delegation tool, execute the selected design roles as explicit, sequential role passes
-in the current session, respecting each role's inputs and owned paths. Execution waves still express
-dependency groups; do not simulate child handles or concurrent processes. This host fallback does not
-attest independence. Record same-session review as such in the design handoff, and do not run broker
-commands or ask the user for a missing broker to perform ordinary research and design work.
+For native Pi, integrated Sketch candidates and Hand application source always use
+`omd schema native-maker --json` then `omd maker run --input <json> --json`.
+Keep output `paths` within the write grant. Put needed first-party imports, callers, entry files
+and manifests outside that grant in Hand's `readPaths`; this adds read context, never write authority.
+Sketch keeps `readPaths: []` and does not receive production source.
+Use admitted inspection and owner-authoring tools, not generic execution or delegation to bypass
+the maker. Keep reference-bearing requests and research prose out of destination task contracts.
+GPT's `apply_patch` can edit owned authoring inputs, but every target must stay within those inputs;
+mixed patches containing candidate/application source or publisher-owned records refuse.
+The host builds the complete source-free task projection, source baseline and current evaluator
+lineage, and supplies every approved first-party image to a fresh native Pi process. It inherits the
+observed provider/model and applies the role's declared effort. It has no parent history, ambient
+project context, raw reference access or workspace tools. Do not author candidate/application source
+in this session, fork its history, or use omd-study as production. A missing or failed maker refuses;
+there is no same-session fallback. Keep candidate selection, browser observation, review and `.omd`
+publication with their existing owners and CLI publishers. Other directly editable design owners
+may still run explicit sequential role passes when native delegation is unavailable; those passes
+do not attest independence. Non-native hosts retain their own authorization contracts.
 
 Read `omd pack protocol/three-layer-enforcement.md` at intake. The three layers are declaration,
 stage/owner procedure, and automatic refusal, not three repetitions of a promise. At each selected
 boundary, the coordinator inspects the brief, delivers contracts, then runs its `entryGate.command`.
 Pi adds host tool/final-message refusal to the CLI boundaries. Before application writes run
 `omd guard production --json`.
+Use `protocol/human-design-loop.md`'s Production code principles for every production handoff:
+new web source defaults to strict TypeScript without `any` or type-error suppression, existing
+stacks stay intact, and other languages use their own type checking and module conventions.
+Assign UI/components, business rules, storage, external integrations, and tests by responsibility
+and reason for change, avoiding giant files and pointless fragmentation. Require executed type
+checking, related tests, production build, and observable entry-point/user-flow verification before
+completion; a syntax check, configured command, or pending run is not that evidence.
 Resolve every blocker using the named stage's brief, delivered contracts, real artifact and checker.
 When selected, Writer publishes the copy deck and completes its current copy-edit review; Typesetter
 proves the actual language/copy before Composer fingerprints those inputs. Same-session passes must
@@ -125,11 +199,53 @@ that grant and a changed route cannot inherit it. Escape ends the current turn w
 repair; a later explicit resume may continue that authorized workflow. After host restart, request continuation of the OMD build/repair
 explicitly or invoke the full workflow again. The host queues the owner to author recovery inputs;
 it does not execute a missing batch or treat a generic status question as build permission.
-Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
+Recompute `stage next --json` after owned stage publication or prerequisite repair, not only at final reporting.
 For `reference-board`, follow the returned action instead of repeating a passing entry check:
-`acquire-reference` uses `ref work-next --json` and executes the current exact native step with
-`ref advance --json`; a signed unavailable source changes the next lead. Inspect a visited concrete
-gallery item and retain only its actual useful UI image/original. An unsuitable visited item is
+Read `ref work-next --json` and dispatch its actual action. `acquire-reference` means only
+native search, direct-entry, or follow-link transport; execute those with `ref advance --json`.
+When a follow-link action includes `batchUrls`, the same command acquires up to
+four known independent sources concurrently. Inspect every returned `outcomes`
+entry: the aggregate receipt is not proof that all sources succeeded. Failed
+attempts keep their own receipts, and no visit grants retention or admission.
+For `collect-leads`, use the returned search input and register observed URLs. For
+`browser-consent`, obtain the stated choice before using the everyday browser.
+For `retain-reference`, inspect the current DOM, verify the exact selector, and use the named
+reference publisher; do not invoke `ref advance` to choose or retain an image.
+For `review-candidates`, run `ref direction-review --json` so isolated Eye owns admission.
+For board authorship, read the schema, author the input, and use `ref board`.
+When an excellent retained reference has only bounded overall-product transfer
+but may answer a required static board question, use `schema reference-zone-review`
+and `ref direction-review --input <zone-input.json> --json`. The isolated Eye
+receives that exact acquisition zone; only its signed zone approval authorizes
+the declared structure, proportion, density, or rhythm axis. Review each axis
+actually used by the piece. Keep global support classification unchanged:
+this is not global direction, an extra direction family, or behavioral proof.
+Do not weaken required zones, substitute a verdict, crop pixels, or reuse a
+scoped approval after source, capture, acquisition, or zone drift.
+After any owner publication, inspect the current work returned by that command.
+When its response already includes `work.action`, `work.next`, and `workSha256`,
+dispatch that action directly instead of querying `ref work-next --json` again.
+Query missing work once, or refresh it after another actor changes the project.
+Recompute `stage next --json` when completing an owned stage or changing its inputs;
+individual visits within the same acquisition stage use the returned discovery work.
+For independent, already-observed public URLs, use `ref discover-batch` rather than
+one model turn per navigation. Keep every returned outcome and receipt, inspect
+the actual originals, and leave retention and independent admission with their owners.
+Pi may return `omd-discovery-summary-v1`: its `work` is current, and historical
+attempts/exclusions are source-bound receipts under `history`. Read their records
+when making a recovery decision; do not replay the entire history on every visit.
+`ref advance` performs acquisition, not read-only validation of judgment or authorship.
+A signed unavailable source changes the next lead. Execute finished-product
+search inputs first and inspect the observed original product task screen. Use galleries only
+as fallback discovery channels, never repeat template directories or guidelines as direction.
+Domain similarity is not aesthetic evidence. Before requesting Eye review, inspect every proposed
+whole original: reject visibly dated, visually weak, mostly empty, or obscured images and broaden
+the visual search across other finished products. A benefits information directory or government
+help article remains domain evidence; do not submit it as direction just because it covers benefits.
+Record the visible composition and hierarchy that make a real finished surface worth emulating,
+not merely that it is readable or relevant. The independent Eye still owns admission.
+Inspect a visited concrete
+gallery item and retain only its actual complete finished-product UI image/original. Scout may propose candidates, but `omd ref direction-review --json` must send every exact whole retained 2x PNG to a host-authenticated isolated Eye before board or v8 research publication. Only its immutable source/capture/task-bound `direction` result authorizes visual direction; `support` and `reject` do not. A pattern catalogue, guideline document, list-card thumbnail, or lone app confirmation screen cannot be selected as the destination's visual character. An unsuitable visited item is
 excluded with `ref exclude <observed-url> --lane design|domain
 --reason "<specific observed reason>"` so Scout can inspect a different lead; this is not a native
 unavailable receipt. When the pointer is board-ready,
@@ -153,10 +269,48 @@ this work-item label as a route stage or send a blocked composition brief to Com
 Changed reference evidence needs renewed interpretation before composition and candidates.
 Selected structural candidates need the current hash-bound `.omd/.cache/sketches/current.json`
 pointer and its complete evidence set; an arbitrary `*-selected` directory is not a selection.
+New routes use integrated visual candidates for restrained and balanced work as well as showpieces.
+Choose the candidate count from uncertainty; do not create more merely to fill a quota. Start with
+representative content and meaningful state transitions before expanding every screen. Grayscale
+studies can answer structure questions, but are not the finished visual direction handed to production.
 After Sketch produces its isolated candidates and the rendered selection is made, the coordinator
 uses `schema candidate-selection` and `candidate select --input` to publish that pointer. Sketch
 does not write outside its assigned candidate directory. Run `stage next` again after publication.
-
+`candidate select` now captures the chosen first-party HTML at fixed desktop and mobile viewports
+and publishes a v2 pointer binding its whole served tree and both images. Deliver those exact current
+images to Hand by default, alongside the approved contracts; never deliver raw third-party references.
+On native Pi with a selected reference board, selection first runs an isolated original-to-candidate
+visual comparison. Recognizable composition, proportions, grouping, containment and rhythm must
+survive; generic hierarchy or functional similarity is insufficient. `CANDIDATE_REFERENCE_REPAIR_REQUIRED`
+leaves the selection pointer unchanged and returns source-free repairs. Repair the owned candidate,
+or return a genuine contract conflict to Composer, then render/select again. Do not weaken the
+selected reference obligations, call every deviation justified, or retry identical pixels for approval.
+Candidate refinement carries the authenticated prior assessment and repair criteria for the same
+candidate and current reference context. Inspect its per-slot continuity: preserved, resolved,
+regressed or unresolved. Repairing one viewport does not excuse losing a previously working
+relationship elsewhere. A changed finding name is not an improvement; compare the newly captured
+state with its concrete criterion. Exploration of a new governing relationship remains a new
+owner-authored candidate, not permission to rewrite the selected target or old review.
+Only the privileged critic sees the complete originals. Other hosts retain their authorized Eye
+procedure and must not claim this native execution receipt.
+After the first representative implementation, run `first-render check` before expanding its design
+across the remaining app. On native Pi this runs an isolated early visual Eye automatically, not final
+review: every quality axis needs an explicit, capture-bound desktop and mobile judgment.
+Composition-selected native routes cannot start lifecycle evaluation without a current independent
+`retain` review. Numeric surface interpretations do not veto or replace that visual judgment.
+`retain` continues only when all pass; usability, alignment or target fidelity cannot compensate
+for weak beauty or generic character. Route `revise` by its `repairOwners`, then rebuild and
+recapture. `reframe` returns composition to Composer or direction to the coordinator for a new
+visual premise, including a replacement provisional study when needed. A selected target can
+itself be the failure; do not preserve it by applying another small spacing fix.
+Reconcile every previous repair criterion with concrete observations from the new captures.
+Do not rerun an unchanged review to fish for approval. Other hosts use their preproduction Eye over
+both saved fixed captures without claiming native isolation. Preserve the full remaining task scope.
+The early Eye receives the exact approved first-party target pair as well as production captures;
+implementing a generic substitute is not fidelity even when all interactions work. Final native
+fidelity critics must identify each used reference's actual counterpart at both required viewports,
+cite the exact supplied image digests, and explain preserved character and constraint-grounded
+departures. A bare GREEN, a usage declaration, or a self-authored waiver is not completion evidence.
 Before selecting methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. A simple task is not settled visual evidence; a current supplied direction can be. Experiments stay conditional.
 
 Check native image generation first. For unsettled marketing, use it when available.
@@ -351,10 +505,10 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
 `standard`, or `deep` sequence.
 
 - Launch only the roles/stages selected by the route in model-owned/dependency order; apply selected
-  methods and preserve every reasoned skip. There is no universal reference quota, but current
-  selected research enforces its evidence minimum: three independent domain operator families and
-  two independent visual-direction source families. When discovery is skipped, use the recorded
-  existing evidence.
+  methods and preserve every reasoned skip. Aim for three independent domain operator families and
+  two independent visual-direction source families; fewer require an advisory limitation, not an
+  admission quota. Current source identity, exact state evidence, and selected prerequisites remain
+  mandatory. When discovery is skipped, use the recorded existing evidence.
 - Candidate generation, framing, copy isolation, typography proof, composition, art direction, and
   refinement are conditional methods. Their own contracts apply when selected; absence requires the
   route reason, not an invented artifact.
@@ -365,11 +519,11 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   Direct browsing of public lists is allowed without a search engine. Retained entries still trace
   to actual visible links and separate native visits; lists/search images stay outside refs.
   Inspect free-access failures and try a public alternative; never require a paid reference MCP.
-  Show the user the retained previews and `.omd/reference-application.md`. Every domain-brief surface
+  Show the user the retained previews and `.omd/reference-application.md`. Before board or v8 research publication run `omd ref direction-review --json`; the separate preproduction reviewer transport has no final-render, source-seal, or completion prerequisite. Before composition or Hand, select Eye-admitted global directions and, only for their exact static zones, separately approved zone evidence; publish the existing hash-bound reference-selection/art-direction decision. A finished app flow must contain another distinct captured screen from that app; a finished website must show its actual full visual composition. Only globally Eye-approved source-free appearance intent goes through the existing visual-character handoff, never Scout praise, scoped approvals, raw images, or source URLs. Every domain-brief surface
   needs separate domain/design coverage, decisions, exclusions, gaps and future rendered checks.
   Pass only referenceApplication/screenApplication from the validated brief/handoff to Composer and
   Hand; never pass the source-bearing plan output or raw research. This is intended use, not proof
-  of use or approval. Actual renders, usage evidence and review remain necessary. Keep the route's
+  of use or approval. After Hand builds, the coordinator's fidelity review compares current desktop/mobile renders against the selected source-free visual character and composition, repairing low aesthetic fit without pixel copying. The separate blind Eye judges anonymous renders for independent beauty/task quality; never send it raw references, selected URLs, source pixels, or provenance. Actual renders, usage evidence and review remain necessary. Keep the route's
   own candidate count and selection authority; this adaptation does not impose a new approval gate.
 - Selected `content-grain`, art direction, concept formation, colour, and refinement methods follow
   their native protocols and stage briefs; skips retain their typed reasons. For art direction, apply
@@ -420,6 +574,9 @@ On Pi, after production and its required checks, follow `protocol/native-pi-comp
 reviews, `lifecycle finalize` derives and publishes the authenticated final graph, then `guard completion`
 rechecks it. Repair real failures with the responsible owner and repeat affected evidence; never author
 review verdicts, activation, or a final manifest to stand in for this transport.
+Evaluation success proves the authored assertions ran, not that every requested behavior works.
+Preserve the actual executed plan for the protocol lane's independent per-outcome assessments;
+never substitute entry-screen text or aggregate GREEN verdicts for missing behavior evidence.
 
 On a brokered Codex host, before either initial final blind Eye runs, print `omd schema final-render-reviewer-packet`, write its
 input with the exact aggregate observation-v2 chain intended for the lane, and run

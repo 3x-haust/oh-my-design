@@ -97,7 +97,7 @@ test('an adaptive route preserves the selected model stage order instead of the 
   const state = resolveRunState(dir, PACK, invocation);
   assert.deepEqual(
     state.stages.map((stage) => stage.stage),
-    ['domain', 'frame', 'content-grain', 'scout', 'reference-board', 'reference-selection', 'copy', 'composition', 'candidate-generation'],
+    ['domain', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board', 'reference-selection', 'copy', 'composition', 'candidate-generation'],
   );
   assert.equal(state.current, 'domain');
 });

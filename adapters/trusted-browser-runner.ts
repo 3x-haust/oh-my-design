@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import {
-  TRUSTED_BROWSER_RECEIPT_SCHEMA,
+  TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
   trustedBrowserReceiptSha256,
   type TrustedBrowserCapture,
   type TrustedBrowserReceipt,
@@ -11,6 +11,7 @@ import type {
   TrustedEntrySurface,
   TrustedLifecycleManifest,
 } from '../core/runtime/trusted-evaluation-contract.ts';
+import { trustedEvaluationPlanBytes } from '../core/runtime/trusted-evaluation-contract.ts';
 import { serveProjectEntry } from '../core/render/serve.ts';
 import { waitForDocumentFonts } from '../core/render/index.ts';
 
@@ -52,7 +53,7 @@ const VIEWPORTS = Object.freeze([
   Object.freeze({ id: '1280x900' as const, width: 1280, height: 900 }),
   Object.freeze({ id: '390x844' as const, width: 390, height: 844 }),
 ]);
-export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v6' as const;
+export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v7' as const;
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
@@ -421,11 +422,11 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           // Attach each visible-state waiter before triggering actions, but convert rejection to a
           // measured boolean immediately so a fast timeout can never become an unhandled rejection.
           const initiallyVisible = await Promise.all(script.assertions.map((assertion) =>
-            assertion.kind === 'visible-text'
+            assertion.kind !== 'absent-text'
               ? resultIsRendered(page, assertion.selector, assertion.text)
               : false));
           const visibleSignals = () => script.assertions.map((assertion) =>
-            assertion.kind === 'visible-text'
+            assertion.kind !== 'absent-text'
               ? waitForRenderedResult(page, assertion.selector, assertion.text)
               : undefined);
           let signals = actions.length === 0 ? visibleSignals() : [];
@@ -434,10 +435,16 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             // immediately before the final triggering/barrier action so the bounded waiter measures
             // the resulting state rather than expiring while the script is still preparing it.
             if (actionIndex === actions.length - 1) signals = visibleSignals();
-            actionLog.push(`${action.kind} ${action.selector} @ ${viewport.width}x${viewport.height}`);
-            transcript.push(`action-${action.kind}:${sha256(Buffer.from(action.selector))}`);
+            actionLog.push(`${action.kind === 'reload' ? 'reload' : `${action.kind} ${action.selector}`} @ ${viewport.width}x${viewport.height}`);
+            transcript.push(action.kind === 'reload' ? 'action-reload' : `action-${action.kind}:${sha256(Buffer.from(action.selector))}`);
             try {
-              if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
+              if (action.kind === 'reload') {
+                const response = await page.reload({ waitUntil: 'load' });
+                if (response === null || !response.ok()) {
+                  findings.add('required-action-unavailable');
+                  safetyFindings.add('browser-navigation-failed');
+                }
+              } else if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
               else await page.locator(action.selector).fill(action.value, { timeout: 2_000 });
             } catch {
               findings.add('required-action-unavailable');
@@ -446,19 +453,23 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           const observedSignals = await Promise.all(signals.map((signal) => signal ?? false));
           if (!await settleTrustedRender(page)) findings.add('required-render-not-settled');
           for (const [index, assertion] of script.assertions.entries()) {
-            const rendered = assertion.kind !== 'visible-text'
+            const rendered = assertion.kind === 'absent-text'
               || await resultIsRendered(page, assertion.selector, assertion.text);
-            if (assertion.kind === 'visible-text' && !rendered) {
+            if (assertion.kind !== 'absent-text' && !rendered) {
               findings.add('required-result-not-rendered');
             }
-            const passed = assertion.kind === 'visible-text'
+            const passed = assertion.kind === 'preserved-text'
+              ? initiallyVisible[index] && observedSignals[index] && rendered
+              : assertion.kind === 'visible-text'
               ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
               : !await page.locator(assertion.selector).filter({ hasText: assertion.text })
                 .isVisible().catch(() => false);
             if (passed) {
               transcript.push(`assertion-pass:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
             } else {
-              findings.add(assertion.kind === 'visible-text' && initiallyVisible[index]
+              findings.add(assertion.kind === 'preserved-text'
+                ? 'required-preserved-state-missing'
+                : assertion.kind === 'visible-text' && initiallyVisible[index]
                 && transitionActions.length > 0
                 ? 'required-state-transition-missing'
                 : 'required-visible-result-missing');
@@ -519,7 +530,8 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   transcript.push(...[...accessFindings].sort().map((finding) => `access-finding:${finding}`));
   transcript.push(...[...safetyFindings].sort().map((finding) => `safety-finding:${finding}`));
   const receipt: TrustedBrowserReceipt = Object.freeze({
-    schema: TRUSTED_BROWSER_RECEIPT_SCHEMA,
+    schema: TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
+    executionPlanSha256: createHash('sha256').update(trustedEvaluationPlanBytes(input.manifest)).digest('hex'),
     runId: input.binding.runId,
     routeSha256: input.binding.routeSha256,
     sourceContractSha256: input.binding.sourceContractSha256,

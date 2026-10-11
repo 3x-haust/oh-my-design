@@ -12,6 +12,8 @@ import { TOKEN_COMMIT_SCHEMA, TOKEN_COMMIT_KEYS, RESPONSIVE_TOKEN_COMMIT_SCHEMA,
 import { CAPTURE_PREPARATION_SCHEMA } from '../ref/capture-preparation.ts';
 import { EXECUTION_REQUIREMENT_GATES } from '../brief/execution-requirements.ts';
 import { ART_DIRECTION_CHECK_INPUT_KEYS } from '../art-direction/schema.ts';
+import { SOURCE_STUDY_INPUT, SOURCE_STUDY_SELECTION_INPUT } from '../art-direction/source-study-input.ts';
+import { NATIVE_MAKER_INPUT } from '../../adapters/pi-maker-contract.ts';
 import { LOCALE_CONTRACT_KEYS, LOCALE_CONTRACT_SCHEMA, LOCALE_MODES } from '../locale/contract.ts';
 import {
   LOCALE_DESIGN_CONTEXT_KEYS,
@@ -274,6 +276,9 @@ const DOMAIN_BRIEF: InputSkeleton = {
     'Author domain fields and publish with domain set after checked domain entry. The publisher binds request from the authenticated current route; omit request in the publisher input instead of retyping or summarizing a long brief. Directly authored final briefs still require the exact route request.',
     'Preserve every explicitly requested screen and task. A short summary or a preferred screen count never removes user scope; enumerate up to 64 canonical surfaces and their meaningful states.',
     'domain check validates structure, not planning confirmation. Each planning statement needs its own genuine userEvidence before production. Check the original request first; ask only for facts it does not supply. Do not silently invent prototype-only non-goals or copy the placeholders as evidence.',
+    'referenceQueries seeds visual research only. Keep comparable-service names, eligibility rules, institutional requirements and verified capabilities in the separate domain research lane; they do not become component design queries or aesthetic endorsements.',
+    'component queries name the information relationship or visual task state to inspect in a populated finished product; craft queries name an actual interaction or motion question. Search across domains for beautiful task-fitting screens rather than requiring the destination industry, country or institution to supply the visual direction.',
+    'mood queries must honor the complete request and authenticated user guidance, including explicit palette, material and style exclusions. A calm, trustworthy or readable service does not imply warm paper, cream, beige or editorial styling. Keep an unsupported mood open rather than inventing one.',
   ],
   skeleton: {
     schema: DOMAIN_BRIEF_SCHEMA,
@@ -293,9 +298,9 @@ const DOMAIN_BRIEF: InputSkeleton = {
       evidence: [{ status: 'user-provided', reference: '<user-message or artifact path>' }],
     },
     referenceQueries: {
-      component: ['<detailed component or section design query>'],
-      craft: ['<motion, scroll, or sculptural craft query>'],
-      mood: ['<felt direction: material, temperature, era, register — never a measurement>'],
+      component: ['<populated visual task state or information relationship, not a comparable-service query>'],
+      craft: ['<actual interaction, motion, scroll or visual craft question>'],
+      mood: ['<supported visual qualities consistent with explicit palette/material/style constraints; never a measurement>'],
     },
     planning: {
       businessGoal: {
@@ -450,7 +455,7 @@ const ROUTE_INPUT: InputSkeleton = {
   constraints: [
     'Choose the starter by task: product-route-input for a new product implementation, design-route-input for design-only delivery, route-input for existing/bounded work. Starters are examples, not permission to change risk, facts, scope or optional-method decisions.',
     'task outcome, policy, claims, discovery, design axes, capability, browser, and learning contexts are all required',
-    'taskOutcome.mustHave, mustNotHave, and completionEvidence contain product/surface outcomes with browser-observable evidence. Preserve execution-only requirements verbatim in taskOutcome.executionRequirements instead of asking page text to prove authorship, scope, independent review, or future finalization. Keep the full original request in request. This partition is made before route publication; do not remove or reclassify a failed product behavior to make a published run pass.',
+    'taskOutcome.mustHave, mustNotHave, and completionEvidence contain product/surface outcomes with browser-observable evidence. Preserve execution-only requirements verbatim in taskOutcome.executionRequirements instead of asking page text to prove authorship, scope, independent review, or future finalization. Inside Pi, omd_cli route validate/classify replaces a missing or placeholder request from the authenticated user input; do not paste a long brief into the authored JSON or summarize it. Outside Pi, the route input must carry the exact complete request. This partition is made before route publication; do not remove or reclassify a failed product behavior to make a published run pass.',
     `Optional taskOutcome.executionRequirements entries have exactly requirement and enforcedBy; enforcedBy is a nonempty unique subset of: ${EXECUTION_REQUIREMENT_GATES.join(', ')}. These are existing mandatory host gates, not caller verdicts or generic external verification. Unsupported requirements stay blocked; native mobile installation is not a browser or host-gate claim.`,
     'designAxes values: taskSize=small|medium|large; failureRisk=low|moderate|high; uxNeed=baseline|focused|rigorous; expressiveDesignNeed=restrained|balanced|showpiece. The art-direction register confident is not a designAxes value; balanced permits confident visual craft.',
     'Before choosing or skipping visual methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. An exploration skip names the current supplied direction or existing visible evidence that settles the content-to-form relationship. Functional simplicity, quietness, no metaphor, no shipped bitmap, or future review alone do not settle it. A bounded change to a current visual target may skip experiments; do not reopen that target or impose a candidate quota.',
@@ -476,7 +481,7 @@ const ROUTE_INPUT: InputSkeleton = {
   ],
   skeleton: {
     schema: ROUTE_INPUT_SCHEMA,
-    request: '<the user request, verbatim>',
+    request: '<Pi omd_cli binds the exact authenticated request; outside Pi provide the full verbatim request>',
     projectMode: '<greenfield|existing from omd stack>',
     namedDependencies: [],
     allowedPaths: ['src/**'],
@@ -616,9 +621,9 @@ const REFERENCE_IMAGE_FRAGMENT: InputSkeleton = {
   keys: ['inputPath', 'provenance', 'transfer'],
   constraints: [
     'import an actual authorized browser capture already saved as a valid PNG beneath the project .omd/refs directory; inputPath is project-relative, without symlinks, traversal, absolute paths or remote URLs; the importer does not fetch or capture images',
-    'provenance requires sourcePage, captureRegion, licenseStatus, rightsNotes and capturedAt; its only permitted optional fields are sourceImage and cropBox; sourcePage and sourceImage are absolute HTTP(S) provenance URLs, never input images',
+    'provenance requires sourcePage, captureRegion, licenseStatus, rightsNotes and capturedAt; its only permitted optional field for new publications is sourceImage; legacy cropBox records remain readable but cannot be published; sourcePage and sourceImage are absolute HTTP(S) provenance URLs, never input images',
     'capturedAt is the actual capture time in canonical UTC ISO format with milliseconds; licenseStatus is allowed|restricted|unknown, and records rights without granting production reuse',
-    'optional provenance.cropBox contains exactly x, y, width, height from the actual capture; x and y are finite non-negative numbers, width and height are finite positive numbers; omit when no crop was made',
+    'retain the entire original PNG or whole 2x screen, never a pixel crop; describe a region in captureRegion text without modifying the image',
     'transfer requires visualRole and non-empty principles; optional geometry describes the saved PNG with exactly width and height in pixels and aspectRatio = width / height, all finite positive numbers; it never describes invented app DOM, font or reflow measurements',
     'captureRegion, rightsNotes and every transfer string must omit source URLs, file paths and pixel payloads; source identities belong only in sourcePage/sourceImage',
     'the source-free text grammar also rejects path-shaped slash-separated words; spell alternatives or paired concepts out (for example, period and location), preserving the observation rather than changing evidence or identifiers to pass',
@@ -851,22 +856,22 @@ const REFERENCE_RESEARCH: InputSkeleton = {
   keys: REFERENCE_RESEARCH_KEYS,
   constraints: [
     'domainReference and designReference are both required and cannot substitute for one another',
-    'v8 domainReference.sources cites signed text/link observations for features, request-grounded similarities and differences, and adoption/avoidance decisions. Three independent final service families are required; domain PNGs, ref add, invariants and visual measurements are not functional evidence. Historical v5-v7 stay readable but new publication requires v8.',
-    'current v7 designReference.sources contains at least two visual-direction sources from independent original service families and distinct inspected gallery items. Their retained PNG bytes must differ, and both visual directions must participate in the current board. Repeated pages, crops, aliases, or capture names from one product count once.',
+    'v8 domainReference.sources cites signed text/link observations for features, request-grounded similarities and differences, and adoption/avoidance decisions. Fewer than three independent service families produces a diversity advisory, not a publication quota; record the research limitation. Domain PNGs, ref add, invariants and visual measurements are not functional evidence. Historical v5-v7 stay readable but new publication requires v8.',
+    'v8 designReference.sources selects visually strong finished-product directions and bounds component-support separately. Fewer than two independent visual-direction service families produces a diversity advisory, not a publication quota; record the research limitation. Repeated pages, crops, aliases, or capture names from one product are not independent families. Board coverage is reviewed rather than imposed as a direction-count quota, but every claimed board piece must bind a current genuine retained source and image.',
     'v8 accepts optional unsigned lead receipts per lane alongside legacy signed searches. queries and searches remain required arrays; leads alone cannot prove destination observation or market qualification. Historical versions remain readable unchanged.',
-    'Follow ref work-next: ask browser consent before searching; search Google in the consented everyday browser, then the OMD profile; otherwise use an available host web search tool (ref leads add), DuckDuckGo HTML (ref leads search), and Bing last. Leads are unsigned and never evidence. Visit each candidate with ref navigate to obtain signed destination observations. Existing signed search receipts remain readable in searches; never author search receipts by hand.',
+    'Follow ref work-next: public search/navigation runs in background headless Chromium or an already-consented dedicated headless OMD profile. Do not attach or focus everyday-browser tabs just because a previous run consented; an explicit everyday-browser override needs its own authorization. Open the dedicated headed profile only for unavoidable login/OTP/challenge after the headless operation closes, then resume headlessly with that profile. If native search is blocked, try available host web search (ref leads add), DuckDuckGo HTML (ref leads search), then Bing last. Leads are unsigned and never evidence; observe candidate destinations with ref navigate. Never author search receipts by hand.',
     'For direct discovery, run ref navigate <public-list-url> --lane domain --entry public-directory --json or --lane design --entry free-gallery --json. Put the returned method, entry, url, evidence and capture plus your reason in discoveryRoots. Only the native entry publisher can create this receipt; old navigation captures cannot be promoted. Design roots must expose actual gallery item links, not selected items or arbitrary services; configured authenticated sessions and challenge handling are permitted. Discovery roots prove visited lists and links, not quality, official authority or a retained reference.',
     'search execution accepts Google/Bing/DuckDuckGo q endpoints and design-only Pinterest /search/pins/?q=, Dribbble /search/<query-slug> with queryParam=path, and Siteinspire /search?query=. Use the executable designSourcePolicy.nativeSearchInputs from ref discover-plan and adapt the query and URL together. Arbitrary service query fields are not search evidence.',
     'when ref discover-plan v2 returns marketReferencePolicy.mode=target-market-first, v7 marketCoverage is required. Execute its exact domainSearchInputs and market-and-domain-qualified design inputs before unqualified global searches. Each lane classifies every source id exactly once as localSources=[{sourceId,evidenceSha256,scope,basis,provenanceReceiptSha256}] or global fallback. The digest must bind the retained source image. basis=market-search-result requires the exact signed market-search receipt whose visible result text for that link names the explicit market and relevant service/product scope. basis=market-direct-result requires the exact signed direct-public root receipt whose visible label for that retained link names the explicit market and relevant scope. URL tokens, localized queries, country-code hostnames, page-wide headings, and freeform reasons are not source-specific market proof. Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current. Every fallback provides provenance=[{sourceId,provenanceReceiptSha256}] binding each chosen global source to a current signed visible link, and its gap records the exact marketRegion, availability|access|coverage kind, exact attemptedQueries, and exact attemptedRoots used by that lane. Every chosen retained capture must be current.',
-    'each lane records actual discovery, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design source and sources[i].discovery evidence/capture receipts stay in .omd/refs/design/, and .omd/discovery/<lane>/ receipts belong only in searches, discoveryRoots or navigation, never retained gallery discovery',
+    'domain sources cite current signed visible text/link observation JSON under .omd/discovery/domain/observations/ and no domain PNG. Design sources retain current full-size PNG evidence and hashed native capture JSON in .omd/refs/design/; native design visits live under .omd/discovery/design/navigation/ and cannot substitute for a retained design source',
     'research-set publishes .omd/refs/domain/research.json and .omd/refs/design/research.json separately, then .omd/reference-research.json as a consistency receipt; research-check requires all three current records',
     'neither the same evidence path nor identical bytes under a renamed path can satisfy both lanes',
     'domain and design sources/discovery entries must use independent service hosts (also checked after redirects). A new crop, path, query or filename of the same service is not a separate lane.',
-    'design sources declare visualRole=visual-direction|component-support and visualAssessment={composition,typography,density,imagery,transfer,avoid}. Inspect actual pixels; none of these fields is an automatic beauty score. Each board candidate must use a visual-direction source; support-only documentation is insufficient.',
-    'non-user discovery must be a concrete supported gallery item: Pinterest pin, Dribbble shot, Behance gallery, Siteinspire/Land-book website, Godly website, UI Bowl public item, Mobbin screen, or Page Flows screen. These are leads, not guaranteed accessible catalogues. Paid MCP is not needed. If every available source is blocked, report incomplete research; do not relabel domain pages.',
-    'every design source needs discovery: a non-homepage gallery/pin entry URL, kind (app-gallery, web-gallery, visual-bookmark, or explicitly user-provided), access free, qualityReason, evidence and capture receipts. Gallery pages are provenance rather than retained visual evidence. Follow an observed original when present; otherwise use ref import-image for the exact useful image/crop with screenshot-only limits, never the surrounding gallery chrome or an unrelated component.',
-    'domain observations are signed JSON returned by ref navigate --lane domain. Each feature citation binds observationSha256, field observedText|taskText|linkLabels, exact whitespace-collapsed quote, and linkUrl for linkLabels only. Design capture still binds native PNG pixels; links do not prove execution.',
-    'use Mobbin, Page Flows, UI Bowl and relevant visual bookmarks for apps/product UI; use website galleries for marketing/web direction. Inspect the entry, then retain its observed original or exact useful image/crop. Screenshots cannot prove live behavior.',
+    'design sources declare visualRole=visual-direction|component-support and visualAssessment={composition,typography,density,imagery,transfer,avoid}; visual-direction additionally requires selection={presentation:finished-product-website|finished-app-flow,verdict:emulate,appearanceIntent,reason,flowCaptures}. The coordinator must visually accept/reject actual finished-product screens before selecting the board; generic dashboard UI kits, gallery-only mockup illustrations, pattern catalogues, docs, list cards and single mobile confirmation screens are not visual direction. A finished-app-flow requires at least one other distinct retained screen from that same app. These typed facts bind provenance, not an automatic beauty score.',
+    'non-user discovery begins with a visited finished public product (kind direct-product) or a concrete supported gallery item: Pinterest pin, Dribbble shot, Behance gallery, Siteinspire/Land-book website, Godly website, UI Bowl public item, Mobbin screen, or Page Flows screen. Direct-product needs a signed current native design navigation at the retained source URL; a gallery category, documentation page or domain-service screen cannot be relabelled as a product. Paid MCP is not needed. If available sources block access, report incomplete research.',
+    'every visual-direction design source needs discovery: direct-product (source and discovery URL match, separately signed navigation PNG/JSON under .omd/discovery/design/navigation/), a concrete gallery/pin item (kind app-gallery, web-gallery or visual-bookmark), or explicitly user-provided evidence. Record free access, a specific qualityReason, evidence and capture receipts. Gallery pages are provenance rather than retained visual evidence. Follow an observed original when present; otherwise use ref import-image for the complete original image with screenshot-only limits, never the surrounding gallery chrome or an unrelated component.',
+    'domain observations are signed JSON returned by ref navigate --lane domain. Each feature citation binds observationSha256, field observedText|taskText|linkLabels, exact whitespace-collapsed quote, and linkUrl for linkLabels only. Link each adopt/avoid decision to exact request wording through its featureIds and request-quoted comparison; distinguish missing information from an observed absence. Synthesize specialization in the source-free application domain reason/application/gap: source-backed behavior versus an unvalidated product hypothesis, never a market gap asserted from competitor silence. Design capture still binds native PNG pixels; links do not prove execution.',
+    'search visually strong finished public product task screens or finished websites first; use Mobbin, Page Flows, UI Bowl, visual bookmarks and website galleries as fallback discovery. Inspect the live product or concrete gallery item, then retain its whole original or complete 2x viewport. Screenshots cannot prove live behavior.',
     'Configured logged-in browser sessions and bounded challenge handling may acquire reference pages; never persist session secrets in receipts. If access remains blocked, record the gap and try another source. Viewing is not a reuse license.',
     'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
     'every visual board piece binds a validated retained design source identity and PNG (path and hash); each candidate needs visual-direction evidence. An extra legacy/domain piece cannot ride alongside a qualified gallery piece.',
@@ -910,6 +915,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
         decision: '<composition, typography, colour, material, component, or motion decision answered>',
         visualRole: 'visual-direction',
         visualAssessment: {
+          selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: '<specific visual character and composition to emulate on the destination>', reason: '<why this finished site is aesthetically beautiful AND why its desktop/mobile UX and task flow suit this destination; judge these separately>', flowCaptures: [] },
           composition: '<observed macro layout and hierarchy>', typography: '<observed type relationships>',
           density: '<observed spacing and information load>', imagery: '<observed image/material role, or explicit absence>',
           transfer: '<what to adapt to this project and why>', avoid: '<what not to copy and why>',
@@ -918,11 +924,11 @@ const REFERENCE_RESEARCH: InputSkeleton = {
         evidence: { path: '.omd/refs/design/design-direction-a.png', sha256: '9'.repeat(64) },
         capture: { path: '.omd/refs/design/design-direction-a.json', sha256: 'a'.repeat(64) },
         discovery: {
-          url: 'https://www.pinterest.com/pin/123456789/',
-          kind: 'app-gallery', access: 'free',
+          url: 'https://visual.example.dev/design-reference',
+          kind: 'direct-product', access: 'free',
           qualityReason: '<why this inspected screen fits the task, viewport, hierarchy, type, and density; not just the gallery name>',
-          evidence: { path: '.omd/refs/design/gallery-entry.png', sha256: 'b'.repeat(64) },
-          capture: { path: '.omd/refs/design/gallery-entry.json', sha256: 'c'.repeat(64) },
+          evidence: { path: `.omd/discovery/design/navigation/${'b'.repeat(64)}.png`, sha256: 'b'.repeat(64) },
+          capture: { path: `.omd/discovery/design/navigation/${'c'.repeat(64)}.json`, sha256: 'c'.repeat(64) },
         },
       }, {
         id: 'design-direction-b',
@@ -931,6 +937,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
         decision: '<a second independently answered composition, typography, material, component, or motion decision>',
         visualRole: 'visual-direction',
         visualAssessment: {
+          selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: '<second distinct finished-product visual direction>', reason: '<why this finished site is aesthetically beautiful AND why its UX/task fit works at desktop and mobile>', flowCaptures: [] },
           composition: '<second observed macro layout and hierarchy>', typography: '<second observed type relationship>',
           density: '<second observed spacing and information load>', imagery: '<second observed image/material role, or explicit absence>',
           transfer: '<what to adapt from this distinct source and why>', avoid: '<what not to copy from this distinct source and why>',
@@ -1012,6 +1019,8 @@ const TRUSTED_LIFECYCLE_MANIFEST: InputSkeleton = {
     '`entrySurface` is required only when the active route includes `greenfield-task-flow-benchmark`.',
     '`omd lifecycle plan` is benchmark-only. For other routes, author this manifest, omit entrySurface entirely, then use `omd lifecycle run --project . --manifest <path> --activation <host-issued-invocation.json>`.',
     'scripts uses canonical short outcomeRef values (mustHave:0, mustHave:1, mustNotHave:0, completionEvidence:0), not requirement prose or hashed outcome refs; cover every current task-outcome item exactly once in mustHave, mustNotHave, completionEvidence order.',
+    'Actions support click(selector), fill(selector,value), and reload with no selector, URL or value. Each may use the existing viewports restriction. reload actually reloads the current local document; use it when proving persistence instead of removing that requirement or adding a test-only app control.',
+    'Use preserved-text for a record that must be visibly present both before and after the script actions. visible-text after a click proves a newly visible result; preserved-text does not replace that transition assertion. Combine both when an action changes one state while retaining another.',
     'Each script has nonempty assertions: absent-text for mustNotHave; visible-text for mustHave and completionEvidence. The current browser evaluator cannot verify source/build, filesystem scope, review completion, or future finalization. Execution-only requirements belong in the original route taskOutcome.executionRequirements and are checked by their named host gates, not browser scripts; do not substitute page text for these requirements or silently remove them from the task contract. Do not omit a product behavior or silently rewrite a published task contract.',
     '`benchmarkProjectionSha256` is the SHA-256 of the current projection file bytes.',
     '`dependentTaskId.dependsOn` must directly include `prerequisiteTaskId`.',
@@ -1099,6 +1108,23 @@ const ENTRY_SURFACE_CONTRACT: InputSkeleton = {
         target: 'consequence',
       },
     ],
+  },
+};
+
+const REFERENCE_ZONE_REVIEW: InputSkeleton = {
+  name: 'reference-zone-review',
+  path: '.omd/.cache/reference-zone-review-input.json',
+  command: 'omd ref direction-review --input .omd/.cache/reference-zone-review-input.json --json',
+  keys: ['schema', 'referenceId', 'zoneId', 'axis', 'viewport'],
+  constraints: [
+    'Use the exact retained design reference ID, captured viewport, and current required acquisition zone. Measured DOM captures require their acquisition slot; whole originals and unmeasured whole-screen PNGs bind the zone in this review without recapture or relabeling.',
+    'An independent review can authorize only one static structure, proportion, density, or rhythm axis for that unchanged zone.',
+    'This does not grant global direction, appearance intent, motion, behavior, typography measurements, or a second source family.',
+    'Every axis used by a scoped board piece needs its own current signed approval; source, capture, plan, or zone drift requires fresh review.',
+  ],
+  skeleton: {
+    schema: 'reference-zone-review-input-v1', referenceId: '', zoneId: '',
+    axis: 'structure', viewport: { width: 1440, height: 900 },
   },
 };
 
@@ -1211,7 +1237,7 @@ const DESIGN_ROUTE_INPUT: InputSkeleton = {
     strategyDecision: {
       schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
       roles: ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-eye'],
-      stages: ['domain', 'frame', 'scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition', 'candidate-generation', 'independent-review'],
+      stages: ['domain', 'frame', 'acquisition', 'scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition', 'candidate-generation', 'independent-review'],
       executionWaves: [
         { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
         { id: 'research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
@@ -1223,7 +1249,7 @@ const DESIGN_ROUTE_INPUT: InputSkeleton = {
       methods: ['design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting', 'hypothesis-validation', 'design-handoff-review', 'reference-discovery', 'parallel-reference-acquisition', 'copy-repair-workflow'],
       aiAssets: [], attributionCategories: ['tokens', 'composition'],
       skips: [
-        ...['depth', 'content-grain', 'acquisition', 'moodboard', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset'].map((id) => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
+        ...['depth', 'content-grain', 'moodboard', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset'].map((id) => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
       ],
       rationale: '<why this design strategy reaches the requested handoff without application implementation>',
     },
@@ -1244,9 +1270,10 @@ const PRODUCT_ROUTE_INPUT: InputSkeleton = {
     referenceDiscovery: { schema: 'reference-discovery-input-v1', taskNeed: 'new-product', uncertainty: 'unresolved', existingEvidence: 'none', intendedUse: '<domain flows and separate visual references>', existingEvidenceUse: null, skipReason: null },
     strategyDecision: {
       schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
-      roles: ['omd-scout', 'omd-hand', 'omd-eye'],
-      stages: ['scout', 'reference-board', 'production', 'browser-evidence', 'independent-review'],
+      roles: ['omd-framer', 'omd-scout', 'omd-hand', 'omd-eye'],
+      stages: ['frame', 'acquisition', 'scout', 'reference-board', 'production', 'browser-evidence', 'independent-review'],
       executionWaves: [
+        { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
         { id: 'research', mode: 'concurrent', roles: ['omd-scout'] },
         { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
         { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
@@ -1275,6 +1302,8 @@ const DESIGN_HANDOFF: InputSkeleton = {
 };
 
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
+  SOURCE_STUDY_INPUT,
+  SOURCE_STUDY_SELECTION_INPUT,
   ...(['intake', 'feedback'] as const).map(kind => ({
     name: kind === 'intake' ? 'design-language-input' : 'design-feedback-input',
     path: `.omd/.cache/design-language-${kind}.json`,
@@ -1293,6 +1322,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   })),
   DESIGN_JUDGMENT_INPUT,
   CANDIDATE_SELECTION_INPUT,
+  NATIVE_MAKER_INPUT,
   {
     name: 'reference-search-leads', path: '.omd/.cache/reference-search-leads.json',
     command: 'omd ref leads add --input .omd/.cache/reference-search-leads.json --json',
@@ -1336,7 +1366,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
       'Replace every example with the actual rendered viewport observations. Arrays may be empty when a feature is absent; do not invent evidence to obtain retain.',
       'dominantAreaShare is the measured dominant-object fraction from 0 to 1. All six keys are required.',
       'This diagnostic projection does not replace browser action evidence, saved captures or independent review.',
-      'The CLI captures --page natively and binds the report to the current hypothesis/source/build. Set optional hypothesis.comparisonRequired=true only for an actual comparison task. Advisory findings do not require revise; critical findings do. Changed inputs require a fresh check.',
+      'The CLI captures fixed desktop 1280x900 and mobile 390x844 views and binds both to the current hypothesis/source/build. Set optional hypothesis.comparisonRequired=true only for an actual comparison task. Numeric findings remain advisory. On native Pi, check also runs an isolated early visual Eye: retain continues, revise requires owner repair/rebuild/recapture, and reframe returns to Composer. Repeated identical evidence reuses its existing review. Other hosts inspect both images through their preproduction Eye; this is not final approval.',
     ],
     skeleton: { heading: '<visible heading>', landmarks: ['<visible landmark in reading order>'],
       repeatedObjects: [], trustSignals: [], visibleText: ['<visible text>'], dominantAreaShare: 0 },
@@ -1370,6 +1400,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   REFERENCE_IMAGE_FRAGMENT,
   REFERENCE_FEATURE_MEASUREMENTS,
   REFERENCE_CAPTURE_PREPARATION,
+  REFERENCE_ZONE_REVIEW,
   REFERENCE_LOCALE_BINDING,
   TASK_FLOW_BENCHMARK,
   REFERENCE_RESEARCH,

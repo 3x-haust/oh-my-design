@@ -9,6 +9,41 @@ export type GalleryImageCandidate = Readonly<{
   naturalHeight: number;
 }>;
 
+export async function prepareNavigationImageCandidates(page: Page): Promise<void> {
+  await page.evaluate(browserCallback(async () => {
+    const original = { left: scrollX, top: scrollY };
+    const images = Array.from(document.querySelectorAll('img')).filter(image => {
+      const box = image.getBoundingClientRect();
+      if (image.complete || box.width < 100 || box.height < 100) return false;
+      for (let element: Element | null = image; element; element = element.parentElement) {
+        const style = getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse'
+          || Number(style.opacity) <= 0) return false;
+      }
+      return true;
+    });
+    try {
+      for (const image of images) {
+        await new Promise<void>(resolve => {
+          const finish = () => {
+            clearTimeout(deadline);
+            image.removeEventListener('load', finish);
+            image.removeEventListener('error', finish);
+            resolve();
+          };
+          const deadline = setTimeout(finish, 2000);
+          image.addEventListener('load', finish, { once: true });
+          image.addEventListener('error', finish, { once: true });
+          if (image.complete) finish();
+          else if (image.loading === 'lazy') image.scrollIntoView({ block: 'center', behavior: 'instant' });
+        });
+      }
+    } finally {
+      scrollTo({ ...original, behavior: 'instant' });
+    }
+  }));
+}
+
 /** Collect actionable, plain-CSS selectors for loaded gallery screenshots. */
 export async function collectGalleryImageCandidates(
   page: Page,

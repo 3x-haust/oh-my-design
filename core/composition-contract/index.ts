@@ -10,6 +10,7 @@ import { parseReferenceHandoffReceipt } from '../ref/reference-handoff.ts';
 import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceSelectionV2Sha256, validateMotionResolutionProjection } from '../ref/reference-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
+import { readSelectedSourceStudy } from '../art-direction/source-study-records.ts';
 
 /** Historical unversioned Markdown ABI. Keep this list stable for persisted artifacts and source seals. */
 export const COMPOSITION_SECTIONS = [
@@ -109,7 +110,7 @@ function validateFingerprint(
   const values = new Map<string, string>();
   for (const line of lines) {
     if (line.trim() === '') continue;
-    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256|Design language SHA-256): (.+)$/.exec(line);
+    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256|Design language SHA-256|Source study SHA-256): (.+)$/.exec(line);
     if (!match) { findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'Input fingerprint contains an unknown or malformed line' }); continue; }
     const key = match[1]!;
     if (values.has(key)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${key} must appear exactly once` });
@@ -141,6 +142,15 @@ function validateFingerprint(
     const value = values.get('Design language SHA-256');
     if (value !== inputs.designLanguage) findings.push({ id: 'COMPOSITION-STALE', path: '.omd/composition.md#Input fingerprint', message: 'DESIGN_LANGUAGE_BINDING_MISSING: current translation fingerprint is missing or stale' });
   } else if (values.has('Design language SHA-256')) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'unexpected design language fingerprint' });
+  if (inputs.sourceStudy !== undefined) {
+    if (values.get('Source study SHA-256') !== inputs.sourceStudy) findings.push({
+      id: 'COMPOSITION-STALE', path: '.omd/composition.md#Input fingerprint',
+      message: 'SOURCE_STUDY_BINDING_MISSING: current selected study fingerprint is missing or stale',
+    });
+  } else if (values.has('Source study SHA-256')) findings.push({
+    id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint',
+    message: 'unexpected source study fingerprint',
+  });
   const scout = values.get('Scout SHA-256');
   if (inputs.scout !== undefined) {
     if (!scout || !/^[0-9a-f]{64}$/.test(scout)) findings.push({ id: 'COMPOSITION-SCOUT', path: '.omd/composition.md#Input fingerprint', message: 'Scout SHA-256 must be a 64-hex hash while .omd/scout.md exists' });
@@ -260,6 +270,7 @@ export interface CompositionContractInputs {
   contract?: string; frame?: string; copyDeck?: string; typeProof?: string; scout?: string;
   artDirectionRecord?: string; motionResolutionProjection?: string; settledSelection?: string; composerHandoff?: string;
   designLanguage?: string; languageTargets?: readonly { id: string; route: string; selector: string; metric: string; range: readonly [number, number] }[];
+  sourceStudy?: string;
   /** Exact normalized Source ref identities for user-origin refs, not host labels. */
   userRefLabels?: string[];
 }
@@ -344,6 +355,10 @@ function validateCompositionContractWith(
   if (invocation !== undefined && existsSync(join(omd, 'route.json'))) {
     try {
       const route = readPersistedRoute(root, invocation);
+      if (route.strategy.methods.includes('provisional-source-study')) {
+        try { derived.sourceStudy = readSelectedSourceStudy(root, invocation).sha256; }
+        catch { stale('.cache/studies/current.json', 'SOURCE_STUDY_REQUIRED: selected study is missing, invalid or stale'); }
+      }
       const language = projection(root, route);
       if (language?.status === 'needs-clarification') stale('design-language/intake.json', 'DESIGN_LANGUAGE_AMBIGUOUS');
       if (language?.status === 'resolved') {

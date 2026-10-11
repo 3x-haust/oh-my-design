@@ -20,18 +20,19 @@ const inputs = [
   { lane: 'design', query: 'dashboard', url: 'https://www.siteinspire.com/search?query=dashboard', queryParam: 'query' },
 ] as const;
 
-test('discovery plan supplies executable gallery searches without requiring invented item URLs', t => {
+test('product discovery starts with an executable finished-product search', t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-gallery-plan-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const route = routeAdaptiveFlow(JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8')));
   const plan = buildReferenceDiscoveryPlan(root, route);
   const native: unknown = Reflect.get(plan.designSourcePolicy, 'nativeSearchInputs');
   assert.ok(Array.isArray(native));
-  assert.equal(native.length, 2);
+  assert.equal(native.length, 1);
   for (const input of native) {
     const parsed = parseSearchInput(input);
     assert.equal(parsed.lane, 'design');
-    assert.equal(parsed.query, 'app interface');
+    assert.equal(parsed.query, 'app interface finished product app');
+    assert.equal(new URL(parsed.url).hostname, 'www.google.com');
   }
 });
 
@@ -59,6 +60,9 @@ test('product-screen providers accept concrete screens but reject their director
   assert.equal(designDiscoveryProvider('https://wwit.design/'), null);
   assert.equal(designDiscoveryDirectoryProvider('https://www.saasui.design/pattern/dashboard'), 'SaaSUI');
   assert.equal(designDiscoveryProvider('https://www.saasui.design/pattern/dashboard'), null);
+  assert.equal(designDiscoveryDirectoryProvider('https://dribbble.com/search/korea-ui'), 'Dribbble');
+  assert.equal(designDiscoveryDirectoryProvider('https://www.behance.net/search/projects/case%20management%20product%20design?locale=ko'), 'Behance');
+  assert.equal(designDiscoveryDirectoryProvider('https://dribbble.com/shots/27610524-Task-Management-Dashboard-Ui-Design'), null);
   assert.equal(designDiscoveryProvider('https://www.saasui.design/blog'), null);
   for (const url of ['https://mobbin.com/explore/screens', 'https://pageflows.com/screens/']) {
     assert.equal(designDiscoveryProvider(url), null);
@@ -75,20 +79,13 @@ test('product-screen providers accept concrete screens but reject their director
   }
 });
 
-test('selected discovery offers explicit direct public entry inputs while skipped discovery offers none', t => {
+test('product discovery does not auto-open gallery roots while skipped discovery offers none', t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-direct-plan-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const makePlan = (fixture: string) => buildReferenceDiscoveryPlan(root,
     routeAdaptiveFlow(JSON.parse(readFileSync(new URL(`fixtures/adaptive-flow/${fixture}.json`, import.meta.url), 'utf8'))));
   const plan = makePlan('medical-new-product');
-  const entries: unknown = Reflect.get(plan.designSourcePolicy, 'nativeEntryInputs');
-  assert.ok(Array.isArray(entries) && entries.length > 0);
-  for (const entry of entries) {
-    assert.equal(entry.lane, 'design');
-    assert.equal(entry.entry, 'free-gallery');
-    assert.ok(plan.designSourcePolicy.candidates.some(candidate => candidate.url === entry.url));
-    assert.equal(designDiscoveryProvider(entry.url), null, 'a directory lead is not an already selected gallery item');
-  }
+  assert.deepEqual(Reflect.get(plan.designSourcePolicy, 'nativeEntryInputs'), []);
   assert.equal(plan.sourcePolicy, 'current-search-or-direct-public-then-live-inspection');
   assert.deepEqual(Reflect.get(makePlan('copy-only').designSourcePolicy, 'nativeEntryInputs'), []);
   assert.equal(Reflect.get(makePlan('copy-only').designSourcePolicy, 'domainEntryCommand'), null);

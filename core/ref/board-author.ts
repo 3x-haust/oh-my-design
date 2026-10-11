@@ -10,6 +10,9 @@ import { ACQUISITION_PLAN_V2_SCHEMA, validateAcquisitionPlan, type AcquisitionPl
 import { localeDesignContextJsonSha256 } from '../locale/design-context.ts';
 import { sourceFeatureWitness } from './feature-measurement.ts';
 import { readImageFragment } from './image-fragment.ts';
+import { currentReferenceDirectionSourceContract } from './reference-direction-admission.ts';
+import { requireReferenceBoardVisualAdmission } from './reference-board-visual-admission.ts';
+import { requireDesignImageAdmission } from './design-image-admission.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const fail = (message: string): never => { throw new Error(`reference board input is invalid: ${message}`); };
@@ -41,6 +44,7 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
   if (requiredZones.size === 0) fail('acquisition plan must declare at least one required zone');
 
   const captured = loadRefs(root, { includeDomain: true });
+  const directionSourceContract = currentReferenceDirectionSourceContract(root);
   const references = new Map(captured.filter(reference => reference.researchLane !== 'domain')
     .map(reference => [refIdentity(reference.source, reference.component), reference]));
   const domainIds = new Set(captured.filter(reference => reference.researchLane === 'domain')
@@ -85,9 +89,16 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
       };
       if (imageFragment) {
         if (nonvisual) fail(`${path} nonvisual evidence requires a classified reference`);
+        if (directionSourceContract !== null) {
+          const fragment = readImageFragment(root, referenceId);
+          requireDesignImageAdmission(root, { imagePath: fragment.imagePath, provenance: fragment.provenance });
+        }
         return { ...common, sourceKind: 'image-fragment' as const };
       }
-      if (!nonvisual) return { ...common, sourceKind: 'component-capture' as const };
+      if (!nonvisual) {
+        const reference = references.get(referenceId) ?? fail(`${path} reference does not exist`);
+        return { ...common, sourceKind: 'component-capture' as const };
+      }
       const reference = references.get(referenceId) ?? fail(`${path} classified reference does not exist`);
       const classification = parseReferenceClassification(reference);
       const expected = signal === 'supporting-content' ? 'content-only' : 'anti-reference';
@@ -146,6 +157,20 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
     candidates: authoredCandidates,
   });
   for (const candidate of parsed.candidates) for (const piece of candidate.pieces) {
+    if (directionSourceContract !== null && piece.sourceKind === 'component-capture') {
+      const reference = references.get(piece.referenceId) ?? fail(`reference ${piece.referenceId} does not exist`);
+      requireReferenceBoardVisualAdmission(root, reference, {
+        sourceContractSha256: directionSourceContract,
+        ...(piece.binding === undefined ? {} : { binding: piece.binding }), take: piece.take,
+      });
+    }
+    if (directionSourceContract !== null && piece.sourceKind === 'image-fragment') {
+      const fragment = readImageFragment(root, piece.referenceId);
+      requireDesignImageAdmission(root, {
+        imagePath: fragment.imagePath, provenance: fragment.provenance,
+        ...(piece.binding === undefined ? {} : { binding: piece.binding }), take: piece.take,
+      }, directionSourceContract);
+    }
     if (piece.binding?.measurements) {
       const reference = references.get(piece.referenceId) ?? fail(`declared feature source ${piece.referenceId} does not exist`);
       for (const measurement of piece.binding.measurements) sourceFeatureWitness(reference.blueprint, measurement);

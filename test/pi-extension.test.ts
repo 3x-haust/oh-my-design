@@ -133,6 +133,67 @@ test('omd_cli returns structured exit-one JSON diagnostics without a failed tool
   assert.deepEqual(result.details, { code: 1, killed: false });
 });
 
+test('omd_cli preserves complete large stage JSON for machine consumers', async () => {
+  const output = { stage: 'reference-board', entry: { request: '한\n'.repeat(30_000) },
+    action: { kind: 'collect-leads', lane: 'design', args: ['ref', 'leads', 'search'] } };
+  const loaded = loadExtension(async () => ({
+    stdout: JSON.stringify(output), stderr: '', code: 0, killed: false,
+  }));
+  const result = await loaded.tool.execute('large-stage', { args: ['stage', 'next', '--json'] },
+    undefined, undefined, { cwd: '/tmp/project' });
+  assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), output);
+  assert.deepEqual(result.details, { code: 0, killed: false });
+});
+
+test('omd_cli returns exact current discovery action with source-bound historical receipts', async () => {
+  const receipt = { path: '.omd/discovery/design/attempts/old.json', sha256: 'a'.repeat(64) };
+  const action = { kind: 'review-candidates', lane: 'design',
+    args: ['ref', 'direction-review', '--json'], reason: 'Independent review is required.' };
+  const output = {
+    schema: 'reference-discovery-work-v1', status: 'action', action,
+    next: 'omd ref direction-review --json', instruction: action.reason,
+    workSha256: 'b'.repeat(64), materialProgressIdentities: ['candidate:current'],
+    circuits: [{ provider: 'example.com', status: 'open' }], code: null, progress: { visits: 20 },
+    attempts: [{ lane: 'design', url: 'https://example.com', reason: 'old failure '.repeat(6000), receipt }],
+    exclusions: [],
+  };
+  const loaded = loadExtension(async () => ({
+    stdout: JSON.stringify(output), stderr: '', code: 0, killed: false,
+  }));
+  const result = await loaded.tool.execute('discovery-summary',
+    { args: ['ref', 'work-next', '--json'] }, undefined, undefined, { cwd: '/tmp/project' });
+  const text = result.content[0]?.text ?? '';
+  const summary = JSON.parse(text);
+  assert.equal(summary.schema, 'omd-discovery-summary-v1');
+  assert.deepEqual(summary.work.action, action);
+  assert.deepEqual(summary.work.circuits, output.circuits);
+  assert.deepEqual(summary.history.attempts, [receipt]);
+  assert.ok(text.length < JSON.stringify(output).length / 10);
+});
+
+test('omd_cli still bounds oversized malformed or human-readable output', async () => {
+  for (const args of [['stage', 'next', '--json'], ['help']]) {
+    const loaded = loadExtension(async () => ({
+      stdout: '{invalid'.repeat(10_000), stderr: '', code: 0, killed: false,
+    }));
+    const result = await loaded.tool.execute('large-text', { args },
+      undefined, undefined, { cwd: '/tmp/project' });
+    const text = result.content[0]?.text ?? '';
+    assert.ok(text.length < 51_000);
+    assert.ok(text.endsWith('[OMD output truncated]'));
+  }
+});
+
+test('omd_cli keeps oversized fatal JSON as a bounded command failure', async () => {
+  const loaded = loadExtension(async () => ({
+    stdout: JSON.stringify({ error: 'x'.repeat(60_000) }), stderr: '', code: 2, killed: false,
+  }));
+  await assert.rejects(loaded.tool.execute('large-error', { args: ['stage', 'next', '--json'] },
+    undefined, undefined, { cwd: '/tmp/project' }), error => error instanceof Error
+      && error.message.startsWith('OMD_CLI_FAILED (2):')
+      && error.message.length < 51_000 && error.message.endsWith('[OMD output truncated]'));
+});
+
 test('a partly failed discovery batch keeps its successful receipt in structured Pi output', async () => {
   const partial = { ok: false, concurrency: 2, outcomes: [
     { kind: 'search', ok: true, receipt: { path: '.omd/discovery/domain/search-a.json', sha256: 'a'.repeat(64) } },

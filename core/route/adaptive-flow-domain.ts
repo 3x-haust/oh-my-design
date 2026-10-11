@@ -48,7 +48,7 @@ export const MANDATORY_STAGE_IDS = Object.freeze([] as const);
 export const OPTIONAL_METHOD_IDS = Object.freeze([
   'reflection-in-action', 'reference-distance', 'image-first-draft',
   'evidence-driven-refinement', 'copy-repair-workflow', 'motion-one',
-  'ai-shipped-asset',
+  'ai-shipped-asset', 'provisional-source-study',
 ] as const);
 export const ADAPTIVE_STAGE_IDS = Object.freeze([
   ...MANDATORY_STAGE_IDS, ...OPTIONAL_STAGE_IDS, 'production', 'browser-evidence', 'independent-review',
@@ -97,9 +97,11 @@ export type AdaptiveRouteErrorCode =
 export class AdaptiveRouteError extends Error {
   override readonly name = 'AdaptiveRouteError';
   readonly code: AdaptiveRouteErrorCode;
-  constructor(code: AdaptiveRouteErrorCode, detail?: string) {
+  readonly requiredRoles?: readonly string[];
+  constructor(code: AdaptiveRouteErrorCode, detail?: string, requiredRoles?: readonly string[]) {
     super(detail === undefined ? code : `${code}: ${detail}`);
     this.code = code;
+    if (requiredRoles !== undefined) this.requiredRoles = Object.freeze([...requiredRoles]);
   }
 }
 

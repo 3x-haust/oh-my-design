@@ -45,7 +45,25 @@ function compile(ruleId: string, expr: string): Compiled {
 
 function evalExpr(ruleId: string, expr: string, node: Node, ir: Ir, value: RuleValue): unknown {
   try {
-    const context = { node: structuredClone(node), ir: structuredClone(ir), value: structuredClone(value) };
+    let irSnapshot: unknown;
+    let hasIrSnapshot = false;
+    const context = {
+      node: structuredClone(node),
+      // Most per-node expressions never read ir. Clone only on first access, still
+      // giving each expression its own mutable snapshot rather than sharing data.
+      get ir(): unknown {
+        if (!hasIrSnapshot) {
+          irSnapshot = structuredClone(ir);
+          hasIrSnapshot = true;
+        }
+        return irSnapshot;
+      },
+      set ir(next: unknown) {
+        irSnapshot = next;
+        hasIrSnapshot = true;
+      },
+      value: structuredClone(value),
+    };
     return compile(ruleId, expr).runInNewContext(context, { timeout: RULE_EVALUATION_TIMEOUT_MS, contextCodeGeneration: { strings: false, wasm: false } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

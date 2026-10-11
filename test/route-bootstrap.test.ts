@@ -135,7 +135,7 @@ test('wave parsing explains accepted mode and sequential-host semantics without 
   }
 });
 
-test('real Pi request classifies with advisory process omissions; final evidence remains hard', async t => {
+test('real Pi route classification cannot authorize source writes without selected prerequisites', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-test013-bootstrap-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const h = harness(cwd);
@@ -150,9 +150,15 @@ test('real Pi request classifies with advisory process omissions; final evidence
   const classified = JSON.parse((await h.run(['route', 'classify', '--input', inputPath, '--json'])).content[0]!.text);
   assert.equal(classified.request, 'Implement a React product');
   assert.ok(classified.gates.includes('dual-reference-research'));
-  assert.equal((await h.run(['guard', 'production', '--json'])).details.code, 0);
-  assert.equal(await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } }), undefined);
-  await assert.rejects(h.run(['guard', 'completion', '--json']), /FINAL_EVIDENCE_REQUIRED/);
+  const readiness = await h.run(['guard', 'production', '--json']);
+  assert.equal(readiness.details.code, 1);
+  assert.match(readiness.content[0]?.text ?? '', /copy-deck|reference/);
+  const blocked = await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } });
+  assert.ok(blocked && typeof blocked === 'object' && 'block' in blocked);
+  assert.equal(blocked.block, true);
+  const completion = await h.run(['guard', 'completion', '--json']);
+  assert.equal(completion.details.code, 1);
+  assert.match(completion.content[0]?.text ?? '', /copy-deck|reference/);
   assert.equal(existsSync(join(cwd, 'src')), false);
 });
 
@@ -335,6 +341,9 @@ test('a real full build that ends after schema inspection gets one authoring act
   const packet = JSON.parse(packetText);
   assert.equal(packet.action, 'author-route-input');
   assert.equal(packet.inputPath, inputPath);
+  assert.equal(packet.writeTool, 'write');
+  assert.equal(packet.editTool, 'edit');
+  assert.equal(packet.preclassificationAuthoringAllowed, true);
   assert.equal(h.calls.length, callsBeforeEntry, 'entry must request authored work, not repeat checks');
   assert.equal(existsSync(join(cwd, inputPath)), false);
   assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
@@ -350,6 +359,26 @@ test('a real full build that ends after schema inspection gets one authoring act
   assert.deepEqual(route.allowedPaths, input.allowedPaths);
   assert.equal(route.request, 'Build a React product.');
   assert.equal(JSON.parse((await h.run(['stage', 'resume', '--json'])).content[0]?.text ?? 'null').current, 'domain');
+});
+
+test('an existing unclassified route input receives validation rather than a missing-input action', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-existing-route-entry-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
+  const bytes = JSON.stringify(fixture());
+  writeFileSync(join(cwd, inputPath), bytes);
+  const h = harness(cwd), prompt = '/skill:omd-ultradesign Build a React product.';
+  await h.emit('input', { source: 'rpc', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  await h.run(['schema', 'product-route-input', '--json']);
+  await h.end();
+  const packetText = /^Action packet: (.+)$/mu.exec(h.sent[0]?.[0].content ?? '')?.[1];
+  assert.ok(packetText);
+  const packet = JSON.parse(packetText);
+  assert.equal(packet.action, 'validate-route-input');
+  assert.deepEqual(packet.afterAuthoring[0], ['route', 'validate', '--input', inputPath, '--json']);
+  assert.equal(readFileSync(join(cwd, inputPath), 'utf8'), bytes);
+  assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
 });
 
 test('new user input revokes an untouched old turn before its delayed final message', async t => {

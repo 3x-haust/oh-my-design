@@ -7,8 +7,37 @@ import { nativeJudgmentSources } from '../core/judgment/sources.ts';
 import { verifyJudgment, type JudgmentInput } from '../core/judgment/index.ts';
 import { discoveryFixture } from './helpers/discovery-capture.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { releaseControlOnVisibleWait } from './helpers/deferred-control.ts';
 
 const url = 'https://reference.example/';
+test('a control rendered after navigation is observed only after its visibility signal', async t => {
+  const root = discoveryFixture(t);
+  const captured = await withBrowser(browser => {
+    const intercepted = new Proxy(browser, { get(target, property) {
+      if (property !== 'newContext') return Reflect.get(target, property, target);
+      return async (...args: Parameters<typeof browser.newContext>) => {
+        const context = await browser.newContext(...args);
+        const newPage = context.newPage.bind(context);
+        context.newPage = async () => {
+          const page = await newPage();
+          await page.route('https://reference.example/**', route => route.fulfill({ status: 200, contentType: 'text/html',
+            body: `<html><body><script>
+              document.addEventListener('control-ready', () => {
+                document.body.insertAdjacentHTML('beforeend', '<a id="details" href="/details">Inspect details</a>');
+              }, {once:true});
+            </script></body></html>` }));
+          releaseControlOnVisibleWait(page, '#details');
+          return page;
+        };
+        return context;
+      };
+    } });
+    return captureReferenceControlObservation(intercepted, root, { url, selector: '#details' }, createTestProjectWriteAdapter(root));
+  });
+  assert.equal(captured.itemId, '#details');
+  assert.equal(captured.text, 'Inspect details');
+});
+
 test('signed current control receipt binds a quote to the exact selector and document', async t => {
   const root = discoveryFixture(t);
   const captured = await withBrowser(browser => {

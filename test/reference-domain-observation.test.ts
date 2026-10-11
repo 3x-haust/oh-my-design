@@ -2,17 +2,87 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { observeDomainHtml, readDomainHtmlBody } from '../core/ref/domain-fetch.ts';
 import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { createReferenceAcquisitionSession } from '../core/ref/acquisition-session.ts';
 import { readDomainObservation } from '../core/ref/domain-observation.ts';
 import { classifyKoreanServiceText } from '../core/ref/market-reference.ts';
 import { withBrowser } from '../core/render/index.ts';
-import { discoveryBrowser, discoveryFixture, PUBLIC_DIRECTORY, DOMAIN_ITEM } from './helpers/discovery-capture.ts';
+import { directoryHtml, discoveryBrowser, discoveryFixture, PUBLIC_DIRECTORY, DOMAIN_ITEM } from './helpers/discovery-capture.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+
+test('domain HTTP body retains a 2.64 MiB populated public catalog', async () => {
+  const html = Buffer.alloc(2_643_194, 97);
+  async function* body(): AsyncGenerator<Uint8Array> {
+    yield html.subarray(0, 1_000_000);
+    yield html.subarray(1_000_000);
+  }
+  assert.equal((await readDomainHtmlBody(body())).byteLength, html.byteLength);
+});
+
+test('domain HTTP body rejects responses beyond its bounded intake', async () => {
+  async function* body(): AsyncGenerator<Uint8Array> {
+    yield Buffer.alloc(4_194_304);
+    yield Buffer.of(97);
+  }
+  await assert.rejects(readDomainHtmlBody(body()), /domain HTML exceeds size limit/);
+});
 
 test('Korean text on .com is Korean; empty text is undetermined, not foreign', () => {
   assert.equal(classifyKoreanServiceText('복지 서비스 혜택 신청 대상 안내입니다'), 'korean');
   assert.equal(classifyKoreanServiceText(''), 'undetermined');
   assert.equal(classifyKoreanServiceText('English-only service homepage'), 'non-korean');
+});
+
+test('static domain HTML with authentication inputs defers to rendered observation', () => {
+  const html = `${directoryHtml(DOMAIN_ITEM)}<form hidden><input type="password"></form>`;
+  assert.equal(observeDomainHtml(html, PUBLIC_DIRECTORY, 200).kind, 'fallback');
+});
+
+test('domain navigation admits public content with hidden authentication controls', async t => {
+  const root = discoveryFixture(t);
+  await withBrowser(async browser => {
+    const html = `${directoryHtml(DOMAIN_ITEM)}<form hidden><input type="password"><span>Hidden sign-in text</span></form>`;
+    const observed = discoveryBrowser(browser, { url: PUBLIC_DIRECTORY, html });
+    const session = createReferenceAcquisitionSession(createTestProjectWriteAdapter(root), {
+      browserConfig: { mode: 'default' }, explicitUserBrowser: false,
+      fetchDomain: async () => observeDomainHtml(html, PUBLIC_DIRECTORY, 200),
+      browserConnector: {
+        launch: async () => observed.browser,
+        connectOverCDP: async () => { throw new Error('unexpected user-browser connection'); },
+      },
+    });
+    const receipt = await session.navigate(PUBLIC_DIRECTORY, 'domain');
+    const record = readDomainObservation(root, receipt);
+    assert.ok(typeof record.observedText === 'string');
+    assert.match(record.observedText, /Public directory/);
+    assert.doesNotMatch(record.observedText, /Hidden sign-in text/);
+    assert.equal(observed.closed(), 1);
+  });
+});
+
+test('domain navigation observes labeled links when the site replaces the global Map', async t => {
+  const root = discoveryFixture(t);
+  await withBrowser(async browser => {
+    const observed = discoveryBrowser(browser, { url: PUBLIC_DIRECTORY,
+      html: `${directoryHtml(DOMAIN_ITEM)}<script>window.Map = function Map() { this.put = function () {}; };</script>` });
+    const receipt = await captureReferenceNavigation(observed.browser, PUBLIC_DIRECTORY, 'domain', createTestProjectWriteAdapter(root));
+    const record = readDomainObservation(root, receipt);
+    assert.deepEqual(record.linkLabels, [{ url: DOMAIN_ITEM, text: 'Inspect entry 1' }]);
+    assert.equal(observed.closed(), 1);
+  });
+});
+
+test('domain navigation refuses an occluding login form without publishing task evidence', async t => {
+  const root = discoveryFixture(t);
+  await withBrowser(async browser => {
+    const observed = discoveryBrowser(browser, { url: PUBLIC_DIRECTORY,
+      html: `${directoryHtml(DOMAIN_ITEM)}<form style="position:fixed;inset:0;background:white"><input type="password"></form>` });
+    await assert.rejects(captureReferenceNavigation(observed.browser, PUBLIC_DIRECTORY, 'domain', createTestProjectWriteAdapter(root)),
+      /login form obscures/);
+    assert.equal(existsSync(join(root, '.omd/discovery/domain/observations')), false);
+    assert.equal(observed.closed(), 1);
+  });
 });
 
 test('domain navigation signs visible text and links without publishing a screenshot', async t => {

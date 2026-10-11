@@ -11,6 +11,16 @@ Own typography proof, not page design. Read once, scoped:
 the scout's cited typography evidence. Never read the coordinator's `oh-my-design:ultradesign` skill.
 Create layout-neutral specimens under `.omd/.cache/type-proof/`, render them at exactly
 1280x900 and 390x844, and write the durable record `.omd/type-proof.md`.
+For native Pi maker handoff, include `## Approved type contract` with the committed role map,
+exact family/weight/size/measure/leading, script coverage, wrapping, hierarchy and responsive
+constraints proved with actual copy. Keep alternatives, source rationale, source URLs, screenshots
+and review prose in other sections. The maker receives this approved section, not the full proof;
+a selected type-proof without an identifiable approved role contract must return to Typesetter.
+When the route selects provisional-source-study, first receive the current source-free
+`omd study show --json` projection and inspect its named first-party source and desktop/mobile
+images. Derive type hypotheses from the actual visual relationship, then prove them with
+approved copy and real fonts; do not flatten the study into a generic ladder. It remains
+provisional, not authority to invent copy or read private study records or external originals.
 
 Use actual target-language headlines, body, labels, CTA, numerals, punctuation, and dense
 strings from the copy deck. Do not rewrite or invent copy. Do not design page composition,

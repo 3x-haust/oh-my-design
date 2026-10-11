@@ -6,6 +6,7 @@ import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-s
 import { runOwnedOmdProcess } from './omd-process.ts';
 import type { PiRequestBindingInfo } from './omd-request-binding.ts';
 import { compactPiRouteOutput } from './omd-route-output.ts';
+import { compactPiDiscoveryOutput } from './omd-discovery-output.ts';
 import type { PiHostContext, PiNativeRuns } from './omd-native-run.ts';
 
 const MAX_OUTPUT_CHARS = 50_000;
@@ -215,10 +216,22 @@ export type PortablePiApi = Readonly<{
 
 function boundedOutput(result: ExecResult, args: readonly string[]): string {
   const combined = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n');
+  if (result.code === 0 && !result.killed && result.stderr.trim() === '') {
+    const discovery = compactPiDiscoveryOutput(result.stdout, args);
+    if (discovery !== undefined) return discovery;
+  }
   if (combined.length <= MAX_OUTPUT_CHARS) return combined;
   if (result.code === 0 && !result.killed) {
     const route = compactPiRouteOutput(result.stdout, args);
     if (route !== undefined) return route;
+    if (args.includes('--json') && result.stderr.trim() === '') {
+      try {
+        JSON.parse(combined);
+        return combined;
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+      }
+    }
   }
   return `${combined.slice(0, MAX_OUTPUT_CHARS)}\n[OMD output truncated]`;
 }

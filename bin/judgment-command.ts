@@ -1,10 +1,11 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { readPiRequest, readPiUserTurn, requestDigest } from '../extensions/omd-request-source.ts';
 import { nativeJudgmentSources } from '../core/judgment/sources.ts';
 import { knownFields, parseJudgment, publishJudgment, readCurrentJudgment, type JudgmentInput, type JudgmentPolicy, type JudgmentReceipt, type JudgmentVerificationContext } from '../core/judgment/index.ts';
 import { DESIGN_LANGUAGE_READING_POLICY } from '../core/design-language/judgment.ts';
+import { parseInput as parseDesignLanguageInput } from '../core/design-language/index.ts';
 import { REFERENCE_JUDGMENT_DECISIONS, referenceJudgmentPolicy, type ReferenceJudgmentPurpose, type ReferenceJudgmentBinding } from '../core/ref/judgment-policy.ts';
 import { signNativeObservation, verifyNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { readContainedRegularFile, projectRunInvocationSha256 } from '../core/ref/reference-selection.ts';
@@ -93,11 +94,34 @@ export async function cliReferenceActionBinding(root: string, invocation: Projec
       verifySignature: (digest, signature) => verifyNativeObservation(root, SIGNING_KIND, digest, signature) } };
 }
 
-export function judgmentStarter(root: string, purpose: string, invocation: ProjectRunInvocation) {
-  const policy = REQUEST_POLICIES[purpose];
-  if (!policy) throw new Error(`AI_JUDGMENT_INVALID: unsupported starter purpose ${purpose}; choose ${Object.keys(REQUEST_POLICIES).join('|')}`);
+export function judgmentStarter(root: string, purpose: string, invocation: ProjectRunInvocation, inputPath?: string) {
+  const policy = purpose === 'design-language-reading' ? DESIGN_LANGUAGE_READING_POLICY : REQUEST_POLICIES[purpose];
+  if (!policy) throw new Error(`AI_JUDGMENT_INVALID: unsupported starter purpose ${purpose}; choose ${[...Object.keys(REQUEST_POLICIES), 'design-language-reading'].join('|')}`);
   const request = readPiRequest(root);
   if (!request) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: current signed request required');
+  if (purpose === 'design-language-reading') {
+    if (!inputPath) throw new Error('AI_JUDGMENT_INVALID: design-language-reading starter requires --input <design-language-input.json>');
+    const route = readPersistedRoute(root, invocation);
+    if (request.request !== route.request) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: current signed request and route required');
+    const input = JSON.parse(readFileSync(resolve(root, inputPath), 'utf8')) as unknown;
+    const kind = input && typeof input === 'object' ? Reflect.get(input, 'kind') : undefined;
+    if (kind !== 'intake' && kind !== 'feedback') throw new Error('DESIGN_LANGUAGE_STALE');
+    const translation = parseDesignLanguageInput(input, kind, route.request, route.sourceContractSha256);
+    const decision = translation.status === 'needs-clarification' ? 'ambiguous' : translation.status;
+    const path = `.omd/.cache/ai-judgment-${purpose}.json`;
+    const skeleton = { schema: 'ai-judgment-v1', purpose, subjectId: translation.kind,
+      context: { requestSha256: request.requestSha256, sourceContractSha256: route.sourceContractSha256,
+        questionDigest: null, documentSha256: null }, decision,
+      reason: 'Explain why this reading matches the cited request without inventing approval',
+      quotes: [{ source: { kind: 'route-request', requestSourceSha256: request.recordSha256,
+        requestSha256: request.requestSha256 }, field: 'request', itemId: null, text: request.request }],
+      evidence: [], payload: { kind: translation.kind, textSha256: translation.textSha256,
+        chosenId: translation.chosenId } };
+    mkdirSync(join(root, '.omd/.cache'), { recursive: true });
+    writeFileSync(join(root, path), `${JSON.stringify(skeleton, null, 2)}\n`);
+    return { name: 'ai-judgment', purpose, path, command: `omd ai-judgment publish --input ${path} --json`,
+      decisions: policy.decisions, skeleton };
+  }
   const turn = purpose === 'workflow-continuation' ? readPiUserTurn(root) : undefined;
   if (purpose === 'workflow-continuation' && !turn) throw new Error('AI_JUDGMENT_CONTEXT_MISMATCH: current authenticated user turn required');
   const route = purpose === 'workflow-continuation' ? readPersistedRoute(root, invocation) : null;

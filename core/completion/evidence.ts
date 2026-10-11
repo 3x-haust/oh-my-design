@@ -23,7 +23,8 @@ import {
   nodeStableProjectFileSystem,
   readStableProjectFile,
 } from '../runtime/stable-project-file.ts';
-import { validateBrowserObservationArtifacts, validateBrowserObservationDecisionLinks } from '../runtime/browser-observation.ts';
+import { validateBrowserObservationArtifacts } from '../runtime/browser-observation.ts';
+import { validateObservationDecisionGraph } from '../runtime/observation-decision-graph.ts';
 import { validateObservationV2 } from '../runtime/observation.ts';
 import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
 import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
@@ -355,8 +356,9 @@ function validateObservationSet(root: string, descriptors: readonly CompletionAr
   for (const [index, descriptor] of descriptors.entries()) {
     const value = validateObservationV2(parseJson(backed(root, descriptor, `observation ${index}`), `observation ${index}`));
     if (value.buildSha256 !== buildSha256) fail(`observation ${index} build is stale`);
-    const links = validateBrowserObservationDecisionLinks(value.evidence, decisionGraph, true)
-      ?? fail(`observation ${index} has no browser evidence`);
+    const { links } = validateObservationDecisionGraph({
+      root, fs, evidence: value.evidence, currentGraph: decisionGraph, requireCurrentGraph: false,
+    });
     validateBrowserObservationArtifacts(links, (path) => stableRead(root, path, `observation ${index} capture`), true);
     for (const observation of links.observations) {
       if (observation.testedUrl !== url || observation.testedState !== state) fail(`observation ${index} URL or state is stale`);

@@ -17,6 +17,8 @@ import {
 } from './trusted-evaluation-contract.ts';
 import { writeTrustedEvaluationObservation } from './trusted-evaluation-observation.ts';
 import { deriveTrustedEvaluationPlanFromProject } from './trusted-evaluation-plan.ts';
+import { requireResolvedNativeReframe } from './native-reframe.ts';
+import { requireRetainedFirstRenderReview } from '../design/first-render-review.ts';
 
 export class NativeEvaluationError extends Error {
   override readonly name = 'NativeEvaluationError';
@@ -39,6 +41,11 @@ export type NativeEvaluationInput = Readonly<{
 export async function runNativeEvaluation(input: NativeEvaluationInput) {
   const root = resolve(input.root);
   const run = getNativePiRun(input.invocation, root);
+  requireResolvedNativeReframe(root, input.invocation);
+  const route = readPersistedRoute(root, input.invocation);
+  if (route.strategy.stages.includes('composition')) {
+    requireRetainedFirstRenderReview(root, input.invocation);
+  }
   // A supplied plan is an evaluation proposal, not authority. Bind every outcome to the
   // authenticated route and verify it in the real browser below. The frame/benchmark
   // projection remains a convenience when no plan was supplied.
@@ -55,7 +62,6 @@ export async function runNativeEvaluation(input: NativeEvaluationInput) {
     || build.sourceSkillSha256 !== input.invocation.current.loadedSkillSha256) {
     throw new NativeEvaluationError('NATIVE_EVALUATION_BUILD_MISMATCH');
   }
-  const route = readPersistedRoute(root, input.invocation);
   const routeSha256 = adaptiveRouteRecordSha256(route);
   const graphBytes = readStableProjectFile({ root, path: resolve(root, '.omd/decision-graph.json'),
     label: 'native evaluation decision graph', fs: nodeStableProjectFileSystem() });
@@ -93,6 +99,9 @@ export async function runNativeEvaluation(input: NativeEvaluationInput) {
     artifacts: { write: (path, bytes) => { writer.writeContentAddressed(path, bytes); } },
   }));
   getNativePiRun(input.invocation, root);
+  if (route.strategy.stages.includes('composition')) {
+    requireRetainedFirstRenderReview(root, input.invocation);
+  }
   const currentPlan = input.manifest === undefined || manifest.entrySurface !== undefined
     ? deriveTrustedEvaluationPlanFromProject({ root, invocation: input.invocation })
     : parseTrustedLifecycleManifest(input.manifest);
@@ -100,16 +109,25 @@ export async function runNativeEvaluation(input: NativeEvaluationInput) {
     || adaptiveRouteRecordSha256(readPersistedRoute(root, input.invocation)) !== routeSha256) {
     throw new NativeEvaluationError('NATIVE_EVALUATION_PLAN_CHANGED');
   }
+  const executedPlanBytes = trustedEvaluationPlanBytes(boundManifest);
+  const executedPlanSha256 = createHash('sha256').update(executedPlanBytes).digest('hex');
+  if (evaluation.receipt.executionPlanSha256 !== executedPlanSha256) {
+    throw new NativeEvaluationError('NATIVE_EVALUATION_PLAN_CHANGED');
+  }
+  writer.writeContentAddressed(`.omd/evaluation-plans/sha256-${executedPlanSha256}.json`, executedPlanBytes);
   authorizeNativePiPayload(input.invocation, root, 'product-probe-result',
     Buffer.from(`${canonicalJson(evaluation.receipt)}\n`));
   const observation = writeTrustedEvaluationObservation({ root, writer, invocation: input.invocation,
     evaluation, currentArtifactPath: '.omd/build.json', productionArtifactPath: manifest.entryPath,
     requireDecisionGraph: true });
   const observationSha256 = observationV2Sha256(observation);
+  const executionPassed = evaluation.receipt.outcomeResults.every(row => row.status === 'pass')
+    && Object.values(evaluation.receipt.hardFloors).every(status => status === 'pass')
+    && evaluation.receipt.entrySurface?.status !== 'fail';
   return Object.freeze({
-    ok: evaluation.receipt.outcomeResults.every(row => row.status === 'pass')
-      && Object.values(evaluation.receipt.hardFloors).every(status => status === 'pass')
-      && evaluation.receipt.entrySurface?.status !== 'fail',
+    ok: executionPassed,
+    executionStatus: executionPassed ? 'pass' as const : 'fail' as const,
+    acceptanceStatus: 'review-required' as const,
     manifest, observation, observationSha256,
     observationPath: `.omd/observation-v2/sha256-${observationSha256}.json`,
     receipt: evaluation.receipt, receiptSha256: evaluation.receiptSha256,

@@ -182,7 +182,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
     || (userBrowser ? acquisition.httpStatus !== null || acquisition.engine !== 'user-browser'
       || acquisition.httpStatusSource !== 'unobserved' || acquisition.authentication !== 'user-browser-session'
       || acquisition.networkIsolation !== 'initial-url-check-only' || acquisition.getOnlyEnforced !== false
-      || acquisition.captureMethod !== 'viewport' || JSON.stringify(acquisition.imageDimensions) !== JSON.stringify({ width: 1280, height: 900 })
+      || acquisition.captureMethod !== 'viewport' || ![JSON.stringify({ width: 1280, height: 900 }), JSON.stringify({ width: 2560, height: 1800 })].includes(JSON.stringify(acquisition.imageDimensions))
       : typeof acquisition.httpStatus !== 'number' || !Number.isInteger(acquisition.httpStatus)
         || acquisition.httpStatus < 200 || acquisition.httpStatus >= 300)) return fail('invalid URL/image acquisition provenance');
   if (!Array.isArray(acquisition.links) || acquisition.links.length > 2000
@@ -193,7 +193,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   const observation = { url, finalUrl: publicDiscoveryUrl(acquisition.finalUrl), links };
   if (entry !== undefined) validateDirectDiscoveryLinks(entry, observation);
   const png = decodePng(read(root, image));
-  if (png.width !== 1280 || png.height !== 900) return fail('discovery capture viewport differs');
+  if (![1280, 2560].includes(png.width) || png.height !== png.width * 900 / 1280) return fail('discovery capture viewport differs');
   const imageCandidates = candidateNavigation || userBrowser ? galleryImageCandidates(row.imageCandidates) : undefined;
   if (!requireCurrent) return observation;
   return observedText === undefined ? { ...observation, capturedAt: text(row.capturedAt),

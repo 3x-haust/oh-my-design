@@ -13,11 +13,13 @@ import { currentNativeFinalObservations } from '../runtime/native-final-manifest
 import { checkNativeFinalReview } from '../runtime/native-final-review-state.ts';
 import { getNativePiRun } from '../runtime/native-pi-run.ts';
 import { checkSlopFinalGraph } from '../slop/review.ts';
+import { nativeReframeWork, requireResolvedNativeReframe } from '../runtime/native-reframe.ts';
 
 const reason = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
 export function checkNativeBrowserEvidence(root: string, invocation: ProjectRunInvocation) {
   getNativePiRun(invocation, root);
+  requireResolvedNativeReframe(root, invocation);
   const observations = currentNativeFinalObservations(root);
   finalRenderReviewerPacket({ root, invocation, packetInput: {
     schema: 'adaptive-final-render-reviewer-packet-input-v1',
@@ -45,6 +47,8 @@ const WORK = {
 
 export function nativeCompletionWork(root: string, invocation: ProjectRunInvocation) {
   getNativePiRun(invocation, root);
+  const reframe = nativeReframeWork(root, invocation);
+  if (reframe !== null) return reframe;
   const route = readPersistedRoute(root, invocation);
   const entry = readFrame(root)?.entrySurface?.entryPath;
   if (entry !== undefined) {

@@ -18,6 +18,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { detectAppShell, renderTargetHint, type AppShell } from '../stack/shell.ts';
 import { readPersistedRoute, type RouteRecord } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { readSelectedSourceStudy } from '../art-direction/source-study-records.ts';
 import { checkContentGrain, CONTENT_GRAIN_PATH } from '../content-grain/files.ts';
 import { readFrame, type RealityLedger } from '../frame/index.ts';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from '../ref/discovery-plan.ts';
@@ -123,6 +124,7 @@ export type Brief = {
   }>;
   readonly referenceApplication?: ReferenceApplicationProjection | null;
   readonly designLanguage?: Readonly<{ sha256: string; targets: readonly Target[]; copyTone: boolean; status: string }> | null;
+  readonly sourceStudy?: ReturnType<typeof readSelectedSourceStudy>;
   readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
   readonly runtimeDesignSystem?: ReturnType<typeof runtimeInventoryStatus> | null;
   readonly stage: BriefStage;
@@ -415,6 +417,17 @@ export function buildBrief(
     })();
 
   const blockers: string[] = [];
+  const sourceStudyRequired = route?.strategy.methods.includes('provisional-source-study')
+    && ['type-proof', 'composition', 'candidate-generation', 'production'].includes(stage);
+  let sourceStudy: Brief['sourceStudy'];
+  if (sourceStudyRequired) {
+    const missing = 'SOURCE_STUDY_REQUIRED: inspect omd study latest before generating again; select a current rendered study before fixing type or composition';
+    if (invocation === undefined) blockers.push(missing);
+    else {
+      try { sourceStudy = readSelectedSourceStudy(root, invocation); }
+      catch { blockers.push(missing); }
+    }
+  }
   const language = route === null ? null : projection(root, route);
   const feedbackTranslation = route === null ? null : readTranslation(root, 'feedback', route);
   const feedbackCopyTone = feedbackTranslation !== null && chosenCopyTone(feedbackTranslation.translation);
@@ -502,7 +515,8 @@ export function buildBrief(
   const referenceDirectory = join(root, '.omd/refs');
   const hasReferenceEvidence = hasReferenceBoard && existsSync(referenceDirectory)
     && readdirSync(referenceDirectory).some((entry) => !entry.startsWith('.'));
-  const greenfieldReferenceConsumer = route?.projectMode === 'greenfield' && judgmentConsumer;
+  const greenfieldReferenceConsumer = route?.projectMode === 'greenfield'
+    && route.strategy.stages.includes('reference-board') && judgmentConsumer;
   if (greenfieldReferenceConsumer && !hasReferenceEvidence) {
     blockers.push(`selected ${stage} input missing: visual reference evidence under .omd/refs/ and .omd/reference-board.json — discover and interpret references before composition`);
   }
@@ -634,6 +648,7 @@ export function buildBrief(
     },
     referenceApplication,
     designLanguage: language === null ? null : { sha256: language.sha256, targets: language.targets, copyTone: language.copyTone, status: language.status },
+    ...(sourceStudy === undefined || stage === 'production' ? {} : { sourceStudy }),
     existingDesignSystem,
     ...(runtimeDesignSystem === null ? {} : { runtimeDesignSystem }),
     owner: native?.owner ?? definition?.owner ?? OWNER[stage] ?? 'coordinator',
@@ -679,6 +694,8 @@ export function buildBrief(
       ...(localeDesign?.projection === null || localeDesign === null ? [] : [localeDesign.projection.path]),
       ...(localeDesign?.referenceBinding === null || localeDesign === null ? [] : [localeDesign.referenceBinding.path]),
       ...(copyReviewPresent ? [copyReviewPath] : []),
+      ...(stage === 'production' && existsSync(join(root, '.omd/first-render/review.json'))
+        ? ['.omd/first-render/review.json'] : []),
     ]),
     blockers,
   };

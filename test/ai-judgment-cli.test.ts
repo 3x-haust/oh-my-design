@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +16,7 @@ test('schema ai-judgment writes a current publishable starter for request and co
   const root = mkdtempSync(join(tmpdir(), 'omd-judgment-starter-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const input = fixture();
-  publishTestAdaptiveRoute(root, input);
+  const invocation = publishTestAdaptiveRoute(root, input);
   capturePiRequest(root, input.request);
   const cli = (...args: string[]) => JSON.parse(execFileSync(process.execPath,
     [fileURLToPath(new URL('../bin/omd.mjs', import.meta.url)), ...args, '--json'],
@@ -36,6 +36,49 @@ test('schema ai-judgment writes a current publishable starter for request and co
   assert.equal(next.skeleton.quotes[0].text, turn.text);
   const resumed = cli('ai-judgment', 'publish', '--input', next.path);
   assert.equal(cli('ai-judgment', 'check', '--judgment', resumed.receipt.path).judgment.decision, 'resume');
+  const route = readPersistedRoute(root, invocation);
+  const readingInput = {
+    schema: 'design-language-input-v1', kind: 'intake', text: input.request, request: input.request,
+    sourceContractSha256: route.sourceContractSha256,
+    readings: [{
+      id: 'space', labelKo: '간격 넓히기', origin: { kind: 'model-proposed' },
+      targets: [{ id: 'group', metric: 'group-gap', role: 'form', route: '/', selector: 'form',
+        viewport: 'desktop', state: 'initial', range: [16, 24], unit: 'px', direction: 'increase', minDelta: 4 }],
+      referenceKeywordsEn: ['grouped form rows'], counterSignals: ['touching rows'], mustNotMean: ['delete content'],
+    }],
+    chosenId: 'space', decision: 'Increase the spacing between form groups.',
+  };
+  const readingInputPath = '.omd/.cache/design-language-input.json';
+  writeFileSync(join(root, readingInputPath), JSON.stringify(readingInput));
+  const reading = cli('schema', 'ai-judgment', '--purpose', 'design-language-reading', '--input', readingInputPath);
+  assert.deepEqual(reading.decisions, ['resolved', 'ambiguous', 'not-applicable']);
+  assert.equal(reading.skeleton.subjectId, 'intake');
+  assert.equal(reading.skeleton.decision, 'resolved');
+  assert.equal(reading.skeleton.quotes[0].text, input.request);
+  assert.deepEqual(reading.skeleton.payload, { kind: 'intake', textSha256: sha(input.request), chosenId: 'space' });
+  const readingStarter = readFileSync(join(root, reading.path), 'utf8');
+  const publishedReading = cli('ai-judgment', 'publish', '--input', reading.path);
+  assert.equal(cli('ai-judgment', 'check', '--judgment', publishedReading.receipt.path).judgment.decision, 'resolved');
+  writeFileSync(join(root, 'index.html'), '<main>unchanged</main>');
+  writeFileSync(join(root, readingInputPath), JSON.stringify({ ...readingInput, request: 'stale request' }));
+  assert.throws(() => cli('schema', 'ai-judgment', '--purpose', 'design-language-reading', '--input', readingInputPath),
+    /DESIGN_LANGUAGE_STALE/);
+  assert.equal(readFileSync(join(root, reading.path), 'utf8'), readingStarter);
+  assert.equal(readFileSync(join(root, 'index.html'), 'utf8'), '<main>unchanged</main>');
+  assert.equal(existsSync(join(root, '.omd/design-language/intake.json')), false);
+  assert.throws(() => cli('schema', 'ai-judgment', '--purpose', 'design-language-reading'), /requires --input|usage:/);
+  writeFileSync(join(root, readingInputPath), JSON.stringify({ ...readingInput, kind: 'unknown' }));
+  assert.throws(() => cli('schema', 'ai-judgment', '--purpose', 'design-language-reading', '--input', readingInputPath),
+    /DESIGN_LANGUAGE_STALE/);
+  assert.equal(readFileSync(join(root, reading.path), 'utf8'), readingStarter);
+  writeFileSync(join(root, readingInputPath), JSON.stringify({ ...readingInput, kind: 'feedback' }));
+  const feedback = cli('schema', 'ai-judgment', '--purpose', 'design-language-reading', '--input', readingInputPath);
+  assert.equal(feedback.skeleton.payload.kind, 'feedback');
+  assert.equal(feedback.skeleton.context.sourceContractSha256, route.sourceContractSha256);
+  const publishedFeedback = cli('ai-judgment', 'publish', '--input', feedback.path);
+  assert.equal(cli('ai-judgment', 'check', '--judgment', publishedFeedback.receipt.path).judgment.payload.kind, 'feedback');
+  assert.equal(existsSync(join(root, '.omd/design-language/feedback.json')), false);
+  assert.equal(readFileSync(join(root, 'index.html'), 'utf8'), '<main>unchanged</main>');
 });
 
 test('CLI publishes a request-bound target-market without using route-bound context', async t => {
@@ -93,6 +136,7 @@ test('CLI publishes only quoted current native request judgments and checks immu
     evidence: [], payload: { kind: 'intake', textSha256: sha(input.request), chosenId: 'chosen' }, extra: 'advisory note' };
   const path = join(root, 'input.json'); writeFileSync(path, JSON.stringify(record));
   const writer = createTestProjectWriteAdapter(root, invocation);
+  await assert.rejects(runJudgmentCommand(root, invocation, 'publish', path), /AI_JUDGMENT_AUTHOR_UNAUTHORIZED/);
   const published = await runJudgmentCommand(root, invocation, 'publish', path, writer);
   assert.ok('receipt' in published);
   assert.deepEqual(published.warnings, [{ code: 'UNKNOWN_FIELD', field: 'judgment.extra' }]);

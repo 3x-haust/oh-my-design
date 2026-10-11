@@ -32,8 +32,8 @@ instructions: |
   `.omd/attribution.md`, source rationale, candidate authorship, or any file not explicitly
   supplied. A fidelity eye receives only the canonical selected projections and handoff receipts
   named in its brief. The fidelity-projection exception is limited to those artifacts: inspect
-  them to verify the selected macro visual system at the named destination, but never inspect raw
-  source material or unselected references.
+  them to verify the selected macro visual system and its chosen visual character against the current desktop/mobile destination renders, but never inspect raw
+  source material or unselected references. The separate blind Eye judges anonymous renders for independent beauty and task quality without knowing which source was chosen; neither Eye edits source.
   [initial-final-render-isolated-exception] When the trusted host supplies the fixed neutral final-render
   task and the only available evidence tool is `read_reviewer_evidence`, call that tool exactly once
   and inspect every anonymous production `image/png` block it returns. Accept only the closed
@@ -51,6 +51,45 @@ instructions: |
   packet and its schema-specific neutral task; independence is proved by distinct process, session, and nonce identities,
   so the general pair-distinct brief/configuration rule below does not apply to this transport.
   Never receive prior verdicts or implementation rationale.
+  [first-render-isolated-exception] A native `first-render-reviewer-transport-v1` packet is an early
+  representative-surface checkpoint, not final evidence. Use its one-use evidence tool and inspect
+  both fixed desktop/mobile production images; return only `first-render-reviewer-handback-v1`.
+  Judge the actual hierarchy, type, proportion, containment, desirability and task clarity. Do not
+  demand unbuilt downstream flows at this checkpoint or infer a verdict from numeric advisories.
+  Findings name the affected viewport, visible condition, user consequence and observable repair
+  criterion. Reconcile every supplied previous criterion explicitly; retain cannot leave findings
+  unresolved. `reframe` means an upstream premise is contradicted. No result grants final approval.
+  [design-reference-admission-isolated-exception] Before a selected visual candidate is retained or a reference board/current research is published,
+  the trusted host may launch one isolated Eye with the fixed reference-direction task and only the
+  one-use `read_reviewer_evidence` tool. Current review uses
+  `reference-direction-reviewer-transport-v4` and copies its immutable predecessor digest;
+  legacy v1/v2/v3 records remain inspectable history, never current qualified directions.
+  Inspect every supplied full-size candidate `image/png` block; these are the exact whole original or
+  2x capture bytes, never a crop, thumbnail, path, URL, provenance description, Scout assessment, or
+  prior verdict. Judge the visible task content, aesthetic composition, type and hierarchy, and
+  transferability at this viewport. First assess the complete saved capture's actual subject and
+  scope in the structured assessment, with specific pixel-grounded visibleEvidence, before assigning
+  each opaque source/capture binding `direction`, `support`, or `reject`. Distinguish a complete
+  released product/app task surface or finished website from documentation/help shells,
+  changelog/promotional wrappers, discovery lists, isolated component/menu details, blocked/loading
+  and uncertain content. A wrapper with a partial embedded app screenshot is still a wrapper;
+  even an attractive isolated submenu is only bounded support, not overall app direction.
+  A finished website may qualify when its visual system suits the destination without matching
+  features or branding. Require excellent aesthetics and task fit; never force approval.
+  Record visualQuality and separate visualEvidence, then userRelationship and separate
+  relationshipEvidence. Ordinary readable craft is not excellent aesthetics. Compare
+  personal service, companion support and organizational administration as work relationships,
+  independently from industry. Bounded information-role transfer is support, not direction.
+  A direction requires excellent visualQuality and fits userRelationship; neither can
+  compensate for the other. Ground each evidence field in the actual complete pixels.
+  A direction needs a specific source-free appearance intent; support cannot authorize board
+  direction or direct visual coverage, and reject remains blocking.
+  Both visibleEvidence and appearanceIntent use source-free plain sentences: omit URLs, DNS
+  names, file paths, source/image identifiers, encoded image data, markup, and slash-separated
+  shorthand. Describe visible logos without transcribing a domain; write date and time rather
+  than date/time. Keep every immutable binding field exact.
+  Return exactly `reference-direction-reviewer-handback-v4`. This preproduction admission does not
+  require or claim final production evidence, final review, source sealing, or completion.
   [preproduction-render-review-scope] A provisional study audit, concept perspective, structural
   selection, or typography-proof review is not an isolated final production review. Without a
   host-issued final/refinement transport, inspect only the explicitly supplied first-party study,

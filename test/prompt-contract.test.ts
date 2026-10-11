@@ -95,7 +95,7 @@ test('durable protocol and hand own stack detail while the coordinator consumes 
     read('src/agents/hand.agent.yaml'),
   ]) {
     const contract = source.replace(/\s+/g, ' ');
-    assert.match(contract, /plain HTML\/CSS\/JS/);
+    assert.match(contract, /HTML\/CSS and strict TypeScript/);
     assert.match(contract, /only when the user explicitly asks for one or the surface is a genuinely stateful application/i);
     assert.match(contract, /build in an existing (?:project's|repository's) stack/i);
     assert.match(contract, /never pins the stack/i);
@@ -108,7 +108,7 @@ test('hand records stack evidence before first write and preserves existing surf
   assert.match(hand, /Before the first write, run `omd stack`/);
   assert.match(hand, /Record the stack choice and concrete evidence with `omd decision`/);
   assert.match(hand, /Always build in an existing project's stack instead of replacing it/);
-  assert.match(hand, /a static page and needs no framework/);
+  assert.match(hand, /a static landing, marketing, or content page needs no framework/);
 });
 
 test('selected copy work remains an isolated writer boundary', () => {
@@ -1044,14 +1044,12 @@ test('source-bound type and composition proofs are current before review', () =>
 
 test('scout batches zone-bound captures without debugging browser transport', () => {
   const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
-  assert.match(scout, /run the initial `omd ref add-batch` once/);
-  assert.match(scout, /Every entry includes a tight component selector and the framer-owned `slot`/);
+  assert.match(scout, /`omd ref work-next --json`/);
+  assert.match(scout, /verified scope and framer-owned `slot`/);
   assert.match(scout, /`reference-board` stage owns board\/candidate assembly/);
   assert.match(scout, /`candidate-generation` is a separate structural-sketch stage owned by `omd-sketch`/);
   assert.match(scout, /Never interpret a skipped or selected `candidate-generation` stage as a skipped or selected reference board/i);
   assert.match(scout, /Never start `browser-rs` yourself, handcraft or `curl` its MCP protocol/);
-  assert.match(scout, /if that provider is not callable on the current host\/connection/i);
-  assert.match(scout, /user-directed image-region capture still requires the actual supporting browser tool/i);
   assert.match(scout, /bounded, evidence-driven changed-strategy repair/i);
   assert.match(scout, /source, selector, query lane, or verified state preparation/i);
   assert.match(scout, /no admissible strategy remains/i);
@@ -1069,7 +1067,7 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /host-required bootstrap read is permitted but is not operational research/);
   assert.match(scout, /Do not act on a standalone-skill instruction that conflicts with this injected pipeline role/);
   assert.match(scout, /Do not otherwise inspect the installed scout skill, every theory\/cookbook file/);
-  assert.match(scout, /start `omd ref add-batch`/);
+  assert.match(scout, /Use `omd ref add-batch` only when that authorized action/);
   const standaloneScout = read('src/skills/omd-scout/SKILL.md').replace(/\s+/g, ' ');
   assert.match(standaloneScout, /When this skill is loaded inside an already spawned `omd-scout` child/);
   assert.match(standaloneScout, /immediately execute the injected role's first operational pass/);
@@ -1089,18 +1087,14 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);
 });
 
-test('reference protocol and Scout share the bounded unavailable-provider fallback', () => {
+test('reference protocol and Scout share the headless default and explicit browser selection', () => {
   const protocol = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
   const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
   for (const source of [protocol, scout]) {
-    assert.match(source, /not callable on the current host\/connection/i);
-    assert.match(source, /ordinary component inspection/i);
-    assert.match(source, /user-directed image-region capture still requires the actual supporting browser tool/i);
-    assert.match(source, /transient failure/i);
-    assert.match(source, /never invent a manual region-capture CLI/i);
+    assert.match(source, /headless Chromium/i);
+    assert.match(source, /explicit.*user-browser choice|user explicitly chooses it/i);
   }
   assert.doesNotMatch(protocol, /fallback only when browser-rs is unavailable for this platform/i);
-  assert.match(protocol, /installed healthy binary does not prove an exposed tool/i);
 });
 
 test('framer CLI writes its owned frame and acquisition plan without direct file tools', () => {

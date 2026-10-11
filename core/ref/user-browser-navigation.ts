@@ -26,6 +26,7 @@ export async function captureUserBrowserNavigation(writer: ProjectWriteAdapter, 
     for (let attempt = 0; attempt < 2; attempt++) {
       const before = await observeUserBrowser(page, options.lookup);
       if (before.loginOccludes) throw new Error('login form obscures the reference');
+      if (lane === 'design' && !before.visibleText.trim()) throw new Error('no visible task text in discovery capture');
       if (entry !== undefined) validateDirectDiscoveryLinks(entry, { url, finalUrl: before.url, links: before.links });
       const inspectImages = lane === 'design' && designDiscoveryItemIdentity(before.url) !== null;
       const images = inspectImages ? await observeUserBrowserImages(page) : [];
@@ -34,7 +35,7 @@ export async function captureUserBrowserNavigation(writer: ProjectWriteAdapter, 
       if (JSON.stringify(before) !== JSON.stringify(after)
         || inspectImages && JSON.stringify(images) !== JSON.stringify(await observeUserBrowserImages(page))) continue;
       if (image && (before.viewport.width !== 1280 || before.viewport.height !== 900
-        || image.width !== 1280 || image.height !== 900)) throw new Error('OMD Browser discovery viewport differs from 1280x900');
+        || image.width !== 2560 || image.height !== 1800)) throw new Error('OMD Browser discovery requires 2x pixels for a 1280x900 viewport');
       options.scope?.assertLive();
       const capturedAt = new Date().toISOString();
       if (lane === 'domain') {

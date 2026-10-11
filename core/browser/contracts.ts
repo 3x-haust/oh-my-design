@@ -1,6 +1,7 @@
 export type UserBrowserSession = Readonly<{
   navigate(url: string, options?: { waitUntil?: string; timeoutMs?: number }): Promise<unknown>;
   resize(width: number, height: number): Promise<unknown>;
+  emulate?(options: { overrides: { width: number; height: number; device_scale_factor: 2; mobile: false } }): Promise<unknown>;
   evaluate(expression: string, options?: { awaitPromise?: boolean; returnByValue?: boolean; timeoutMs?: number }): Promise<{ ok: boolean; value?: unknown; error?: unknown }>;
   screenshot(options: { fullPage: true } | Record<string, never>): Promise<{ buffer: Uint8Array; width: number; height: number; captureUnavailable?: boolean; format?: string }>;
   requestHelp(request: { prompt: string; title?: string; completionCriteria?: string; timeoutMs?: number }): Promise<{ outcome: string }>;

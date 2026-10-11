@@ -4,7 +4,7 @@ import { captureFrozenSearchText } from './search-frozen-capture.ts';
 import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
 
 export async function inspectRenderedState(page: Page, purpose: 'search' | 'discovery' = 'search'): Promise<RawSearchRenderedState> {
-  const rendered = await page.locator('body').evaluate(browserCallback((body: HTMLElement, purpose: 'search' | 'discovery') => {
+  const serialized = await page.locator('body').evaluate(browserCallback((body: HTMLElement, purpose: 'search' | 'discovery') => {
     const pointerlessOverlays = Array.from(document.querySelectorAll<HTMLElement>('*')).flatMap(element => {
       const style = getComputedStyle(element);
       if (style.pointerEvents !== 'none' || !['absolute', 'fixed', 'sticky'].includes(style.position)
@@ -37,7 +37,7 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       return [...(ownPaint ? [{ element, box, effectiveZ }] : []), ...pseudoPaint];
     });
 
-    const anchors = new Map<HTMLAnchorElement, { href: string; text: string[]; left: number; right: number; top: number; bottom: number }>();
+    const anchors: Array<[HTMLAnchorElement, { href: string; text: string[]; left: number; right: number; top: number; bottom: number }]> = [];
     for (const element of body.querySelectorAll<HTMLAnchorElement>('a[href]')) {
       let parsed: URL;
       try { parsed = new URL(element.href); } catch { continue; }
@@ -46,7 +46,7 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       const box = element.getBoundingClientRect();
       if (box.width <= 0 || box.height <= 0 || box.right <= 0 || box.bottom <= 0
         || box.left >= innerWidth || box.top >= innerHeight) continue;
-      anchors.set(element, { href: parsed.href, text: [], left: box.left, right: box.right, top: box.top, bottom: box.bottom });
+      anchors.push([element, { href: parsed.href, text: [], left: box.left, right: box.right, top: box.top, bottom: box.bottom }]);
     }
 
     const visibleText: Array<{ id: number; value: string; taskClaim: boolean }> = [];
@@ -233,7 +233,7 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       });
       range.detach();
       if (!textVisible) continue;
-      const anchor = parent.closest<HTMLAnchorElement>('a[href]'); const record = anchor ? anchors.get(anchor) : undefined;
+      const anchor = parent.closest<HTMLAnchorElement>('a[href]'); const record = anchor ? anchors.find(([element]) => element === anchor)?.[1] : undefined;
       const id = visibleText.length;
       const chromeText = Boolean(parent.closest('header, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [aria-modal="true"], [class*="cookie" i], [id*="cookie" i], [class*="consent" i], [id*="consent" i]'));
       const taskClaim = !anchor && !chromeText;
@@ -246,8 +246,10 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       if (record) record.text.push(value);
     }
     void mainContext; // Observed text is retained; relevance is judged from signed link observations.
-    return {
-      anchors: [...anchors.entries()].flatMap(([element, anchor]) => {
+    // A page-owned legacy Map also breaks Playwright's object return serializer.
+    // Transfer this owned JSON projection as a primitive, not a page-realm object.
+    return JSON.stringify({
+      anchors: anchors.flatMap(([element, anchor]) => {
         if (anchor.text.length > 0) {
           const label = anchor.text.join(' ').slice(0, 4096);
           const navigationRegion = Boolean(element.closest('header, nav, [role="navigation"], [role="banner"]'));
@@ -258,8 +260,9 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
         return [];
       }).slice(0, 2000),
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
-    };
+    });
   }), purpose);
+  const rendered: Pick<RawSearchRenderedState, 'anchors' | 'visibleText' | 'uncertain' | 'viewport'> = JSON.parse(serialized);
   return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
 }
 

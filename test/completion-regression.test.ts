@@ -25,6 +25,7 @@ import {
 } from '../core/completion/preflight.ts';
 import { observationV2Sha256, writeObservationV2 } from '../core/runtime/observation.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { validateDecisionGraph } from '../core/deliberation/contracts.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { checkAdaptiveWorkflow, publishAdaptiveWorkflowPlan } from '../core/design-development/workflow-persistence.ts';
@@ -273,6 +274,25 @@ test('publishes an immutable content-addressed zero-finding run and guarded curr
 
     writeFileSync(join(value.root, '.omd', 'functional-requirements.json'), `${JSON.stringify(requirementsV1)}\n`);
     assert.throws(() => checkCompletenessRun(value.root, value.invocation), /requirements bytes changed/);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('completeness supporting observations retain their own graph after decision evolution', () => {
+  const value = prepare();
+  try {
+    const path = join(value.root, '.omd', 'decision-graph.json');
+    const original = readFileSync(path);
+    const graph = validateDecisionGraph(JSON.parse(original.toString('utf8'))).value;
+    assert.ok(graph);
+    const snapshot = `.omd/decision-graphs/sha256-${sha256(original)}.json`;
+    createTestProjectWriteAdapter(value.root, value.invocation).writeContentAddressed(snapshot, original);
+    writeFileSync(path, `${canonicalJson({
+      ...graph, decisions: graph.decisions.map(item => ({ ...item, question: 'Which revised layout preserves the action?' })),
+    })}\n`);
+    publishCompletenessRun(value.root, value.input, value.invocation);
+    assert.equal(checkCompletenessRun(value.root, value.invocation).observations.length, 2);
+    rmSync(join(value.root, snapshot));
+    assert.throws(() => checkCompletenessRun(value.root, value.invocation), /historical design decision graph/);
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 

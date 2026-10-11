@@ -29,7 +29,7 @@ export const ADAPTIVE_STAGE_GRAPH = Object.freeze({
   acquisition: { prerequisites: ['frame'], afterIfSelected: [] },
   scout: { prerequisites: [], afterIfSelected: ['acquisition'] },
   moodboard: { prerequisites: ['domain'], afterIfSelected: [] },
-  'reference-board': { prerequisites: ['scout'], afterIfSelected: [] },
+  'reference-board': { prerequisites: ['acquisition', 'scout'], afterIfSelected: [] },
   'reference-selection': { prerequisites: ['reference-board'], afterIfSelected: [] },
   'art-direction': { prerequisites: [], afterIfSelected: ['depth', 'reference-selection'] },
   copy: { prerequisites: [], afterIfSelected: ['art-direction'] },

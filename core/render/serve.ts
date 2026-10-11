@@ -133,7 +133,7 @@ export function readLocalFileNoFollow(root: string, relativePath: string): Buffe
   }
 }
 
-type ProjectTreeSnapshot = Readonly<{
+export type ProjectTreeSnapshot = Readonly<{
   root: string;
   files: ReadonlyMap<string, Buffer>;
   identities: ReadonlyMap<string, string>;
@@ -141,7 +141,7 @@ type ProjectTreeSnapshot = Readonly<{
 }>;
 
 /** Materializes the complete served tree through no-follow descriptors before any consumer starts. */
-function materializeProjectTree(root: string, entryPath: string): ProjectTreeSnapshot {
+export function materializeProjectTree(root: string, entryPath: string): ProjectTreeSnapshot {
   const safeEntry = safeRelativePath(entryPath, 'production entry');
   const projectRoot = resolve(root);
   const absoluteEntry = resolve(projectRoot, safeEntry);

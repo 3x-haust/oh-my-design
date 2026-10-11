@@ -28,6 +28,8 @@ import type { CodexRoleAuthorityReceipt } from '../core/runtime/role-receipt.ts'
 import { PI_ROLE_RESULT_SCHEMA, verifySignedPiEyeRoleResult, type PiRoleAuthorityReceipt } from '../core/runtime/pi-role-receipt.ts';
 import { getNativePiRun } from '../core/runtime/native-pi-run.ts';
 import { nativeFinalLanePacket, nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
+import { nativeOutcomeExecutionEvidence, validateNativeOutcomeAssessments } from '../core/runtime/native-outcome-review.ts';
+import { validateCurrentReferenceFidelityAssessments } from '../core/runtime/native-reference-fidelity.ts';
 const SHA256 = /^[a-f0-9]{64}$/;
 const LANE_CONTRACTS = {
   'blind-review-v2': {
@@ -414,8 +416,8 @@ export function buildFinalReviewerPublication(
       exact(packet, ['schema', 'evidenceSha256', 'evidence', 'outputContract'], `packet[${index}]`);
       const output = record(packet.outputContract, `packet[${index}].outputContract`);
       exact(output, [
-        'schema', 'lane', 'laneSchema', 'verdictKeys', 'criticalFloorKeys',
-        'designQuality', 'reviewerFields', 'fixedBindings',
+        'schema', 'lane', 'laneSchema', 'responseIdentity', 'verdictKeys', 'criticalFloorKeys',
+        'designQuality', 'reviewerFields', 'fixedBindings', 'responseTemplate', 'responseSchema',
       ], `packet[${index}].outputContract`);
       fixed = record(output.fixedBindings, `packet[${index}].fixedBindings`);
       exact(fixed, [
@@ -439,6 +441,7 @@ export function buildFinalReviewerPublication(
       const orderedFloors = contract.floors.filter((key) => floorKeys.includes(key));
       if (packet.schema !== FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA
         || output.schema !== FINAL_RENDER_REVIEWER_HANDBACK_SCHEMA
+        || canonicalJson(output.responseIdentity) !== canonicalJson({ schema: FINAL_RENDER_REVIEWER_HANDBACK_SCHEMA, lane: contract.lane })
         || output.lane !== contract.lane
         || output.laneSchema !== laneSchema
         || !verdictKeys.includes('blindVisual')
@@ -481,6 +484,14 @@ export function buildFinalReviewerPublication(
         ),
       })
       : undefined;
+    const outcomeAssessments = contract.lane === 'protocolLane' && role.receipt.schema === 'omd-pi-role-exec-result-v1'
+      ? validateNativeOutcomeAssessments(handback.outcomeAssessments, nativeOutcomeExecutionEvidence(
+        context.projectRoot, context.invocation,
+        boundObservationSha256s.at(-1) ?? fail('FINAL_REVIEW_PUBLICATION_INVALID:terminal observation'),
+      )) : undefined;
+    const referenceFidelityAssessments = contract.lane === 'fidelityLane' && role.receipt.schema === 'omd-pi-role-exec-result-v1'
+      ? validateCurrentReferenceFidelityAssessments(context.projectRoot, context.invocation,
+        boundObservationSha256s, handback.referenceFidelityAssessments) : undefined;
     return Object.freeze({
       lane: contract.lane,
       verdicts: greenRecord(handback.verdicts, verdictKeys, false, `handback[${index}].verdicts`),
@@ -492,6 +503,9 @@ export function buildFinalReviewerPublication(
       browserSha256: digest(handback.browserSha256, `handback[${index}].browserSha256`),
       evidenceSha256: digest(handback.evidenceSha256, `handback[${index}].evidenceSha256`),
       ...(designQuality === undefined ? {} : { designQuality }),
+      ...(outcomeAssessments === undefined ? {} : { outcomeAssessments }),
+      ...(referenceFidelityAssessments === undefined || referenceFidelityAssessments.length === 0
+        ? {} : { referenceFidelityAssessments }),
       findings: handback.findings === undefined ? Object.freeze([]) : Object.freeze(findingList(handback.findings, `handback[${index}].findings`)),
     });
   });
@@ -538,6 +552,10 @@ export function buildFinalReviewerPublication(
         designQuality: handback.designQuality,
       }),
       findings: handback.findings,
+      ...(handback.outcomeAssessments === undefined ? {} : { outcomeAssessments: handback.outcomeAssessments }),
+      ...(handback.referenceFidelityAssessments === undefined ? {} : {
+        referenceFidelityAssessments: handback.referenceFidelityAssessments,
+      }),
       isolationReceiptSha256: isolationSha256,
       observationSha256s: handback.observationSha256s,
       ...(artDirectionBinding === undefined

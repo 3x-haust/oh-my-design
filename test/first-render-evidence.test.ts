@@ -24,6 +24,11 @@ test('native first render binds report, current hypothesis, source, build and ca
   assert.throws(() => checkFirstRenderEvidence(root), /schema or digest/);
   const result = await publishFirstRenderCheck(root, 'dist/index.html', { heading: 'Edit the current project source', landmarks: ['main editor'], repeatedObjects: ['code editor'], trustSignals: [], visibleText: ['Edit the current project source'], dominantAreaShare: 0.8 }, writer);
   assert.equal(result.report.verdict, 'retain');
+  assert.equal(result.schema, 'first-render-check-v3');
+  assert.deepEqual(result.captures.map(capture => capture.viewport), [
+    { width: 1280, height: 900 }, { width: 390, height: 844 },
+  ]);
+  assert.ok(result.captures.every(capture => capture.fullPage === false));
   assert.equal(checkFirstRenderEvidence(root)?.report.findings[0].severity, 'advisory');
   const pointer = readFileSync(join(root, '.omd/first-render-critic.json'));
   writer.write('.omd/first-render-critic.json', JSON.stringify({ ...result, report: { ...result.report, verdict: 'revise' } }));

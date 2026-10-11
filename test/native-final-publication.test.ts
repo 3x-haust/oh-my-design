@@ -9,14 +9,16 @@ import { runNativeFinalReview, finalizeNativeEvidence, checkNativeFinalReview } 
 import { authorizeNativePiPayload, createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
 import { requireFinalReviewerLaneAuthorization } from '../core/runtime/invocation.ts';
 import { prepareFinalRenderReviewFixture } from './helpers/final-render-review.ts';
+import { installNativeFidelityReferences } from './helpers/native-reference-fidelity.ts';
 
 const digest = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 const cliPath = fileURLToPath(new URL('./fixtures/pi-reviewer-rpc.mjs', import.meta.url));
 const nodePath = realpathSync(process.execPath);
-function setup(t: TestContext) {
-  const fixture = prepareFinalRenderReviewFixture();
+function setup(t: TestContext, references = false) {
+  const fixture = prepareFinalRenderReviewFixture(references ? 'synth-marketing' : 'copy-only');
   const root = realpathSync(fixture.root);
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  if (references) installNativeFidelityReferences(t, root);
   const host = { nodePath, nodeSha256: digest(readFileSync(nodePath)), cliPath, cliSha256: digest(readFileSync(cliPath)),
     provider: 'fixture-provider', model: 'fixture-model', thinkingLevel: 'high', parentSessionId: 'fixture-parent' };
   const invocation = createTestNativePiInvocation({ root, host, current: fixture.invocation.current });
@@ -24,6 +26,54 @@ function setup(t: TestContext) {
     authorizeNativePiPayload(invocation, root, 'product-probe-result', readFileSync(join(root, '.omd', path)));
   }
   return { root, invocation, host };
+}
+
+test('native fidelity refuses authenticated GREEN claims without selected-original visual assessments', { timeout: 60_000 }, async t => {
+  const input = setup(t, true);
+  const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'missing-fidelity-assessments';
+  t.after(() => {
+    if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+    else process.env.PI_REVIEWER_FIXTURE_MODE = previous;
+  });
+  await assert.rejects(runNativeFinalReview({ ...input, signal: t.signal }), /handback|assessment/);
+  assert.equal(existsSync(join(input.root, '.omd/final-evidence-v2.json')), false);
+});
+
+test('independent native fidelity reviewers publish complete digest-bound assessments for selected used originals', { timeout: 60_000 }, async t => {
+  const input = setup(t, true);
+  const result = await runNativeFinalReview({ ...input, signal: t.signal });
+  const restarted = createTestNativePiInvocation({ ...input,
+    host: { ...input.host, parentSessionId: 'resumed-fidelity-parent' }, current: input.invocation.current });
+  const fidelity = result.executions.map(artifact => {
+    const bytes = readFileSync(join(input.root, artifact.path));
+    requireFinalReviewerLaneAuthorization(restarted, input.root, bytes);
+    return JSON.parse(bytes.toString());
+  }).filter(execution => execution.lane === 'fidelityLane');
+  assert.equal(fidelity.length, 2);
+  assert.equal(new Set(fidelity.map(execution => execution.childPid)).size, 2);
+  for (const execution of fidelity) {
+    assert.deepEqual(execution.referenceFidelityAssessments.map((row: { slotId: string }) => row.slotId),
+      ['hero-card', 'hero-card']);
+    assert.deepEqual(execution.referenceFidelityAssessments.map((row: { viewport: string }) => row.viewport),
+      ['desktop', 'mobile']);
+  }
+  assert.equal(checkNativeFinalReview({ root: input.root, invocation: restarted }).ok, true);
+});
+
+for (const mode of ['insufficient-fidelity', 'unrecognizable-fidelity', 'wrong-fidelity-image', 'incomplete-fidelity']) {
+  test(`native fidelity refuses ${mode} despite authenticated GREEN verdicts`, { timeout: 60_000 }, async t => {
+    const input = setup(t, true);
+    const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
+    process.env.PI_REVIEWER_FIXTURE_MODE = mode;
+    t.after(() => {
+      if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+      else process.env.PI_REVIEWER_FIXTURE_MODE = previous;
+    });
+    await assert.rejects(runNativeFinalReview({ ...input, signal: t.signal }), /FIDELITY_INVALID/);
+    assert.throws(() => checkNativeFinalReview(input), /review in progress or rejected/);
+    assert.equal(existsSync(join(input.root, '.omd/final-evidence-v2.json')), false);
+  });
 }
 
 test('Given actual isolated fixture reviewer processes When native review runs Then all three exact authorized lanes survive a fresh invocation', { timeout: 60_000 }, async t => {
@@ -34,13 +84,20 @@ test('Given actual isolated fixture reviewer processes When native review runs T
   assert.equal(Object.keys(result.lanes).length, 3);
   assert.equal(result.executions.length, 6);
   const pids: number[] = [];
+  let protocolExecutions = 0;
   for (const artifact of [...Object.values(result.lanes), ...result.executions]) {
     const bytes = readFileSync(join(input.root, artifact.path));
     assert.equal(digest(bytes), artifact.sha256);
     assert.doesNotThrow(() => requireFinalReviewerLaneAuthorization(restarted, input.root, bytes));
     const value: unknown = JSON.parse(bytes.toString());
     if (value && typeof value === 'object' && 'childPid' in value && typeof value.childPid === 'number') pids.push(value.childPid);
+    if (value && typeof value === 'object' && 'childPid' in value && 'lane' in value && value.lane === 'protocolLane') {
+      assert.ok('outcomeAssessments' in value && Array.isArray(value.outcomeAssessments));
+      assert.ok(value.outcomeAssessments.length > 0);
+      protocolExecutions++;
+    }
   }
+  assert.equal(protocolExecutions, 2);
   assert.equal(new Set(pids).size, 6);
   const attempts = readdirSync(join(input.root, '.omd/final-review/attempts'));
   assert.equal(attempts.length, 1);
@@ -54,6 +111,21 @@ test('Given actual isolated fixture reviewer processes When native review runs T
     projectRoot: input.root, invocation: input.invocation, ...input.invocation.current,
   }), /native lane packet/);
 });
+
+for (const mode of ['missing-outcome-assessments', 'insufficient-outcome']) {
+  test(`native protocol publication refuses ${mode} despite GREEN aggregate verdicts`, { timeout: 60_000 }, async t => {
+    const input = setup(t);
+    const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
+    process.env.PI_REVIEWER_FIXTURE_MODE = mode;
+    t.after(() => {
+      if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+      else process.env.PI_REVIEWER_FIXTURE_MODE = previous;
+    });
+    await assert.rejects(runNativeFinalReview({ ...input, signal: t.signal }), /handback|assessment/);
+    assert.throws(() => checkNativeFinalReview(input), /review in progress or rejected/);
+    assert.equal(existsSync(join(input.root, '.omd/final-evidence-v2.json')), false);
+  });
+}
 
 test('Given a completed RED reviewer judgment When native review runs Then diagnostics remain but no lane is approved', { timeout: 60_000 }, async t => {
   const input = setup(t);

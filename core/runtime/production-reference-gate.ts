@@ -3,6 +3,7 @@ import { projection, requireCopyToneReview } from '../design-language/index.ts';
 import { lstatSync } from 'node:fs';
 import { buildBrief } from '../brief/index.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
+import { checkCandidateReferenceReview } from '../brief/candidate-reference-review.ts';
 import { readFrame } from '../frame/index.ts';
 import { checkFrameUx } from '../frame/check-ux.ts';
 import { validateCopyDeck, validateCurrentCopyReview } from '../copy/index.ts';
@@ -13,6 +14,8 @@ import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readPersistedRoute, pathsOutsideScope } from '../route/index.ts';
 import { resolveRunState, requireConfirmedPlanningForProduction } from '../stage/contract.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
+import { isNativePiInvocation } from './native-pi-run.ts';
+import { nativeReframeWork } from './native-reframe.ts';
 
 export type ProductionReadiness = Readonly<{
   schema: 'production-readiness-v1'; ok: boolean; blockers: readonly string[]; warnings: readonly string[];
@@ -38,6 +41,18 @@ export function checkProductionReadiness(
     if (route.deliveryMode === 'design-only' || !route.strategy.stages.includes('production')) {
       blockers.push('production is not selected; finish the design handoff without application writes');
     }
+    if (isNativePiInvocation(invocation)) attempt('renderer entry', () => {
+      const entryPath = readFrame(root)?.entrySurface?.entryPath;
+      if (entryPath !== undefined && pathsOutsideScope(route, [entryPath]).length > 0) {
+        blockers.push(`RENDER_ENTRY_OUTSIDE_ROUTE: ${entryPath}; resolve the actual configured build output and route scope before production, not after reference discovery or evaluation`);
+      }
+    });
+    if (isNativePiInvocation(invocation)) attempt('reframe source owner', () => {
+      const work = nativeReframeWork(root, invocation);
+      if (work?.action === 'author-reframe-candidate' || work?.action === 'resolve-reframe-route') {
+        blockers.push(`${work.problems.join('; ')}; ${work.next}`);
+      }
+    });
     const targets = target === undefined ? [] : typeof target === 'string' ? [target] : target;
     const outside = pathsOutsideScope(route, targets);
     for (const path of outside) {
@@ -56,7 +71,6 @@ export function checkProductionReadiness(
         }
       });
     }
-    const hardCount = blockers.length;
     attempt('design language', () => {
       const language = projection(root, route);
       if (language?.status === 'needs-clarification') throw new Error('DESIGN_LANGUAGE_AMBIGUOUS: resolve the picture-backed question');
@@ -115,13 +129,14 @@ export function checkProductionReadiness(
     if (route.strategy.stages.includes('candidate-generation')) {
       attempt('selected candidate', () => {
         const bytes = readContainedRegularFile(root, join(root, CANDIDATE_SELECTION_POINTER_PATH), 'current candidate selection');
-        const paths = resolveCandidateSelection(root, validateCandidateSelectionPointer(JSON.parse(bytes.toString('utf8'))));
+        const pointer = validateCandidateSelectionPointer(JSON.parse(bytes.toString('utf8')));
+        const paths = resolveCandidateSelection(root, pointer);
+        checkCandidateReferenceReview(root, invocation, pointer);
         for (const path of paths) {
           if (!readContainedRegularFile(root, join(root, path), path).toString('utf8').trim()) throw new Error(`${path} is empty`);
         }
       });
     }
-    warnings.push(...blockers.splice(hardCount));
   });
   return { schema: 'production-readiness-v1', ok: blockers.length === 0, blockers: [...new Set(blockers)], warnings: [...new Set(warnings)] };
 }

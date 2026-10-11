@@ -124,25 +124,25 @@ test('stage entry connects selected procedure to actual current validation, not 
   assert.match(checkBriefEntry(root, 'production', pack, invocation).blockers.join('\n'), /current copy-deck bytes/);
 });
 
-test('CLI stage entry reports selected and stale process warnings without refusing inspection', () => {
+test('CLI stage entry refuses missing or stale prerequisites while inspection stays available', () => {
   const { root } = readyCliCopyProject();
   const checked = (...args: string[]) => runCli(root, 'brief', ...args, '--json');
   assert.equal(checked('copy', '--check').status, 0);
   assert.equal(checked('production', '--check').status, 0);
   const skipped = checked('scout', '--check');
-  assert.equal(skipped.status, 0);
+  assert.equal(skipped.status, 1);
   assert.match(skipped.stdout, /stage is not selected/);
   assert.equal(checked('scout').status, 0, 'unselected-stage inspection stays available');
   write(root, '.omd/copy-deck.md', deck + '\nNew bytes.\n');
   assert.equal(checked('production').status, 0);
   const stale = checked('production', '--check');
-  assert.equal(stale.status, 0);
+  assert.equal(stale.status, 1);
   assert.match(stale.stdout, /current copy-deck bytes/);
   write(root, '.omd/copy-deck.md', deck);
   assert.equal(checked('production', '--check').status, 0);
   write(root, '.omd/delivery.jsonl', '');
   const missing = checked('copy', '--check');
-  assert.equal(missing.status, 0);
+  assert.equal(missing.status, 1);
   assert.match(missing.stdout, /contract not delivered/);
 });
 
@@ -164,14 +164,18 @@ test('source path gates reject target symlinks even when both paths are in route
   assert.equal(checkProductionReadiness(root, invocation, pack, ['src/copy/new.ts', 'src/copy/current.ts']).ok, true);
 });
 
-test('direct routed recipe CLI proceeds with stale optional copy review and preserves source scope', () => {
+test('direct routed recipe CLI refuses stale selected copy review before writing and accepts repaired inputs', () => {
   const { root } = readyCliCopyProject();
   const output = join(root, 'src/copy/recipe');
   write(root, '.omd/copy-deck.md', deck + '\nStale review.\n');
   const readiness = runCli(root, 'guard', 'production', '--json');
-  assert.equal(readiness.status, 0);
+  assert.equal(readiness.status, 1);
   assert.match(readiness.stdout, /current copy-deck bytes/);
   assert.equal(runCli(root, 'recipe', 'show', 'scroll-reveal', '--json').status, 0);
+  const refused = runCli(root, 'recipe', 'add', 'scroll-reveal', '--out', output, '--json');
+  assert.equal(refused.status, 1);
+  assert.equal(existsSync(output), false);
+  write(root, '.omd/.cache/copy-eye.md', review(deck + '\nStale review.\n'));
   const installed = runCli(root, 'recipe', 'add', 'scroll-reveal', '--out', output, '--json');
   assert.equal(installed.status, 0, installed.stderr);
   const written = JSON.parse(installed.stdout).written as string[];
@@ -205,21 +209,21 @@ test('standalone recipe use does not silently activate an OMD design workflow', 
   assert.ok(JSON.parse(installed.stdout).written.every((path: string) => existsSync(path)));
 });
 
-test('optional copy validation and delivery remain visible as advisory warnings', () => {
+test('selected copy validation and delivery failures remain production blockers', () => {
   const { root, invocation } = readyCopyProject();
   write(root, '.omd/.cache/copy-eye.md', review(deck, 'REVISE'));
-  assert.match(checkProductionReadiness(root, invocation, pack).warnings.join('\n'), /CLEAN/);
+  assert.match(checkProductionReadiness(root, invocation, pack).blockers.join('\n'), /CLEAN/);
   write(root, '.omd/.cache/copy-eye.md', review(deck));
   write(root, '.omd/copy-deck.md', deck + '\nChanged after review.\n');
-  assert.match(checkProductionReadiness(root, invocation, pack).warnings.join('\n'), /current copy-deck bytes/);
+  assert.match(checkProductionReadiness(root, invocation, pack).blockers.join('\n'), /current copy-deck bytes/);
   write(root, '.omd/copy-deck.md', '{}');
-  assert.match(checkProductionReadiness(root, invocation, pack).warnings.join('\n'), /Missing required section/);
+  assert.match(checkProductionReadiness(root, invocation, pack).blockers.join('\n'), /Missing required section/);
   write(root, '.omd/copy-deck.md', deck);
   write(root, '.omd/delivery.jsonl', '');
-  assert.match(checkProductionReadiness(root, invocation, pack).warnings.join('\n'), /contract not delivered/);
+  assert.match(checkProductionReadiness(root, invocation, pack).blockers.join('\n'), /contract not delivered/);
 });
 
-test('new-product process deficits are advisory rather than initial write blocks', () => {
+test('new-product missing selected evidence blocks initial writes instead of becoming warnings', () => {
   const root = project();
   const invocation = publishTestAdaptiveRoute(root, fixture('medical-new-product'));
   mkdirSync(join(root, '.omd/.cache/sketches/fake-selected'), { recursive: true });
@@ -227,9 +231,11 @@ test('new-product process deficits are advisory rather than initial write blocks
   write(root, '.omd/reference-board.json', '{}');
   write(root, '.omd/.cache/sketches/fake-selected/index.html', '<p>not selection evidence</p>');
   const result = checkProductionReadiness(root, invocation, pack);
-  assert.equal(result.ok, true);
-  const reasons = result.warnings.join('\n');
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.warnings, []);
+  const reasons = result.blockers.join('\n');
   for (const pattern of [/product\/mixed/, /reference board\/judgment:/, /copy-deck/, /composition/, /current candidate selection/]) assert.match(reasons, pattern);
+  assert.equal(existsSync(join(root, 'src')), false);
 });
 
 test('real local CLI transport rejects missing inputs and design-only source writes without asking for activation', () => {
@@ -240,12 +246,12 @@ test('real local CLI transport rejects missing inputs and design-only source wri
   const publish = run('route', 'classify', '--input', 'route-input.json', '--json');
   assert.equal(publish.status, 0, publish.stderr);
   const missing = run('guard', 'production', '--path', 'src/copy/confirmation.ts', '--json');
-  assert.equal(missing.status, 0, missing.stderr);
+  assert.equal(missing.status, 1, missing.stderr);
   assert.match(missing.stdout, /copy-deck/);
   assert.doesNotMatch(missing.stdout, /ROUTE_AUTHORITY_REQUIRED/);
   const completion = run('guard', 'completion', '--json');
   assert.equal(completion.status, 1);
-  assert.match(completion.stderr + completion.stdout, /final|evidence|review/i);
+  assert.match(completion.stderr + completion.stdout, /copy-deck/);
   write(root, 'route-input.json', JSON.stringify(fixture('design-only-test007')));
   const design = run('route', 'classify', '--input', 'route-input.json', '--json');
   assert.equal(design.status, 0, design.stderr);

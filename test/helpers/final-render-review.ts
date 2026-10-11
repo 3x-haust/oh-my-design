@@ -16,15 +16,18 @@ import {
 } from '../../core/route/adaptive-route-persistence.ts';
 import { observationV2Sha256, writeObservationV2 } from '../../core/runtime/observation.ts';
 import {
-  TRUSTED_BROWSER_RECEIPT_SCHEMA,
+  TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
   trustedBrowserReceiptSha256,
   type TrustedBrowserReceipt,
 } from '../../core/runtime/trusted-browser-receipt.ts';
 import {
   deriveTrustedDecisionRefs,
   deriveTrustedEvaluationIdentity,
+  trustedEvaluationPlanBytes,
+  type TrustedLifecycleManifest,
 } from '../../core/runtime/trusted-evaluation-contract.ts';
 import { validateDecisionGraph } from '../../core/deliberation/contracts.ts';
+import { browserObservationSha256, designDecisionSha256 } from '../../core/runtime/browser-observation.ts';
 import {
   authorizeTestProjectRunPayloads,
   createTestProjectWriteAdapter,
@@ -37,6 +40,11 @@ const sha256 = (value: string | Uint8Array): string =>
 
 export function prepareFinalRenderReviewFixture(
   routeFixture: 'copy-only' | 'synth-marketing' = 'copy-only',
+  options: Readonly<{
+    withGraphHistory?: boolean;
+    fillValue?: string;
+    executionScripts?: (scripts: TrustedLifecycleManifest['scripts']) => TrustedLifecycleManifest['scripts'];
+  }> = {},
 ): Readonly<{
   root: string;
   invocation: ReturnType<typeof publishTestAdaptiveRoute>;
@@ -49,7 +57,7 @@ export function prepareFinalRenderReviewFixture(
   const productionPath = routeFixture === 'synth-marketing'
     ? 'index.html'
     : 'src/copy/final.html';
-  writeFileSync(join(root, productionPath), '<main>Approved copy</main>\n');
+  writeFileSync(join(root, productionPath), `${options.fillValue === undefined ? '' : '<input>'}<main>Approved copy</main>\n`);
   const routeInput = JSON.parse(readFileSync(
     new URL(`../fixtures/adaptive-flow/${routeFixture}.json`, import.meta.url),
     'utf8',
@@ -127,8 +135,21 @@ export function prepareFinalRenderReviewFixture(
     allowedPaths: route.allowedPaths,
     entryPath: productionPath,
   });
+  const scripts: TrustedLifecycleManifest['scripts'] = trustedIdentity.requiredOutcomeRefs.map((outcomeRef, index) => ({
+      outcomeRef, actions: index === 0 && options.fillValue !== undefined
+        ? [{ kind: 'fill' as const, selector: 'input', value: options.fillValue }] : [],
+      assertions: [{ kind: 'visible-text', selector: 'main', text: 'Approved copy' }],
+    }));
+  const executionPlan = trustedEvaluationPlanBytes({
+    schema: 'trusted-lifecycle-manifest-v1', entryPath: productionPath,
+    scripts: options.executionScripts?.(scripts) ?? scripts,
+  });
+  const executionPlanSha256 = sha256(executionPlan);
+  mkdirSync(join(root, '.omd/evaluation-plans'), { recursive: true });
+  writeFileSync(join(root, `.omd/evaluation-plans/sha256-${executionPlanSha256}.json`), executionPlan);
   const receipt: TrustedBrowserReceipt = {
-    schema: TRUSTED_BROWSER_RECEIPT_SCHEMA,
+    schema: TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
+    executionPlanSha256,
     runId: 'final-render-review-fixture',
     routeSha256: adaptiveRouteRecordSha256(route),
     sourceContractSha256: route.sourceContractSha256,
@@ -165,6 +186,29 @@ export function prepareFinalRenderReviewFixture(
     { path: desktopPath, sha256: sha256(desktop), viewport: { width: 1280, height: 900 }, testedState: 'initial' },
     { path: mobilePath, sha256: sha256(mobile), viewport: { width: 390, height: 844 }, testedState: 'initial' },
   ]);
+  const writer = createTestProjectWriteAdapter(root, invocation);
+  const observationSha256s: string[] = [];
+  if (options.withGraphHistory) {
+    const decisions = decisionGraph.value.decisions.map(item => ({ ...item, question: 'Which earlier composition keeps context?' }));
+    const historicalBytes = Buffer.from(`${canonicalJson({ schema: 'decision-graph-v1', decisions })}\n`);
+    writer.writeContentAddressed(`.omd/decision-graphs/sha256-${sha256(historicalBytes)}.json`, historicalBytes);
+    writeFileSync(join(root, '.omd', 'decision-graph.json'), historicalBytes);
+    const observations = evidence.browserObservations.observations.map(item => {
+      const core = { ...item, decisionRefs: decisions.map(decision => ({
+        decisionId: decision.id, decisionSha256: designDecisionSha256(decision),
+      })) };
+      return { ...core, observationSha256: browserObservationSha256(core) };
+    });
+    const historical = writeObservationV2(root, {
+      currentArtifact: buildReceipt, buildSha256: invocation.current.buildSha256,
+      observedAt: '2026-09-05T00:00:00.000Z',
+      evidence: { browserObservations: {
+        ...evidence.browserObservations, decisionGraphSha256: sha256(historicalBytes), observations,
+      } },
+    }, writer);
+    observationSha256s.push(observationV2Sha256(historical));
+    writeFileSync(join(root, '.omd', 'decision-graph.json'), decisionGraphBytes);
+  }
   const observation = writeObservationV2(root, {
     currentArtifact: buildReceipt,
     buildSha256: invocation.current.buildSha256,
@@ -186,10 +230,11 @@ export function prepareFinalRenderReviewFixture(
         transcriptSha256: sha256(canonicalJson(receipt.transcript)),
       },
     },
-  }, createTestProjectWriteAdapter(root, invocation));
+  }, writer);
+  observationSha256s.push(observationV2Sha256(observation));
   return Object.freeze({
     root,
     invocation,
-    observationSha256s: Object.freeze([observationV2Sha256(observation)]),
+    observationSha256s: Object.freeze(observationSha256s),
   });
 }

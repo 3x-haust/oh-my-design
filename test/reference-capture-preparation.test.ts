@@ -72,15 +72,28 @@ test('capture preparation schema permits only explicit disclosure clicks and vis
   ]) assert.throws(() => parseCapturePreparation(value), /reference capture preparation/);
 });
 
-test('visible preparation waits for hydrated content while missing and ambiguous observations fail', async () => {
+test('visible preparation waits for hydrated content while missing and ambiguous observations fail', { timeout: 15_000 }, async () => {
   await withBrowser(async browser => {
     const page = await browser.newPage();
     try {
-      await page.setContent(`<section id="schedule"><p>Loading schedule</p></section>
-        <script>setTimeout(() => { document.querySelector('#schedule').innerHTML = '<h2 id="class-title">Yoga Flow</h2>'; }, 150)</script>`);
+      await page.setContent('<section id="schedule"><p>Loading schedule</p></section>');
       const prep: CapturePreparation = { schema: 'reference-capture-preparation-v1', actions: [], assertions: [{ selector: '#class-title', state: 'visible' }] };
       assert.equal(await page.locator('#class-title').count(), 0, 'the element is initially absent');
-      assert.deepEqual(await observeCapturePreparation(page, prep), [{ selector: '#class-title', state: 'visible', passed: true }]);
+      const locate = page.locator.bind(page);
+      const hydratedTarget = locate('#class-title');
+      const waitFor = hydratedTarget.waitFor.bind(hydratedTarget);
+      const waiting = new Promise<void>(resolve => {
+        hydratedTarget.waitFor = options => {
+          const pending = waitFor(options);
+          if (options?.state === 'attached') resolve();
+          return pending;
+        };
+      });
+      page.locator = (selector, options) => selector === '#class-title' ? hydratedTarget : locate(selector, options);
+      const observed = observeCapturePreparation(page, prep);
+      await waiting;
+      await page.locator('#schedule').evaluate(element => { element.innerHTML = '<h2 id="class-title">Yoga Flow</h2>'; });
+      assert.deepEqual(await observed, [{ selector: '#class-title', state: 'visible', passed: true }]);
       for (const state of ['visible', 'hidden'] as const) {
         await assert.rejects(observeCapturePreparation(page, { ...prep, assertions: [{ selector: '#missing', state }] }), /exactly one existing element/);
       }
@@ -113,6 +126,9 @@ test('observe-only preparation preserves actual initial focus without granting a
       const shotOut = join(root, 'focused.png');
       const captured = await withBrowser(browser => capturePageForRef(browser, url, viewport, { selector: '#fixture', preparation: prep, shotOut, adapter }));
       assert.equal(captured.shotSaved, true);
+      const retained = decodePng(readFileSync(shotOut));
+      assert.equal(retained.width, viewport.width * 2, 'reference screen preserves every pixel at DPR 2');
+      assert.ok(retained.height >= viewport.height * 2, 'whole-page capture is not selector cropped');
       assert.deepEqual(captured.capturePreparation?.executedActions, []);
       assert.deepEqual(captured.capturePreparation?.observations, [{ selector: '#query:focus', state: 'visible', passed: true }]);
       assert.equal(captured.raw.meta?.interaction, null); assert.equal(captured.raw.meta?.motion, null);

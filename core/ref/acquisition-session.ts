@@ -18,6 +18,7 @@ import { NAVIGATION_BUDGET_MS, AcquisitionTimeoutError, withAcquisitionDeadline,
 export function createReferenceAcquisitionSession(writer: ProjectWriteAdapter, options: Readonly<{
   fetchDomain?: DomainFetchTransport; browserConnector?: BrowserConnector; browserConfig?: ReferenceBrowserConfig;
   userBrowserDriver?: UserBrowserDriver; userBrowserLookup?: PublicHostLookup; consentHome?: string;
+  explicitUserBrowser?: boolean;
 }> = {}) {
   const config = options.browserConfig ?? readReferenceBrowserConfig();
   return {
@@ -26,7 +27,8 @@ export function createReferenceAcquisitionSession(writer: ProjectWriteAdapter, o
       const url = publicDiscoveryUrl(source); const lane = discoveryLane(requestedLane);
       const entry = requestedEntry === undefined ? undefined : directDiscoveryEntry(requestedEntry, lane);
       const engine = await selectReferenceAcquisitionEngine(config, { ...(options.consentHome ? { home: options.consentHome } : {}),
-        ...(options.userBrowserDriver ? { driver: options.userBrowserDriver } : {}) });
+        ...(options.userBrowserDriver ? { driver: options.userBrowserDriver } : {}),
+        ...(options.explicitUserBrowser === undefined ? {} : { explicitUserBrowser: options.explicitUserBrowser }) });
       const userBrowser = engine === 'user-browser';
       const acquireUserBrowser = (scope?: AcquisitionDeadlineScope) => captureUserBrowserNavigation(writer, url, lane, entry,
         { ...(options.userBrowserDriver ? { driver: options.userBrowserDriver } : {}),

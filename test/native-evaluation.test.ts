@@ -20,34 +20,54 @@ import { writeTrustedEvaluationObservation } from '../core/runtime/trusted-evalu
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 import { nativeCompletionWork } from '../core/stage/native-completion.ts';
+import { makerEvaluationLineage } from '../core/runtime/native-maker-evaluation.ts';
+import { publishDesignJudgment } from '../core/design/judgment-files.ts';
+import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
+import { runFirstRenderReview } from '../core/design/first-render-review.ts';
 
 const runtimeRoot = fileURLToPath(new URL('..', import.meta.url));
 const packRoot = join(runtimeRoot, 'core');
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const request = 'Build a shipment evidence review workspace';
 
-function fixture(t: TestContext, options: Readonly<{ broken?: boolean; mixedPhases?: boolean }> = {}) {
+function fixture(t: TestContext, options: Readonly<{
+  broken?: boolean; mixedPhases?: boolean; unrelatedOutcome?: boolean; composition?: boolean;
+}> = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-native-evaluation-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const local = createTestProjectRunInvocation(root, request);
   const build = createBuildIdentityFromSource(runtimeRoot);
-  const cliPath = join(runtimeRoot, 'bin/omd.mjs');
+  const cliPath = options.composition
+    ? fileURLToPath(new URL('fixtures/pi-reviewer-rpc.mjs', import.meta.url))
+    : join(runtimeRoot, 'bin/omd.mjs');
   const invocation = createTestNativePiInvocation({ root, current: {
     ...local.current, buildSha256: build.buildSha256, loadedSkillSha256: build.sourceSkillSha256,
   }, host: { nodePath: process.execPath, nodeSha256: hash(readFileSync(process.execPath)),
     cliPath, cliSha256: hash(readFileSync(cliPath)), provider: 'openai-codex', model: 'gpt-6-luna',
     thinkingLevel: 'medium', parentSessionId: 'native-evaluation-fixture' } });
   const writer = createTestProjectWriteAdapter(root, invocation);
-  const skeleton = inputSkeleton('product-route-input').skeleton;
+  const skeleton = structuredClone(inputSkeleton('product-route-input').skeleton);
   assert.ok(typeof skeleton === 'object' && skeleton !== null && !Array.isArray(skeleton));
   const strategy = Reflect.get(skeleton, 'strategyDecision') as { methods: string[]; skips: { id: string }[] };
   for (const id of ['design-strategy-balanced-delivery', 'model-capability-probe']) {
     if (!strategy.methods.includes(id)) strategy.methods.push(id);
     strategy.skips = strategy.skips.filter(skip => skip.id !== id);
   }
+  if (options.composition) {
+    const stages = Reflect.get(strategy, 'stages') as string[];
+    const roles = Reflect.get(strategy, 'roles') as string[];
+    const executionWaves = Reflect.get(strategy, 'executionWaves') as { id: string; mode: string; roles: string[] }[];
+    const attributionCategories = Reflect.get(strategy, 'attributionCategories') as string[];
+    if (!stages.includes('composition')) stages.push('composition');
+    if (!roles.includes('omd-composer')) roles.push('omd-composer');
+    executionWaves.push({ id: 'composition', mode: 'concurrent', roles: ['omd-composer'] });
+    if (!attributionCategories.includes('composition')) attributionCategories.push('composition');
+    strategy.skips = strategy.skips.filter(skip => skip.id !== 'composition');
+  }
   publishAdaptiveRoute(root, { ...skeleton, request,
     taskOutcome: { schema: 'task-outcome-contract-v1', goal: 'Review shipment evidence',
-      mustHave: [options.mixedPhases ? 'Evidence reviewed' : 'Review shipment evidence'], mustNotHave: ['Invented approval'],
+      mustHave: [options.unrelatedOutcome ? 'Revoke helper access and retain the applicant record'
+        : options.mixedPhases ? 'Evidence reviewed' : 'Review shipment evidence'], mustNotHave: ['Invented approval'],
       completionEvidence: ['Evidence reviewed'], strategyFreedom: ['Choose a readable layout'] },
   }, writer, invocation);
   const route = readPersistedRoute(root, invocation);
@@ -88,6 +108,49 @@ function fixture(t: TestContext, options: Readonly<{ broken?: boolean; mixedPhas
   return { root, packRoot, invocation, writer, local, route };
 }
 
+test('composition-selected native evaluation refuses missing retained visual review before publication', async t => {
+  const value = fixture(t, { composition: true });
+  const sourceBefore = readFileSync(join(value.root, 'index.html'));
+
+  await assert.rejects(runNativeEvaluation(value), /FIRST_RENDER|review/i);
+
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), sourceBefore);
+  assert.equal(existsSync(join(value.root, '.omd/build.json')), false);
+  assert.equal(existsSync(join(value.root, '.omd/evaluation-runs')), false);
+  assert.equal(readCurrentObservationV2(value.root), undefined);
+});
+
+test('composition-selected native evaluation accepts a current authentic retained visual review', { timeout: 30_000 }, async t => {
+  const value = fixture(t, { composition: true });
+  const oldMode = process.env.PI_REVIEWER_FIXTURE_MODE;
+  t.after(() => {
+    if (oldMode === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+    else process.env.PI_REVIEWER_FIXTURE_MODE = oldMode;
+  });
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'success';
+  publishDesignJudgment(value.root, {
+    schema: 'design-judgment-v1', referenceBoardSha256: 'a'.repeat(64),
+    hypothesis: { schema: 'design-judgment-v1', feelsLike: 'A focused shipment evidence workspace',
+      dominantObject: 'shipment evidence', subordinate: ['navigation'], densityIntent: 'one shipment record',
+      trustSource: 'visible shipment status', twoSecondRead: 'Review shipment evidence' },
+    judgments: [{ id: 'shipment', observation: 'The shipment record is the primary work object.',
+      whyItWorksThere: 'The review action stays attached to the evidence.', relevance: 'high',
+      adopt: ['Evidence-local action'], reject: ['Source branding'],
+      interpretation: 'Keep shipment evidence dominant.', scope: 'surface' }],
+  }, value.writer);
+  await publishFirstRenderCheck(value.root, 'index.html', {
+    heading: 'Review shipment evidence', landmarks: ['main shipment evidence'], repeatedObjects: [],
+    trustSignals: ['Awaiting evidence'], visibleText: ['Review shipment evidence', 'Shipment CX-204'],
+    dominantAreaShare: 0.8,
+  }, value.writer);
+  assert.equal((await runFirstRenderReview(value.root, value.invocation, t.signal)).decision, 'retain');
+
+  const result = await runNativeEvaluation(value);
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
+});
+
 test('native evaluation executes the project-derived plan and publishes source-bound live evidence', async t => {
   // Given a native run and a real local prerequisite-to-consequence interface.
   const value = fixture(t);
@@ -123,6 +186,66 @@ test('native evaluation accepts a complete outcome-bound browser plan without fr
   assert.equal(result.receipt.outcomeResults.length, 3);
   assert.ok(result.receipt.captures.length > 0);
 });
+
+test('native evaluation cannot certify an unimplemented outcome from an unrelated entry label', async t => {
+  const value = fixture(t, { unrelatedOutcome: true });
+  const result = await runNativeEvaluation(value);
+  assert.equal(result.ok, true, 'the authored text assertions executed successfully');
+  assert.equal(Reflect.get(result, 'acceptanceStatus'), 'review-required',
+    'executed text assertions cannot certify that helper access can be revoked');
+});
+
+test('native evaluation binds the executed outcome plan to its receipt', async t => {
+  const value = fixture(t);
+  const result = await runNativeEvaluation(value);
+  const planSha256 = Reflect.get(result.receipt, 'executionPlanSha256');
+  assert.equal(typeof planSha256, 'string');
+  const bytes = readFileSync(join(value.root, `.omd/evaluation-plans/sha256-${String(planSha256)}.json`));
+  assert.equal(hash(bytes), planSha256);
+  const executed = JSON.parse(bytes.toString('utf8'));
+  assert.deepEqual(executed.scripts.map((script: { outcomeRef: string }) => script.outcomeRef),
+    result.receipt.outcomeResults.map(row => row.outcomeRef));
+  assert.ok(executed.scripts.some((script: { actions: unknown[] }) => script.actions.length > 0));
+});
+
+for (const recordMode of ['retained', 'missing-before', 'deleted-after'] as const) {
+test(`an authored behavior plan checks revocation with ${recordMode} applicant record`, async t => {
+  const value = fixture(t, { unrelatedOutcome: true });
+  value.writer.write('index.html', `<!doctype html><html lang="en"><head><meta charset="utf-8">
+    <title>Applicant record</title><style>body{font:18px Arial;margin:24px}button{padding:16px}</style></head>
+    <body><main><h1>Applicant record</h1><p id="record">${recordMode === 'missing-before' ? '' : 'Applicant CX-204 retained'}</p>
+    <p id="helper">Helper access active</p><button id="revoke">Revoke helper access</button>
+    <p id="review">Awaiting review</p></main><script>
+    document.querySelector('#revoke').onclick=()=>{
+      document.querySelector('#helper').textContent='Helper access revoked';
+      document.querySelector('#review').textContent='Evidence reviewed';
+      document.querySelector('#record').textContent=${JSON.stringify(recordMode === 'deleted-after' ? '' : 'Applicant CX-204 retained')};
+    };</script></body></html>`);
+  const result = await runNativeEvaluation({ ...value, manifest: {
+    schema: 'trusted-lifecycle-manifest-v1', entryPath: 'index.html',
+    scripts: [
+      { outcomeRef: 'mustHave:0', actions: [{ kind: 'click', selector: '#revoke' }],
+        assertions: [
+          { kind: 'visible-text', selector: '#helper', text: 'Helper access revoked' },
+          { kind: 'preserved-text', selector: '#record', text: 'Applicant CX-204 retained' },
+        ] },
+      { outcomeRef: 'mustNotHave:0', actions: [],
+        assertions: [{ kind: 'absent-text', selector: 'body', text: 'Invented approval' }] },
+      { outcomeRef: 'completionEvidence:0', actions: [],
+        assertions: [{ kind: 'visible-text', selector: '#review', text: 'Evidence reviewed' }] },
+    ],
+  } });
+  assert.equal(result.executionStatus, recordMode === 'retained' ? 'pass' : 'fail', JSON.stringify({
+    outcomes: result.receipt.outcomeResults, floors: result.receipt.hardFloors, transcript: result.receipt.transcript,
+  }));
+  assert.equal(result.acceptanceStatus, 'review-required');
+  const executionPlan = JSON.parse(readFileSync(join(value.root,
+    `.omd/evaluation-plans/sha256-${result.receipt.executionPlanSha256}.json`), 'utf8'));
+  assert.equal(executionPlan.scripts[0].actions[0].selector, '#revoke');
+  assert.equal(executionPlan.scripts[0].assertions.length, 2);
+  assert.ok(result.receipt.transcript.some(entry => entry.startsWith('action-click:')));
+});
+}
 
 test('a serialized browser receipt cannot replace the observation after native evaluation', async t => {
   // Given a real observation and its serialized public receipt.
@@ -169,6 +292,21 @@ test('initial violations cannot pass when a preceding outcome requires a later p
   const initial = result.receipt.outcomeResults.find(row => row.outcomeRef.includes(':mustNotHave:0:'));
   assert.ok(initial);
   assert.equal(initial.status, 'fail');
+});
+
+test('maker repair projection retains failed native evaluator results and exact execution lineage', async t => {
+  // Given a real failed browser evaluation, not a fabricated publisher receipt.
+  const value = fixture(t, { broken: true });
+  const result = await runNativeEvaluation(value);
+  // When the maker host projects its complete evaluator lineage.
+  const lineage = makerEvaluationLineage(value.root, value.invocation);
+  // Then source repair receives every measured failure, capture and executed plan binding.
+  assert.equal(lineage.length, 1);
+  assert.equal(lineage[0]?.observationSha256, result.observationSha256);
+  assert.equal(lineage[0]?.executionPlanSha256, result.receipt.executionPlanSha256);
+  assert.deepEqual(lineage[0]?.outcomeResults, result.receipt.outcomeResults);
+  assert.deepEqual(lineage[0]?.captures, result.receipt.captures);
+  assert.equal(lineage[0]?.hardFloors.behavior, 'fail');
 });
 
 for (const kind of ['manifest', 'graph', 'local', 'serialized'] as const) {

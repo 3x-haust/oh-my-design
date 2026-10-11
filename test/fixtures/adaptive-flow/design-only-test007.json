@@ -187,6 +187,7 @@
     "stages": [
       "domain",
       "frame",
+      "acquisition",
       "scout",
       "reference-board",
       "reference-selection",
@@ -266,10 +267,6 @@
       {
         "id": "content-grain",
         "reason": "기획서가 실제 제품 카피와 데이터 구조의 충분한 재료를 제공하므로 별도 content-grain 탐색은 생략한다."
-      },
-      {
-        "id": "acquisition",
-        "reason": "브라우저 캡처 획득은 Scout의 지원 가능한 레퍼런스 경로에서만 수행한다."
       },
       {
         "id": "moodboard",

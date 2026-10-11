@@ -51,6 +51,8 @@ type MessageEndTask = Readonly<{
   onUserQuestion?(question: UserQuestion): void;
   onBrowserAnswer?(answer: 'user-browser' | 'omd-profile' | null, digest: string): void;
   onReferenceWork?(work: ReferenceWork | null): void;
+  browserDoctor?(): Promise<import('../core/browser/contracts.ts').UserBrowserDoctorReport>;
+  explicitUserBrowser?: boolean;
 }>;
 
 const stringList = (value: unknown): readonly string[] => Array.isArray(value)
@@ -187,6 +189,21 @@ function actionPacket(work: StageWorkPointer): string {
 
 const koreanMessage = (_message: NonNullable<PortablePiEvent['message']>, locale?: 'ko' | 'en'): boolean => locale === 'ko';
 
+export async function readyBridgeQuestion(home?: string, doctor?: () => Promise<import('../core/browser/contracts.ts').UserBrowserDoctorReport>, workSha256?: string, explicit = process.env.OMD_REFERENCE_BROWSER_ENGINE === 'user-browser'): Promise<UserQuestion | null> {
+  if (!explicit) return null;
+  const { readBrowserConsent, readUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+  // A previously consented dedicated profile does not grant access to the everyday browser.
+  if (readUserBrowserConsent(home) !== null || readBrowserConsent(home) !== 'consented') return null;
+  const { readReferenceBrowserConfig } = await import('../core/ref/browser-config.ts');
+  if (readReferenceBrowserConfig(process.env, home).mode !== 'profile') return null;
+  const inspect = doctor ?? (await import('../core/browser/setup.ts')).userBrowserDoctor;
+  if ((await inspect()).state !== 'ready') return null;
+  return parseUserQuestion(JSON.stringify({ action: { kind: 'browser-consent',
+    question: '평소 쓰는 브라우저가 연결되어 있습니다. 레퍼런스 조사에 이 브라우저를 사용해도 될까요? OMD 전용 브라우저를 유지하거나 이번에는 건너뛸 수도 있습니다.',
+    options: ['평소 쓰는 브라우저 그대로 쓰기', 'OMD 전용 로그인 브라우저', '이번엔 건너뛰기', '다시 묻지 않기'] },
+    workSha256 }));
+}
+
 export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown> {
   const { cwd, signal, message, run, interrupted, bootstrap, repairLoop, revision, pi } = task;
   if (bootstrap !== undefined && !task.hasRoute) {
@@ -197,7 +214,8 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       const result = await run(['stage', 'next', '--json'], cwd, signal);
       if (interrupted()) return;
       let work = parseStageWork(result.text);
-      const stageQuestion = parseUserQuestion(result.text);
+      const stageQuestion = parseUserQuestion(result.text) ?? (work?.stage === 'reference-board' && work.referenceWork?.status === 'action'
+        ? await readyBridgeQuestion(task.browserConsentHome, task.browserDoctor, work.referenceWork.workSha256, task.explicitUserBrowser) : null);
       if (stageQuestion) {
         task.onUserQuestion?.(stageQuestion);
         if (stageQuestion.kind === 'browser-consent' && task.ui?.select) {
@@ -209,9 +227,14 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
             try {
               const setup = await run(['browser', 'setup', '--engine', answer, '--consent', '--json'], cwd, signal);
               if (interrupted()) return;
-              const { writeBrowserInterpretation } = await import('../core/ref/browser-consent.ts');
+              const { writeBrowserInterpretation, writeUserBrowserConsent } = await import('../core/ref/browser-consent.ts');
+              if (answer === 'omd-profile') writeUserBrowserConsent('skipped-this-run', task.browserConsentHome);
               writeBrowserInterpretation({ questionDigest: stageQuestion.digest, userText: selected!, agentInterpretation: answer }, task.browserConsentHome);
               task.onBrowserAnswer?.(null, stageQuestion.digest);
+              const ready = JSON.parse(setup.text) as { state?: string };
+              if (ready.state === 'ready') pi.sendMessage?.({ customType: 'omd-browser-ready', display: true,
+                content: 'OMD Browser bridge is ready after explicit consent. The bundled OMD browser driver is now the selected research engine; run omd ref work-next --json and continue its native browsing action. Do not ask the user to invoke a browser skill or manually click routine Enable/Use controls.' },
+              { triggerTurn: true, deliverAs: 'followUp' });
               return { message: { ...message, content: [...(message.content ?? []), { type: 'text', text: `Browser setup result: ${setup.text}` }] } };
             } catch (error) {
               if (interrupted()) return;

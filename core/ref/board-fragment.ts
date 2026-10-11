@@ -100,7 +100,9 @@ export const parseImageFragmentTransfer = (value: unknown): ImageFragmentTransfe
 
 export function validatedImageFragmentPiece(root: string, expected: ReferenceBoardImageFragmentPiece, value: ResolvedImageFragmentPiece): ResolvedImageFragmentPiece {
   if (value.slotId !== expected.slotId || value.referenceId !== expected.referenceId || value.sourceKind !== expected.sourceKind) fail('resolver changed the board piece identity');
-  return { ...expected, imagePath: trustedReferenceImage(root, text(value.imagePath, 'imagePath')), provenance: parseImageFragmentProvenance(value.provenance), transfer: parseImageFragmentTransfer(value.transfer) };
+  const provenance = parseImageFragmentProvenance(value.provenance);
+  if (provenance.cropBox !== undefined) fail('new board publication cannot retain a cropped image fragment');
+  return { ...expected, imagePath: trustedReferenceImage(root, text(value.imagePath, 'imagePath')), provenance, transfer: parseImageFragmentTransfer(value.transfer) };
 }
 
 export function copyImageFragmentTransfer(value: ImageFragmentTransfer): ImageFragmentTransfer {

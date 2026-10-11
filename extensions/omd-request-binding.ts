@@ -24,7 +24,19 @@ export class PiRequestBindings {
     return this.fullWorkflows.has(cwd) && this.active.has(cwd) && !this.suspended.has(cwd) && !this.failures.has(cwd);
   }
   current(cwd: string): PiRequestSource | undefined { return this.active.get(cwd); }
+  hasPendingInput(cwd: string): boolean { return (this.pending.get(cwd)?.length ?? 0) > 0; }
   suspend(cwd: string): void { this.suspended.add(cwd); this.fullWorkflows.delete(cwd); }
+  /** Called only after the host verifies the current captured-turn continuation judgment. */
+  resume(cwd: string, requestSha256: string): boolean {
+    const current = readPiRequest(cwd);
+    const previous = this.active.get(cwd);
+    if (this.failures.has(cwd) || !current || current.requestSha256 !== requestSha256
+      || (previous && previous.recordSha256 !== current.recordSha256)) return false;
+    this.active.set(cwd, current);
+    this.suspended.delete(cwd);
+    this.fullWorkflows.add(cwd);
+    return true;
+  }
   receive(cwd: string, event: PortablePiEvent): void {
     if ((event.source !== 'interactive' && event.source !== 'rpc') || typeof event.text !== 'string') return;
     // Capture real bytes even before the agent has published its intent judgment. Capture is not authorization.

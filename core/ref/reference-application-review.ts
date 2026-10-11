@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { loadDesignQualityObservationBindings } from '../evidence/final-v2-browser-observations.ts';
 import type { FinalEvidenceV2GraphVariant } from '../evidence/final-v2-graph.ts';
 import type { DesignQualityObservationBinding } from '../evidence/final-v2-design-quality.ts';
-import { validateBrowserObservationDecisionLinks } from '../runtime/browser-observation.ts';
+import { validateObservationDecisionGraph } from '../runtime/observation-decision-graph.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ReferenceApplicationProjection } from './reference-application.ts';
@@ -65,9 +65,13 @@ function parse(value: unknown): Review {
 
 /** Deterministic IDs change when either the destination surface or its actual criterion changes. */
 export function referenceApplicationCriteria(application: ReferenceApplicationProjection) {
-  return application.screens.flatMap(screen => screen.checks.map(check => ({
-    criterionId: hash(JSON.stringify([screen.surface, screen.target, check])), surface: screen.surface, target: screen.target, check,
-  })));
+  return application.screens.flatMap(screen => [
+    ...screen.checks,
+    ...(screen.design.coverage === 'direct'
+      ? [`Visual fidelity and beauty: compare the current desktop and mobile renders with the selected source-free visual direction (${screen.design.application}); preserve the intended composition, hierarchy, and visual character without copying source pixels.`]
+      : []),
+  ].map(check => ({ criterionId: hash(JSON.stringify([screen.surface, screen.target, check])),
+    surface: screen.surface, target: screen.target, check })));
 }
 function read(root: string, path: string): Buffer {
   try { return readStableProjectFile({ root: resolve(root), path: resolve(root, path), label: path, fs: nodeStableProjectFileSystem() }); }
@@ -84,10 +88,13 @@ export function referenceApplicationReviewContext(root: string, application: Ref
   if (seal.inputs?.referenceApplicationSha256 !== application.applicationSha256) return fail('source was sealed before the current application decisions; reseal and recapture');
   const observations = loadDesignQualityObservationBindings(root, nodeStableProjectFileSystem(), graph.observations.map(item => item.sha256));
   const decisions = read(root, '.omd/decision-graph.json');
-  const captureIndex = graph.observations.flatMap(item => {
+  const captureIndex = graph.observations.slice(-1).flatMap(item => {
     const bytes = read(root, item.path);
     if (hash(bytes) !== item.sha256) return fail('final observation changed during review planning');
-    const links = validateBrowserObservationDecisionLinks(JSON.parse(bytes.toString('utf8')).evidence, decisions, true)!;
+    const { links } = validateObservationDecisionGraph({
+      root, fs: nodeStableProjectFileSystem(), evidence: JSON.parse(bytes.toString('utf8')).evidence,
+      currentGraph: decisions, requireCurrentGraph: true,
+    });
     return links.observations.filter(row => observations.some(binding => binding.browserObservationSha256 === row.observationSha256))
       .map(row => ({ path: row.observableResult.capture.path, testedUrl: row.testedUrl, browserObservationSha256: row.observationSha256 }));
   });

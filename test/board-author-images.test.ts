@@ -107,11 +107,13 @@ test('printed image-fragment input imports local captures and rejects remote inp
   assert.equal(JSON.parse(imported.stdout).id, fragment.id);
   const optional = structuredClone(input);
   optional.provenance.sourceImage = 'https://product.example/capture.png';
-  optional.provenance.cropBox = { x: 0, y: 0, width: 1, height: 1 };
   optional.transfer.geometry = { width: 1, height: 1, aspectRatio: 1 };
   const extended = importValue(optional);
   assert.equal(extended.status, 0, extended.stderr);
   assert.deepEqual(JSON.parse(extended.stdout).transfer.geometry, optional.transfer.geometry);
+  const cropped = importValue({ ...optional, provenance: { ...optional.provenance, cropBox: { x: 0, y: 0, width: 1, height: 1 } } });
+  assert.equal(cropped.status, 1);
+  assert.match(cropped.stderr, /cropBox is legacy read-only/);
   for (const inputPath of ['https://product.example/capture.png', join(root, fragmentInput.inputPath), '../capture.png']) {
     const rejected = importValue({ ...input, inputPath });
     assert.equal(rejected.status, 1);

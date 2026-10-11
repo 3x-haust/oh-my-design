@@ -6,12 +6,19 @@ effort: high
 ---
 
 Discovery execution is a deliverable. In research v7 choose actual search or direct-public
-browsing per lane. Follow `ref work-next`: ask its browser-consent question before any search.
-Search Google in the consented everyday browser, then the OMD login browser; otherwise use an
-available host web search tool, `ref leads search` (DuckDuckGo HTML), and Bing last. Register
+browsing per lane. Follow `ref work-next`: search and navigate public sources in background
+headless Chromium, using an already-consented dedicated OMD profile when available. Never
+attach, resize, navigate or focus everyday-browser tabs by default, even if previously consented.
+Only explicit user-browser choice authorizes that bundled bridge, whose network isolation is
+limited. For unavoidable login, OTP or challenge, close the headless acquisition, ask the
+human once in a dedicated headed OMD profile, then resume headlessly with the same profile.
+Do not claim completion if the challenge remains unsolved. If native search fails, use an
+available host web search tool, `ref leads search` (DuckDuckGo HTML), then Bing last. Register
 actual host URLs with `omd ref leads add --input <leads.json> --json`. Leads are unsigned and
 never evidence; only OMD's signed destination observation can support research. Historical
-signed `ref search` receipts remain readable. For direct browsing run
+signed `ref search` receipts remain readable. For design, register observed finished-product
+URLs as leads and follow the signed next action to their actual public task screens first.
+For domain direct browsing or a justified design-gallery fallback run
 `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` or
 `--lane design --entry free-gallery --json`; put its returned object plus an authored reason
 in discoveryRoots. Empty queries/searches require valid direct roots. Every declared query still
@@ -31,8 +38,11 @@ never a retained domain or design board reference.
 With target-market-first policy, acquire local-market destination observations before global
 destinations; host search timestamps cannot prove observation order.
 Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
-The v3 benchmark checker reports artifact-only evidence strength, not verified live actions. Historical v2 records remain readable under their original admission.
-Preserve that limitation in the synthesis; do not claim every flow/control was tested.
+Publish the optional task-flow benchmark only when selected by the route or deliberately included
+in the research. Otherwise keep benchmarkSha256 null and record the limitation. A declared v3
+completion requires its signed native execution receipt and verified live actions; blocked flows
+remain exclusions, not completed evidence. Historical v2 records remain readable under their
+original admission. Do not claim every flow/control was tested.
 Read `protocol/reference-assembly.md` and `protocol/locale-contract.md`, then only
 `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`
 and `--section "Feature-level reference research and transfer"`, plus a theory
@@ -48,14 +58,14 @@ unresolved decisions and stop when measured evidence resolves them. Capture user
 structural-sketch stage owned by `oh-my-design:sketch`. Never interpret a skipped or selected
 `candidate-generation` stage as a skipped or selected reference board, or vice versa. Author a
 board only when `reference-board` is selected; otherwise hand measured records directly to the next
-selected stage. Current research needs three independent domain operator families and two
-independent visual-direction source families; this is evidence diversity, not a query or capture
-quota. There is no default candidate count.
+selected stage. Aim for three independent domain operator families and two independent
+visual-direction source families. If fewer are available, record the advisory limitation; these
+counts are not admission quotas. There is no default candidate count.
 When discovery is selected, run `omd ref discover-plan --json`. The current request, explicit
 locale context, acquisition decisions and selected motion produce its search lanes even when
 domain analysis is skipped. User reference URLs are optional inputs, never a prerequisite.
 Execute discovery from this plan as two non-substitutable lanes: domain-reference
-for comparable-service screens/features/flows and design-reference for visual direction and craft,
+for signed comparable-service task text/links, audience, eligibility, objects, online/offline/support/recovery flows and limits; design-reference for separately beautiful and usable visual direction and craft,
 plus any motion discovery lane. A candidate motion lane informs art direction; it
 does not activate a production scene or create a user motion lock. Preserve explicit style, language and reference-
 region requests in those queries; a surface locale alone does not infer a country aesthetic.
@@ -66,7 +76,12 @@ explicit cultural-design market claim; Korean-language service pages count as lo
 regardless of `.kr` versus `.com`. Treat insufficient observed text as undetermined, not foreign;
 native capture settles once before returning a retryable gap. Domain work records signed functional
 text/links with `ref navigate --lane domain`, never `ref add` screenshots or domain visual anatomy.
-Cite the signed page quote/link for every feature, compare against the request, and author adopt/avoid decisions.
+Cite signed current visible task text/links for observed features; bind adoption/avoidance to
+exact request quotes through feature IDs and comparisons. Compare independent operators for
+audience, eligibility/prerequisites, data objects, online/offline/support task flows, errors,
+recovery, friction and limits. Unavailable information is unknown, not an absent feature;
+competitor silence does not establish user need or a market gap. A differentiated product
+specialization remains a hypothesis until user/task evidence validates it.
 A gallery selector matching multiple images is ambiguous, not empty: inspect candidate CSS selectors
 and choose one exact image. A signed timeout is an unavailable attempt; recompute work-next. For Korean welfare tasks, run the plan's service-specific
 searches (복지로, 정부24 혜택알리미, 서울복지포털, 웰로) and follow their *current observed* links; do not
@@ -103,41 +118,58 @@ A credential-access failure inside the role may use the protocol's Host-executed
 discovery recovery: return the exact read-only request and error, then evaluate the host's actual
 returned output with its execution provenance. You still own inspection, synthesis and publication;
 a coordinator transport result is not a completed search by this role or an approved reference.
-Gallery directories are discovery channels, not preset winners. Use current results to find the
-relevant free entry: apps/product UI use screen/pattern galleries such as Mobbin, Page Flows,
-UI Bowl and Pinterest;
-websites/marketing use website galleries such as Siteinspire and Pinterest. Follow discover-plan's
+Search short English component and visual-mechanism terms across independent finished products.
+One exact-domain dashboard phrase or repeated Google challenge does not exhaust design discovery.
+Execute the plan's first finished-product inputs before gallery fallback. A failed product
+candidate calls for a different observed product/state or a changed visual-mechanism query,
+not another template directory, guidelines page or catalogue with the same missing task screen.
+Gallery directories are discovery channels, not preset winners. For the design lane inspect visually excellent REAL finished websites or multiple screens from a released app, including desktop product websites when the destination is desktop. Siteinspire and original live products are useful website leads; Mobbin and Page Flows are flow leads only after inspecting multiple real screens. A generic Dribbble dashboard UI kit, one-off mockup illustration, pattern catalogue, guidelines page, single confirmation screen, list-card thumbnail or relevant but ugly service is not visual direction. Reject it and search for the original released product website or several real screens of a shipped app. Record these as support/rejected evidence, not winners. Follow discover-plan's
 designSourcePolicy, verify current free access per entry, and record a task-specific quality reason
 (viewport, hierarchy, typography, density) rather than trusting the gallery's reputation. On login,
-payment, or blocking, let the acquisition layer handle challenges. For login-gated galleries or
-unsolved challenges, follow the harness's one-time ask-then-setup flow: after user consent OMD sets up
-its own logged-in browser profile; do not ask users to set env vars. If acquisition still fails,
+payment, or blocking, let the acquisition layer handle challenges. For unavoidable login-gated galleries or challenges, close the headless acquisition first,
+ask once for the dedicated OMD headed profile, then return to headless using that profile
+when the human closes it. Do not ask users to set env vars. If acquisition still fails,
 record the limit and try another source. Never purchase or start a trial. Free viewing does not grant asset reuse rights.
 Use designSourcePolicy.searchQueries (including Pinterest pins) through the real search transport,
 register host search results with ref leads add, or use nativeEntryInputs with ref navigate --entry free-gallery.
 Direct public-list browsing is a first-class alternative, not an invented successful search.
-Record the actual method, result and capability gaps. Search inputs are free gallery query
+Record the actual method, result and capability gaps. The first native search inputs seek
+finished products; later fallback search inputs are free gallery query
 transports for Pinterest plus Dribbble on product routes or Siteinspire on marketing routes,
 not preset reference winners.
 Open an item actually returned in observed links; never guess numeric shot/pin IDs. If a provider
 returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
-public gallery after challenge handling and any user-consented OMD browser setup fail. Refine unscoped query terms to the actual
+accessible finished product or original-site lead after challenge handling and any
+user-consented OMD browser setup fail. Use another public gallery only for an original-product
+lead the earlier product search could not supply. Refine unscoped query terms to the actual
 task and update the URL with them; keep explicit-market native search inputs exact. Direct roots must expose actual same-gallery item links;
 follow only observed links via strict native navigation, then visit the concrete gallery item
 with `omd ref navigate <item-url> --lane design --json`. The list and gallery wrapper are not
 retained design evidence. Search, direct-entry and navigation records live in
-.omd/discovery/<lane>/, never refs. Only an observed original product screen or the exact UI
-image element itself belongs in refs/design. Use `omd ref add <item-url> --lane design
+.omd/discovery/<lane>/, never refs. Only an independently approved original product screen
+or the exact UI image element itself belongs in refs/design. Use `omd ref add <item-url> --lane design
 --selector <img-css>` after the visit for an image-only item, then `omd ref import-image`
-with source-page and rights notes before using it in the board. Its record is visual-only;
-a crop is not mandatory and its pixels cannot prove app DOM structure.
+with source-page and rights notes before using it in the board. Follow the item detail or original site and retain its largest loaded srcset/currentSrc at native resolution, never a list-card thumbnail. A long side below 1200px is an advisory quality warning: prefer a higher-resolution original from another item. Its record is visual-only; cropping is forbidden (describe a region in text on the whole image), and its pixels cannot prove app DOM structure. Whole-page/viewport captures are 2x pixels.
+Select exactly one loaded img on an ordinary product page too: ref add retains the full native
+original rather than its surrounding help/changelog article. A direct image document also
+retains original pixels. Do not request a DOM blueprint or claim article CSS/motion as app
+measurements from these image-only records.
 Before reusing an existing inventory, run ref tidy --json. When no other research owner is active,
 inspect its reasons and use ref tidy --apply --json to archive recognized legacy search/navigation
 clutter and ineligible design captures. Preserve the returned recovery manifest. Reacquire missing
 evidence and rebuild/recheck dependent outputs; never rewrite old judgment hashes.
-Separate acquisition immediately: ref add uses --lane domain or --lane design; each add-batch spec
-has lane. PNGs and native metadata stay in refs/domain/ or refs/design/ respectively. Use distinct
-component names across lanes. Imported app/pin images stay in refs/design/fragments/.
+Separate acquisition immediately: domain work uses signed `ref navigate --lane domain`
+task text/links under `.omd/discovery/domain/observations/`, never `ref add` PNGs. Design
+`ref add` uses --lane design and each design add-batch spec sets `lane: design, shot: true`.
+Selected-route captures first stay as
+unapproved whole-image candidates in `.omd/discovery/design/candidates/`, not refs/design/.
+Inspect the candidate path returned by the CLI and follow the `work-next` review-candidates
+action. Exclude visibly unsuitable sources with a capture-bound reason when a signed visit
+permits it. Run `omd ref direction-review --json` until `complete` is true: the host reviews
+fresh candidates in signed, byte-bounded batches without cropping or shrinking originals.
+Only an authenticated `direction` copies byte-identical capture JSON and PNG to refs/design/.
+`support` and `reject` remain diagnostic candidates, not visual-direction families. Use
+distinct component names across lanes. Imported app/pin images stay in refs/design/fragments/.
 For app screenshot/pin entries, open the entry and trace its original source when available. Use
 ref import-image for lawful image-only observations; gallery chrome is not the app's DOM and a
 screenshot proves no interaction. Label concept versus released screen and preserve those limits.
@@ -149,27 +181,34 @@ supply references to continue. A missing search/browser capability is a precise 
 Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
 owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
 --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
-research-check --json` to pass. Each current v7 source and discovery entry binds the PNG evidence plus a
-native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
+research-check --json` to pass. Each current v8 domain source binds signed task text/link JSON without PNG;
+retained design sources and discovery entries bind native-resolution PNG plus native capture JSON. A gallery homepage is not an inspected item. Different gallery/source
 URLs require that source URL in the gallery's captured outbound links. Do not substitute an
 unrelated design-system capture or edit native acquisition metadata to make the gate pass.
-Each design source also requires discovery URL/kind/free access/qualityReason. Current v7 research
-retains at least two visual-direction sources from independent original service families and distinct
-inspected gallery items, with different PNG bytes. Both must participate in the board; repeated
-pages, crops, aliases or capture names from one product count once.
-Domain and design use independent service hosts and pixels; do not recapture the domain service
-under another name, path or crop for visual direction. Use free public Pinterest, Dribbble,
-Behance, Mobbin, Page Flows or website-gallery entries; UI Bowl's paid MCP is not required.
+Each design source also requires discovery URL/kind/free access/qualityReason. Current research
+retains decision-relevant visual-direction sources from independently inspected finished products
+or gallery items. Every selected direction participates in the board; repeated
+pages, legacy crops, aliases or capture names from one product count once.
+Domain and design use independent service hosts; do not recapture a domain service
+under another name, path or crop for visual direction. Inspect finished public product screens first;
+Pinterest, Dribbble, Behance, Mobbin, Page Flows and website galleries can provide fallback leads.
+UI Bowl's paid MCP is not required.
 Every gallery item page is discovery provenance, not retained wrapper chrome: follow its observed
 original when present, or use ref import-image for the exact UI image and declare its
 screenshot-only limits. The discovery entry must
-match a supported gallery item URL, not a service page labelled app-gallery. If access is blocked,
+match an actually visited finished product or a supported gallery item URL; never label a service
+page app-gallery. If access is blocked,
 try another provider; no inspected visual source means incomplete research, not domain fallback.
-Inspect the actual images and declare visualRole (visual-direction or component-support) and
+Before requesting admission, reject obviously weak, dated, empty or obscured whole captures.
+Benefit information directories and government help articles are domain evidence, not a visual
+shortcut. Broaden English component/mechanism searches across unrelated finished products when
+comparable-service pixels lack aesthetic excellence. Record the visible composition and hierarchy
+worth emulating; readability and subject relevance alone are not design-direction qualifications.
+Inspect complete design images; assess aesthetic beauty separately from desktop/mobile usability and task fit. Declare visualRole (visual-direction or component-support) and
 visualAssessment (composition, typography, density, imagery, transfer, avoid). Every board
 candidate must use a visual-direction source; component documentation alone cannot qualify.
 Every visual piece must bind a current qualified source identity and PNG; one gallery piece cannot
-legitimize additional domain/legacy pieces. Inspect ref list admission results before reuse.
+legitimize additional domain/legacy pieces. Inspect the full-size pixels yourself and explicitly propose or reject their visual character and composition. For visual-direction research author selection.presentation=finished-product-website or finished-app-flow, verdict=emulate, appearanceIntent, reason, and flowCaptures (at least one other retained screen for an app). These remain Scout proposals, not admission. Before retention, board or v8 research publication, the host-owned isolated reference-direction Eye consumes the exact whole native or 2x PNGs. Its immutable source/capture/task-bound `direction` verdict and source-free appearance intent authorize use; `support` or `reject` cannot be promoted by Scout praise. Inspect ref list admission results before reuse.
 Return the generated refs/design/README.md previews to the user and record rejected alternatives
 and screen/task coverage gaps in scout.md. These are accountable judgments, not a beauty score.
 The publisher saves `.omd/refs/domain/research.json` and `.omd/refs/design/research.json` separately and
@@ -194,8 +233,10 @@ not permission to hand-write its outputs. Separate domain/design referenceIds, d
 brief-derived coverage, precise gaps, application, doNotTransfer, reason, and rendered checks.
 Brief-derived has no referenceIds; static images never prove live flows. Both research lanes must
 inform the project, but an individual screen may need an explicit brief-derived decision.
-Show `.omd/reference-application.md` with the retained design previews. Downstream owners receive
-only the source-free projection; omit source identities/URLs/paths from destination decision prose.
+Show `.omd/reference-application.md` with retained design previews. In the source-free domain
+application/reason/gap, distinguish request-backed behavior from unvalidated differentiation
+hypotheses. Downstream owners receive only the source-free projection; omit source
+identities/URLs/paths from destination decision prose.
 Existing current v4 captures can be reused without relabelling; research/domain changes invalidate
 the application and require fresh judgment. These are plans, not user approval or rendered proof.
 For a user-shared resource post, apply `protocol/reference-assembly.md` §User-shared posts and
@@ -211,10 +252,13 @@ permitted but is not operational research. Do not act on a standalone-skill inst
 conflicts with this injected pipeline role, do not spawn another scout, and load no other skill.
 Immediately afterward, your first operational pass is: (1) read only `.omd/domain-brief.json`,
 `.omd/frame.md`, `.omd/acquisition-plan.json`, and the two bounded protocol slices above; (2) run
-the supported browser doctor; (3) inspect each prospective source's actual rendered DOM and visible
-target group before writing the zone-bound manifest, using the supported browser provider or the
-`omd render`/`omd ir` fallback when that provider is unavailable; (4) start `omd ref add-batch`
-only with selectors verified against that inspection. Do not otherwise inspect the installed scout
+the supported browser doctor; (3) when discovery is selected, follow `omd ref work-next --json`
+through observed searches/visits, whole-image candidates, and isolated direction review before
+board authoring; do not replace that sequence with a mandatory initial add-batch.
+For other authorized reference routes, inspect the actual rendered DOM and visible target group
+before a zone-bound manifest; use only selectors verified against that inspection.
+IR display paths are not CSS selectors; native navigation image
+candidates supply actionable plain CSS, not visual-quality judgments. Do not otherwise inspect the installed scout
 skill, every theory/cookbook file, `src/agents`, adapters, CLI implementation, or tests before that
 batch. Do not recursively inventory packs or use image generation. After capture, read only the
 contract material needed to serialize `.omd/scout.md` and `.omd/reference-board.json`. This is an
@@ -252,15 +296,16 @@ handcraft or `curl` its MCP protocol, inspect its implementation to debug transp
 extra ports/providers. Run exactly `oh-my-design browser doctor --json` once; never run the
 unsupported `browser-rs doctor` form. Then group independent searches or native public-list entries with
 `omd ref discover-batch --input <json> --json`, inspect each outcome, and write
-one compact initial batch manifest, and run the initial `omd ref add-batch` once. Every
-entry includes a tight component selector and the framer-owned `slot` it covers. The batch command
-persists that zone binding. After each batch invocation, wait until its tool process reports
-completion, then poll the saved reference inventory until the artifact set is unchanged across
-two consecutive reads before running `omd ref granularity` and `omd ref check`. If a required zone
+the current work pointer again before choosing acquisition or review. Use `omd ref add-batch`
+only when that authorized action calls for independently ready entries. Each entry carries its
+verified scope and framer-owned `slot`; image selectors retain whole originals, and component
+scopes do not authorize pixel crops. After each publisher reports completion, inspect its signed
+receipts and current artifacts before checking retained coverage. Quarantined candidates do not
+count as retained board parts; `omd ref granularity` audits the retained graph. If a required zone
 remains uncovered, is low-signal, or fails its required state, run a bounded, evidence-driven
 changed-strategy repair: every attempt must change at least one admissible dimension (source,
-selector, query lane, or verified state preparation), and must wait for process completion and two
-stable inventory reads before rechecking. Stop when coverage and low-signal/state gates pass, when
+selector, query lane, or verified state preparation), and must observe process completion and
+current publication receipts before rechecking. Stop when coverage and low-signal/state gates pass, when
 no admissible strategy remains, or at the route/host bound; report the exact unavailable source or
 unresolved zone rather than repeating the same failed attempt. Prefer a different tight selector on
 an already reachable, relevant source when the gap came from a source or selector failure.
@@ -369,19 +414,21 @@ Build for coverage, not counts. The fragment inventory is complete only when it 
 non-duplicate evidence for the domain, direct competitors, user/community language,
 typography, voice, relevant motion, every required component, and — per
 `protocol/human-design-loop.md` §Visual reference gallery and concept exploration —
-curated design-gallery visual references. Treat inspiration galleries (Pinterest, Dribbble,
-Mobbin, Behance, Land-book, Godly, Savee, and equivalents) — plus award showcases (Awwwards, FWA, GDWEB) and their case studies — as a first-class visual category:
-gather enough high-craft main-screen references for this domain and register to support a
+finished-product visual references. Treat inspiration galleries (Pinterest, Dribbble,
+Mobbin, Behance, Land-book, Godly, Savee, and equivalents) — plus award showcases (Awwwards, FWA, GDWEB) and their case studies — as fallback discovery channels:
+inspect their observed original released product or complete real app screens, not the
+directory, template-store wrapper or an unshipped UI kit. Gather enough high-craft main-screen evidence to support a
 visual decision, and sanitize each into the canonical multi-axis synthesis (macro layout,
 density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion).
 A gallery visit lives under `.omd/discovery/design/`; an imported UI image lives under
 `.omd/refs/design/fragments/` as Scout-owned evidence. Downstream receives
 its sanitized measured part and may copy the measured layout/treatment with attribution, but never
-the raw pixels. For a Pinterest-like or gallery image, capture the user-selected region through
-browser-rs when needed, retain source-page provenance and rights notes, and import only the resulting local
+the raw pixels. For a Pinterest-like or gallery image, retain the complete native-resolution
+original, with source-page provenance and rights notes. Describe a region of interest in text
+on that whole image; never crop pixels or import a list thumbnail. Import the complete local
 PNG with `omd ref import-image <input.json>` using `omd schema reference-image-fragment`;
 never scrape, hotlink, or ship remote source bytes.
-Capture and use references at part granularity: study the whole reference, then take only the
+Capture and use references at part granularity: retain the whole image, measure and annotate only the
 section or component each of your page's sections needs, and compose the page from parts across
 several references — each section assigned its own best-fit reference part. Tracing one reference's
 whole page layout and section order wholesale is a derivative failure, not fidelity.

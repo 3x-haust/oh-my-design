@@ -4,6 +4,8 @@ import type { ExecutionRequirement } from '../brief/execution-requirements.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import { checkFinalEvidenceV2, type FinalEvidenceV2ManifestVariant } from '../evidence/final-v2.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
+import { requireResolvedNativeReframe } from '../runtime/native-reframe.ts';
 import {
   checkCompletionPublicationPrerequisites,
   CompletionPreflightError,
@@ -28,6 +30,7 @@ export type CompletionPreflightResult = Readonly<{
 
 /** Read-only terminal gate above final-v2; it never publishes, repairs, or mutates evidence. */
 export function checkTerminalCompletion(root: string, invocation: ProjectRunInvocation): CompletionPreflightResult {
+  if (isNativePiInvocation(invocation)) requireResolvedNativeReframe(root, invocation);
   if (existsSync(resolve(root, '.omd/route.json')) && readPersistedRoute(root, invocation).deliveryMode === 'design-only') {
     throw new CompletionPreflightError('design-only route has no implemented application; use omd completion design-check --input .omd/design-handoff.json');
   }

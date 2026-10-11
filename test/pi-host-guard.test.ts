@@ -33,6 +33,33 @@ test('reference work-next is inspection and advance is an owned mutation', () =>
   assert.equal(isMutatingOmdCommand(['ref', 'advance', '--json']), true);
 });
 
+test('managed production refuses general execution and unclassified mutation tools', async () => {
+  const h = harness();
+  assert.equal(await h.emit('tool_call', { toolName: 'eval', input: { code: '1 + 1' } }), undefined);
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  h.pass();
+  for (const toolName of ['eval', 'monitor', 'lsp_rename', 'ast_grep_replace', 'task', 'unregistered_executor']) {
+    assert.equal(blocked(await h.emit('tool_call', { toolName, input: {} })), true, toolName);
+  }
+  for (const toolName of ['read', 'grep', 'find', 'ls', 'todo', 'create_goal', 'get_goal', 'update_goal', 'web_search', 'webfetch', 'lsp_diagnostics']) {
+    assert.equal(await h.emit('tool_call', { toolName, input: {} }), undefined, toolName);
+  }
+  assert.equal(h.calls.length, 0);
+});
+
+test('GPT patches can edit owned inputs but not mix in production or publisher records', async () => {
+  const h = harness();
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign Build an app' });
+  const patch = (body: string) => h.emit('tool_call', { toolName: 'apply_patch',
+    toolCallId: 'patch-owned', input: { input: `*** Begin Patch\n${body}*** End Patch\n` } });
+  assert.equal(await patch('*** Add File: .omd/.cache/first.json\n+{}\n*** Add File: .omd/.cache/second.json\n+{}\n'), undefined);
+  for (const path of ['src/main.ts', '.omd/route.json', '.omd/.cache/sketches/a/index.html', '../outside.json']) {
+    assert.equal(blocked(await patch(`*** Add File: .omd/.cache/ok.json\n+{}\n*** Add File: ${path}\n+{}\n`)), true, path);
+  }
+  assert.equal(blocked(await patch('*** Update File: .omd/.cache/first.json\n*** Move to: src/main.ts\n@@\n-{}\n+{}\n')), true);
+  assert.equal(blocked(await patch('*** Add File: .omd/.cache/ok.json\n+{}\r*** Add File: src/main.ts\n+{}\n')), true);
+});
+
 test('test-011 bypass: selected-stage failure blocks native write, edit and script-based bash', async () => {
   const h = harness();
   await h.emit('before_agent_start', { prompt: '/skill:omd-ultradesign Build an app', systemPrompt: 'Base' });
@@ -78,13 +105,17 @@ test('an unrelated doctor or schema query does not turn subsequent generic work 
   assert.equal(await h.emit('message_end', { message: final }), undefined);
 });
 
-test('current successful gates allow in-scope writes and preserve final message; plain chat is untouched', async () => {
+test('current successful gates still refuse coordinator source writes; plain chat is untouched', async () => {
   const h = harness();
   assert.equal(await h.emit('message_end', { message: final }), undefined);
   assert.equal(await h.emit('tool_call', { toolName: 'write', input: { path: 'plain.txt' } }), undefined);
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
   h.pass();
-  assert.equal(await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } }), undefined);
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } })), true);
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path: '.omd/.cache/sketches/alpha/index.html' } })), true);
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'apply_patch', input: {} })), true);
+  assert.equal(await h.emit('tool_call', { toolName: 'bash', input: { command: 'npm run build' } }), undefined);
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'bash', input: { command: 'npm run build; node author.js' } })), true);
   assert.equal(await h.emit('message_end', { message: final }), undefined);
   const count = h.calls.length;
   await h.emit('input', { source: 'interactive' });
@@ -95,10 +126,11 @@ test('current successful gates allow in-scope writes and preserve final message;
 
 test('repairable terminal failures stall after three consecutive passes without material evidence, despite source edits', async () => {
   const sent: Array<Parameters<NonNullable<PortablePiApi['sendMessage']>>> = [];
-  const h = harness(async (_command, args) => args[2] === 'production'
+  const h = harness(async (_command, args) => args[2] === 'production' || args[1] === 'maker'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
     : { stdout: JSON.stringify({ blockers: ['copy deck missing'] }), stderr: '', code: 1, killed: false }, (...args) => { sent.push(args); });
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  await h.tool.execute('maker', { args: ['maker', 'run', '--input', '.omd/.cache/maker-input.json'] }, undefined, undefined, { cwd: h.cwd });
   mkdirSync(join(h.cwd, 'src'));
   for (let round = 0; round < 5; round++) {
     const toolCallId = `repair-${round}`;
@@ -121,6 +153,7 @@ test('repairable terminal failures stall after three consecutive passes without 
   }
   assert.equal(sent.length, 3);
   await h.emit('input', { source: 'interactive' });
+  await h.tool.execute('maker-next', { args: ['maker', 'run', '--input', '.omd/.cache/maker-input.json'] }, undefined, undefined, { cwd: h.cwd });
   await h.emit('tool_call', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' } });
   writeFileSync(join(h.cwd, 'src/main.jsx'), 'new request bytes');
   await h.emit('tool_result', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' }, isError: false });
@@ -143,10 +176,11 @@ test('new material identities, not source byte churn, keep repairs running past 
 
 test('identical writes and successful publisher help do not manufacture repair progress', async () => {
   const sent: unknown[] = [];
-  const h = harness(async (_command, args) => args[2] === 'production' || args[1] === 'frame'
+  const h = harness(async (_command, args) => args[2] === 'production' || args[1] === 'frame' || args[1] === 'maker'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
     : { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false }, m => { sent.push(m); });
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  await h.tool.execute('maker', { args: ['maker', 'run', '--input', '.omd/.cache/maker-input.json'] }, undefined, undefined, { cwd: h.cwd });
   mkdirSync(join(h.cwd, 'src'));
   await h.emit('tool_call', { toolName: 'write', toolCallId: 'seed', input: { path: 'src/main.jsx', content: 'same bytes' } });
   writeFileSync(join(h.cwd, 'src/main.jsx'), 'same bytes');
@@ -163,7 +197,7 @@ test('identical writes and successful publisher help do not manufacture repair p
   assert.equal(sent.length, 3, 'successful no-op activity must not reset the no-progress allowance');
 });
 
-test('id-less source writes do not count as material repair progress', async () => {
+test('id-less coordinator source writes are refused and cannot authorize repair progress', async () => {
   const sent: unknown[] = [];
   const h = harness(async (_command, args) => args[2] === 'production'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
@@ -171,16 +205,15 @@ test('id-less source writes do not count as material repair progress', async () 
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
   mkdirSync(join(h.cwd, 'src'));
   for (let round = 0; round < 5; round++) {
-    await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: `round ${round}` } });
+    assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: `round ${round}` } })), true);
     writeFileSync(join(h.cwd, 'src/main.jsx'), `round ${round}`);
     await h.emit('tool_result', { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false });
-    const held = await h.emit('message_end', { message: final }) as { message: typeof final };
-    if (round >= 3) assert.match(held.message.content[0]?.text ?? '', /OMD_REPAIR_STALLED/);
+    await h.emit('message_end', { message: final });
   }
-  assert.equal(sent.length, 3);
+  assert.equal(sent.length, 0);
 });
 
-test('overlapping id-less writes to one file retain each pending fingerprint', async () => {
+test('overlapping id-less coordinator writes grant no pending source authority', async () => {
   const sent: unknown[] = [];
   const h = harness(async (_command, args) => args[2] === 'production'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
@@ -188,14 +221,14 @@ test('overlapping id-less writes to one file retain each pending fingerprint', a
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
   mkdirSync(join(h.cwd, 'src'));
   writeFileSync(join(h.cwd, 'src/main.jsx'), 'base');
-  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'first' } });
-  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'second' } });
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'first' } })), true);
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'second' } })), true);
   writeFileSync(join(h.cwd, 'src/main.jsx'), 'first');
   await h.emit('tool_result', { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false });
   writeFileSync(join(h.cwd, 'src/main.jsx'), 'second');
   await h.emit('tool_result', { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false });
   await h.emit('message_end', { message: final });
-  assert.equal(sent.length, 1);
+  assert.equal(sent.length, 0);
 });
 
 test('mixed-result overlapping id-less writes grant no ambiguous repair authority', async () => {
@@ -251,16 +284,13 @@ test('authority failures, user aborts and tool-use messages do not trigger autom
 
 test('missing rendered application review enters the progress-driven repair loop only after source work', async () => {
   const sent: unknown[] = [];
-  const h = harness(async (_command, args) => args[2] === 'production'
+  const h = harness(async (_command, args) => args[2] === 'production' || args[1] === 'maker'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
     : { stdout: '', stderr: 'REFERENCE_APPLICATION_REVIEW: .omd/reference-application-review.json is unavailable or changed', code: 1, killed: false }, m => { sent.push(m); });
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'apply-review-plan', '--json'] } });
   assert.equal(await h.emit('message_end', { message: final }), undefined);
-  mkdirSync(join(h.cwd, 'src'));
-  await h.emit('tool_call', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' } });
-  writeFileSync(join(h.cwd, 'src/main.jsx'), 'application source');
-  await h.emit('tool_result', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' }, isError: false });
+  await h.tool.execute('maker', { args: ['maker', 'run', '--input', '.omd/.cache/maker-input.json'] }, undefined, undefined, { cwd: h.cwd });
   for (let attempt = 0; attempt < 4; attempt++) await h.emit('message_end', { message: final });
   assert.equal(sent.length, 3);
 });

@@ -1,10 +1,26 @@
 ---
 name: sketch
-description: "Produces one isolated, low-fidelity structural candidate from real copy."
+description: "Produces one isolated visual candidate from approved contracts and real copy."
 model: inherit
 effort: medium
 ---
 
+[native-pi-maker] Native Pi integrated candidates use `omd maker run --input <json> --json`
+with role oh-my-design:sketch, an assigned candidateId and one exact current Candidate axes entry.
+Receive only the host-built source-free task/contracts, owned candidate baseline, current
+evaluator repair lineage and approved first-party material. Return the fixed multi-file source
+handback for `.omd/.cache/sketches/<id>/`; never publish selection, captures or approval.
+Candidate selection remains the coordinator's `omd candidate select` publication. Revised
+candidates and reframes use another fresh maker run against the newly current contracts.
+For native repair of the same governing candidate, keep its candidateId and owned paths:
+the host supplies existing source, authenticated repair criteria and the exact reviewed
+first-party captures as repair baselines. Inspect those pixels alongside the mapped slot
+and viewport findings; they are rejected/current work to improve, not approved targets.
+Preserve successful relationships while repairing failures. A new id is a new exploration,
+not a way to discard repair history. Raw external reference images remain forbidden.
+No source-aware parent history, raw-reference recovery, omd-study production or same-session
+fallback is permitted. Existing filesystem directions below apply to other hosts; native Pi
+receives these inputs through its sole evidence tool instead.
 Read `omd pack protocol/human-design-loop.md --section "Blindness and isolation"`,
 `--section "Greenfield authenticity"`, and
 `--section "Divergence and checkpoints"`, once, and obey that isolation boundary. Never read the
@@ -15,7 +31,12 @@ composition contract's Candidate axes section. The contracts contain approved de
 alignment, density, focal hierarchy, form, media or alternate mental-model carrier,
 responsive, type-role, family, weight, size/measure, and wrapping constraints, without
 source rationale, rejected alternatives, URLs, or authorship.
-Do not read the full type proof, another candidate, reference rationale, raw screenshots,
+When provisional-source-study is selected, also receive its current source-free projection
+and exact named first-party HTML/desktop/mobile renders. Inspect those images; they are a
+provisional visual seed, not another candidate or aesthetic approval. Preserve their actual
+character while applying the approved copy/type/composition, rather than replacing it with
+default controls or a verbal approximation. Never read private study sets or role receipts.
+Do not read the full type proof, another candidate, reference rationale, raw external screenshots,
 or production files. Write only `.omd/.cache/sketches/<id>/`.
 
 [greenfield-authenticity:sketch-consumer] For a prompt-only greenfield product, use only
@@ -25,27 +46,40 @@ metadata. A quiet product candidate proves distinction through work-object anato
 hierarchy, density, prerequisite order, feedback, and real mobile recomposition; it does
 not add a motif, decorative carrier, hero, or static template break to look designed.
 
-In the single bounded replacement round, start in a fresh context with a fresh anonymous id.
+For non-native structural exploration's single bounded replacement round,
+start in a fresh context with a fresh anonymous id.
 Receive the same approved contracts and assigned axis plus only your own sanitized visible
 failure and acceptance criteria. Never receive or infer numeric scores, the prior candidate
 render/source, another candidate or render, or candidate/selector rationale. Produce one
 replacement; do not revise it through another retry round.
 
-Build a renderable candidate using the real copy deck: semantic regions,
-representative data density, and structural boxes. When the contract's surface grammar is
+Build a renderable candidate using the real copy deck: semantic regions and representative
+data whose meaning, length, relationships and priority shape the composition. When the contract's surface grammar is
 `product`, sketch the work surface: the work object (table, queue, canvas, form) at
 realistic row/item density in the first viewport, the shell/navigation region, and the
-structural footprint of the spine's reachable states (empty, error, loading) as grayscale
-zones — never a hero band the contract rejected. Preserve the approved typography roles
+spine's applicable reachable states (empty, error, loading) at the fidelity selected below.
+Use grayscale zones only in explicit structural mode, never as the default product finish
+and never as a hero band the contract rejected. Preserve the approved typography roles
 and both contracts exactly; vary only the assigned structural axis. Realize that axis as its named
-macro-layout family — a genuinely different top-level spatial organization, never a cosmetic reskin of
+macro-layout family within the contract's preserved reference relationships — a genuinely different
+top-level spatial organization when that decision remains open, never a cosmetic reskin of
 the default single-column stack (the same stacked flow at a different margin, column width, type scale,
 or spacing is not a candidate, it is the divergence failure). Preserve the dominant
+reference-grounded grouping, containment, relative scale and rhythm, not only generic information
+hierarchy. A settled single-candidate direction does not require invented macro divergence.
+Concrete source-free reference-fidelity repair criteria are constraints on your own replacement;
+do not replace them with general usability improvements or weaken them to make the candidate pass.
+Keep distinct task states independently reachable. A collection overview and an expanded editor
+need not fit into the same first viewport. Return the exact local actions and visible assertions
+for the coordinator to capture each required complementary state at both fixed viewports.
+Missing-state evidence calls for the matching capture, not compressed content, a permanently
+expanded form, invented rows, or weakened visual criteria. State names alone are not observations.
+Preserve the dominant
 anchor's morphology and value/proof/CTA relationship at both viewports. A visible CTA and
 predictable path to completion proves reach; do not crowd the first viewport with the
 terminal form/control surface or treat its visibility as an advantage. Represent the
 lawful mechanism carrier, or the approved alternate carrier and limitation, with enough
-grayscale structure to judge its functional relationship. Do not invent, replace,
+visible structure to judge its functional relationship. Do not invent, replace,
 or tune a new type scale or composition recipe to make a candidate look stronger.
 Follow the composition's explicit content-to-treatment assignments; do not promote every H1
 to the largest proved treatment. A neutral type specimen alone does not establish the page's
@@ -55,13 +89,16 @@ weight, or measure. Existing owner proof and fresh rendered selection still appl
 [design-quality-contract:v1] When the brief's `designQuality.candidateMode` is
 `integrated-visual`, realize the composition contract's approved aesthetic thesis, colour
 roles, typography, optical hierarchy, state surfaces, and responsive finish at reviewable
-fidelity. Every candidate must differ in macro composition while remaining a complete,
-desirable product direction; do not submit an unfinished wireframe whose plainness hides
+fidelity. In an exploration set, candidates differ in the unresolved macro relationship;
+a settled single-candidate direction instead preserves that relationship through refinement.
+Each remains a complete, desirable product direction; do not submit an unfinished wireframe whose plainness hides
 aesthetic risk. Beauty/desirability and hierarchy/composition must each reach score 4;
 the other four axes must each reach score 3. A candidate capped at 3 by rectangular-rule
 monoculture, repeated equal containers, cramped labels, weak negative-space composition,
 or generic admin-tool finish is ineligible even when its task flow is correct. When the mode
-is `structural`, stay grayscale and low fidelity. In structural mode: No production edits, colour
+is `structural`, stay grayscale and low fidelity for that explicitly bounded study only. New routes
+default to integrated visual candidates even for restrained products; restrained means deliberate
+quiet expression, not deferred typography, colour or finish. In structural mode: No production edits, colour
 direction, motion, polished or decorative graphics, or persuasive rationale. Neither mode
 permits production edits, unapproved colour direction, decorative invention, or persuasive
 rationale. Motion also remains forbidden unless the task contains both

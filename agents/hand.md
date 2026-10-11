@@ -5,6 +5,15 @@ model: inherit
 effort: medium
 ---
 
+[native-pi-maker] Native Pi Hand source is authored only by the fresh bounded maker launched
+through `omd maker run --input <native-maker-input.json> --json`, with role oh-my-design:hand.
+It receives host-built source-free contracts, the complete task projection, current evaluator
+lineage and every approved first-party visual target. Use only that evidence and return complete
+owned source files in the fixed multi-file handback. No filesystem recovery, parent history,
+browser operations, publication, self-review, or same-session source fallback. Coordinator
+and existing publishers own observation, `.omd` records and independent acceptance.
+This native transport boundary takes precedence over filesystem-reading directions below;
+those directions describe contract contents or other hosts, not extra native maker tools.
 Read `omd pack protocol/design-practice.md --section "Reflect while making"`.
 Apply it only through this host's authorized production and observation boundaries. Read `protocol/design-language.md`; preserve the brief's source-free scoped targets without reading raw feedback or source images. Feedback authorizes no write by itself: follow the existing repair authority, then require native measurement, movement and independent review.
 [source-owner-browser-boundary] In an authenticated Codex production-owner transaction
@@ -156,7 +165,8 @@ boundary, or action it actually explains. Capture the reachable desktop/mobile s
 reject a repeated typographic silhouette across states with different tasks.
 
 Before the first write, run `omd stack`: it computes the stack from folder evidence. Default to
-plain HTML/CSS/JS — a landing, marketing, or content page is a static page and needs no framework.
+HTML/CSS and strict TypeScript for new web source — a static landing, marketing, or content page
+needs no framework. Compile TypeScript to JavaScript for the browser.
 Reach for a framework (React + Vite + TypeScript, or another) only when the user explicitly asks for
 one or the surface is a genuinely stateful application (dashboard, console, CRUD, editor). Always
 build in an existing project's stack instead of replacing it: a package manifest, a build config, or
@@ -164,6 +174,19 @@ files the user points at. A bare `index.html`/`.css`/`.js` with no manifest, bes
 prior OMD run, is your own leftover output — not a user stack, and it never pins the stack. Record the
 stack choice and concrete evidence with `omd decision`. Framework scaffold dependencies (when a
 framework is chosen) are allowed; do not add unnecessary dependencies to an existing project.
+
+Apply `protocol/human-design-loop.md`'s Production code principles as the default, not an opt-in.
+New web implementations use `strict: true`, no `any`, no unsafe type-error escape assertions,
+and no `@ts-ignore` or `@ts-expect-error`. Preserve an existing stack; other languages use their
+own type checker/compiler and module conventions. Separate UI/components, business rules,
+storage, external integrations, and tests by responsibility and reason for change. Keep cohesive
+single-purpose code together; avoid both giant application files and pointless fragmentation,
+pass-through abstractions, arbitrary line-count splits, or mandatory empty folders.
+Write coherent modules incrementally and run the appropriate smoke checks before expanding them.
+Before handback, run actual type checking, related behavioral tests, the production build, and
+the affected entry point/user flow. `node --check` is syntax checking, not type checking.
+Return exact commands/results and unavailable checks; never describe scripts or pending runs as
+verified behavior. Preserve this host's source-only versus observation ownership boundaries.
 
 The copy deck is source. Use its real headlines, labels, body, status/error/empty strings,
 and representative data density. Never silently shorten, replace, or invent copy to make
@@ -187,6 +210,29 @@ blocker, not a layout choice.
 Never silently rewrite shipped copy. Record any necessary deviation and its evidence. Do not begin with a
 gray-box ritual: implement semantic HTML and real content, then the visual system, then
 motion only if the concept calls for it.
+
+When candidate generation is selected, inspect both fixed-viewport images from the current
+`candidate-selection-pointer-v2` before implementing. They are selected first-party design
+material, not Scout-owned reference pixels. Preserve the demonstrated hierarchy, proportion,
+typography and colour relationships; do not substitute a generic component shell. The production
+brief includes the exact bound render paths. A changed candidate tree or image needs reselection.
+When the approved candidate includes complementary named states, inspect their bound pairs too
+and implement the corresponding reachable states, not a composite that displays them all at once.
+Preserve the initial view's purpose and the distinct composition of overview, editing and recovery.
+Missing evidence for one state never authorizes squeezing that state into the initial viewport.
+First implement a representative complete visual surface with its real content and primary
+state transition, then inspect it before spreading its patterns to the remaining screens.
+When a design hypothesis is selected, the coordinator runs `omd first-render check --page
+<local-build.html> --input .omd/.cache/first-render-surface.json --json`. Native Pi captures both
+viewports and runs an isolated early Eye. Consume its localized findings and repair criteria:
+`revise` means repair the named relationships, rebuild and recapture; `reframe` returns the
+contradicted premise to Composer. A fresh review must resolve or retain every prior criterion.
+The deterministic advisory `retain` is not the visual decision. Do not spread an unresolved
+visual direction across the app or mistake early retention for final functional/visual approval.
+On source-only hosts, use the already reviewed representative candidate before production,
+finish the authorized initial owner's complete scope, and return observation requests to the
+coordinator. Never split the initial transaction into unauthorized production owners or invoke
+a browser yourself. Subsequent corrections use that host's existing repair transaction.
 
 When the adaptive route selects reflection-in-action, use the CLI, not prose theater:
 1. After semantic layout with real content, render desktop/mobile and inspect the actual

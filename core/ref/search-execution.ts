@@ -155,7 +155,7 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     await withAcquisitionDeadline({ budgetMs: SEARCH_BUDGET_MS, phase: 'reference search' }, async (scope: AcquisitionDeadlineScope) => {
     networkProxy = scope.own(await createPublicNetworkProxy());
     try {
-    context = scope.own(await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
+    context = scope.own(await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2, serviceWorkers: 'block', acceptDownloads: false,
       proxy: { server: networkProxy.server } }));
     await disableUnproxiedRealtimeTransports(context);
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
@@ -170,7 +170,11 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     capture = { path: `.omd/discovery/${input.lane}/search-${hash(captureBytes)}.png`, sha256: hash(captureBytes) };
     links = observation.links;
     results = observation.results;
-    const challenge = searchChallengeReason(observation.body);
+    // Google's /sorry/ redirect and HTTP 429 are protocol evidence of a challenge;
+    // page prose is not a trustworthy semantic signal for access classification.
+    const googleChallenge = new URL(input.url).hostname === 'www.google.com'
+      && (new URL(finalUrl).pathname.startsWith('/sorry/') || httpStatus === 429);
+    const challenge = googleChallenge ? 'Google search challenge; hand off to the consented browser user or use public search fallback' : null;
     const gallery = gallerySearchProvider(input) !== null;
     const httpOk = httpStatus === 200;
     status = challenge !== null ? 'blocked' : !httpOk ? 'http-error'
@@ -258,7 +262,9 @@ export async function executeUserBrowserSearch(value: unknown, writer: ProjectWr
         links = []; results = []; return;
       }
       status = 'page-observed';
-      image = (await page.screenshot()).buffer;
+      const shot = await page.screenshot();
+      if (shot.width !== 2560 || shot.height !== 1800) throw new Error('user-browser search capture requires 2x pixels; use the dedicated OMD profile for 1x browsers');
+      image = shot.buffer;
     });
   } catch (caught) { status = 'navigation-error'; error = `user-browser: ${caught instanceof Error ? caught.message : String(caught)}`.slice(0, 4096);
     finalUrl = null; image = null; links = []; results = []; }
@@ -299,7 +305,7 @@ export function readSearchExecution(root: string, value: unknown, lane: Lane): S
   }
   if (execution.capture) {
     const image = decodePng(read(execution.capture));
-    if (image.width !== 1280 || image.height !== 900) return fail('search capture viewport differs');
+    if (!([1280, 2560].includes(image.width) && image.height === image.width * 900 / 1280)) return fail('search capture viewport differs');
   }
   return execution;
 }

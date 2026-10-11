@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { diagnoseAdaptiveRouteInput } from '../core/route/adaptive-flow.ts';
 import {
   ADAPTIVE_ROUTE_RECORD_SCHEMA,
   ADAPTIVE_STAGE_GRAPH,
@@ -130,7 +131,7 @@ test('medical new-product work keeps safety, UX, evidence, and review while pres
     'omd-framer', 'omd-scout', 'omd-composer', 'omd-sketch', 'omd-writer', 'omd-hand', 'omd-eye',
   ]);
   assert.deepEqual(routed.strategy.stages, [
-    'domain', 'frame', 'content-grain', 'scout', 'reference-board', 'reference-selection', 'safety-validation', 'copy',
+    'domain', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board', 'reference-selection', 'safety-validation', 'copy',
     'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review',
   ]);
   assert.ok(routed.strategy.methods.includes('design-strategy-safety-recovery'));
@@ -276,6 +277,36 @@ test('production, linked evidence, independent review, scope, and model ownershi
   assert.deepEqual(pathsOutsideScope(routed, ['src/copy/Confirmation.tsx', '.omd/route.json', 'LICENSE']), ['LICENSE']);
 });
 
+test('missing selected-stage owners identify roles to add without changing selected work', () => {
+  const input = changed('medical-new-product', (value) => {
+    const strategy = Reflect.get(value, 'strategyDecision');
+    assert.ok(typeof strategy === 'object' && strategy !== null);
+    Reflect.set(strategy, 'roles', ['omd-framer', 'omd-scout', 'omd-writer', 'omd-hand', 'omd-eye']);
+  });
+  const before = JSON.stringify(input);
+  assert.throws(() => routeAdaptiveFlow(input), error => {
+    assert.ok(error instanceof AdaptiveRouteError);
+    assert.equal(error.code, 'MODEL_OWNER_REQUIRED');
+    const requiredRoles = Reflect.get(error, 'requiredRoles');
+    assert.ok(Array.isArray(requiredRoles) && requiredRoles.length > 0);
+    assert.ok(requiredRoles.includes('omd-composer'));
+    return true;
+  });
+  assert.equal(JSON.stringify(input), before);
+  const diagnostic = diagnoseAdaptiveRouteInput(input).find(item => item.code === 'MODEL_OWNER_REQUIRED');
+  assert.ok(diagnostic !== undefined && diagnostic.requiredRoles !== undefined);
+  assert.ok(diagnostic.requiredRoles.includes('omd-composer'));
+  assert.ok(typeof input === 'object' && input !== null);
+  const strategy = Reflect.get(input, 'strategyDecision');
+  assert.ok(typeof strategy === 'object' && strategy !== null);
+  const roles = Reflect.get(strategy, 'roles');
+  assert.ok(Array.isArray(roles));
+  const stagesBefore = JSON.stringify(Reflect.get(strategy, 'stages'));
+  Reflect.set(strategy, 'roles', [...roles, ...diagnostic.requiredRoles]);
+  assert.doesNotThrow(() => routeAdaptiveFlow(input));
+  assert.equal(JSON.stringify(Reflect.get(strategy, 'stages')), stagesBefore);
+});
+
 test('execution waves enforce actual scout-writer concurrency and closed dependency-safe ownership', () => {
   const routed = routeAdaptiveFlow(fixture('medical-new-product'));
   assert.deepEqual(routed.strategy.executionWaves[1], {
@@ -360,7 +391,7 @@ test('strategy roles and stages are closed, duplicate-free, and dependency order
     assert.ok(typeof strategy === 'object' && strategy !== null);
     Reflect.set(strategy, 'stages', [
       'domain',
-      'frame', 'scout', 'reference-board', 'safety-validation', 'composition',
+      'frame', 'acquisition', 'scout', 'reference-board', 'safety-validation', 'composition',
       'candidate-generation', 'copy',
       'production', 'browser-evidence', 'independent-review',
     ]);
@@ -379,6 +410,7 @@ test('every topological permutation passes and every dependency inversion fails'
       const strategy = Reflect.get(input, 'strategyDecision');
       assert.ok(typeof strategy === 'object' && strategy !== null);
       const expanded = [...order];
+      expanded.splice(expanded.indexOf('frame') + 1, 0, 'acquisition');
       expanded.splice(expanded.indexOf('scout') + 1, 0, 'reference-board');
       expanded.splice(expanded.indexOf('reference-board') + 1, 0, 'reference-selection');
       expanded.splice(expanded.indexOf('composition') + 1, 0, 'candidate-generation');
@@ -389,11 +421,11 @@ test('every topological permutation passes and every dependency inversion fails'
       && order.indexOf('composition') > order.indexOf('frame')
       && order.indexOf('composition') > order.indexOf('scout')
       && order.indexOf('composition') > order.indexOf('copy');
-    if (topological) {
+    if (topological) valid += 1;
+    if (order.indexOf('frame') < order.indexOf('scout')) {
       assert.doesNotThrow(() => routeAdaptiveFlow(value), order.join(' -> '));
-      valid += 1;
     } else {
-      assert.doesNotThrow(() => routeAdaptiveFlow(value), order.join(' -> '));
+      routeError(() => routeAdaptiveFlow(value), 'ADAPTIVE_STAGE_ORDER_INVALID');
     }
   }
   assert.equal(valid, 72);

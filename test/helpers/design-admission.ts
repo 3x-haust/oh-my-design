@@ -67,7 +67,7 @@ export function designAdmissionFixture(t: TestContext) {
       sources: [domain, domainTwo, domainThree].map((entry, index) => ({ id: `domain-${index + 1}`, url: entry.source, observedAt, decision: 'Task order', finding: 'Review before submission', evidence: entry.evidence, capture: entry.capture })), benchmarkSha256: null },
     designReference: { queries: ['visual task'], searches: [testSearchReceipt(root, 'design', 'visual task', [gallery.source])],
       sources: [{ id: 'visual', url: source.source, observedAt, decision: 'Visual hierarchy', finding: 'Heading anchors work', evidence: source.evidence, capture: source.capture,
-        visualRole: 'visual-direction', visualAssessment: { composition: 'Anchored task', typography: 'Heading contrast', density: 'Compact controls', imagery: 'None', transfer: 'Task hierarchy', avoid: 'Branding' },
+        visualRole: 'visual-direction', visualAssessment: { selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Confident task hierarchy', reason: 'Inspected complete site', flowCaptures: [] }, composition: 'Anchored task', typography: 'Heading contrast', density: 'Compact controls', imagery: 'None', transfer: 'Task hierarchy', avoid: 'Branding' },
         discovery: { url: gallery.source, kind: 'app-gallery', access: 'free', qualityReason: 'Task remains legible.', evidence: gallery.evidence, capture: gallery.capture } }],
       boardSha256: admissionHash(readFileSync(boardPath)) },
   };
@@ -79,7 +79,7 @@ export function designAdmissionFixture(t: TestContext) {
       id: 'visual-two', url: secondSource.source, observedAt, decision: 'Workspace proportion',
       finding: 'A broad task region stays distinct from supporting evidence.',
       evidence: secondSource.evidence, capture: secondSource.capture, visualRole: 'visual-direction',
-      visualAssessment: { composition: 'Broad task region with narrow support', typography: 'Task title leads compact labels',
+      visualAssessment: { selection: { presentation: 'finished-product-website', verdict: 'emulate', appearanceIntent: 'Spacious primary work region', reason: 'Inspected complete site', flowCaptures: [] }, composition: 'Broad task region with narrow support', typography: 'Task title leads compact labels',
         density: 'Spacious primary task with dense evidence rows', imagery: 'No decorative imagery',
         transfer: 'Adapt task-to-evidence proportion', avoid: 'Do not copy branding or content' },
       discovery: { url: secondGallery.source, kind: 'app-gallery', access: 'free',

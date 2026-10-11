@@ -17,6 +17,7 @@ export { checkNativeFinalReview } from './native-final-review-state.ts';
 import { authorizeNativePiPayload, getNativePiRun } from './native-pi-run.ts';
 import { acquireProjectMutationLock, createProjectWriteAdapter, replaceProjectFileAtomically } from './project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
+import { requireResolvedNativeReframe } from './native-reframe.ts';
 
 type Lane = 'blindLane' | 'fidelityLane' | 'protocolLane';
 type Descriptor = Readonly<{ path: string; sha256: string }>;
@@ -42,6 +43,7 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
 }>> {
   const run = getNativePiRun(input.invocation, input.root);
   const root = run.projectRoot;
+  requireResolvedNativeReframe(root, input.invocation);
   const observationSha256s = currentNativeFinalObservations(root).map(({ receipt }) => receipt.sha256);
   const packetFor = (lane: Lane): Buffer => lane === 'blindLane'
     ? finalRenderReviewerPacket({ root, invocation: input.invocation,
@@ -125,6 +127,7 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
 export function finalizeNativeEvidence(input: Readonly<{ root: string; invocation: ProjectRunInvocation }>): Readonly<{ path: string }> {
   const run = getNativePiRun(input.invocation, input.root);
   const root = run.projectRoot;
+  requireResolvedNativeReframe(root, input.invocation);
   checkNativeFinalReview(input);
   const activation = Buffer.from(canonicalJson(input.invocation.activation));
   const activationPath = `.omd/activation/sha256-${hash(activation)}.json`;

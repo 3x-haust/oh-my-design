@@ -7,6 +7,8 @@ import { readPublishedReferenceResearch, validateReferenceResearch, REFERENCE_RE
 import { readResearchDiscoveryRoots } from './discovery-coverage.ts';
 import { readDomainObservation } from './domain-observation.ts';
 import { referenceServiceHost } from './design-discovery-sources.ts';
+import { currentReferenceDirectionSourceContract, requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
+import { loadRefs } from './store.ts';
 
 export const REFERENCE_APPLICATION_SCHEMA = 'reference-application-v2' as const;
 export const REFERENCE_APPLICATION_PATH = '.omd/reference-application.json';
@@ -117,7 +119,7 @@ export function referenceApplicationPlan(root: string, options: Options) {
       researchSha256: current.researchSha256, domainBriefSha256: current.domainBriefSha256,
       screens: current.domain.surfaces.map(surface => ({ surface: surface.name, target: { route: '', state: '' }, domain: draftLane(), design: draftLane(), checks: [] })) },
     evidence: { domain: current.research.domainReference.sources, design: current.research.designReference.sources },
-    limitations: 'Inspect actual images. Fill the input; evidence is for the research owner, not downstream roles. This draft cannot pass apply-check.',
+    limitations: 'Inspect signed domain text/links for functional decisions and actual design images for visual decisions. In each domain application/reason/gap, distinguish request-backed adopted behavior from a proposed specialization awaiting user/task validation; competitor silence is not proof of a market gap. The source-free projection carries those decisions, not source identities. This draft cannot pass apply-check.',
   };
 }
 
@@ -137,12 +139,23 @@ function validate(root: string, application: ReferenceApplication, options: Opti
   if (application.screens.some(row => !surfaces.includes(row.surface))
     || new Set(application.screens.map(row => row.surface)).size !== application.screens.length)
     return fail('application names an unknown or duplicate domain surface');
-  // Omitted surfaces and lanes remain advisory gaps; submitted identities must still be genuine.
+  if (application.screens.length !== surfaces.length) return fail('missing domain surface decision');
   for (const row of application.screens) for (const key of ['domain', 'design'] as const) {
     const sourceIds = new Set(current.research[key === 'domain' ? 'domainReference' : 'designReference'].sources.map(source => source.id));
     if (row[key].referenceIds.some(id => !sourceIds.has(id))) return fail(`${row.surface}/${key}: unknown or wrong-lane reference`);
-    if (key === 'design' && row.design.coverage === 'direct' && !row.design.referenceIds.some(id =>
-      current.research.designReference.sources.some(source => source.id === id && source.visualRole === 'visual-direction'))) return fail(`${row.surface}: support-only evidence cannot claim direct visual coverage`);
+    if (key === 'design') {
+      if (row.design.coverage === 'direct' && !row.design.referenceIds.some(id =>
+        current.research.designReference.sources.some(source => source.id === id && source.visualRole === 'visual-direction'))) return fail(`${row.surface}: support-only evidence cannot claim direct visual coverage`);
+      const sourceContract = currentReferenceDirectionSourceContract(root);
+      if (sourceContract !== null && current.research.schema === 'reference-research-v8') for (const id of row.design.referenceIds) {
+        const source = current.research.designReference.sources.find(item => item.id === id);
+        const reference = source === undefined ? undefined : loadRefs(root, { includeDomain: true })
+          .find(item => item.researchLane === 'design' && item.source === source.url);
+        if (reference === undefined) return fail(`${row.surface}/design: reference admission is missing`);
+        requireReferenceDirectionAdmission(root, reference, sourceContract,
+          row.design.coverage === 'direct' ? 'direction' : 'support');
+      }
+    }
   }
   // Explicit URLs and acquisition paths belong only in the source-bearing record, not decision prose.
   const projection = JSON.stringify(projectReferenceApplication(application)).toLowerCase();

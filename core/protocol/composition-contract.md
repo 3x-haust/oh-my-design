@@ -50,6 +50,21 @@ type-proof, or scout-summary change invalidates the contract; rerun composer and
 The coordinator obtains these current file digests with `omd hash <.omd/artifact-path> --json`
 and supplies them with the permitted input packet. A digest is identity, not evidence of review.
 
+When a resolved design-language translation projects scoped targets, add the auxiliary
+`## Design language targets` section with exactly one literal row per current target:
+`- id | route | selector | metric | min..max`. Copy each value from the current projection;
+do not invent or adjust ranges to pass validation. Do not put code fences, table headers,
+explanations or duplicate rows inside that section. These rows bind existing decisions,
+not aesthetic approval. With no projected targets, omit the section. To read the complete
+language protocol, use `omd pack protocol/design-language.md` without `--section`.
+
+When the current route selects `provisional-source-study`, also record exactly one
+`- Source study SHA-256: <64 lowercase hex>` line using the `sha256` from
+`omd study show --json`. Inspect the projection's named first-party source and desktop/mobile
+renders, not only its digest. Missing, changed or invalid selected study data makes composition
+stale. Omit this line when the method is not selected. The study remains a provisional visual
+seed; its selection is not independent approval or permission to override approved copy.
+
 ## Experience spine
 
 For a `marketing` or `editorial` surface: for every section, record the entering user
@@ -124,8 +139,20 @@ production evidence still renders 1280x900 and 390x844.
 
 ## Candidate axes
 
-Define at least two structurally divergent candidate axes that can satisfy the same spine, copy,
-type, and acceptance criteria. Genuine divergence is a different macro-layout family — the top-level
+New route contracts select `integrated-visual` for restrained, balanced and showpiece expression.
+Build the representative surface's approved type, colour, proportion and containment together so
+selection can judge the composition's actual visual character. Structural studies remain useful
+for bounded uncertainty, not a substitute for the production direction. Selected first-party
+desktop/mobile renders travel to Hand through the current candidate pointer, not as raw references.
+
+Before naming axes, record the unresolved design relationship, candidate count and reason.
+When structure is unsettled, define independent alternatives that can satisfy the same spine,
+copy, type and acceptance criteria. When a current selected target already settles the relationship,
+one faithful candidate is valid: record what is fixed and which remaining risks the render tests.
+A simple brief alone is not a settled target. Do not invent an unused alternative or reopen the
+chosen topology to satisfy a candidate quota.
+
+Genuine divergence is a different macro-layout family — the top-level
 spatial organization changes (single-column stack, asymmetric split, multi-column or modular grid,
 sidebar/rail, centered canvas, full-bleed alternating bands) or the dominant anchor's placement and
 reading path changes — not the same layout at different sizes. Axes vary spatial relationships, not
@@ -133,6 +160,13 @@ content truth. Two candidates that share one macro-layout family and differ only
 column width, type scale, or the vertical spacing of the same single-column stack — are one axis, not
 two, and are a divergence failure, not a candidate set. Name each axis's macro-layout family so the
 difference is legible before any sketch is built.
+
+The divergence criteria above apply to exploration sets, not refinement of a settled target.
+Compare complete representative states with the same actual content and behavior requirements.
+Do not make one candidate look cleaner by deleting long text, difficult records or required actions.
+Once selected, refinement preserves the governing relationships and changes only the implicated
+decisions. A new governing relationship returns to the composition owner as exploration; it is not
+a silent repair. A saved candidate and a rendered candidate are not automatically a selected one.
 
 ## Colour roles
 

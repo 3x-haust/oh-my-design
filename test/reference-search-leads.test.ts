@@ -22,14 +22,14 @@ const input = { schema: 'reference-search-leads-v1', lane: 'domain', query: 'Kor
 test('rendered Google organic results in the user browser produce a signed, integrity-checked search receipt', async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-google-search-'));
   const query = 'benefits'; const url = `https://www.google.com/search?q=${query}`;
-  const png = testPng(); let stopped = 0; let navigated = 0;
+  const png = testPng(2560, 1800); let stopped = 0; let navigated = 0;
   const driver = { userBrowserBridgeDoctor: async () => ({ ready: true, cli: { installed: true }, daemon: { running: true },
     identification: { needsChoice: false, candidates: [], defaultBrowser: null }, primary: null, browsers: [] }),
     userBrowserBridgeOnboard: async () => ({ ready: true }), connectUserBrowserSession: async () => ({
     resize: async () => {}, navigate: async () => { navigated++; },
     evaluate: async (expression: string) => ({ ok: true, value: expression.includes('location.href')
       ? url : { body: 'Search results', results: [{ url: 'https://example.com/benefits', text: 'Benefits finder service' }] } }),
-    screenshot: async () => ({ buffer: png, width: 1280, height: 900, format: 'png' }),
+    screenshot: async () => ({ buffer: png, width: 2560, height: 1800, format: 'png' }),
     requestHelp: async () => ({ outcome: 'cancelled' as const }), stop: async () => { stopped++; },
   }) } as UserBrowserDriver;
   try {

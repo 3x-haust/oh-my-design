@@ -29,10 +29,15 @@ const imagePath = (value: unknown, sha: string): string => {
 export function parseImageFragmentInput(value: unknown): ImageFragmentInput {
   const parsed = record(value, 'input');
   if (['id', 'sha256', 'imagePath', 'schemaVersion'].some(key => Object.hasOwn(parsed, key))) fail('input cannot supply derived fragment authority');
+  if (Object.keys(parsed).some(key => !['inputPath', 'provenance', 'transfer'].includes(key))) fail('input has unknown fields');
   exactKeys(parsed, ['inputPath', 'provenance', 'transfer'], 'input');
+  const source = record(parsed['provenance'], 'provenance');
+  if (Object.keys(source).some(key => !['sourcePage', 'sourceImage', 'captureRegion', 'cropBox', 'licenseStatus', 'rightsNotes', 'capturedAt'].includes(key))) fail('provenance has unknown fields');
+  const provenance = parseImageFragmentProvenance(source);
+  if (provenance.cropBox !== undefined) fail('new references must retain the whole original image; cropBox is legacy read-only');
   return {
     inputPath: localInputPath(parsed['inputPath']),
-    provenance: parseImageFragmentProvenance(parsed['provenance']),
+    provenance,
     transfer: parseImageFragmentTransfer(parsed['transfer']),
   };
 }

@@ -3,13 +3,18 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { refImagePath, saveRef } from '../core/ref/store.ts';
+import { capturePageForRef } from '../core/render/index.ts';
+import { decodePng } from '../core/motion/energy.ts';
 import { validateFunctionalResearch } from '../core/ref/reference-research-functional.ts';
 import { parseReferenceResearch } from '../core/ref/reference-research-parser.ts';
 import { publishReferenceResearch, readPublishedReferenceResearch } from '../core/ref/reference-research.ts';
 import { designAdmissionFixture, ADMISSION_SOURCE_SHA } from './helpers/design-admission.ts';
+import { publishSearchLeads } from '../core/ref/search-leads.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { discoveryBrowser, discoveryFixture } from './helpers/discovery-capture.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { testSearchReceipt } from './helpers/search-execution.ts';
 
 test('three signed functional sources cite observed text, compare the request and record adoption', async t => {
   const root = discoveryFixture(t);
@@ -82,9 +87,73 @@ test('v8 publishes three functional domain sources without domain PNGs and refus
   assert.doesNotThrow(() => publishReferenceResearch(fixture.root, research, options, fixture.writer));
   assert.equal(readPublishedReferenceResearch(fixture.root).schema, 'reference-research-v8');
   assert.equal(existsSync(join(fixture.root, '.omd/discovery/domain/observations')), true);
+  const directKind = structuredClone(research);
+  directKind.designReference.sources[0]!.discovery.kind = 'direct-product';
+  assert.doesNotThrow(() => parseReferenceResearch(directKind));
   const before = readFileSync(join(fixture.root, '.omd/reference-research.json'));
+  const published = ['.omd/refs/domain/research.json', '.omd/refs/design/research.json',
+    '.omd/refs/design/README.md'].map(path => [path, readFileSync(join(fixture.root, path))] as const);
+  const missingDiscovery = structuredClone(research);
+  Reflect.deleteProperty(missingDiscovery.designReference.sources[0]!, 'discovery');
+  assert.throws(() => publishReferenceResearch(fixture.root, missingDiscovery, options, fixture.writer),
+    /REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED/);
+  assert.deepEqual(readFileSync(join(fixture.root, '.omd/reference-research.json')), before);
+  for (const [path, bytes] of published) assert.deepEqual(readFileSync(join(fixture.root, path)), bytes);
   const fabricated = structuredClone(research);
   fabricated.domainReference.sources[0]!.features[0]!.evidence[0]!.quote = 'Unobserved feature';
   assert.throws(() => publishReferenceResearch(fixture.root, fabricated, options, fixture.writer), /REFERENCE_DOMAIN_CITATION_MISMATCH/);
   assert.deepEqual(readFileSync(join(fixture.root, '.omd/reference-research.json')), before);
+
+  const productUrl = fixture.source.source;
+  const productImage = refImagePath(fixture.root, fixture.source.ref);
+  const product = await withBrowser(async browser => {
+    const page = discoveryBrowser(browser, { url: productUrl,
+      html: `<main><h1 id="hero">Application workspace</h1><p>${'Review the current application and prepare the next document. '.repeat(8)}</p><a href="https://visual.example/next">Continue</a></main>` });
+    const visit = await captureReferenceNavigation(page.browser, productUrl, 'design', fixture.writer);
+    const captured = await capturePageForRef(page.browser, productUrl, { width: 1280, height: 900 },
+      { shotOut: productImage, adapter: fixture.writer, selector: '#hero', viewportShot: true });
+    const record = saveRef(fixture.root, { ...fixture.source.ref, capturedAt: new Date().toISOString(),
+      acquisition: captured.acquisition }, fixture.writer);
+    return { visit, record };
+  });
+  const pixels = decodePng(readFileSync(productImage));
+  assert.deepEqual([pixels.width, pixels.height], [2560, 1800]);
+  const direct = structuredClone(research);
+  const design = direct.designReference.sources[0]!;
+  design.evidence = fixture.receipt(productImage);
+  design.capture = fixture.receipt(product.record);
+  design.discovery = { ...design.discovery, url: productUrl, kind: 'direct-product',
+    evidence: product.visit.evidence, capture: product.visit.capture };
+  direct.designReference.searches = [testSearchReceipt(fixture.root, 'design', direct.designReference.queries[0]!,
+    [productUrl, direct.designReference.sources[1]!.discovery.url])];
+  assert.doesNotThrow(() => publishReferenceResearch(fixture.root, direct, options, fixture.writer));
+  assert.equal(readPublishedReferenceResearch(fixture.root).designReference.sources[0]?.discovery?.kind, 'direct-product');
+  const directBytes = readFileSync(join(fixture.root, '.omd/reference-research.json'));
+  const directPublished = published.map(([path]) => [path, readFileSync(join(fixture.root, path))] as const);
+  const unsighted = structuredClone(direct);
+  unsighted.designReference.sources[0]!.discovery.capture = unsighted.designReference.sources[0]!.capture;
+  unsighted.designReference.sources[0]!.discovery.evidence = unsighted.designReference.sources[0]!.evidence;
+  assert.throws(() => publishReferenceResearch(fixture.root, unsighted, options, fixture.writer),
+    /REFERENCE_RESEARCH_DIRECT_PRODUCT_PROVENANCE_REQUIRED/);
+  assert.deepEqual(readFileSync(join(fixture.root, '.omd/reference-research.json')), directBytes);
+  for (const [path, bytes] of directPublished) assert.deepEqual(readFileSync(join(fixture.root, path)), bytes);
+  const relabeled = structuredClone(direct);
+  relabeled.designReference.sources[0]!.discovery.kind = 'app-gallery';
+  assert.throws(() => publishReferenceResearch(fixture.root, relabeled, options, fixture.writer),
+    /REFERENCE_RESEARCH_GALLERY_ITEM_REQUIRED/);
+  assert.deepEqual(readFileSync(join(fixture.root, '.omd/reference-research.json')), directBytes);
+  for (const [path, bytes] of directPublished) assert.deepEqual(readFileSync(join(fixture.root, path)), bytes);
+
+  fixture.board.candidates[0]!.pieces.pop();
+  fixture.refreshBoard();
+  const lead = publishSearchLeads(fixture.writer, ADMISSION_SOURCE_SHA, {
+    schema: 'reference-search-leads-v1', lane: 'design', query: direct.designReference.queries[0]!,
+    urls: [productUrl], provider: 'host', tool: 'web_search', observedAt: new Date().toISOString(),
+  });
+  const mixed = { ...structuredClone(direct),
+    designReference: { ...structuredClone(direct.designReference), leads: [lead] } };
+  mixed.designReference.sources.splice(1);
+  mixed.designReference.boardSha256 = fixture.research.designReference.boardSha256;
+  mixed.designReference.searches = [testSearchReceipt(fixture.root, 'design', mixed.designReference.queries[0]!, [], true)];
+  assert.doesNotThrow(() => publishReferenceResearch(fixture.root, mixed, options, fixture.writer));
 });

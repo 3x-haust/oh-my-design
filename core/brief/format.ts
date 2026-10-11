@@ -60,6 +60,13 @@ export function formatBrief(brief: Brief): string {
     ...(brief.designLanguage.copyTone ? ['copy-tone: Writer and CLEAN copy review required; no Hand visual targets'] : []),
     ...brief.designLanguage.targets.map(t => `${t.id}: ${t.role} ${t.route} ${t.selector} ${t.state}/${t.viewport} ${t.metric} ${t.range[0]}..${t.range[1]} ${t.unit}`),
   ]);
+  if (brief.sourceStudy !== undefined) section('provisional visual study', [
+    `selection: ${brief.sourceStudy.sha256} (not independent approval)`,
+    `source: ${brief.sourceStudy.html.path} @ ${brief.sourceStudy.html.sha256}`,
+    ...brief.sourceStudy.renders.map(render =>
+      `${render.viewport.name} ${render.state} ${render.viewport.width}x${render.viewport.height}: ${render.path} @ ${render.sha256}`),
+    ...brief.sourceStudy.unresolvedConstraints.map(constraint => `unresolved: ${constraint}`),
+  ]);
   if (brief.reality !== null) {
     section('reality', [
       brief.reality.mode,

@@ -9,6 +9,7 @@ import omdExtension, { type PortablePiEvent, type PortablePiHook, type PortableP
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { expandedSkillOnly } from './helpers/pi-stage-continuity.ts';
 import { PiRequestBindings } from '../extensions/omd-request-binding.ts';
+import { capturePiRequest } from '../extensions/omd-request-source.ts';
 
 const inputPath = '.omd/.cache/route-input.json';
 const original = `\n# 사용자 기획서\n${'조건과 화면을 빠짐없이 구현한다.\n'.repeat(1000)}리액트로 구현해줘.\n  `;
@@ -30,9 +31,11 @@ function project(t: { after(fn: () => void): void }): string {
 function host(cwd: string, afterExec?: () => void) {
   const hooks = new Map<string, PortablePiHook>();
   const inputs: Array<{ path: string; request: string }> = [];
+  const sent: Array<{ customType?: string; content?: string }> = [];
   let tool: PortablePiTool | undefined;
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {},
+    sendMessage: message => { sent.push(message); },
     registerTool: value => { tool = value; },
     execOwned(command, args, options) { return this.exec(command, args, options); },
     async exec(_command, args, options) {
@@ -45,7 +48,7 @@ function host(cwd: string, afterExec?: () => void) {
     },
   });
   const emit = (name: string, event: InputEvent) => hooks.get(name)?.(event, { cwd });
-  return { emit, inputs,
+  return { emit, inputs, sent,
     async start(request = original) {
       await emit('input', { source: 'interactive', text: `/skill:omd-ultradesign ${request}` });
       await emit('before_agent_start', { prompt: `${expandedSkillOnly()}\n\n${request.trim()}` });
@@ -74,6 +77,35 @@ test('live Pi skill-instruction transport binds the complete original request fo
   assert.equal(existsSync(join(cwd, '.omd/request-source.json')), true);
   assert.equal(bindings.pin(cwd, ['route', 'validate', '--input', inputPath, '--json'])?.request, original);
   bindings.clear();
+});
+
+for (const replacement of [false, true]) {
+  test(`checked continuation refuses ${replacement ? 'a replaced source' : 'a different request digest'}`, t => {
+    const cwd = project(t), bindings = new PiRequestBindings();
+    const prompt = `/skill:omd-ultradesign ${original}`;
+    bindings.receive(cwd, { source: 'rpc', text: prompt });
+    bindings.activate(cwd, prompt);
+    const source = bindings.current(cwd);
+    assert.ok(source);
+    bindings.suspend(cwd);
+    const expected = replacement ? capturePiRequest(cwd, 'Different product').requestSha256 : 'f'.repeat(64);
+    assert.equal(bindings.resume(cwd, expected), false);
+    assert.equal(bindings.classificationGranted(cwd), false);
+    assert.throws(() => bindings.pin(cwd, ['route', 'validate', '--input', inputPath, '--json']), /OMD_REQUEST_BINDING/);
+  });
+}
+
+test('test-047 native skill transport continues missing route even without a legacy owned-work token', async t => {
+  const cwd = project(t), pi = host(cwd);
+  rmSync(join(cwd, inputPath));
+  const request = original.trim();
+  const skill = expandedSkillOnly().replace('<skill name=', '<skill-instruction name=').replace('</skill>', '</skill-instruction>');
+  const expanded = `The user explicitly invoked the "omd-ultradesign" skill. Follow the instructions in <skill-instruction> as binding for this request, while respecting higher-priority instructions.\n\n${skill}\n\n<user-request>\n${request}\n</user-request>`;
+  await pi.emit('input', { source: 'rpc', text: `/skill:omd-ultradesign\n${original}` });
+  await pi.emit('before_agent_start', { prompt: expanded });
+  await pi.emit('message_end', { message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Route input is absent.' }] } });
+  assert.equal(pi.sent.at(-1)?.customType, 'omd-route-entry');
+  assert.equal(JSON.parse(pi.sent.at(-1)?.content?.split('Action packet: ')[1] ?? 'null').writeTool, 'write');
 });
 
 test('Pi validation and publication preserve the full actual request when the authored input is a summary', async t => {

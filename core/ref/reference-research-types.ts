@@ -42,10 +42,13 @@ export type ResearchSource = Readonly<{
   evidence: ResearchEvidence;
   capture: ResearchEvidence;
   visualRole?: 'visual-direction' | 'component-support';
-  visualAssessment?: Readonly<Record<'composition' | 'typography' | 'density' | 'imagery' | 'transfer' | 'avoid', string>>;
+  visualAssessment?: Readonly<Record<'composition' | 'typography' | 'density' | 'imagery' | 'transfer' | 'avoid', string> & {
+    selection?: Readonly<{ presentation: 'finished-product-website' | 'finished-app-flow'; verdict: 'emulate';
+      appearanceIntent: string; reason: string; flowCaptures: readonly ResearchEvidence[] }>;
+  }>;
   discovery?: Readonly<{
     url: string;
-    kind: 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided';
+    kind: 'direct-product' | 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided';
     access: 'free';
     qualityReason: string;
     evidence: ResearchEvidence;

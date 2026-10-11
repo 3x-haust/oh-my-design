@@ -1,4 +1,4 @@
-import { connectUserBrowser } from '../browser/driver.ts';
+import { connectUserBrowser, UserBrowserError } from '../browser/driver.ts';
 import type { UserBrowserDriver, UserBrowserSession } from '../browser/contracts.ts';
 import { publicDiscoveryUrl } from './discovery-record.ts';
 import { browserExpression } from './browser-evaluation.ts';
@@ -23,7 +23,11 @@ export async function openUserBrowserPage(options: Readonly<{
   };
   return {
     engine: 'user-browser',
-    async resize(width, height) { live(); await session.resize(width, height); },
+    async resize(width, height) {
+      live();
+      if (!session.emulate) throw new UserBrowserError('driver-incompatible', 'per-tab 2x viewport emulation is unavailable');
+      await session.emulate({ overrides: { width, height, device_scale_factor: 2, mobile: false } });
+    },
     async navigate(url) {
       live();
       const requested = publicDiscoveryUrl(url);
