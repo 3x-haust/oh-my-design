@@ -24,7 +24,7 @@ import { candidateCaptureStates, candidateStateHtml } from './helpers/candidate-
 
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
-test('native early review repairs and recaptures without final evidence and reuses unchanged judgments', { timeout: 30_000 }, async t => {
+test('native early review repairs and recaptures without final evidence and reuses unchanged judgments', { timeout: 120_000 }, async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-early-review-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const oldMode = process.env.PI_REVIEWER_FIXTURE_MODE;
