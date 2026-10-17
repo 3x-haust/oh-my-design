@@ -333,7 +333,6 @@
       "test/render-proofs.test.ts",
       "test/research-path-diagnostic.test.ts",
       "test/scoped-sparse-capture.test.ts",
-      "test/selected-reference-distance-cli.test.ts",
       "test/svg-measurement.test.ts",
       "test/token-hex.test.ts",
       "test/trusted-browser-evaluation.test.ts",

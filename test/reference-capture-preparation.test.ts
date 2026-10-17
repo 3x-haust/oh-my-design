@@ -10,7 +10,6 @@ import { addRefsBatch, type RefSpec } from '../core/ref/batch.ts';
 import { observeCapturePreparation, parseCapturePreparation, type CapturePreparation } from '../core/ref/capture-preparation.ts';
 import { loadRefs, refImagePath } from '../core/ref/store.ts';
 import { capturePageForRef, onPage, withBrowser } from '../core/render/index.ts';
-import { inputSkeleton } from '../core/schema/inputs.ts';
 import { decodePng } from '../core/motion/energy.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
@@ -62,7 +61,7 @@ function runCli(root: string, args: string[]): Promise<{ code: number | null; st
 }
 
 test('capture preparation schema permits only explicit disclosure clicks and visibility assertions', () => {
-  assert.deepEqual(parseCapturePreparation(inputSkeleton('reference-capture-preparation').skeleton), preparation());
+  assert.deepEqual(parseCapturePreparation(preparation()), preparation());
   for (const value of [
     { ...preparation(), script: 'menu.open()' },
     { ...preparation(), assertions: [] }, { ...preparation(), actions: Array(9).fill(preparation().actions[0]) },

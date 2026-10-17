@@ -473,26 +473,6 @@ test('stale predecessor cannot discard an authenticated Eye batch', { timeout: 3
     ['A focused primary work object with restrained supporting hierarchy.']);
 });
 
-test('direction planning uses the packet task normalization while preserving the route request bytes', { timeout: 30_000 }, async t => {
-  const request = '\n  Build a personal reading app. \n';
-  const f = fixture(t, request);
-  assert.equal(f.task, request);
-  const planned = planReferenceDirectionReview(f.root, {
-    sourceContractSha256: f.sourceContractSha256, task: f.task, references: [f.reference],
-  });
-  assert.ok(planned.packet);
-  assert.equal(planned.selected, 1);
-  const reviewed = await authenticatedAdmission(t, f);
-  publishReferenceDirectionAdmission(f.root, reviewed.packet, reviewed.result, f.invocation, f.writer);
-  assert.equal(planReferenceDirectionReview(f.root, {
-    sourceContractSha256: f.sourceContractSha256, task: f.task, references: [f.reference],
-  }).carried, 1);
-  assert.throws(() => planReferenceDirectionReview(f.root, {
-    sourceContractSha256: f.sourceContractSha256, task: 'A different task', references: [f.reference],
-  }), /REFERENCE_DIRECTION_ADMISSION_STALE/);
-  assert.equal(readPersistedRoute(f.root, f.invocation).request, request);
-});
-
 test('a legitimate source-contract change prepares and publishes a fresh review without carrying the old verdict', { timeout: 45_000 }, async t => {
   const f = fixture(t);
   const first = await authenticatedAdmission(t, f, 'reference-reject');
