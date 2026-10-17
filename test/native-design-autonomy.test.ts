@@ -15,12 +15,17 @@ import { capturePiRequest } from '../extensions/omd-request-source.ts';
 import { observePiReviewPurpose } from '../extensions/omd-review-purpose.ts';
 import { publishAdaptiveRoute, readPersistedRoute } from '../core/route/index.ts';
 import { createProjectWriteAdapter } from '../core/runtime/project-write.ts';
-import { routeInput } from './helpers/phase6-process.ts';
 import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
-import { inputSkeleton } from '../core/schema/inputs.ts';
-import { modelLedRouteInput } from '../core/schema/candidate-selection.ts';
+import { inputSkeleton, modelLedRouteInput } from '../core/schema/inputs.ts';
 
 const request = 'Create a populated support inbox with a detail panel.';
+type MutableRouteInput = Record<string, unknown> & {
+  request: string;
+  taskOutcome: unknown;
+  allowedPaths: string[];
+};
+const routeInput = (): MutableRouteInput =>
+  structuredClone(inputSkeleton('product-route-input').skeleton) as MutableRouteInput;
 const cliPath = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const host: NativePiHost = {
   nodePath: realpathSync(process.execPath), nodeSha256: hash(readFileSync(process.execPath)),
@@ -62,7 +67,6 @@ test('native design authority rejects changed request, forged signature and relo
   writeFileSync(join(f.root, f.path), canonicalRouteJson({ ...f.record, signature: 'forged' }));
   assert.throws(() => verifyDirectionAutonomyGrant(f.root, fileReceipt(f.root, f.path), request));
 });
-
 test('historical native runs without a captured policy are not implicit design grants', t => {
   const f = fixture(t);
   const invocation = createTestNativePiInvocation({ root: f.root, host, current: {
@@ -75,7 +79,6 @@ test('historical native runs without a captured policy are not implicit design g
   }));
   assert.throws(() => verifyDirectionAutonomyGrant(f.root, fileReceipt(f.root, f.path), request));
 });
-
 test('native route binding replaces model-selected interaction with genuine host authority', t => {
   const f = fixture(t);
   capturePiRequest(f.root, request);
@@ -96,17 +99,6 @@ test('native route binding replaces model-selected interaction with genuine host
 
 test('ordinary native production preserves outcomes and scope without intermediate design records', t => {
   const input = routeInput();
-  input.strategyDecision = {
-    schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
-    roles: ['omd-hand', 'omd-eye'],
-    stages: ['production', 'browser-evidence', 'independent-review'],
-    executionWaves: [
-      { id: 'build', mode: 'concurrent', roles: ['omd-hand'] },
-      { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
-    ],
-    methods: [], aiAssets: [], attributionCategories: [], skips: [],
-    rationale: 'Build and verify the requested result directly; use optional methods when needed.',
-  };
   const f = fixture(t, false, input.request);
   capturePiRequest(f.root, input.request);
   observePiReviewPurpose(f.root, input.request, 'pi-rpc');
@@ -128,10 +120,8 @@ test('ordinary native production preserves outcomes and scope without intermedia
 test('the model-led route starter selects results and verification rather than a design ceremony', () => {
   const structured = inputSkeleton('route-input');
   const direct = modelLedRouteInput(structured);
-  const skeleton = direct.skeleton as { strategyDecision: { stages: string[]; roles: string[]; methods: string[] }; request: string; taskOutcome: unknown };
-  assert.deepEqual(skeleton.strategyDecision.stages, ['production', 'browser-evidence', 'independent-review']);
-  assert.deepEqual(skeleton.strategyDecision.roles, ['omd-hand', 'omd-eye']);
-  assert.deepEqual(skeleton.strategyDecision.methods, []);
+  const skeleton = direct.skeleton as { request: string; taskOutcome: unknown };
+  assert.equal(Reflect.has(skeleton, 'strategyDecision'), false);
   assert.equal(Reflect.has(skeleton, 'processPolicy'), false);
   assert.equal(skeleton.request, Reflect.get(structured.skeleton as object, 'request'));
   assert.deepEqual(skeleton.taskOutcome, Reflect.get(structured.skeleton as object, 'taskOutcome'));
@@ -150,17 +140,4 @@ test('native route publication persists harness authority while preserving the r
   const receipt = route.sourceContract.processPolicy?.autonomyGrant;
   assert.ok(receipt);
   assert.equal(verifyDirectionAutonomyGrant(f.root, receipt, input.request).source, 'native-host-policy');
-});
-
-test('current reference analysis cannot select a route that forbids its domain publisher', t => {
-  const input = routeInput();
-  input.strategyDecision.stages = input.strategyDecision.stages.filter((stage: string) => stage !== 'domain');
-  const f = fixture(t, false, input.request);
-  capturePiRequest(f.root, input.request);
-  observePiReviewPurpose(f.root, input.request, 'pi-rpc');
-  const before = readFileSync(join(f.root, f.path));
-  assert.throws(() => publishAdaptiveRoute(f.root, input, createProjectWriteAdapter(f.root, f.invocation), f.invocation),
-    /include domain before reference-board/);
-  assert.equal(existsSync(join(f.root, '.omd/route.json')), false);
-  assert.deepEqual(readFileSync(join(f.root, f.path)), before);
 });

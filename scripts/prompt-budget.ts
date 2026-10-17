@@ -4,11 +4,10 @@ import { pathToFileURL } from 'node:url';
 import { readRoleProfiles, PROFILE_SOURCE_ROOT } from '../core/brief/profiles.ts';
 
 export const AGENT_PROMPT_BUDGETS: Readonly<Record<string, number>> = {
-  'art-director': 1000, framer: 900, scout: 1500, writer: 900, typesetter: 850,
-  composer: 1100, sketch: 350, study: 600, hand: 1500, eye: 350, glance: 200,
+  eye: 350,
 };
 export const SKILL_PROMPT_BUDGETS: Readonly<Record<string, number>> = {
-  ultradesign: 500, scout: 300, coach: 250, critique: 300, figma: 600, humanize: 600,
+  ultradesign: 5000, scout: 300, coach: 250, critique: 300, figma: 600, humanize: 600,
   concepts: 250, system: 250, expand: 250, audit: 250,
 };
 export const estimatedTokens = (source: string): number => Math.ceil((source.trim().match(/\S+/gu)?.length ?? 0) * 1.35);

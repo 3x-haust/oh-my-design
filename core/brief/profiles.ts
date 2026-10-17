@@ -4,9 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const PROFILE_MODES = {
-  'omd-eye': ['concept-selection', 'structural-selection', 'visual-study', 'copy-editor', 'typography-proof', 'production-visual', 'fidelity', 'protocol', 'perspective', 'moderator'],
-  'omd-sketch': ['structural', 'visual-study'],
-  'omd-hand': ['source', 'observer'],
+  'omd-eye': ['production-visual', 'fidelity', 'protocol'],
 } as const;
 export type ProfileRole = keyof typeof PROFILE_MODES;
 export type RoleProfile = Readonly<{ role: ProfileRole; mode: string; file: string; budget: number; source: string; sha256: string }>;

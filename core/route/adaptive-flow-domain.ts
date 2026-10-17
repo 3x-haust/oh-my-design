@@ -20,7 +20,7 @@ export const ADAPTIVE_SOURCE_CONTRACT_SCHEMA = 'adaptive-route-source-contract-v
 export const ADAPTIVE_ROUTE_INPUT_KEYS = [
   'schema', 'request', 'projectMode', 'namedDependencies', 'allowedPaths', 'taskOutcome', 'uxPolicy',
   'evidenceClaims', 'referenceDiscovery', 'designAxes', 'modelCapability',
-  'browserDecisionContext', 'validatedLearningContext', 'strategyDecision',
+  'browserDecisionContext', 'validatedLearningContext',
 ] as const;
 
 export const MANDATORY_ADAPTIVE_GATES = Object.freeze([
@@ -35,10 +35,7 @@ export const MANDATORY_ADAPTIVE_GATES = Object.freeze([
 ] as const);
 
 export const OPTIONAL_STAGE_IDS = Object.freeze([
-  'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'moodboard', 'reference-board',
-  'reference-selection', 'art-direction', 'copy', 'type-proof', 'composition',
-  'candidate-generation', 'safety-validation',
-] as const);
+ ] as const);
 /**
  * Stages every route carries. A mandatory stage is never optional-skip accounted and never
  * accepts a `strategyDecision.skips` reason; `validateAdaptiveStrategyRails` rejects the route
@@ -46,16 +43,12 @@ export const OPTIONAL_STAGE_IDS = Object.freeze([
  */
 export const MANDATORY_STAGE_IDS = Object.freeze([] as const);
 export const OPTIONAL_METHOD_IDS = Object.freeze([
-  'reflection-in-action', 'reference-distance', 'image-first-draft',
-  'evidence-driven-refinement', 'copy-repair-workflow', 'motion-one',
-  'ai-shipped-asset', 'provisional-source-study', 'concept-exploration',
-] as const);
+ ] as const);
 export const ADAPTIVE_STAGE_IDS = Object.freeze([
   ...MANDATORY_STAGE_IDS, ...OPTIONAL_STAGE_IDS, 'production', 'browser-evidence', 'independent-review',
 ] as const);
 export const ADAPTIVE_ROLE_IDS = Object.freeze([
-  'omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer',
-  'omd-sketch', 'omd-hand', 'omd-eye', 'omd-glance', 'omd-study', 'omd-art-director',
+  'omd-hand', 'omd-eye',
 ] as const);
 
 export type AdaptiveRouteErrorCode =
@@ -123,6 +116,21 @@ export type AdaptiveStrategyDecision = Readonly<{
   skips: readonly AdaptiveSkip[];
   rationale: string;
 }>;
+export const MODEL_LED_STRATEGY_DECISION: AdaptiveStrategyDecision = Object.freeze({
+  schema: ADAPTIVE_STRATEGY_DECISION_SCHEMA,
+  owner: 'user-selected-model',
+  roles: Object.freeze(['omd-hand', 'omd-eye']),
+  stages: Object.freeze(['production', 'browser-evidence', 'independent-review']),
+  executionWaves: Object.freeze([
+    Object.freeze({ id: 'build', mode: 'concurrent', roles: Object.freeze(['omd-hand']) }),
+    Object.freeze({ id: 'verify', mode: 'concurrent', roles: Object.freeze(['omd-eye']) }),
+  ]),
+  methods: Object.freeze([]),
+  aiAssets: Object.freeze([]),
+  attributionCategories: Object.freeze([]),
+  skips: Object.freeze([]),
+  rationale: 'The model builds the requested result directly, verifies it in a real browser, and submits it to independent review.',
+});
 export type AdaptiveBrowserDecisionContext = Readonly<{
   schema: typeof ADAPTIVE_BROWSER_CONTEXT_SCHEMA;
   status: 'pending' | 'validated';

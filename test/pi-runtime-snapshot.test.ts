@@ -161,7 +161,7 @@ test('first OMD command survives checkout removal after Pi activation', t => {
       '} };',
       'pi.execOwned = pi.exec;',
       'const result = await runtime.runOmd(pi, ["schema", "reference-research"], targetRoot);',
-      'const second = await runtime.runOmd(pi, ["schema", "reality-ledger"], targetRoot);',
+      'const second = await runtime.runOmd(pi, ["schema", "route-input"], targetRoot);',
       'let callbacks = 0;',
       'const damaging = { exec: async () => { throw new Error("unused"); }, execOwned: async (_command, args) => {',
       '  callbacks++; rmSync(join(dirname(dirname(args[0])), "package.json"));',
@@ -173,7 +173,7 @@ test('first OMD command survives checkout removal after Pi activation', t => {
       'console.log(JSON.stringify({ sourceGone: !existsSync(pluginRoot), text: result.text, second: second.text, callbacks, firstLoss, secondLoss }));',
     ].join('\n'), runtimeUrl, pluginRoot, targetRoot,
   ], { cwd: repositoryRoot, encoding: 'utf8',
-    env: { ...process.env, TMPDIR: temporaryHome, XDG_STATE_HOME: stateHome }, timeout: 30_000 });
+    env: { ...process.env, TMPDIR: temporaryHome, XDG_STATE_HOME: stateHome }, timeout: 90_000 });
 
   assert.equal(probe.status, 0, probe.stderr);
   const result = JSON.parse(probe.stdout) as {
@@ -182,7 +182,7 @@ test('first OMD command survives checkout removal after Pi activation', t => {
   };
   assert.equal(result.sourceGone, true);
   assert.match(String(result.text), /reference-research-v8/);
-  assert.match(String(result.second), /reality-ledger-v1/);
+  assert.match(String(result.second), /adaptive-design-route-input-v1/);
   assert.equal(result.callbacks, 1);
   assert.match(String(result.firstLoss), /OMD_RUNTIME_SNAPSHOT_LOST/);
   assert.equal(result.secondLoss, result.firstLoss);

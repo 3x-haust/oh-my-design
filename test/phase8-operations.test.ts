@@ -31,29 +31,24 @@ test('host capability matrix distinguishes Pi hooks, Claude declarations, and Co
   assert.equal(codex.guarantees.completionHold.enforced, false);
 });
 
-test('host capabilities CLI reports the current local host without claiming structural enforcement', () => {
+test('the retired host capabilities CLI is absent', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-host-capabilities-'));
   try {
     const result = spawnSync(process.execPath, [cli, 'host', 'capabilities', '--json'], { cwd: root, encoding: 'utf8' });
-    assert.equal(result.status, 0, result.stderr);
-    const matrix = JSON.parse(result.stdout) as ReturnType<typeof hostCapabilityMatrix>;
-    assert.equal(matrix.host, 'local');
-    assert.equal(matrix.guarantees.writeBoundary.enforced, false);
-    assert.equal(matrix.guarantees.reviewerIsolation.enforced, false);
-    assert.equal(matrix.guarantees.completionHold.enforced, false);
+    assert.equal(result.status, 1);
+    assert.match(`${result.stdout}\n${result.stderr}`, /unknown command host/i);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test('legacy evidence check remains a deprecated alias for migration verify-final-v1', () => {
+test('legacy evidence and migration commands are absent from the bounded CLI', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-v1-migration-'));
   try {
     mkdirSync(join(root, '.omd'));
     const alias = spawnSync(process.execPath, [cli, 'evidence', 'check', '--json'], { cwd: root, encoding: 'utf8' });
     const migration = spawnSync(process.execPath, [cli, 'migration', 'verify-final-v1', '--json'], { cwd: root, encoding: 'utf8' });
-    assert.notEqual(alias.status, 0); assert.notEqual(migration.status, 0);
-    assert.match(alias.stderr, /^deprecated: `omd evidence check` is now `omd migration verify-final-v1`/);
-    assert.doesNotMatch(migration.stderr, /deprecated/);
-    assert.match(alias.stderr, /final-evidence\.json/); assert.match(migration.stderr, /final-evidence\.json/);
+    assert.equal(alias.status, 1); assert.equal(migration.status, 1);
+    assert.match(`${alias.stdout}\n${alias.stderr}`, /unknown command evidence/i);
+    assert.match(`${migration.stdout}\n${migration.stderr}`, /unknown command migration/i);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

@@ -1,72 +1,86 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import test from 'node:test';
+import { digest } from '../core/measure/identity.ts';
+import { loadReviewPolicy } from '../core/measure/review-policy.ts';
+import { reviewProfileBinding } from '../core/runtime/trusted-review-profile.ts';
+import {
+  MEASURED_REVIEW_HANDBACK,
+  MEASURED_REVIEW_TRANSPORT,
+  measuredFinalRenderPacket,
+} from '../core/runtime/trusted-measured-review.ts';
 import { prepareFinalRenderReviewFixture } from './helpers/final-render-review.ts';
-import { finalRenderReviewerPacket } from '../core/runtime/final-render-review.ts';
-import { nativeFinalLanePacket } from '../core/runtime/native-final-packet.ts';
-import { DESIGN_QUALITY_AXES, parseDesignQualityContract } from '../core/evidence/final-v2-design-quality.ts';
 
-for (const lane of ['blindLane', 'fidelityLane', 'protocolLane'] as const) {
-  test(`${lane} supplies a complete response template with numeric floors and string findings`, () => {
-    const fixture = prepareFinalRenderReviewFixture();
-    try {
-      const bytes = lane === 'blindLane'
-        ? finalRenderReviewerPacket({ ...fixture, packetInput: {
-          schema: 'adaptive-final-render-reviewer-packet-input-v1',
-          observationSha256s: fixture.observationSha256s,
-        } })
-        : nativeFinalLanePacket({ ...fixture, lane });
-      const packet = JSON.parse(bytes.toString());
-      const contract = packet.outputContract;
-      assert.ok(contract.responseTemplate, 'machine-readable response template is required');
-      assert.equal(contract.responseTemplate.schema, contract.responseIdentity.schema);
-      assert.equal(contract.responseTemplate.lane, lane);
-      for (const [key, value] of Object.entries(contract.fixedBindings)) {
-        assert.deepEqual(contract.responseTemplate[key], value);
-      }
-      assert.deepEqual(Object.keys(contract.responseTemplate.verdicts).sort(), [...contract.verdictKeys].sort());
-      for (const key of contract.verdictKeys) {
-        assert.equal(contract.responseTemplate.verdicts[key], null);
-        assert.deepEqual(contract.responseSchema.properties.verdicts.properties[key].enum, ['GREEN', 'RED']);
-      }
-      for (const key of contract.criticalFloorKeys) {
-        assert.equal(contract.responseTemplate.criticalFloors[key], null);
-        assert.equal(contract.responseSchema.properties.criticalFloors.properties[key].type, 'number');
-      }
-      assert.equal(contract.responseSchema.additionalProperties, false);
-      assert.equal(contract.responseSchema.properties.findings.items.type, 'string');
-    } finally { rmSync(fixture.root, { recursive: true, force: true }); }
-  });
-}
+const sharedFixture = prepareFinalRenderReviewFixture();
 
-test('blind quality template supports exact evidence-bound rejection without converting it into approval', () => {
-  const fixture = prepareFinalRenderReviewFixture();
+test('measured blind packet supplies bindings rather than an unmeasured response template', async () => {
+  const fixture = await sharedFixture;
+  const packet = JSON.parse(measuredFinalRenderPacket(
+    fixture.root,
+    fixture.invocation,
+    fixture.observationSha256s,
+  ).toString('utf8'));
+    const contract = packet.outputContract;
+
+    assert.equal(packet.schema, MEASURED_REVIEW_TRANSPORT);
+    assert.equal(contract.schema, MEASURED_REVIEW_HANDBACK);
+    assert.equal(contract.lane, 'blindLane');
+    assert.equal(contract.laneSchema, 'measured-blind-review-v1');
+    assert.equal(contract.responseTemplate, undefined);
+    assert.equal(contract.responseSchema, undefined);
+    assert.deepEqual(
+      contract.reviewerFields,
+      [
+        'schema',
+        'lane',
+        'verdicts',
+        'criticalFloors',
+        'designQuality',
+        'observationSha256s',
+        'routeSha256',
+        'buildSha256',
+        'briefSha256',
+        'browserSha256',
+        'evidenceSha256',
+        'measurements',
+        'reviewPolicySha256',
+        'reviewProfile',
+        'processBindingSha256',
+        'findings',
+      ],
+    );
+    assert.ok(contract.verdictKeys.includes('blindVisual'));
+    assert.ok(contract.verdictKeys.includes('blindNarrative'));
+    assert.ok(contract.criticalFloorKeys.includes('composition'));
+    assert.ok(contract.criticalFloorKeys.includes('copy'));
+});
+
+test('measured packet binds current policy, profile, process, observations, and native measurements', async () => {
+  const fixture = await sharedFixture;
   try {
-    const packet = JSON.parse(finalRenderReviewerPacket({ ...fixture, packetInput: {
-      schema: 'adaptive-final-render-reviewer-packet-input-v1',
-      observationSha256s: fixture.observationSha256s,
-    } }).toString());
-    assert.ok(packet.outputContract.responseTemplate, 'quality response template is required');
-    const template = packet.outputContract.responseTemplate.designQuality;
-    assert.deepEqual(template.axes.map((row: { axis: string }) => row.axis), DESIGN_QUALITY_AXES);
-    const observations = packet.evidence.observationProjection.observations;
-    const evidence = ['desktop', 'mobile'].map(viewport => {
-      const row = observations.find((item: { viewport: string }) => item.viewport === viewport);
-      assert.ok(row);
-      return { observationSha256: row.observationSha256, viewport, state: row.state,
-        region: 'main', visibleCondition: 'The required hierarchy is not visible.',
-        userConsequence: 'The next action is unclear.' };
-    });
-    const rejected = { ...template, axes: template.axes.map((row: { axis: string }) => ({
-      ...row, verdict: 'RED', score: 0, crossViewport: 'contradicted',
-      criticalFailure: 'The main action is absent.', evidence,
-    })) };
-    assert.equal(parseDesignQualityContract(rejected, {
-      expectedObservationSha256s: fixture.observationSha256s,
-    }).axes.length, 6);
-    assert.throws(() => parseDesignQualityContract({
-      ...rejected, axes: rejected.axes.map((row: object) => ({ ...row, verdict: 'GREEN' })),
-    }), /DESIGN_QUALITY_VERDICT_MISMATCH/);
-    assert.throws(() => parseDesignQualityContract({ beautyDesirability: 3 }), /DESIGN_QUALITY_MALFORMED/);
-  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+    const packet = JSON.parse(measuredFinalRenderPacket(
+      fixture.root,
+      fixture.invocation,
+      fixture.observationSha256s,
+    ).toString('utf8'));
+    const fixed = packet.outputContract.fixedBindings;
+    const policy = loadReviewPolicy(fixture.root, fixture.invocation);
+
+    assert.deepEqual(fixed.observationSha256s, fixture.observationSha256s);
+    assert.equal(fixed.reviewPolicySha256, digest(policy));
+    assert.deepEqual(fixed.reviewProfile, reviewProfileBinding('blindLane'));
+    assert.match(fixed.processBindingSha256, /^[a-f0-9]{64}$/);
+    assert.ok(Array.isArray(fixed.measurements));
+    assert.ok(fixed.measurements.length > 0);
+    assert.deepEqual(
+      packet.evidence.measurementProjection.map(({ packetSha256 }: { packetSha256: string }) => packetSha256),
+      fixed.measurements.map(({ sha256 }: { sha256: string }) => sha256),
+    );
+    assert.ok(packet.evidence.renders.every(
+      ({ packetSha256 }: { packetSha256: string }) =>
+        fixed.measurements.some(({ sha256 }: { sha256: string }) => sha256 === packetSha256),
+    ));
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
 });

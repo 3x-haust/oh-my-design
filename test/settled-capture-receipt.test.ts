@@ -175,7 +175,7 @@ test('an unfocused offscreen skip link cannot change viewport pixels', () => {
   assert.ok(findings.some(({ id }) => id === 'CAPTURE_PIXEL_GEOMETRY_CONTRADICTION'));
 });
 
-test('the capture CLI publishes the same strict gate', () => {
+test('the retired capture CLI is absent while the strict validator remains available', () => {
   const { root, receipt } = fixture();
   writeFileSync(join(root, 'receipt.json'), JSON.stringify(receipt));
   const result = spawnSync(process.execPath, [
@@ -186,6 +186,6 @@ test('the capture CLI publishes the same strict gate', () => {
     'receipt.json',
     '--json',
   ], { cwd: root, encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), []);
+  assert.equal(result.status, 1);
+  assert.match(`${result.stdout}\n${result.stderr}`, /unknown command capture/i);
 });

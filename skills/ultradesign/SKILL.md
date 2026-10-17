@@ -117,7 +117,7 @@ Deliver current contracts; check
 `omd brief <stage> --check --json` separately. Obtain `omd brief <stage> --role <role> [--mode <mode>] --json`;
 Sketch needs `--input <sketch-brief.json>`. Eye briefs are profiles, not authority. Let the
 exclusive owner publish, check outputs and recompute.
-Load only the active oh-my-design:scout, oh-my-design:concepts, oh-my-design:system, oh-my-design:expand or oh-my-design:audit step.
+Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step.
 Follow ref advance's design-first action. Budget both lanes before starting;
 secure visual originals before lengthy domain help.
 

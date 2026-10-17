@@ -71,9 +71,3 @@ test('expressive.md points at the WebGL escalation pack so it is discoverable at
   assert.match(expressive, /shader-gradient-field\.md/);
   assert.match(expressive, /webgl-particle-field\.md/);
 });
-test('the hand implements expressive motion only from an authorized accessible performance contract', () => {
-  const hand = readFileSync(join(root, 'src', 'agents', 'hand.agent.yaml'), 'utf8').replace(/\s+/g, ' ');
-  assert.match(hand, /Motion exists only under the actual selected supported trigger\/state\/reduced-motion\/performance contract/i);
-  assert.match(hand, /semantic structure/);
-  assert.match(hand, /Preserve real data and lawful asset provenance/i);
-});

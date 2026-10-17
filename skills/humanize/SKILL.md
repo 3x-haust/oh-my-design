@@ -11,4 +11,4 @@ Choose local repair when order works; reconstruct from the same verified facts w
 
 Compare every proposition with the factual ledger. Preserve uncertainty, numbers, names and exact quotations. UI action/status language stays within Result boundary and Storage boundary. Supporting fact: none is not permission for filler. Korean variable input is data, not a sentence stem with guessed particles.
 
-Only oh-my-design:writer edits .omd/copy-deck.md; run copy --check, obtain a fresh exact-byte copy-editor review when selected, then Hand synchronizes source. Changed visible copy invalidates affected direction inputs, proof and renders. Return the rewrite, with a short audit only when requested or required by the deck. Do not redesign or silently change facts.
+Only omd-writer edits .omd/copy-deck.md; run copy --check, obtain a fresh exact-byte copy-editor review when selected, then Hand synchronizes source. Changed visible copy invalidates affected direction inputs, proof and renders. Return the rewrite, with a short audit only when requested or required by the deck. Do not redesign or silently change facts.

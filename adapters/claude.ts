@@ -148,9 +148,7 @@ export function emitClaude({
 // flavor is a second, parallel emission: same agents, same MCP server, but names stripped
 // of their "omd-" prefix and cross-references rewritten to the "oh-my-design:" plugin form.
 
-// Marketplace references use the plugin namespace, but executable `--agent omd-hand`
-// and `--role omd-typesetter` arguments remain CLI identifiers rather than plugin references.
-const AGENT_REF = /\bomd-(art-director|composer|framer|eye|glance|hand|scout|sketch|study|typesetter|writer|ultradesign|humanize|critique|coach|figma|concepts|system|expand|audit)\b/g;
+const AGENT_REF = /\bomd-(eye|ultradesign|humanize|critique|coach|figma)\b/g;
 
 const pluginizeRefs = (text: string): string => text.replace(
   AGENT_REF,

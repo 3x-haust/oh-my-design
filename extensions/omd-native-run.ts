@@ -29,10 +29,6 @@ export class PiNativeRuns {
 
   clear(): void { this.hosts.clear(); this.calibrations.clear(); }
 
-  modelLed(): boolean {
-    return this.designPolicy.criteriaVersion === 'model-led-design-v1';
-  }
-
   observe(context: PiHostContext): void {
     if (context.model === undefined) return;
     if (context.sessionManager === undefined || context.thinkingLevel === undefined) {

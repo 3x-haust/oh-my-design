@@ -30,7 +30,7 @@ import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 const MAX_NODES = 4000;
-const BROWSER_CLEANUP_TIMEOUT_MS = 5_000;
+const BROWSER_CLEANUP_TIMEOUT_MS = 60_000;
 const REFERENCE_CAPTURE_TIMEOUT_MS = 60_000;
 const REFERENCE_ENERGY_TIMEOUT_MS = 30_000;
 const MOTION_CAPTURE_EVENT_TIMEOUT_MS = 5_000;

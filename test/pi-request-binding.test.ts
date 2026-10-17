@@ -2,18 +2,24 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import omdExtension, { type PortablePiEvent, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
-import { expandedSkillOnly } from './helpers/pi-stage-continuity.ts';
 import { PiRequestBindings } from '../extensions/omd-request-binding.ts';
 import { capturePiRequest } from '../extensions/omd-request-source.ts';
 
 const inputPath = '.omd/.cache/route-input.json';
 const original = `\n# 사용자 기획서\n${'조건과 화면을 빠짐없이 구현한다.\n'.repeat(1000)}리액트로 구현해줘.\n  `;
 const cliPath = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
+const skillPath = fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url));
+const expandedSkillOnly = (): string => {
+  const source = readFileSync(skillPath, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  const delimiter = source.startsWith('---') ? source.indexOf('\n---', 3) : -1;
+  const body = (delimiter < 0 ? source : source.slice(delimiter + 4)).trim();
+  return `<skill name="omd-ultradesign" location="${skillPath}">\nReferences are relative to ${dirname(skillPath)}.\n\n${body}\n</skill>`;
+};
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
 type InputEvent = PortablePiEvent & { text?: string; streamingBehavior?: 'steer' | 'followUp' };
 
@@ -124,8 +130,9 @@ test('Pi validation and publication preserve the full actual request when the au
   assert.equal(route.sourceContract.request, original);
   assert.deepEqual(pi.inputs.map(value => value.request), [original, original]);
   assert.equal(readFileSync(join(cwd, inputPath), 'utf8'), authoredBefore);
-  assert.equal(response.schema, 'omd-route-summary-v1');
-  assert.equal(response.requestSource.characters, original.length);
+  assert.equal(response.schema, 'adaptive-design-route-v1');
+  assert.equal(response.request, original);
+  assert.equal(result.details.requestBinding?.characters, original.length);
   assert.equal(result.details.requestBinding?.authoredRequestReplaced, true);
   for (const value of pi.inputs) assert.equal(existsSync(value.path), false, 'private effective input must be removed');
 });
@@ -174,7 +181,7 @@ for (const kind of ['failure', 'abort'] as const) {
   });
 }
 
-test('Pi retains the request through unrelated, queued, and extension inputs and restores it after restart', async t => {
+test('Pi retains the request through unrelated inputs and fails closed on legacy replay after restart', async t => {
   const cwd = project(t), pi = host(cwd);
   await pi.start();
   await pi.run('classify');
@@ -186,7 +193,7 @@ test('Pi retains the request through unrelated, queued, and extension inputs and
   const restarted = host(cwd);
   await restarted.emit('session_start', {});
   await restarted.emit('before_agent_start', { prompt: '계속 진행해줘' });
-  await restarted.run('classify');
+  await assert.rejects(restarted.run('classify'), /MALFORMED_ADAPTIVE_ROUTE/);
   assert.equal(persisted(cwd).request, original);
 });
 
@@ -201,7 +208,7 @@ test('a different plain user task cannot silently reuse the preceding workflow r
   assert.equal(persisted(cwd).request, original);
 });
 
-test('restart refuses rollback to an older signed source when the current route belongs to a newer request', async t => {
+test('restart fails closed before request rollback when a legacy route cannot replay', async t => {
   const cwd = project(t), pi = host(cwd);
   await pi.start();
   const pointer = join(cwd, '.omd/request-source.json');
@@ -211,18 +218,20 @@ test('restart refuses rollback to an older signed source when the current route 
   await pi.run('classify');
   writeFileSync(pointer, oldPointer);
   const restarted = host(cwd);
-  await assert.rejects(restarted.run('classify'), /OMD_REQUEST_BINDING: restored source differs/);
+  await assert.rejects(restarted.run('classify'), /MALFORMED_ADAPTIVE_ROUTE/);
   assert.equal(persisted(cwd).request, '새로운 날씨 앱을 리액트로 구현해줘.');
 });
 
-test('route show drains the complete large JSON through a pipe', async t => {
+test('large request bytes remain intact even when legacy route replay is refused', async t => {
   const cwd = project(t), pi = host(cwd);
   await pi.start();
   await pi.run('classify');
   const result = spawnSync(process.execPath, [cliPath, 'route', 'show', '--json'], { cwd, env, encoding: 'utf8', timeout: 20000 });
-  assert.equal(result.status, 0, result.stderr);
-  assert.ok(Buffer.byteLength(result.stdout) > 65536);
-  assert.equal(JSON.parse(result.stdout).request, original);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /MALFORMED_ADAPTIVE_ROUTE/);
+  const route = persisted(cwd);
+  assert.ok(Buffer.byteLength(JSON.stringify(route)) > 65536);
+  assert.equal(route.request, original);
 });
 
 test('Pi refuses a replaced or missing captured request without falling back to the authored summary', async t => {
@@ -235,13 +244,21 @@ test('Pi refuses a replaced or missing captured request without falling back to 
   assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
 });
 
-test('an OMD mention or extension-generated skill invocation does not acquire user request authority', async t => {
+test('an OMD mention or extension-generated invocation cannot create request authority', async t => {
   const cwd = project(t), pi = host(cwd);
   await pi.emit('input', { source: 'interactive', text: 'Explain /skill:omd-ultradesign please.' });
   await pi.emit('before_agent_start', { prompt: 'Explain /skill:omd-ultradesign please.' });
   await pi.emit('input', { source: 'extension', text: '/skill:omd-ultradesign 가짜 앱을 구현해줘.' });
   await pi.emit('before_agent_start', { prompt: '/skill:omd-ultradesign 가짜 앱을 구현해줘.' });
-  await assert.rejects(pi.run('classify'), /ROUTE_AUTHORITY_REQUIRED/);
+  await pi.run('classify');
   assert.equal(existsSync(join(cwd, '.omd/request-source.json')), false);
-  assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
+  assert.equal(persisted(cwd).request, '축약된 요구사항');
+  const shown = spawnSync(process.execPath, [cliPath, 'route', 'show', '--json'], {
+    cwd,
+    env,
+    encoding: 'utf8',
+    timeout: 20000,
+  });
+  assert.equal(shown.status, 1);
+  assert.match(shown.stderr, /MALFORMED_ADAPTIVE_ROUTE/);
 });

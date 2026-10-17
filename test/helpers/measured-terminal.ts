@@ -21,13 +21,12 @@ import { writeSourceSeal } from '../../core/source-seal/index.ts';
 import { adaptiveFinalOmissionMappings } from '../../core/evidence/final-v2-adaptive-contract.ts';
 import { validateDecisionGraph } from '../../core/deliberation/contracts.ts';
 import { writeBrowserDecisionFixture } from './browser-observation-decision-links.ts';
-import { authorizeTestProjectRunPayloads, createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './project-write.ts';
+import { authorizeModelLedPayloads, createModelLedRouteContext } from './model-led.ts';
 import { captureMeasuredSlopCheckpoint, publishMeasuredSlopReview } from '../../core/slop/measured-review.ts';
 import { finalRenderReviewerPacket, FINAL_RENDER_REVIEWER_TASK } from '../../core/runtime/final-render-review.ts';
 import { measuredReviewerTask } from '../../core/runtime/trusted-review-profile.ts';
 import { measuredLanePacket, type MeasuredLane } from '../../adapters/measured-reviewer-publication.ts';
 import { loadTerminalProcess } from '../../core/evidence/final-v2-process.ts';
-import { authorizeNativePiPayload, createTestNativePiInvocation } from '../../core/runtime/native-pi-run.ts';
 import { publishAdaptiveRoute } from '../../core/route/adaptive-route-persistence.ts';
 import { writeFrame } from '../../core/frame/write.ts';
 import type { DeveloperEvaluationSnapshot } from '../../core/coach/developer-evaluation-contract.ts';
@@ -79,26 +78,16 @@ export async function measuredTerminalFixture(t: { after(fn: () => void): void }
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-measured-terminal-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const input = JSON.parse(readFileSync(new URL('../fixtures/adaptive-flow/copy-only.json', import.meta.url), 'utf8'));
-  input.processPolicy = { schema: 'human-design-process-v1', interactionMode: 'interactive', autonomyGrant: null };
-  input.strategyDecision.skips.push({ id: 'concept-exploration', reason: 'The approved existing layout is outside this copy-only task.' });
-  if (!options.legacyPurpose) { input.reviewPurpose = options.purpose ?? 'ordinary'; input.reviewPurposeAuthority = testPurposeAuthority(root, input.reviewPurpose, input.request); }
   write(root, '.omd/copy-deck.md', measuredTerminalCopy);
   const text = 'Review the recorded quantities and the delivery details shown on your order receipt. Keep this record available while checking the items listed below.';
   const html = `<!doctype html><html lang="en"><meta charset="utf-8"><title>Order receipt</title><style>
 *{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font:400 16px/1.5 Arial,sans-serif}main{max-width:1000px;margin:auto;padding:24px}h1{font:700 32px/1.25 Arial,sans-serif;margin:0 0 24px}p{margin:0 0 16px}button{font:700 16px/1.5 Arial,sans-serif;padding:8px 16px;color:#fff;background:#164a35;border:0}button:focus-visible{outline:2px solid #111;outline-offset:2px}
 </style><main><h1>Order receipt</h1><button id="review">Review receipt</button><p role="status">Review your order receipt.</p>${Array.from({ length: 7 }, (_, i) => `<p>Item ${i + 1}. ${text}</p>`).join('')}</main><script>document.querySelector('#review').onclick=()=>document.querySelector('[role=status]').textContent='Approved confirmation sentence.';</script></html>`;
   const entry = 'src/copy/final.html'; write(root, entry, html);
-  const initial = publishTestAdaptiveRoute(root, input, 'measured-terminal');
-  const nodePath = realpathSync(process.execPath);
-  const cliPath = new URL('../fixtures/pi-reviewer-rpc.mjs', import.meta.url);
-  const invocation = options.calibration === undefined ? initial : createTestNativePiInvocation({
-    root, current: initial.current, calibration: options.calibration,
-    host: { nodePath, nodeSha256: sha256(readFileSync(nodePath)), cliPath: realpathSync(cliPath),
-      cliSha256: sha256(readFileSync(cliPath)), provider: 'fixture-provider', model: 'fixture-model',
-      thinkingLevel: 'high', parentSessionId: 'measured-calibration-parent' },
+  const { invocation, writer } = createModelLedRouteContext(root, input.request, {
+    ...(options.calibration === undefined ? {} : { calibration: options.calibration }),
   });
-  const writer = createTestProjectWriteAdapter(root, invocation);
-  if (options.calibration !== undefined) publishAdaptiveRoute(root, input, writer, invocation);
+  publishAdaptiveRoute(root, input, writer, invocation);
   const route = readPersistedRoute(root, invocation);
   if (options.frame !== undefined) writeFrame(root, options.frame, '', writer);
   const evidence = [{ status: 'user-provided', reference: 'request' }], statement = (text: string) => ({ text, userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'request', excerpt: route.request }] });
@@ -123,8 +112,7 @@ export async function measuredTerminalFixture(t: { after(fn: () => void): void }
       confirmedClaimRefs: identity.confirmedClaimRefs, decisionRefs: deriveTrustedDecisionRefs(route.sourceContractSha256, decisions.decisions) },
     artifacts: { write: (path, bytes) => writer.writeContentAddressed(path, bytes) } });
   const probeBytes = Buffer.from(`${canonicalJson(evaluation.receipt)}\n`);
-  if (options.calibration === undefined) authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'product-probe-result', payload: probeBytes }]);
-  else authorizeNativePiPayload(invocation, root, 'product-probe-result', probeBytes);
+  authorizeModelLedPayloads(root, invocation, [{ purpose: 'product-probe-result', payload: probeBytes }]);
   const observation = writeTrustedEvaluationObservation({ root, writer, invocation, evaluation, currentArtifactPath: '.omd/build.json', productionArtifactPath: entry, requireDecisionGraph: true });
   const observationSha256s = [observationV2Sha256(observation)], measurements = [...new Map(evaluation.receipt.captures.map(c => [c.measurement!.packet.sha256, c.measurement!.packet])).values()];
   return { root, writer, invocation, route, input, entry, evaluation, observation, observationSha256s, measurements };
@@ -136,7 +124,7 @@ export function reviewedMeasuredGraph(f: Awaited<ReturnType<typeof measuredTermi
   const route = createAdaptiveSourceSealRoute(f.root, f.invocation);
   const graph = { schema: 'final-evidence-v2-adaptive-omission-graph', activation: receipt(f.root, '.omd/activation-record.json', 'activation-context-v2'), route,
     omissions: adaptiveFinalOmissionMappings().flatMap(([id, routeSkipId]) => { const skip = f.route.strategy.skips.find(s => s.id === routeSkipId); return skip ? [{ id, status: 'skipped', routeSkipId, reason: skip.reason, routeSha256: route.record.sha256, authoritySha256: route.authority.sha256 }] : []; }),
-    copy: receipt(f.root, '.omd/copy-deck.md', 'copy-deck-v2'), sourceSeal: receipt(f.root, '.omd/source-seal.json', 'source-seal-v1'), buildIdentity: receipt(f.root, '.omd/build.json', 'omd-build-identity-v1'),
+     sourceSeal: receipt(f.root, '.omd/source-seal.json', 'source-seal-v1'), buildIdentity: receipt(f.root, '.omd/build.json', 'omd-build-identity-v1'),
     observations: f.observationSha256s.map(h => receipt(f.root, `.omd/observation-v2/sha256-${h}.json`, 'observation-v2')),
     measuredTerminal: { schema: 'measured-terminal-graph-v1' as const, measurements: f.measurements, reviewPolicy: loadReviewPolicy(f.root, f.invocation), slop: { checkpoint: checkpoint.checkpoint, review }, process: loadTerminalProcess(f.root, f.invocation, f.observationSha256s)!.binding, lanes: {} } };
   return graph;

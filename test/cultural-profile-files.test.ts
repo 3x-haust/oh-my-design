@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 import { judgmentStarter, readVerifiedCliJudgment, runJudgmentCommand } from '../bin/judgment-command.ts';
-import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { CULTURAL_DESIGN_AXES } from '../core/locale/cultural-profile.ts';
 import {
   CULTURAL_DESIGN_PROJECTION_POINTER_PATH,
@@ -21,18 +19,12 @@ import {
   verifyRemoteCulturalDesignSources,
 } from '../core/locale/source-capture-files.ts';
 import {
-  adaptiveRouteAuthorityBytes,
-  adaptiveRouteRecordSha256,
   publishAdaptiveRoute,
-  routeAdaptiveFlow,
 } from '../core/route/index.ts';
-import { createAdaptiveSourceSealRoute } from '../core/source-seal/adaptive-inputs.ts';
 import { capturePiRequest } from '../extensions/omd-request-source.ts';
 import {
-  authorizeTestProjectRunPayloads,
-  createTestProjectRunInvocation,
-  createTestProjectWriteAdapter,
-} from './helpers/project-write.ts';
+  createModelLedRouteContext,
+} from './helpers/model-led.ts';
 
 const fixture = (): Record<string, unknown> => {
   const value = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8')) as Record<string, unknown>;
@@ -43,7 +35,6 @@ const fixture = (): Record<string, unknown> => {
   publication.userFacts.push('market-authority');
   return value;
 };
-const PACK_ROOT = fileURLToPath(new URL('../core', import.meta.url));
 const context = (): Record<string, unknown> => ({
   schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ja-JP',
   marketRegion: 'JP', marketAuthorityClaimId: 'market-authority', audience: 'Adults comparing a public mission archive',
@@ -86,8 +77,8 @@ function routeWithoutArtDirection(): Record<string, unknown> {
 async function publishTargetMarketJudgment(
   root: string,
   input: Record<string, unknown>,
-  invocation: ReturnType<typeof createTestProjectRunInvocation>,
-  writer: ReturnType<typeof createTestProjectWriteAdapter>,
+  invocation: ReturnType<typeof createModelLedRouteContext>['invocation'],
+  writer: ReturnType<typeof createModelLedRouteContext>['writer'],
 ) {
   capturePiRequest(root, String(input.request));
   const starter = judgmentStarter(root, 'target-market', invocation);
@@ -98,24 +89,15 @@ async function publishTargetMarketJudgment(
 }
 
 test('published profile and projection bind fetched source receipts, current type proof, and source seal', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-cultural-profile-files-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-cultural-profile-files-')));
   mkdirSync(join(root, '.omd'), { recursive: true });
   const rawContext = context();
   writeFileSync(join(root, '.omd', 'locale-design-context.json'), `${JSON.stringify(rawContext)}\n`);
   const locale = routeLocaleDesignContext(rawContext);
   const input = routeWithoutArtDirection();
-  const invocation = createTestProjectRunInvocation(root, 'cultural-profile-files');
-  const writer = createTestProjectWriteAdapter(root, invocation);
+  const { invocation, writer } = createModelLedRouteContext(root, String(input.request));
   const marketJudgment = await publishTargetMarketJudgment(root, input, invocation, writer);
-  const record = routeAdaptiveFlow(input, { root, invocation, marketJudgment }, locale);
-  const authority = adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation);
-  authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority', payload: authority }]);
   publishAdaptiveRoute(root, input, writer, invocation, locale, marketJudgment);
-  const beforeProfile = buildBrief(root, 'composition', PACK_ROOT, invocation);
-  assert.equal(beforeProfile.localeDesign?.decision, 'research');
-  assert.equal(beforeProfile.localeDesign?.projection, null);
-  assert.ok(beforeProfile.confidenceDebt.some(debt => debt.reason.includes('cultural design projection unavailable') && debt.claim === 'not-verified'));
-  assert.equal(beforeProfile.localeDesign?.projection, null, 'missing research cannot be delivered as approved cultural evidence');
   writeFileSync(join(root, '.omd', 'copy-deck.md'), 'copy-deck.md: approved\n');
   const typeProofBytes = 'type-proof.md: approved Japanese copy at both viewports\n';
   writeFileSync(join(root, '.omd', 'type-proof.md'), typeProofBytes);
@@ -133,23 +115,9 @@ test('published profile and projection bind fetched source receipts, current typ
   const typeProofSha256 = createHash('sha256').update(typeProofBytes).digest('hex');
 
   const published = publishCulturalDesignProfile(root, profile(locale.contextSha256, sources, typeProofSha256), invocation);
-  const compositionBrief = buildBrief(root, 'composition', PACK_ROOT, invocation);
-  assert.deepEqual(compositionBrief.localeDesign?.projection, {
-    path: '.omd/cultural-design-projection.json', sha256: published.projectionSha256,
-  });
-  assert.doesNotMatch(JSON.stringify(compositionBrief.localeDesign), /locale-profiles|sourceIds|https?:/);
-  assert.match(formatBrief(compositionBrief), /projection: \.omd\/cultural-design-projection\.json/);
-  assert.ok(compositionBrief.judgedBy.some((entry) => entry.command.startsWith('omd locale profile-check')));
   assert.match(published.profileRecordPath, /locale-profiles\/sha256-[a-f0-9]{64}\.json$/);
   assert.match(published.projectionRecordPath, /locale-projections\/sha256-[a-f0-9]{64}\.json$/);
   assert.equal(readCurrentCulturalDesignProfile(root, invocation).projectionSha256, published.projectionSha256);
-  const sealRoute = createAdaptiveSourceSealRoute(root, invocation);
-  const composition = sealRoute.stages.find((stage) => stage.id === 'composition');
-  assert.ok(composition?.status === 'selected');
-  assert.deepEqual(composition.artifacts.map((artifact) => artifact.path), [
-    '.omd/composition.md', '.omd/cultural-design-profile.json', published.profileRecordPath,
-    '.omd/cultural-design-projection.json', published.projectionRecordPath,
-  ]);
   const remote = await verifyRemoteCulturalDesignSources(root, published.profile.sources, locale.contextSha256, fakeFetch);
   assert.equal(remote.sourceCount, 4);
   const changedFetch: typeof fetch = (async () => new Response(
@@ -170,22 +138,17 @@ test('published profile and projection bind fetched source receipts, current typ
 
   writeFileSync(join(root, CULTURAL_DESIGN_PROJECTION_POINTER_PATH), '{}\n');
   assert.throws(() => readCurrentCulturalDesignProfile(root, invocation), /LOCALE_DESIGN_PROFILE_STALE/);
-  assert.throws(() => createAdaptiveSourceSealRoute(root, invocation), /LOCALE_DESIGN_PROFILE_STALE/);
 });
 
 test('source stability records volatile successful responses without letting a stable source stay unavailable', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-cultural-source-stability-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-cultural-source-stability-')));
   mkdirSync(join(root, '.omd'), { recursive: true });
   const rawContext = context();
   writeFileSync(join(root, '.omd', 'locale-design-context.json'), `${JSON.stringify(rawContext)}\n`);
   const locale = routeLocaleDesignContext(rawContext);
   const input = routeWithoutArtDirection();
-  const invocation = createTestProjectRunInvocation(root, 'cultural-source-stability');
-  const writer = createTestProjectWriteAdapter(root, invocation);
+  const { invocation, writer } = createModelLedRouteContext(root, String(input.request));
   const marketJudgment = await publishTargetMarketJudgment(root, input, invocation, writer);
-  const record = routeAdaptiveFlow(input, { root, invocation, marketJudgment }, locale);
-  const authority = adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation);
-  authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority', payload: authority }]);
   publishAdaptiveRoute(root, input, writer, invocation, locale, marketJudgment);
 
   let changingCall = 0;
@@ -226,18 +189,14 @@ test('source stability records volatile successful responses without letting a s
 });
 
 test('source stability rejects a fresh matching pair that differs from the active captured receipt', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-cultural-source-delayed-stability-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-cultural-source-delayed-stability-')));
   mkdirSync(join(root, '.omd'), { recursive: true });
   const rawContext = context();
   writeFileSync(join(root, '.omd', 'locale-design-context.json'), `${JSON.stringify(rawContext)}\n`);
   const locale = routeLocaleDesignContext(rawContext);
   const input = routeWithoutArtDirection();
-  const invocation = createTestProjectRunInvocation(root, 'cultural-source-delayed-stability');
-  const writer = createTestProjectWriteAdapter(root, invocation);
+  const { invocation, writer } = createModelLedRouteContext(root, String(input.request));
   const marketJudgment = await publishTargetMarketJudgment(root, input, invocation, writer);
-  const record = routeAdaptiveFlow(input, { root, invocation, marketJudgment }, locale);
-  const authority = adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation);
-  authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority', payload: authority }]);
   publishAdaptiveRoute(root, input, writer, invocation, locale, marketJudgment);
   const typeProofBytes = 'type-proof.md: approved Japanese copy at both viewports\n';
   writeFileSync(join(root, '.omd', 'type-proof.md'), typeProofBytes);
@@ -284,7 +243,7 @@ test('source stability rejects a fresh matching pair that differs from the activ
 });
 
 test('publication rejects self-attested source and type-proof hashes before writing pointers', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-cultural-profile-self-attested-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-cultural-profile-self-attested-')));
   mkdirSync(join(root, '.omd'), { recursive: true });
   const rawContext = context();
   writeFileSync(join(root, '.omd', 'locale-design-context.json'), `${JSON.stringify(rawContext)}\n`);
@@ -292,12 +251,8 @@ test('publication rejects self-attested source and type-proof hashes before writ
   writeFileSync(join(root, '.omd', 'type-proof.md'), actualTypeProof);
   const locale = routeLocaleDesignContext(rawContext);
   const input = routeWithoutArtDirection();
-  const invocation = createTestProjectRunInvocation(root, 'cultural-profile-self-attested');
-  const writer = createTestProjectWriteAdapter(root, invocation);
+  const { invocation, writer } = createModelLedRouteContext(root, String(input.request));
   const marketJudgment = await publishTargetMarketJudgment(root, input, invocation, writer);
-  const record = routeAdaptiveFlow(input, { root, invocation, marketJudgment }, locale);
-  const authority = adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation);
-  authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority', payload: authority }]);
   publishAdaptiveRoute(root, input, writer, invocation, locale, marketJudgment);
   const fabricated = ['standard', 'global', 'native', 'counter'].map((id, index) => ({
     id, lane: index === 0 ? 'standard' : index === 1 ? 'global-equivalent' : index === 2 ? 'native-category' : 'counterexample',

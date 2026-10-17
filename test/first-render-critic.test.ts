@@ -2,13 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { critiqueLegacyFirstRender as critiqueFirstRender, FIRST_RENDER_CRITIC_SCHEMA, parseFirstRenderSurface } from '../core/design/first-render-critic.ts';
 import type { DesignHypothesis } from '../core/design/judgment.ts';
-import { inputSkeleton } from '../core/schema/inputs.ts';
 
-test('the documented first-render schema exists and is accepted by the actual parser', () => {
-  const input = inputSkeleton('first-render-surface');
-  assert.equal(input.command, 'omd first-render check --page <local-build.html> --json');
-  assert.doesNotThrow(() => parseFirstRenderSurface(input.skeleton));
-  assert.match(input.constraints!.join('\n'), /actual rendered viewport/);
+test('the first-render parser accepts measured viewport projections directly', () => {
+  assert.doesNotThrow(() => parseFirstRenderSurface({
+    heading: 'Review evidence',
+    landmarks: ['main', 'review-action'],
+    repeatedObjects: ['evidence-row'],
+    trustSignals: ['current status'],
+    visibleText: ['Review evidence', 'Current status'],
+    dominantAreaShare: 0.4,
+  }));
 });
 
 const hypothesis: DesignHypothesis = {

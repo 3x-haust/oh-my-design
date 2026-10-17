@@ -117,11 +117,6 @@ export default function omdExtension(pi: PortablePiApi): void {
     const next = previous.catch(() => undefined).then(async () => {
       stopWaiting();
       if (signal?.aborted || (isMutatingOmdCommand(args) && epochs.get(cwd) !== commandEpoch)) throw new OmdCancelledError();
-      const commitsDirection = args[0] === 'guard' && ['production', 'completion'].includes(args[1] ?? '')
-        || args[0] === 'brief' && args.includes('--check') && ['art-direction', 'type-proof', 'composition', 'production', 'independent-review'].includes(args[1] ?? '')
-        || ['recipe', 'finalize', 'complete', 'refine'].includes(args[0] ?? '')
-        || args[0] === 'ref' && isMutatingOmdCommand(args);
-      if (commitsDirection && requests.directions.isPending(cwd)) throw new Error('NEEDS_USER_DIRECTION: expansion/completion waits for actual direction input; representative rendering and inspection remain available');
       await requests.verifyRestored(cwd, requestSource, () => runOmd(pi, ['route', 'show', '--json'], cwd, signal, undefined, undefined, nativeRuns));
       if (signal?.aborted) throw new OmdCancelledError();
       const effective = requests.materialize(cwd, args, requestSource);
@@ -277,12 +272,8 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
       if (!guarded(context.cwd)) return;
       if (paused.has(context.cwd)) return;
-      const modelLed = nativeRuns.modelLed();
       const writes = nativeWriteEvents(event);
-      if (writes === null || event.toolName === 'apply_patch'
-        && !modelLed && writes.some(write => classifyPiWrite(context.cwd, write.input?.path).kind !== 'authoring')) {
-        return { block: true, reason: 'NATIVE_MAKER_REQUIRED: patches may edit only owned authoring inputs. Use omd maker run for candidate/application source and owner publishers for records.' };
-      }
+      if (writes === null) return { block: true, reason: 'OMD_PRODUCTION_BLOCKED: unsupported mutation shape' };
       for (const writeEvent of writes) {
         const event = writeEvent;
         const name = event.toolName === 'apply_patch' ? 'write' : event.toolName;
@@ -293,16 +284,14 @@ export default function omdExtension(pi: PortablePiApi): void {
             'request_user_input', 'lsp_diagnostics', 'lsp_goto_definition', 'lsp_find_references',
             'lsp_symbols', 'lsp_prepare_rename', 'ast_grep_search',
           ].includes(name)) return;
-          if (modelLed) {
-            try {
-              const readiness: unknown = JSON.parse((await run(['guard', 'production', '--json'], context.cwd, context.signal)).text);
-              if (context.signal?.aborted) return { block: true, reason: 'OMD_STAGE_ENTRY_INTERRUPTED' };
-              if (typeof readiness === 'object' && readiness !== null && Reflect.get(readiness, 'sourceAuthoring') === 'model') return;
-            } catch (error) {
-              return { block: true, reason: `OMD_PRODUCTION_BLOCKED: ${error instanceof Error ? error.message : String(error)}` };
-            }
+          try {
+            const readiness: unknown = JSON.parse((await run(['guard', 'production', '--json'], context.cwd, context.signal)).text);
+            if (context.signal?.aborted) return { block: true, reason: 'OMD_STAGE_ENTRY_INTERRUPTED' };
+            if (typeof readiness === 'object' && readiness !== null && Reflect.get(readiness, 'sourceAuthoring') === 'model') return;
+          } catch (error) {
+            return { block: true, reason: `OMD_PRODUCTION_BLOCKED: ${error instanceof Error ? error.message : String(error)}` };
           }
-          return { block: true, reason: 'NATIVE_MAKER_REQUIRED: general execution, delegation and unclassified tools cannot author managed source. Use omd_cli for owned actions or an admitted inspection tool.' };
+          return { block: true, reason: 'OMD_PRODUCTION_BLOCKED: production readiness did not authorize model source authoring' };
         }
         if (name === 'bash' && isPreproductionReadCommand(event.input?.command)) return;
         touched.add(context.cwd);
@@ -338,12 +327,12 @@ export default function omdExtension(pi: PortablePiApi): void {
         try {
           const readiness: unknown = JSON.parse((await run(['guard', 'production', ...(target === undefined ? [] : ['--path', target]), '--json'], context.cwd, context.signal)).text);
           if (context.signal?.aborted) return { block: true, reason: 'OMD_STAGE_ENTRY_INTERRUPTED' };
-          if (modelLed && typeof readiness === 'object' && readiness !== null && Reflect.get(readiness, 'sourceAuthoring') === 'model') {
+          if (typeof readiness === 'object' && readiness !== null && Reflect.get(readiness, 'sourceAuthoring') === 'model') {
             rememberMutation(context.cwd, event.toolName, event.toolCallId, target, true);
             continue;
           }
           if (name === 'bash' && isNativeVerificationCommand(event.input?.command)) return;
-          return { block: true, reason: 'NATIVE_MAKER_REQUIRED: current readiness is not source-owner authority. Use omd schema native-maker then omd maker run --input <json> --json. The coordinator cannot author production through write, edit, bash or scripts.' };
+          return { block: true, reason: 'OMD_PRODUCTION_BLOCKED: current readiness is not model source-authoring authority' };
         } catch (error) {
           return { block: true, reason: `OMD_PRODUCTION_BLOCKED: ${error instanceof Error ? error.message : String(error)}\nRepair the named design inputs through omd_cli; use read for inspection. Do not bypass with bash, scripts, or a different file tool.` };
         }
@@ -373,7 +362,7 @@ export default function omdExtension(pi: PortablePiApi): void {
           if (ownedWork.started(context.cwd)) rememberWorkflow(context.cwd);
         }
       }
-      if (nativeRuns.modelLed() && event.isError === false && ['bash', 'eval', 'task'].includes(event.toolName ?? '')) {
+      if (event.isError === false && ['bash', 'eval', 'task'].includes(event.toolName ?? '')) {
         productionAttempted.add(context.cwd);
       }
     });
@@ -462,10 +451,6 @@ export default function omdExtension(pi: PortablePiApi): void {
           if (answer === null) { browserConsentGranted.delete(context.cwd); pendingQuestions.delete(context.cwd); }
           else browserConsentGranted.set(context.cwd, { digest, engine: answer });
         },
-        onAwaitUser: pending => {
-          epochs.delete(context.cwd); repairLoop.delete(context.cwd); pendingReferenceWork.delete(context.cwd);
-          return requests.directions.present(context.cwd, pending);
-        },
         onReferenceWork: work => {
           if (work === null) pendingReferenceWork.delete(context.cwd);
           else pendingReferenceWork.set(context.cwd, work);
@@ -515,11 +500,6 @@ export default function omdExtension(pi: PortablePiApi): void {
           bootstraps.set(context.cwd, commandBootstrap);
           touched.add(context.cwd);
         }
-      }
-      if (guarded(context.cwd) && params.args[0] === 'recipe' && params.args[1] === 'add') {
-        touched.add(context.cwd);
-        await run(['guard', 'production', '--json'], context.cwd, signal);
-        throw new Error('NATIVE_MAKER_REQUIRED: use omd maker run for production source; recipe inspection remains available');
       }
       let result: Awaited<ReturnType<typeof run>>;
       try {
@@ -597,10 +577,6 @@ export default function omdExtension(pi: PortablePiApi): void {
         if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) {
           touched.add(context.cwd);
           if (ownedWork.started(context.cwd)) rememberWorkflow(context.cwd);
-        }
-        if (params.args[0] === 'maker' && ['run', 'restore'].includes(params.args[1] ?? '')) {
-          productionAttempted.add(context.cwd);
-          touched.add(context.cwd);
         }
         if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
           && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) {

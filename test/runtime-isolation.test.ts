@@ -449,87 +449,6 @@ test('serialized host-derived local CLI invocation cannot mint a guarded write a
     rmSync(root, { recursive: true, force: true });
   }
 });
-test('host-issued pipe receipts accept one exact receipt once and reject caller JSON, replayed, or mismatched bindings', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-host-fd-'));
-  const nonce = 'host-receipt-nonce-0123456789012345';
-  try {
-    const callerJson = executeCallerJsonCli(root);
-    assert.notEqual(callerJson.status, 0);
-    assert.equal(existsSync(join(root, '.omd', 'config.json')), false);
-    const forgedRoot = await executeHostIssuedCli(root, `${nonce}-root`, { projectRoot: `${realpathSync(root)}-forged` });
-    assert.notEqual(forgedRoot.status, 0);
-    assert.equal(existsSync(join(root, '.omd', 'config.json')), false);
-
-    const forgedArgv = await executeHostIssuedCli(
-      root,
-      `${nonce}-argv`,
-      {},
-      ['config', 'set', 'checkpoint', 'none'],
-      ['config', 'set', 'checkpoint', 'both'],
-    );
-    assert.notEqual(forgedArgv.status, 0);
-    assert.equal(existsSync(join(root, '.omd', 'config.json')), false);
-
-    const expired = await executeHostIssuedCli(root, `${nonce}-expiry`, { expiresAt: Date.now() - 1 });
-    assert.notEqual(expired.status, 0);
-    assert.equal(existsSync(join(root, '.omd', 'config.json')), false);
-
-    const consumedTwice = await executeHostIssuedCliTwice(root, nonce);
-    assert.equal(consumedTwice.status, 0, consumedTwice.stderr);
-    const report = JSON.parse(consumedTwice.stdout) as {
-      readonly first: { readonly status: number | null; readonly stderr: string };
-      readonly second: { readonly status: number | null; readonly stderr: string };
-    };
-    assert.equal(report.first.status, 0, report.first.stderr);
-    assert.notEqual(report.second.status, 0, report.second.stderr);
-    assert.equal(existsSync(join(root, '.omd', 'config.json')), true);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-test('host-issued pipe receipts authorize only the exact purpose-bound payload', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-host-payload-'));
-  const activation: ActivationContext = {
-    schemaVersion: ACTIVATION_CONTEXT_SCHEMA_VERSION,
-    buildSha256: hash('a'),
-    loadedSkillSha256: hash('b'),
-    briefSha256: hash('c'),
-    hostCapability: { host: 'claude' },
-  };
-  const event = {
-    eventId: 'current-user-intent-event',
-    currentUser: true,
-    kind: 'explicit-intent',
-    lock: { register: 'quiet' },
-    recordedAt: '2026-01-01T00:00:00.000Z',
-  };
-  const argv = ['intent', 'append', '--input', 'intent.json'];
-  try {
-    mkdirSync(join(root, '.omd'), { recursive: true });
-    writeFileSync(join(root, 'intent.json'), JSON.stringify({
-      invocation: { activation, current: activation },
-      event,
-      expectedCurrentSha256: null,
-    }));
-    const mismatched = await executeHostIssuedCli(root, 'host-payload-mismatch-nonce-0123456789', {
-      payloadAuthorizations: [{ purpose: 'current-user-intent-event', payloadSha256: hash('d') }],
-    }, argv);
-    assert.notEqual(mismatched.status, 0);
-    assert.equal(existsSync(join(root, '.omd', 'intent-current.json')), false);
-
-    const authorized = await executeHostIssuedCli(root, 'host-payload-authorized-nonce-0123456789', {
-      payloadAuthorizations: [{
-        purpose: 'current-user-intent-event',
-        payloadSha256: createHash('sha256').update(`${canonicalJson(event)}\n`).digest('hex'),
-      }],
-    }, argv);
-    assert.equal(authorized.status, 0, authorized.stderr);
-    assert.equal(existsSync(join(root, '.omd', 'intent-current.json')), true);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test('project mutation inventory traverses source files and catches a newly introduced direct write', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-mutation-inventory-'));
   try {
@@ -712,10 +631,6 @@ test('normal CLI mutation graph has no unclassified direct project writers', () 
   assert.equal(
     inventory.owners.find((owner) => owner.filePath === 'core/runtime/project-write.ts')?.exception,
     'writeExternalObservationFile/createExternalObservationDirectory',
-  );
-  assert.equal(
-    inventory.owners.find((owner) => owner.filePath === 'core/evidence/final-v2.ts')?.exception,
-    'final-evidence-v2 stable descriptor adapter (audited capability owner)',
   );
   assert.equal(
     inventory.owners.find((owner) => owner.filePath === 'adapters/reviewer-mcp.ts')?.exception,

@@ -1,8 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
-import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
-import { readCurrentCandidateSelection } from '../brief/candidate-choice.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { firstRenderContext } from './first-render-context.ts';
 import { qualitativeFeedbackProjection } from './qualitative-feedback.ts';
@@ -43,38 +41,6 @@ const fields = (value: unknown): FirstRenderReviewBindings => {
     ...(row.consultedReferencesSha256 === undefined ? {} : { consultedReferencesSha256: piDigest(row.consultedReferencesSha256, 'consulted-references') }),
   };
 };
-
-function candidateTarget(root: string) {
-  if (!existsSync(join(root, CANDIDATE_SELECTION_POINTER_PATH))) return null;
-  const pointer = validateCandidateSelectionPointer(piParse(
-    bytesAt(root, CANDIDATE_SELECTION_POINTER_PATH).toString('utf8'), 'candidate-target'));
-  resolveCandidateSelection(root, pointer);
-  if ('selection' in pointer) {
-    const selected = readCurrentCandidateSelection(root);
-    const renders = (['desktop', 'mobile'] as const).map((viewport) => {
-      const dimensions = FIRST_RENDER_VIEWPORTS[viewport];
-      const preview = selected.previews.find((item) =>
-        item.viewport.width === dimensions.width && item.viewport.height === dimensions.height)
-        ?? fail(`selected candidate needs an approved ${viewport} visual target`);
-      return {
-        role: 'selected-first-party-target', viewport,
-        width: preview.viewport.width, height: preview.viewport.height,
-        captureSha256: preview.png.sha256,
-        pngBase64: bytesAt(root, preview.png.path).toString('base64'),
-      };
-    });
-    return { sha256: sha256(canonicalJson(pointer)), renders };
-  }
-  if (pointer.visual === undefined) return fail('selected candidate needs both approved visual targets');
-  return {
-    sha256: sha256(canonicalJson(pointer)),
-    renders: pointer.visual.renders.slice(0, 2).map((render, index) => ({
-      role: 'selected-first-party-target', viewport: index === 0 ? 'desktop' : 'mobile',
-      width: render.viewport.width, height: render.viewport.height, captureSha256: render.sha256,
-      pngBase64: bytesAt(root, render.path).toString('base64'),
-    })),
-  };
-}
 
 function readReviewRecord(root: string, path: string) {
   const bytes = bytesAt(root, path);
@@ -159,12 +125,10 @@ function prepareFirstRenderReviewPacket(
   const priorCriteria: readonly FirstRenderFinding[] = previous?.findings ?? [];
   const priorBaselines = previous?.baselines ?? [];
   const priorRenders = baselineRenders(root, priorBaselines, priorCriteria);
-  const target = candidateTarget(root);
   const referenceCaptures = (consulted?.renders ?? []).map(({ captureSha256, referenceRole }) => ({ captureSha256, referenceRole }));
   const comparisons = referenceComparisonBindings(referenceCaptures, renders);
   const evidence = { ...(context.schema === 'model-led-first-render-context-v1'
     ? { taskContext: context } : { hypothesis: context.hypothesis }), renders, priorCriteria, priorBaselines, priorRenders,
-    ...(target === null ? {} : { referenceRenders: target.renders }),
     ...(feedback === null ? {} : { reportedFeedback: feedback.context, feedbackRenders: feedback.renders }),
     ...(consulted === null ? {} : { consultedReferences: consulted.context, consultedReferenceRenders: consulted.renders }),
     scope: 'early-representative-viewports-not-final' };
@@ -174,7 +138,6 @@ function prepareFirstRenderReviewPacket(
     browserSha256: sha256(canonicalJson(renders.map(({ pngBase64: _bytes, ...row }) => row))),
     captureReportSha256: piDigest(current.reportSha256, 'report-sha'),
     previousReviewSha256: previous?.sha256 ?? null,
-    ...(target === null ? {} : { candidateTargetSha256: target.sha256 }),
     ...(feedback === null ? {} : { reportedFeedbackSha256: feedback.context.sha256 }),
     ...(consulted === null ? {} : { consultedReferencesSha256: consulted.context.sha256 }),
   };
@@ -237,24 +200,14 @@ export async function runFirstRenderReview(root: string, invocation: ProjectRunI
   const run = getNativePiRun(invocation, root);
   const previous = readFirstRenderReview(run.projectRoot);
   const capture = checkFirstRenderEvidence(run.projectRoot, 'review', invocation);
-  const target = candidateTarget(run.projectRoot);
-  const next = (review: FirstRenderReview) => {
-    if (capture?.schema === 'first-render-check-v4') return {
-      next: review.decision === 'retain' ? 'continue-selected-production' : 'repair-model-led-source-and-recapture',
-      repairOwners: review.findings.length === 0 ? [] : ['coordinator'],
-    };
-    const owners = { direction: 'coordinator', composition: 'omd-composer', type: 'omd-typesetter',
-      copy: 'omd-copywriter', surface: 'omd-hand' } as const;
-    return { next: review.decision === 'retain' ? 'continue-selected-production'
-      : review.decision === 'revise' ? 'repair-rebuild-recapture'
-        : review.findings.some(finding => finding.repairScope === 'direction')
-          ? 'return-to-visual-direction-owner' : 'return-to-composition-owner',
-    repairOwners: [...new Set(review.findings.map(finding => owners[finding.repairScope]))] };
-  };
+  const next = (review: FirstRenderReview) => ({
+    next: review.decision === 'retain' ? 'continue-selected-production' : 'repair-model-led-source-and-recapture',
+    repairOwners: review.findings.length === 0 ? [] : ['coordinator'],
+  });
   if (previous && previous.schema === SCHEMA && previous.bindings.captureReportSha256 === capture?.reportSha256
     && previous.bindings.buildSha256 === invocation.current.buildSha256
     && previous.bindings.briefSha256 === invocation.current.briefSha256
-    && previous.bindings.candidateTargetSha256 === target?.sha256
+    && previous.bindings.candidateTargetSha256 === undefined
     && previous.bindings.consultedReferencesSha256 === consultedReferenceProjection(root)?.context.sha256
     && previous.bindings.reportedFeedbackSha256 === qualitativeFeedbackProjection(root)?.context.sha256) {
     return { ...previous, path: FIRST_RENDER_REVIEW_PATH, ...next(previous) };

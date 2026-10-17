@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,6 +17,7 @@ import {
 import { observationV2Sha256, writeObservationV2 } from '../../core/runtime/observation.ts';
 import {
   TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
+  parseTrustedBrowserReceipt,
   trustedBrowserReceiptSha256,
   type TrustedBrowserReceipt,
 } from '../../core/runtime/trusted-browser-receipt.ts';
@@ -28,41 +29,48 @@ import {
 } from '../../core/runtime/trusted-evaluation-contract.ts';
 import { validateDecisionGraph } from '../../core/deliberation/contracts.ts';
 import { browserObservationSha256, designDecisionSha256 } from '../../core/runtime/browser-observation.ts';
-import {
-  authorizeTestProjectRunPayloads,
-  createTestProjectWriteAdapter,
-  publishTestAdaptiveRoute,
-} from './project-write.ts';
-import { browserFixturePng, writeBrowserDecisionFixture } from './browser-observation-decision-links.ts';
+import { createTestProjectWriteAdapter } from './project-write.ts';
+import { writeBrowserDecisionFixture } from './browser-observation-decision-links.ts';
+import { publishModelLedRoute } from './model-led.ts';
+import { measureProject } from '../../core/measure/index.ts';
+import { loadMeasurement } from '../../core/measure/files.ts';
+import { authorizeNativePiPayload } from '../../core/runtime/native-pi-run.ts';
+import { requireProductProbeResultAuthorization } from '../../core/runtime/invocation.ts';
 
 const sha256 = (value: string | Uint8Array): string =>
   createHash('sha256').update(value).digest('hex');
 
-export function prepareFinalRenderReviewFixture(
+export async function prepareFinalRenderReviewFixture(
   routeFixture: 'copy-only' | 'synth-marketing' = 'copy-only',
   options: Readonly<{
     withGraphHistory?: boolean;
     fillValue?: string;
     executionScripts?: (scripts: TrustedLifecycleManifest['scripts']) => TrustedLifecycleManifest['scripts'];
   }> = {},
-): Readonly<{
+): Promise<Readonly<{
   root: string;
-  invocation: ReturnType<typeof publishTestAdaptiveRoute>;
+  invocation: ReturnType<typeof publishModelLedRoute>['invocation'];
   observationSha256s: readonly string[];
-}> {
-  const root = mkdtempSync(join(tmpdir(), 'omd-final-render-review-'));
+}>> {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-final-render-review-')));
   mkdirSync(join(root, '.omd'), { recursive: true });
   mkdirSync(join(root, 'src', 'copy'), { recursive: true });
   writeFileSync(join(root, '.omd', 'copy-deck.md'), '# Approved copy\n');
   const productionPath = routeFixture === 'synth-marketing'
     ? 'index.html'
     : 'src/copy/final.html';
-  writeFileSync(join(root, productionPath), `${options.fillValue === undefined ? '' : '<input>'}<main>Approved copy</main>\n`);
+  writeFileSync(join(root, productionPath), `<!doctype html><html lang="en"><meta charset="utf-8"><title>Approved copy</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f7f7f5;color:#17201b;font:400 18px/1.5 Arial,sans-serif}main{max-width:760px;margin:auto;padding:64px 24px}input{display:block;width:100%;min-height:44px;margin-bottom:24px;font:inherit}
+</style><main>${options.fillValue === undefined ? '' : '<input aria-label="Review value">'}<h1>Approved copy</h1><p>Review the approved confirmation sentence.</p></main></html>\n`);
   const routeInput = JSON.parse(readFileSync(
     new URL(`../fixtures/adaptive-flow/${routeFixture}.json`, import.meta.url),
     'utf8',
   )) as unknown;
-  const invocation = publishTestAdaptiveRoute(root, routeInput, 'final-render-review');
+  const { invocation } = publishModelLedRoute(
+    root,
+    routeInput as Record<string, unknown>,
+    String((routeInput as Record<string, unknown>).request),
+  );
   if (routeFixture === 'synth-marketing') {
     const h = (character: string): string => character.repeat(64);
     const alternative = {
@@ -108,13 +116,8 @@ export function prepareFinalRenderReviewFixture(
       sha256: currentSha256,
     })}\n`);
   }
-  const browser = writeBrowserDecisionFixture(root);
-  const desktopPath = '.omd/final-desktop.png';
-  const mobilePath = '.omd/final-mobile.png';
-  const desktop = browserFixturePng(1280, 900);
-  const mobile = browserFixturePng(390, 844);
-  writeFileSync(join(root, desktopPath), desktop);
-  writeFileSync(join(root, mobilePath), mobile);
+  const testedUrl = 'http://127.0.0.1/index.html';
+  const browser = writeBrowserDecisionFixture(root, testedUrl);
   const buildPath = '.omd/build.json';
   const buildValue = {
     schemaVersion: 'omd-build-identity-v1',
@@ -124,6 +127,9 @@ export function prepareFinalRenderReviewFixture(
   };
   writeFileSync(join(root, buildPath), `${canonicalJson(buildValue)}\n`);
   const buildReceipt = { path: buildPath, sha256: sha256(readFileSync(join(root, buildPath))) };
+  const writer = createTestProjectWriteAdapter(root, invocation);
+  const measured = await measureProject({ root, entry: productionPath, writer, invocation });
+  const packet = loadMeasurement(root, measured.packet);
   const route = readPersistedRoute(root, invocation);
   const decisionGraphBytes = readFileSync(join(root, '.omd', 'decision-graph.json'));
   const decisionGraph = validateDecisionGraph(JSON.parse(decisionGraphBytes.toString('utf8')) as unknown);
@@ -147,6 +153,25 @@ export function prepareFinalRenderReviewFixture(
   const executionPlanSha256 = sha256(executionPlan);
   mkdirSync(join(root, '.omd/evaluation-plans'), { recursive: true });
   writeFileSync(join(root, `.omd/evaluation-plans/sha256-${executionPlanSha256}.json`), executionPlan);
+  const captures = packet.scope.map(view => {
+    const capture = packet.captures.find(candidate => candidate.viewId === view.id)!;
+    return {
+      path: capture.capture.path,
+      sha256: capture.capture.sha256,
+      width: capture.image.width,
+      height: capture.image.height,
+      testedUrl,
+      measurement: {
+        packet: measured.packet,
+        viewId: view.id,
+        browserZoom: view.browserZoom,
+        state: view.state,
+        stateRecipeSha256: view.stateRecipeSha256,
+        viewport: view.viewport,
+        layoutViewport: view.viewport,
+      },
+    };
+  });
   const receipt: TrustedBrowserReceipt = {
     schema: TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA,
     executionPlanSha256,
@@ -156,7 +181,7 @@ export function prepareFinalRenderReviewFixture(
     activationBuildSha256: invocation.current.buildSha256,
     productionRevisionSha256: servedProjectTreeSha256(root, productionPath),
     productionPath,
-    testedUrl: 'http://127.0.0.1:1/index.html',
+    testedUrl,
     decisionGraphSha256: sha256(decisionGraphBytes),
     outcomeResults: trustedIdentity.requiredOutcomeRefs.map((outcomeRef) => ({
       outcomeRef,
@@ -166,27 +191,28 @@ export function prepareFinalRenderReviewFixture(
     confirmedClaimRefs: trustedIdentity.confirmedClaimRefs,
     decisionRefs: deriveTrustedDecisionRefs(route.sourceContractSha256, decisionGraph.value.decisions),
     hardFloors: { behavior: 'pass', access: 'pass', safety: 'pass' },
-    captures: [
-      { path: desktopPath, sha256: sha256(desktop), width: 1280, height: 900 },
-      { path: mobilePath, sha256: sha256(mobile), width: 390, height: 844 },
-    ],
+    captures,
     transcript: [`assertion-pass:${'a'.repeat(64)}`],
   };
   const receiptSha256 = trustedBrowserReceiptSha256(receipt);
   const receiptBytes = Buffer.from(`${canonicalJson(receipt)}\n`);
+  const parsedReceipt = parseTrustedBrowserReceipt(JSON.parse(receiptBytes.toString('utf8')) as unknown);
+  if (trustedBrowserReceiptSha256(parsedReceipt) !== receiptSha256) {
+    throw new Error('test trusted browser receipt changed during canonical parsing');
+  }
   writeFileSync(
     join(root, `.omd/trusted-browser-receipt-sha256-${receiptSha256}.json`),
     receiptBytes,
   );
-  authorizeTestProjectRunPayloads(root, invocation, [{
-    purpose: 'product-probe-result',
-    payload: receiptBytes,
-  }]);
-  const evidence = browser.evidence([
-    { path: desktopPath, sha256: sha256(desktop), viewport: { width: 1280, height: 900 }, testedState: 'initial' },
-    { path: mobilePath, sha256: sha256(mobile), viewport: { width: 390, height: 844 }, testedState: 'initial' },
-  ]);
-  const writer = createTestProjectWriteAdapter(root, invocation);
+  authorizeNativePiPayload(invocation, root, 'product-probe-result', receiptBytes);
+  requireProductProbeResultAuthorization(invocation, root, receiptBytes);
+  const evidence = browser.evidence(captures.map(capture => ({
+    path: capture.path,
+    sha256: capture.sha256,
+    viewport: capture.measurement.layoutViewport,
+    testedState: capture.measurement.state,
+    measurement: capture.measurement,
+  })));
   const observationSha256s: string[] = [];
   if (options.withGraphHistory) {
     const decisions = decisionGraph.value.decisions.map(item => ({ ...item, question: 'Which earlier composition keeps context?' }));

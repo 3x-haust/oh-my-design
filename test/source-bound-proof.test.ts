@@ -72,27 +72,12 @@ test('production entry paths cannot escape the project', () => {
   assert.ok(findings.some(({ id }) => id === 'SOURCE_BOUND_PROOF_INVALID'));
 });
 
-test('the proof CLI publishes the same currentness gate', () => {
-  const { root, revision } = fixture();
-  const revisionResult = spawnSync(process.execPath, [
-    resolve('bin/omd.ts'),
-    'proof',
-    'revision',
-    '--input',
-    'src/index.html',
-    '--json',
-  ], { cwd: root, encoding: 'utf8' });
-  assert.equal(revisionResult.status, 0, revisionResult.stderr);
-  assert.deepEqual(JSON.parse(revisionResult.stdout), {
-    entry: 'src/index.html',
-    revisionSha256: revision,
+test('the retired proof CLI is absent while source-bound validation remains available as an API', () => {
+  const { root } = fixture();
+  const result = spawnSync(process.execPath, [resolve('bin/omd.ts'), 'proof', '--check', '--json'], {
+    cwd: root,
+    encoding: 'utf8',
   });
-  const result = spawnSync(process.execPath, [
-    resolve('bin/omd.ts'),
-    'proof',
-    '--check',
-    '--json',
-  ], { cwd: root, encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), []);
+  assert.equal(result.status, 1);
+  assert.match(`${result.stdout}\n${result.stderr}`, /unknown command proof/i);
 });

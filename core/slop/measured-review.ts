@@ -4,7 +4,7 @@ import { check, loadRules } from '../rules/engine.ts';
 import { MeasurementIndex, validateSlopMeasurementDecision, type SlopMeasurementDecision } from '../measure/citations.ts';
 import type { Receipt, MeasuredIr, MetricKind, Measurement, VisualMeasurement } from '../measure/types.ts';
 import { loadMeasurement } from '../measure/files.ts';
-import { readArtifact, sourceDigest, loadContracts } from '../measure/inputs.ts';
+import { readArtifact, sourceDigest } from '../measure/inputs.ts';
 import { canonicalBytes, digest, sha256 } from '../measure/identity.ts';
 import * as v from '../measure/validation.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
@@ -12,7 +12,6 @@ import { acquireProjectMutationLock, requireProjectWriteAdapterForInvocation, re
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import { isModelLedProcess } from '../route/process-policy.ts';
-import { validateSourceBoundProofCurrentness } from '../composition-contract/source-currentness.ts';
 import { scanSlopSource } from './index.ts';
 import { checkSlopReview } from './review.ts';
 import { historicalCheckpoint, inheritedSlopFindings, measuredSlopScope, type Finding, type Checkpoint, type Review } from './measured-history.ts';
@@ -188,16 +187,8 @@ function current(root: string, checkpoint: Checkpoint) {
   for (const key of ['views', 'findings', 'filesScanned', 'sourceSha256', 'rulesSha256'] as const) if (digest(actual[key]) !== digest(checkpoint[key])) fail(`stale measured slop ${key}`);
   return actual;
 }
-function exceptionApplies(root: string, ref: { receipt: Receipt; field: string }, finding: Finding, packets: VisualMeasurement[]): boolean {
-  // Only typed, currently owner-bound typography commitments are exceptions. Prose is not authority.
-  if (!['TEXT_UNDER_12', 'SLOP-MICRO-LABELS', 'SLOP-DECORATIVE-MONOSPACE', 'default-font-pair', 'global-terminal-styling'].includes(finding.rule)
-    || ref.receipt.path !== '.omd/type-proof.md' || sha256(readArtifact(root, ref.receipt.path)) !== ref.receipt.sha256
-    || validateSourceBoundProofCurrentness(root, ['.omd/type-proof.md']).length) return false;
-  const contract = loadContracts(root).contracts.type;
-  const role = contract?.roles.find(role => ref.field === `Measurement contract.roles.${role.id}`);
-  if (!role || !packets.every(p => p.binding.inputs.some(i => i.kind === 'type-proof' && digest(i.receipt) === digest(ref.receipt)))) return false;
-  const subjects = packets.flatMap(p => p.subjects).filter(s => finding.viewIds.includes(s.viewId) && (!finding.subjectIds.length || finding.subjectIds.includes(s.id)));
-  return subjects.length > 0 && subjects.every(s => s.role === role.id) && packets.every(p => p.measurements.filter(m => m.kind === 'contract-conformance').every(m => m.coverage.status === 'complete' && m.value.observations.filter(o => o.role === role.id).every(o => o.result === 'pass')));
+function exceptionApplies(_root: string, _ref: { receipt: Receipt; field: string }, _finding: Finding, _packets: VisualMeasurement[]): boolean {
+  return false;
 }
 function absent(root: string, checkpoint: Checkpoint, finding: Finding, measurement: Measurement, resolving: boolean): boolean {
   if (finding.kind === 'source-candidate') {

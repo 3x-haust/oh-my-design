@@ -11,6 +11,7 @@ import {
   type AdaptiveSkip,
   type AdaptiveStrategyDecision,
   type ModelCapabilityRouteInput,
+  MODEL_LED_STRATEGY_DECISION,
 } from './adaptive-flow-domain.ts';
 import { parseProcessPolicy } from './process-policy.ts';
 import { parseReviewPurpose, parseReviewPurposeAuthority } from './review-purpose-authority.ts';
@@ -233,8 +234,10 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
     const hasProcess = typeof value === 'object' && value !== null && Object.hasOwn(value, 'processPolicy');
     const hasReviewPurpose = typeof value === 'object' && value !== null && Object.hasOwn(value, 'reviewPurpose');
     const hasReviewPurposeAuthority = typeof value === 'object' && value !== null && Object.hasOwn(value, 'reviewPurposeAuthority');
+    const hasStrategy = typeof value === 'object' && value !== null && Object.hasOwn(value, 'strategyDecision');
     if (hasReviewPurpose !== hasReviewPurposeAuthority) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'reviewPurpose and reviewPurposeAuthority must be supplied together');
     const item = fields(value, [...baseKeys, ...(hasMode ? ['deliveryMode'] : []), ...(hasScope ? ['learningScope'] : []), ...(hasProcess ? ['processPolicy'] : []),
+      ...(hasStrategy ? ['strategyDecision'] : []),
       ...(hasReviewPurpose ? ['reviewPurpose', 'reviewPurposeAuthority'] : [])], true);
     // Legacy descriptors remain readable, but neither their status nor their IDs select learning.
     if (hasLearning) parseAdaptiveLearningContext(item.get('validatedLearningContext'));
@@ -264,7 +267,7 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
       browserDecisionContext: parseAdaptiveBrowserContext(item.get('browserDecisionContext')),
       validatedLearningContext: UNSELECTED_LEARNING,
       ...(hasScope ? { learningScope: learningScope(item.get('learningScope')) } : {}),
-      strategyDecision: parseAdaptiveStrategyDecision(item.get('strategyDecision'), processPolicy?.schema === 'model-led-design-process-v1'),
+      strategyDecision: MODEL_LED_STRATEGY_DECISION,
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AdaptiveRouteError') throw error;
