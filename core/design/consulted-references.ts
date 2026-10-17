@@ -7,7 +7,7 @@ import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
-import { parseFileKey } from '../figma/client.ts';
+import { figmaTargetsInRequest } from '../figma/completion.ts';
 
 const SCHEMA = 'consulted-references-v2';
 const LEGACY_SCHEMA = 'consulted-references-v1';
@@ -262,17 +262,8 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
   };
 }
 
-/** Structural Figma URL detection only; this never classifies natural-language task prose. */
 export function requestSuppliesFigmaTarget(request: string): boolean {
-  const urls = request.match(/https?:\/\/[^\s<>"'`]+/gu) ?? [];
-  return urls.some(candidate => {
-    const value = candidate.replace(/[),.;!?]+$/u, '');
-    let url: URL;
-    try { url = new URL(value); } catch { return false; }
-    if ((url.hostname !== 'figma.com' && url.hostname !== 'www.figma.com')
-      || !/^\/(?:file|design)\//u.test(url.pathname)) return false;
-    try { parseFileKey(url.href); return true; } catch { return false; }
-  });
+  return figmaTargetsInRequest(request).length > 0;
 }
 
 export function requiresConsultedPrimaryOriginal(

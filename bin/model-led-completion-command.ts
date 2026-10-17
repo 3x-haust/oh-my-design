@@ -17,6 +17,7 @@ import { parseTrustedLifecycleManifest } from '../core/runtime/trusted-evaluatio
 import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import { runFirstRenderReview } from '../core/design/first-render-review.ts';
 import { requireConsultedPrimaryOriginal } from '../core/design/consulted-references.ts';
+import { figmaCompletionIssues } from '../core/figma/completion.ts';
 import { createProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { runNativeVerification } from './native-verification-command.ts';
 
@@ -71,6 +72,10 @@ export async function runModelLedCompletion(input: Readonly<{
     const route = readPersistedRoute(input.root, input.invocation);
     if (!isModelLedProcess(route.sourceContract)) throw new CompletionStepError('MODEL_LED_WORKFLOW_REQUIRED');
     requireConsultedPrimaryOriginal(input.root, route);
+    const figmaIssues = figmaCompletionIssues(input.root, route.request);
+    if (figmaIssues.length > 0) {
+      throw new CompletionStepError('FIGMA_TARGET_NOT_PROVEN', figmaIssues.map(issue => `${issue.code}: ${issue.message}`).join('; '));
+    }
     const readiness = checkProductionReadiness(input.root, input.invocation, input.packRoot);
     if (!readiness.ok) throw new CompletionStepError('NATIVE_PRODUCTION_NOT_READY', readiness.blockers.join('; '));
     phase = 'plan';

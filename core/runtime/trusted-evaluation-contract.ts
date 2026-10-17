@@ -386,19 +386,20 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
         : captureState.state === 'pressed' ? finalAction?.kind === 'press-start'
         : captureState.state === 'open' ? finalAction?.kind === 'click' || finalAction?.kind === 'press'
         : actions.length === 0 || finalAction?.kind === 'reload';
+      const finalSelector = finalAction !== undefined && 'selector' in finalAction ? finalAction.selector : undefined;
       const matchingAssertion = captureState.state === 'hover'
         ? assertions.some(assertion => assertion.kind === 'element-state'
-          && assertion.state === 'hovered' && assertion.selector === finalAction?.selector)
+          && assertion.state === 'hovered' && assertion.selector === finalSelector)
         : captureState.state === 'focus'
           ? assertions.some(assertion => assertion.kind === 'element-state'
             && (assertion.state === 'focused' || assertion.state === 'focus-visible')
-            && assertion.selector === finalAction?.selector)
+            && assertion.selector === finalSelector)
           : captureState.state === 'pressed'
             ? assertions.some(assertion => assertion.kind === 'element-state'
-              && assertion.state === 'pressed' && assertion.selector === finalAction?.selector)
+              && assertion.state === 'pressed' && assertion.selector === finalSelector)
             : captureState.state === 'open'
               ? assertions.some(assertion => assertion.kind === 'element-state'
-                && assertion.state === 'expanded' && assertion.selector === finalAction?.selector)
+                && assertion.state === 'expanded' && assertion.selector === finalSelector)
               : true;
       if (!matchingAction || !matchingAssertion) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
     }

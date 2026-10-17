@@ -52,9 +52,17 @@ palettes, density, shapes and control systems. Prefer complementary states withi
 system when available. Domain similarity alone does not establish aesthetic fit.
 When you consult external originals, preserve those exact whole PNGs through
 `omd ref context --input <json> --json` before the first-render check:
-`{schema:"consulted-references-input-v1",requestSha256:<original route request digest>,
+`{schema:"consulted-references-input-v2",requestSha256:<original route request digest>,
 images:[{path:<whole PNG>,sha256:<exact file digest>,sourceUrl:<actual source URL>,
-role:"primary"|"supplemental"}]}`. This lightweight reported comparison context is not
+role:"primary"|"supplemental",component:<compared destination component, e.g. "booking card">,
+state?:"default"|"hover"|"focus"|"pressed"|"open"}]}`. Exactly one image is primary.
+Capture reference interaction states with `omd ref add <url> --preparation <json>`
+(`hover`, `focus`, `press-start` or a disclosure `click`; never submit, sign in, pay,
+delete, download or navigate away), one whole capture per state. For every primary state,
+author a matching `hover`/`focus`/`press-start` action with `captureState` in the
+trusted lifecycle manifest so the final review compares the same component and state.
+Completion refuses without a request-scoped primary original unless the request links a
+Figma target, which is proven by its own frame diffs instead. This lightweight reported comparison context is not
 reference admission, candidate selection or approval; do not create a board merely to use it.
 The harness delivers these exact originals privately to contextual early/fidelity review,
 separately from first-party candidate targets and rejected output baselines.

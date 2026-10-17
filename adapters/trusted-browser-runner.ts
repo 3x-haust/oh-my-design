@@ -606,7 +606,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
                   after: { tagName: after.tagName,
                     idSha256: after.id ? sha256(Buffer.from(after.id)) : null } })}`);
               }
-              else {
+              else if (action.kind === 'fill') {
                 const control = page.locator(action.selector);
                 const isSelect = await control.evaluate(element => element.tagName === 'SELECT',
                   undefined, { timeout: 2_000 });
