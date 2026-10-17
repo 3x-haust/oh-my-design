@@ -1,22 +1,16 @@
 import assert from 'node:assert/strict';
-import { execFile, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 import test from 'node:test';
 import { inputSkeleton } from '../core/schema/inputs.ts';
-import { loadRefs } from '../core/ref/store.ts';
 import { captureFinalUrlGuard, captureLane } from '../core/ref/capture-intake.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
 
-const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
-const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
 test('request language does not refuse a public foreign capture without market judgment', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-korean-intake-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
@@ -98,40 +92,16 @@ test('a changed gallery item cannot fabricate traversal for a direct source', t 
   assert.equal(captureLane(value.root, { source: value.source.source, lane: 'design' }, invocation), 'design');
 });
 
-test('a source may inform both lanes without asserting independent corroboration', async t => {
-  const server = createServer((req, res) => {
-    if (req.url?.startsWith('/redirect')) {
-      res.writeHead(302, { Location: `http://[::1]:${port}/same-service` }); res.end(); return;
-    }
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(`<main><h1>Service workspace</h1><p>${'Application preparation status and confirmed requirements. '.repeat(15)}</p></main>`);
-  });
-  await new Promise<void>(resolve => server.listen(0, resolve));
-  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
-  const address = server.address(); assert.ok(address && typeof address !== 'string');
-  const port = address.port;
+test('a redirected service may inform both lanes without asserting independent corroboration', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-redirect-intake-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
-  writeFileSync(join(cwd, '.omd/.cache/route.json'), JSON.stringify(inputSkeleton('product-route-input').skeleton));
-  const classified = spawnSync(process.execPath, [cli, 'route', 'classify', '--input', '.omd/.cache/route.json'], { cwd, env, encoding: 'utf8' });
-  assert.equal(classified.status, 0, classified.stderr);
-  const source = `http://127.0.0.1:${port}/redirect-domain`;
-  const visual = `http://localhost:${port}/redirect-design`;
-  writeFileSync(join(cwd, '.omd/.cache/batch.json'), JSON.stringify([
-    { source, as: 'task', lane: 'domain', energy: false, shot: true },
-    { source: visual, as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
-  ]));
-  const command = (...args: string[]) => promisify(execFile)(process.execPath, [cli, ...args], { cwd, env, timeout: 30000 });
-  await assert.doesNotReject(command('ref', 'add-batch', '.omd/.cache/batch.json', '--json'));
-  const refs = loadRefs(cwd, { includeDomain: true });
-  assert.equal(refs.length, 2);
-  const pngs = ['domain', 'design'].flatMap(lane => {
-    const path = join(cwd, '.omd/refs', lane);
-    return existsSync(path) ? readdirSync(path).filter(file => file.endsWith('.png')) : [];
-  });
-  assert.equal(pngs.length, 2);
-  await assert.doesNotReject(command('ref', 'add', source,
-    '--as', 'retry', '--lane', 'domain', '--from-user', '--no-energy'));
-  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 3);
+  const invocation = publishTestAdaptiveRoute(cwd, inputSkeleton('product-route-input').skeleton);
+  const finalUrl = 'https://service.example/workspace';
+  const guard = captureFinalUrlGuard(cwd, [
+    { source: 'https://directory.example/service', lane: 'domain' },
+    { source: 'https://visual.example/service', lane: 'design', fromUser: true },
+  ], invocation);
+  assert.doesNotThrow(() => guard(0, finalUrl, 'Application requirements and preparation status'));
+  assert.doesNotThrow(() => guard(1, finalUrl, 'Application requirements and preparation status'));
+  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });

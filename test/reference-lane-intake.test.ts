@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { loadRefs } from '../core/ref/store.ts';
+import { loadDesignCandidates } from '../core/ref/reference-candidate.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
@@ -37,15 +38,16 @@ test('selected discovery requires a lane but permits visual domain capture witho
   assert.equal(loadRefs(cwd, { includeDomain: true }).length, 1);
 });
 
-test('direct design captures do not fabricate gallery traversal provenance', t => {
+test('selected direct design imports cannot bypass complete-pixel candidate review', t => {
   const cwd = project(t);
   const result = run(cwd, ['ref', 'add', 'https://www.benefits.gov/', '--as', 'beautiful-flow', '--image', '--lane', 'design']);
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(loadRefs(cwd).length, 1);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /REFERENCE_CANDIDATE_IMAGE_REQUIRED/);
+  assert.equal(loadRefs(cwd).length, 0);
   const gallery = run(cwd, ['ref', 'add', 'https://dribbble.com/shots/123-screen', '--as', 'visual-study', '--image', '--lane', 'design']);
   assert.equal(gallery.status, 1, gallery.stderr);
   assert.match(gallery.stderr, /DESIGN_GALLERY_DISCOVERY_ONLY/);
-  assert.equal(loadRefs(cwd).length, 1);
+  assert.equal(loadRefs(cwd).length, 0);
 });
 
 test('batch preflight rejects an incomplete lane manifest atomically before browser launch', t => {
@@ -85,7 +87,7 @@ test('a domain ref-add batch is refused before any browser acquisition', t => {
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
 
-test('independent local user-reference batch still captures visual design evidence', t => {
+test('local user-reference pixels remain quarantined without fabricated user direction', t => {
   const cwd = project(t);
   const path = join(cwd, '.omd/.cache/batch.json');
   writeFileSync(path, JSON.stringify([
@@ -94,6 +96,9 @@ test('independent local user-reference batch still captures visual design eviden
   ]));
   const result = run(cwd, ['ref', 'add-batch', path, '--json']);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 2);
-  assert.equal(loadRefs(cwd).length, 2);
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 0);
+  assert.equal(loadRefs(cwd).length, 0);
+  const candidates = loadDesignCandidates(cwd);
+  assert.equal(candidates.length, 2);
+  assert.ok(candidates.every(candidate => candidate.reference.origin === 'user'));
 });

@@ -104,7 +104,7 @@ test('native gallery discovery keeps wrapper pixels outside refs/design and admi
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
 });
 
-test('a visited gallery may retain only its actual UI image element without cropping', async t => {
+test('a visited gallery image fragment remains blocked until independent direction admission', async t => {
   const { root, gallery, writer, research, board, receipt, refreshBoard } = designAdmissionFixture(t);
   const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
   refreshSearchesAfterRoute(root, research);
@@ -155,7 +155,8 @@ test('a visited gallery may retain only its actual UI image element without crop
   piece.referenceId = imported.id;
   piece.take = ['density'];
   refreshBoard();
-  assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), options),
+    /REFERENCE_DIRECTION_ADMISSION_MISSING/);
 });
 
 test('website gallery wrappers are discovery evidence, not retained visual evidence', t => {

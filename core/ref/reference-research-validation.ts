@@ -95,8 +95,9 @@ function currentNavigation(root: string, item: { url: string; evidence: Research
 
 export function validateReferenceResearch(root: string, research: ReferenceResearch, options: ValidationOptions): void {
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
-  const admissionSourceContract = currentReferenceDirectionSourceContract(root);
-  if (research.schema === 'reference-research-v8' && admissionSourceContract !== null) {
+  const admissionSourceContract = research.schema === 'reference-research-v8'
+    ? currentReferenceDirectionSourceContract(root) : null;
+  if (admissionSourceContract !== null) {
     if (admissionSourceContract !== options.expectedSourceContractSha256) fail('REFERENCE_DIRECTION_ADMISSION_STALE');
     const retained = loadRefs(root, { includeDomain: true });
     for (const source of research.designReference.sources) {

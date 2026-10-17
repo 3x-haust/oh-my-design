@@ -38,7 +38,7 @@ test('native direct roots publish both lanes without any executed search and ret
   await withBrowser(async browser => {
     const research = await directResearch(browser, fixture);
     publishReferenceResearch(fixture.root, research, options, fixture.writer);
-    assert.deepEqual(readPublishedReferenceResearch(fixture.root), research);
+    assert.deepEqual(readPublishedReferenceResearch(fixture.root), parseReferenceResearch(research));
     assert.equal(readPublishedReferenceResearch(fixture.root).designReference.sources[0]?.url, fixture.source.source);
   });
 });
