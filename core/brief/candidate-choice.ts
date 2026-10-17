@@ -7,7 +7,8 @@ import { acquireProjectMutationLock, replaceProjectFileAtomically, requireProjec
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { selectedBaseTokens } from '../tokens/minimal.ts';
 import { CANDIDATE_SET_PATH, checkCandidateSet, parseCandidatePreview, type CandidatePreview } from './candidate-plan.ts';
-import { buildCandidateReviewPacket, verifyCandidateEyeReview, type CandidateReviewPacket } from './candidate-review.ts';
+import { buildCandidateReviewPacket, CANDIDATE_REVIEW_FEEDBACK_PATH, readCurrentCandidateReviewFeedback,
+  verifyCandidateEyeReview, type CandidateReviewPacket } from './candidate-review.ts';
 import { chosenDirectionId, verifyDirectionUserInput, verifyDirectionAutonomyGrant, type DirectionUserInput } from './candidate-authority.ts';
 import * as v from './candidate-data.ts';
 export const CURRENT_CANDIDATE_PATH = '.omd/.cache/sketches/current.json';
@@ -52,7 +53,8 @@ function setPointer(root: string): SetPointer {
   const p = v.object(JSON.parse(v.readBytes(root, CANDIDATE_SET_PATH).toString('utf8')), ['schema', 'candidateSet', 'displayedSet', 'packet', 'aliases']);
   return { schema: v.enumeration(p.schema, ['candidate-set-pointer-v2']), candidateSet: v.receipt(p.candidateSet), displayedSet: v.receipt(p.displayedSet), packet: v.receipt(p.packet), aliases: v.list(p.aliases, value => { const a = v.object(value, ['id', 'alias']); return { id: v.id(a.id), alias: v.id(a.alias) }; }) };
 }
-function verifySetPointer(root: string, pointer: SetPointer, checked: ReturnType<typeof checkCandidateSet>): void {
+function verifySetPointer(root: string, pointer: SetPointer, checked: ReturnType<typeof checkCandidateSet>,
+  route: { sourceContractSha256: string; request: string }, refreshReferences = false): CandidateReviewPacket {
   v.unique(pointer.aliases, a => a.id); v.unique(pointer.aliases, a => a.alias);
   if (v.digest(pointer.aliases.map(a => a.id).sort()) !== v.digest(checked.set.candidates.map(c => c.id).sort())) v.fail('anonymous option mapping must contain exactly the actual candidate IDs');
   for (const [directory, receipt] of [['sets', pointer.candidateSet], ['presentations', pointer.displayedSet], ['packets', pointer.packet]] as const) {
@@ -61,10 +63,21 @@ function verifySetPointer(root: string, pointer: SetPointer, checked: ReturnType
   const presentation: PresentedCandidates = { schema: 'candidate-presentation-v1', candidateSet: pointer.candidateSet, sourceContractSha256: checked.plan.sourceContractSha256, inputDigest: checked.inputDigest,
     options: checked.plan.candidates.map(c => ({ id: c.id, layoutStrategy: c.layoutStrategy, tradeoffs: c.tradeoffs, previews: checked.set.candidates.find(s => s.id === c.id)!.previews })) };
   if (v.digest(JSON.parse(v.readReceipt(root, pointer.displayedSet).toString('utf8'))) !== v.digest(presentation)) v.fail('displayed options/previews changed');
-  const packet: CandidateReviewPacket = { schema: 'candidate-review-packet-v1', inputDigest: checked.inputDigest,
-    task: { surfaceId: checked.plan.representative.surfaceId, stateId: checked.plan.representative.stateId, content: checked.content.units.map(u => u.text), truthBoundary: checked.content.truthBoundary },
-    candidates: pointer.aliases.map(a => { const c = checked.set.candidates.find(c => c.id === a.id)!; return { alias: a.alias, previews: c.previews.map(p => ({ renderId: p.renderId, viewId: p.viewId, viewport: p.viewport, png: p.png })) }; }) };
-  if (v.digest(JSON.parse(v.readReceipt(root, pointer.packet).toString('utf8'))) !== v.digest(packet)) v.fail('anonymous packet/mapping differs from actual captures');
+  const packet = buildCandidateReviewPacket(root, checked.set, route).packet;
+  const stablePacket = { ...packet, candidates: pointer.aliases.map(a => {
+    const c = checked.set.candidates.find(c => c.id === a.id)!;
+    return { alias: a.alias, previews: c.previews.map(p => ({ renderId: p.renderId, viewId: p.viewId, viewport: p.viewport, png: p.png })) };
+  }) };
+  const committedPacket = v.object(JSON.parse(v.readReceipt(root, pointer.packet).toString('utf8')));
+  if (v.digest(refreshReferences ? { ...committedPacket, references: stablePacket.references } : committedPacket)
+    !== v.digest(stablePacket)) v.fail('anonymous packet/mapping or current reference evidence differs from actual captures');
+  return stablePacket;
+}
+export function currentCandidateReview(root: string, invocation: ProjectRunInvocation) {
+  const route = readPersistedRoute(root, invocation);
+  const pointer = setPointer(root);
+  const checked = checkCandidateSet(root, JSON.parse(v.readReceipt(root, pointer.candidateSet).toString('utf8')), route.sourceContractSha256);
+  return { route, pointer, plan: checked.set.plan, packet: verifySetPointer(root, pointer, checked, route) };
 }
 export function pendingDirection(inputDigest: string, displayedSet: v.Receipt | null, optionIds: readonly string[], stale = false): PendingDirection {
   const id = v.digest({ inputDigest, displayedSet, optionIds });
@@ -81,15 +94,17 @@ export function publishCandidatePacket(root: string, value: unknown, writer: Pro
     if (existsSync(join(root, CANDIDATE_SET_PATH))) {
       const previous = setPointer(root);
       if (previous.candidateSet.sha256 === v.hash(v.jsonBytes(checked.set))) {
-        verifySetPointer(root, previous, checked);
-        return { ...previous, pending: route.sourceContract.processPolicy.interactionMode === 'interactive' ? pendingDirection(checked.inputDigest, previous.displayedSet, checked.set.candidates.map(c => c.id)) : null, interactionMode: route.sourceContract.processPolicy.interactionMode };
+        const currentPacket = verifySetPointer(root, previous, checked, route, true);
+        if (v.digest(JSON.parse(v.readReceipt(root, previous.packet).toString('utf8'))) === v.digest(currentPacket)) {
+          return { ...previous, pending: route.sourceContract.processPolicy.interactionMode === 'interactive' ? pendingDirection(checked.inputDigest, previous.displayedSet, checked.set.candidates.map(c => c.id)) : null, interactionMode: route.sourceContract.processPolicy.interactionMode };
+        }
       }
     }
     const candidateSet = v.publishRecord(writer, '.omd/.cache/sketches/sets', checked.set);
     const presentation: PresentedCandidates = { schema: 'candidate-presentation-v1', candidateSet, sourceContractSha256: route.sourceContractSha256, inputDigest: checked.inputDigest,
       options: checked.plan.candidates.map(c => ({ id: c.id, layoutStrategy: c.layoutStrategy, tradeoffs: c.tradeoffs, previews: checked.set.candidates.find(s => s.id === c.id)!.previews })) };
     const displayedSet = v.publishRecord(writer, '.omd/.cache/sketches/presentations', presentation);
-    const blind = buildCandidateReviewPacket(root, checked.set, route.sourceContractSha256), packet = v.publishRecord(writer, '.omd/.cache/sketches/packets', blind.packet);
+    const blind = buildCandidateReviewPacket(root, checked.set, route), packet = v.publishRecord(writer, '.omd/.cache/sketches/packets', blind.packet);
     const pointer: SetPointer = { schema: 'candidate-set-pointer-v2', candidateSet, displayedSet, packet, aliases: blind.aliases };
     replaceProjectFileAtomically({ projectRoot: root, relativePath: CANDIDATE_SET_PATH, content: v.jsonBytes(pointer), invocation });
     return { ...pointer, pending: route.sourceContract.processPolicy.interactionMode === 'interactive' ? pendingDirection(checked.inputDigest, displayedSet, checked.set.candidates.map(c => c.id)) : null, interactionMode: route.sourceContract.processPolicy.interactionMode };
@@ -127,7 +142,7 @@ export function checkCandidateSelection(root: string, pointer: CandidatePointerV
   const choice = parseCandidateSelection(JSON.parse(v.readReceipt(root, pointer.selection).toString('utf8'))), route = directionRoute(root), current = setPointer(root);
   if (v.digest(choice.candidateSet) !== v.digest(current.candidateSet)) v.fail('selection candidate set changed');
   const checked = checkCandidateSet(root, JSON.parse(v.readReceipt(root, choice.candidateSet).toString('utf8')), route.sourceContractSha256);
-  verifySetPointer(root, current, checked);
+  verifySetPointer(root, current, checked, route);
   const selected = checked.set.candidates.find(c => c.id === choice.selectedId);
   if (!selected || choice.inputDigest !== checked.inputDigest || v.digest(choice.selectedSource) !== v.digest(selected.source)
     || v.digest(choice.previews) !== v.digest(selected.previews) || choice.effectiveBaseTokensSha256 !== selected.effectiveTokensSha256) v.fail('selected direction inputs/previews changed');
@@ -142,7 +157,7 @@ export function publishCandidateSelection(root: string, value: unknown, writer: 
     const route = readPersistedRoute(root, invocation), pointer = setPointer(root), candidateSet = v.receipt(input.candidateSet);
     if (v.digest(candidateSet) !== v.digest(pointer.candidateSet)) v.fail('candidate selection must bind the current displayed set');
     const checked = checkCandidateSet(root, JSON.parse(v.readReceipt(root, candidateSet).toString('utf8')), route.sourceContractSha256), selectedId = v.id(input.selectedId), selected = checked.set.candidates.find(c => c.id === selectedId);
-    verifySetPointer(root, pointer, checked);
+    verifySetPointer(root, pointer, checked, route);
     if (!selected || input.inputDigest !== checked.inputDigest) v.fail('wrong option or stale displayed input digest');
     const choice: CandidateSelection = { schema: 'candidate-selection-v2', candidateSet, selectedId, inputDigest: checked.inputDigest, decidedAt: new Date().toISOString(), decision: decision(input.decision), selectedSource: selected.source, previews: selected.previews, effectiveBaseTokensSha256: selected.effectiveTokensSha256 };
     const observation = inline ? verifyDirectionUserInput(root, input.userInputObservation) : undefined;
@@ -169,7 +184,7 @@ export function candidateDirectionState(root: string): DirectionState {
   }
   try {
     const pointer = setPointer(root), checked = checkCandidateSet(root, JSON.parse(v.readReceipt(root, pointer.candidateSet).toString('utf8')), route.sourceContractSha256);
-    verifySetPointer(root, pointer, checked);
+    verifySetPointer(root, pointer, checked, route);
     return { selectionStatus: stale ? 'stale' : route.processPolicy.interactionMode === 'interactive' ? 'awaiting-user' : 'missing',
       pending: route.processPolicy.interactionMode === 'interactive' ? pendingDirection(checked.inputDigest, pointer.displayedSet, checked.set.candidates.map(c => c.id), stale !== null) : null, reason: stale, selection: null };
   } catch (error) {
@@ -187,7 +202,17 @@ export function selectedCandidateBase(root: string, selection: CandidateSelectio
 export function directionCommitmentBlocker(root: string): string | null {
   if (!existsSync(join(root, '.omd/route-source.json'))) return null;
   const state = candidateDirectionState(root);
-  return state.pending ? `NEEDS_USER_DIRECTION: ${state.pending.question}` : state.selectionStatus === 'stale' ? `STALE_DIRECTION: ${state.reason}` : null;
+  if (state.pending) return `NEEDS_USER_DIRECTION: ${state.pending.question}`;
+  if (state.selectionStatus === 'stale') return `STALE_DIRECTION: ${state.reason}`;
+  if ((state.selectionStatus === 'missing' || state.selectionStatus === 'unavailable')
+    && existsSync(join(root, CANDIDATE_REVIEW_FEEDBACK_PATH))) {
+    const pointer = v.object(JSON.parse(v.readBytes(root, CANDIDATE_REVIEW_FEEDBACK_PATH).toString('utf8')));
+    const feedback = readCurrentCandidateReviewFeedback(root, v.id(pointer.runId), directionRoute(root).sourceContractSha256);
+    if (feedback !== null) {
+      return 'MISSING_DIRECTION: independent candidate review exists but did not produce an authenticated current selection; repair or re-review the concepts';
+    }
+  }
+  return null;
 }
 export function directionPresentation(root: string, pending: PendingDirection): PresentedCandidates | null {
   return pending.presentedSet === null ? null : JSON.parse(v.readReceipt(root, pending.presentedSet).toString('utf8')) as PresentedCandidates;

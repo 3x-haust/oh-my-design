@@ -354,6 +354,10 @@ test('non-git scope ignores only validated npm dependencies and Vite output', ()
   mkdirSync(join(root, 'node_modules', 'vite', 'bin'), { recursive: true });
   writeFileSync(join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'process.exit(0);\n');
   symlinkSync('../vite/bin/vite.js', join(root, 'node_modules', '.bin', 'vite'));
+  mkdirSync(join(root, 'node_modules', 'vite-node', 'node_modules', '.bin'), { recursive: true });
+  mkdirSync(join(root, 'node_modules', 'vite-node', 'node_modules', 'esbuild', 'bin'), { recursive: true });
+  writeFileSync(join(root, 'node_modules', 'vite-node', 'node_modules', 'esbuild', 'bin', 'esbuild'), 'fixture\n');
+  symlinkSync('../esbuild/bin/esbuild', join(root, 'node_modules', 'vite-node', 'node_modules', '.bin', 'esbuild'));
   mkdirSync(join(root, 'dist', 'assets'), { recursive: true });
   writeFileSync(join(root, 'dist', 'index.html'), '<script src="./assets/app.js"></script>\n');
   writeFileSync(join(root, 'dist', 'assets', 'app.js'), 'console.log("built");\n');

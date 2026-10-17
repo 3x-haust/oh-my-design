@@ -1,5 +1,6 @@
 import type { CaptureBinding, Finding, FindingCode, MeasuredIr, Measurement, MetricKind, MetricValues, Subject, ViewSpec, VisualMeasurement } from './types.ts';
 import type { Contracts } from './contracts.ts';
+import { colorsForView } from './contracts.ts';
 import { assignRoles, conformance } from './conformance.ts';
 import { typography } from './typography.ts';
 import { spacing } from './spacing.ts';
@@ -8,6 +9,7 @@ import { paint } from './paint.ts';
 import { layout } from './layout.ts';
 import { responsive } from './responsive.ts';
 import { digest, findingId, measurementId } from './identity.ts';
+import { canonicalJson } from '../ref/board-artifacts.ts';
 export type RetainedCapture = { view: ViewSpec; binding: CaptureBinding; raw: MeasuredIr; png: Buffer };
 export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], contracts: Contracts, method: VisualMeasurement['method']): Pick<VisualMeasurement, 'subjects' | 'measurements' | 'findings' | 'summary'> {
   const subjects: Subject[] = [], measurements: Measurement[] = [], findings: Finding[] = [];
@@ -27,28 +29,47 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     dom.paintSamples = dom.paintSamples.map(p => ({ ...p, subjectId: p.subjectId ? id(p.subjectId) : null }));
     assignRoles(dom, contracts);
     subjects.push(...dom.nodes.map(n => ({ id: n.id, viewId: c.view.id, irNodeId: n.id.slice(c.view.id.length + 1), locator: n.locator, role: n.role, box: n.box, visibleBox: n.visibleBox, textExcerpt: n.text ? n.text.slice(0, 200) : null })));
-    const excluded = [...dom.excluded, ...dom.nodes.filter(n => n.visibleBox && n.unsupported.length).map(n => ({ subjectId: n.id, reason: n.unsupported.join(',') }))];
+    // SVG internals remain unmeasured; that limitation does not invalidate
+    // unrelated DOM geometry/text. Selected paint/target contracts still refuse
+    // unsupported SVG through contrast/conformance below.
+    const svgPixels = new Set(dom.nodes.filter(n => n.visibleBox && n.tag === 'svg'
+      && n.unsupported.length === 1 && n.unsupported[0] === 'opaque-content').map(n => n.id));
+    const nativeText = new Set(dom.nodes.filter(n => n.visibleBox && n.unsupported.length === 1
+      && (['input', 'select', 'textarea'].includes(n.tag) && n.unsupported[0] === 'native-control-text'
+        || n.tag === 'option' && n.unsupported[0] === 'native-option-text')).map(n => n.id));
+    const excluded = [...dom.excluded, ...dom.nodes.filter(n => n.visibleBox && n.unsupported.length && !svgPixels.has(n.id) && !nativeText.has(n.id)).map(n => ({ subjectId: n.id, reason: n.unsupported.join(',') }))];
     if (!dom.fonts.ready || dom.fonts.failedFamilies.length) excluded.push({ subjectId: c.view.id, reason: 'fonts-not-ready-or-failed' });
     if (c.binding.stability.status !== 'stable') excluded.push({ subjectId: c.view.id, reason: 'unstable-capture' });
     const ids = dom.nodes.map(n => n.id), area = dom.viewport.innerWidth * dom.viewport.innerHeight;
-    const p = paint(dom, c.png), conforms = conformance(dom, contracts);
-    for (const n of dom.nodes.filter(n => n.visibleBox && n.media && !p.mediaContrast.has(n.id))) excluded.push({ subjectId: n.id, reason: 'media-salience-unsampled' });
-    const values: Omit<MetricValues, 'cross-viewport-order'> = { ...typography(dom.nodes, area), ...spacing(dom.nodes), 'contrast-pair': contrast(dom.nodes), ...layout(dom, contracts, p.canvasPaintShare, p.mediaContrast), 'canvas-color': p['canvas-color'], 'accent-distribution': p['accent-distribution'], 'contract-conformance': conforms.value };
+    const p = paint(dom, c.png), conforms = conformance(dom, contracts, c.view.id);
+    for (const n of dom.nodes.filter(n => n.visibleBox && n.media && !p.mediaContrast.has(n.id) && !svgPixels.has(n.id))) excluded.push({ subjectId: n.id, reason: 'media-salience-unsampled' });
+    const values: Omit<MetricValues, 'cross-viewport-order'> = { ...typography(dom.nodes, area), ...spacing(dom.nodes), 'contrast-pair': contrast(dom.nodes, colorsForView(contracts.composition, c.view.id)), ...layout(dom, contracts, p.canvasPaintShare, p.mediaContrast), 'canvas-color': p['canvas-color'], 'accent-distribution': p['accent-distribution'], 'contract-conformance': conforms.value };
     const metrics = new Map<MetricKind, Measurement>();
     for (const kind of Object.keys(values) as (keyof typeof values)[]) metrics.set(kind, add(kind, [c.view.id], ids, values[kind], excluded));
     const quality = metrics.get('contract-conformance')!;
+    if (svgPixels.size) finding('MEASUREMENT_INCOMPLETE', metrics.get('salience-regions')!, [...svgPixels], null,
+      'SVG internal paint and salience are unmeasured; inspect these subjects in the authenticated whole captures. No SVG contrast or salience proof is claimed.',
+      'coverage', ['contrastColorRoles', 'hierarchy', 'composition', 'beautyDesirability'], 'advisory');
+    if (nativeText.size) finding('MEASUREMENT_INCOMPLETE', quality, [...nativeText], null,
+      'Native form-value glyphs and text contrast are unmeasured; inspect these subjects in the authenticated whole captures. DOM metrics do not certify their painted text.',
+      'coverage', ['typography', 'contrastColorRoles', 'usability', 'responsiveCraft'], 'advisory');
     const issueGroups = new Map<string, typeof conforms.issues>();
     for (const issue of conforms.issues) { const key = `${issue.code}:${issue.field}`; issueGroups.set(key, [...(issueGroups.get(key) ?? []), issue]); }
     for (const group of issueGroups.values()) { const i = group[0]!; finding(i.code, quality, [...new Set(group.flatMap(i => i.subjects))], { field: i.field, value: i.expected }, group.map(i => i.actual).join(';'), 'contract', i.code.startsWith('TYPE') ? ['typography', 'hierarchy'] : i.code.startsWith('COLOR') ? ['contrastColorRoles'] : ['composition']); }
     const pairs = values['contrast-pair'].pairs.filter(p => p.result === 'fail');
-    if (pairs.length) finding('TEXT_CONTRAST_FAIL', metrics.get('contrast-pair')!, pairs.map(p => p.subjectId), null, JSON.stringify(pairs.map(p => ({ ratio: p.ratio, threshold: p.threshold }))), 'accessibility', ['contrastColorRoles', 'usability']);
+    for (const kind of ['text', 'non-text'] as const) {
+      const rows = pairs.filter(p => kind === 'non-text' ? p.kind === 'non-text' : p.kind === undefined);
+      if (rows.length) finding(kind === 'non-text' ? 'NON_TEXT_CONTRAST_FAIL' : 'TEXT_CONTRAST_FAIL', metrics.get('contrast-pair')!, rows.map(p => p.subjectId), null, canonicalJson(rows.map(p => ({ ratio: p.ratio, threshold: p.threshold }))), 'accessibility', ['contrastColorRoles', 'usability']);
+    }
+    const unknownPaint = values['contrast-pair'].pairs.filter(p => p.kind === 'non-text' && p.result === 'unmeasured');
+    if (unknownPaint.length) finding('MEASUREMENT_INCOMPLETE', metrics.get('contrast-pair')!, unknownPaint.map(p => p.subjectId), null, 'Declared non-text paint could not be measured', 'coverage', ['contrastColorRoles']);
     const wraps = values['control-word-wrap'].controls.filter(c => c.tokens.some(t => t.split));
     if (wraps.length) finding('REQUIRED_CONTROL_WORD_SPLIT', metrics.get('control-word-wrap')!, wraps.map(w => w.subjectId), null, 'Hangul control token crosses rendered lines', 'accessibility', ['typography', 'usability', 'responsiveCraft']);
     const clipped = values['clipping-overflow'].subjects.filter(n => n.control && n.clipped.some(c => !c.scrollEscape));
-    if (clipped.length) finding('REQUIRED_CONTROL_CLIPPED', metrics.get('clipping-overflow')!, clipped.map(c => c.subjectId), null, JSON.stringify(clipped), 'accessibility', ['usability', 'responsiveCraft']);
+    if (clipped.length) finding('REQUIRED_CONTROL_CLIPPED', metrics.get('clipping-overflow')!, clipped.map(c => c.subjectId), null, canonicalJson(clipped), 'accessibility', ['usability', 'responsiveCraft']);
     if (values['clipping-overflow'].documentOverflowX > 1) finding('MEASUREMENT_INCOMPLETE', metrics.get('clipping-overflow')!, [], null, 'Document has horizontal overflow; reflow needs repair or a scoped access contract', 'coverage', ['responsiveCraft']);
     if (values['text-minimum'].under12) finding('TEXT_UNDER_12', metrics.get('text-minimum')!, values['text-minimum'].small.map(s => s.subjectId), null, `${values['text-minimum'].under12} visible text roles below 12 CSS px`, 'heuristic', ['typography'], 'advisory');
-    if (excluded.length) finding('MEASUREMENT_INCOMPLETE', quality, [], null, JSON.stringify(excluded), 'coverage', []);
+    if (excluded.length) finding('MEASUREMENT_INCOMPLETE', quality, [], null, canonicalJson(excluded), 'coverage', []);
     return { view: c.view, dom };
   });
   add('cross-viewport-order', scope.map(s => s.id), subjects.map(s => s.id), responsive(doms));

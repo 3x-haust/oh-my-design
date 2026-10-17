@@ -12,7 +12,7 @@ import {
   rmSync,
   statSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import { basename, join, resolve, sep } from 'node:path';
 
 const RUNTIME_PATHS = [
@@ -43,12 +43,14 @@ const SNAPSHOT_DEADLINE_MS = 30_000;
 export type OmdRuntimeSnapshot = Readonly<{
   root: string;
   entryPath: string;
+  assertIntact(): void;
   dispose(): void;
 }>;
 
 export type OmdRuntimeSnapshotOptions = Readonly<{
   sourceRoot: string;
   dependencyRoot: string | null;
+  parentRoot?: string;
 }>;
 
 export class OmdRuntimeSnapshotError extends Error {
@@ -181,11 +183,15 @@ function copyDependencies(sourceRoot: string, targetRoot: string, deadline: numb
 
 export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): OmdRuntimeSnapshot {
   const sourceRoot = resolve(options.sourceRoot);
+  const stateHome = process.env.XDG_STATE_HOME ?? (process.platform === 'win32'
+    ? process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local') : join(homedir(), '.local', 'state'));
+  const parentRoot = resolve(options.parentRoot ?? join(stateHome, 'oh-my-design', 'runtime'));
+  mkdirSync(parentRoot, { recursive: true, mode: 0o700 });
   const deadline = Date.now() + SNAPSHOT_DEADLINE_MS;
   let lastMismatch = '';
   for (let attempt = 1; attempt <= MAX_COPY_ATTEMPTS; attempt += 1) {
     const before = runtimeDigest(sourceRoot, deadline);
-    const snapshotRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-'));
+    const snapshotRoot = realpathSync(mkdtempSync(join(parentRoot, 'omd-runtime-')));
     let retained = false;
     try {
       copyRuntime(sourceRoot, snapshotRoot, deadline);
@@ -200,11 +206,31 @@ export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): Om
       }
       const after = runtimeDigest(sourceRoot, deadline);
       if (before === copied && copied === after && dependencyBefore === dependencyAfter) {
+        const copiedDependencies = options.dependencyRoot === null ? null
+          : dependencyFingerprint(join(snapshotRoot, 'node_modules'), deadline);
         retained = true;
         let disposed = false;
+        let lost: OmdRuntimeSnapshotError | null = null;
         return Object.freeze({
           root: snapshotRoot,
           entryPath: join(snapshotRoot, 'bin/omd.mjs'),
+          assertIntact: () => {
+            if (lost) throw lost;
+            try {
+              const checkDeadline = Date.now() + SNAPSHOT_DEADLINE_MS;
+              const stat = lstatSync(snapshotRoot);
+              if (disposed || !stat.isDirectory() || stat.isSymbolicLink()
+                || realpathSync(snapshotRoot) !== snapshotRoot
+                || runtimeDigest(snapshotRoot, checkDeadline) !== copied
+                || (copiedDependencies !== null && dependencyFingerprint(join(snapshotRoot, 'node_modules'), checkDeadline) !== copiedDependencies)) {
+                throw new OmdRuntimeSnapshotError('captured runtime or dependencies changed');
+              }
+            } catch (error) {
+              lost = new OmdRuntimeSnapshotError('OMD_RUNTIME_SNAPSHOT_LOST: immutable runtime unavailable; start a fresh native run',
+                { cause: error });
+              throw lost;
+            }
+          },
           dispose: () => {
             if (disposed) return;
             disposed = true;

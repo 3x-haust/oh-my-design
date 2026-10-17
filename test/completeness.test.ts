@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkFunctionalCompleteness, validateFunctionalRequirements } from '../core/completeness/index.ts';
 import type { RawNode } from '../core/types.ts';
+import { buildBrief } from '../core/brief/index.ts';
 
 // The visual gates cannot tell a landing that links to the repository from one that only says it
 // does. This gate correlates the brief's stated requirements with the built page and adds no style
@@ -141,7 +142,9 @@ test('the frame owner persists functional requirements through the canonical sta
   assert.match(stages, /requiredContracts: \['protocol\/human-design-loop\.md', 'theory\/ux\.md'\]/);
 
   const brief = readFileSync(fileURLToPath(new URL('../core/brief/index.ts', import.meta.url)), 'utf8');
-  assert.match(brief, /frame: \['frame', 'functional-requirements', 'reality-ledger'\]/);
+  const frameBrief = buildBrief(project(), 'frame', fileURLToPath(new URL('../core/', import.meta.url)));
+  assert.deepEqual(frameBrief.schemas.map(schema => schema.name),
+    ['frame', 'functional-requirements', 'reality-ledger', 'decision-entry']);
   assert.match(brief, /'\.omd\/functional-requirements\.json'/);
   assert.match(brief, /omd complete check <page>/);
 

@@ -4,6 +4,8 @@ import { readFileSync, realpathSync, rmSync, watch, writeFileSync } from 'node:f
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test, { type TestContext } from 'node:test';
+import { PNG } from 'pngjs';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { runPiReviewerLane } from '../adapters/pi-reviewer-runtime.ts';
 import { PiReviewerError } from '../adapters/pi-reviewer-contract.ts';
 import { verifySignedPiEyeRoleResult } from '../core/runtime/pi-role-receipt.ts';
@@ -100,6 +102,53 @@ test('repair baseline images cannot enter the blind final reviewer', async t => 
   await assert.rejects(() => runPiReviewerLane({
     ...input, packet: Buffer.from(JSON.stringify(packet)), signal: t.signal,
   }), error => error instanceof PiReviewerError && error.code === 'packet-prior-renders');
+  assert.deepEqual(trace(), []);
+});
+
+test('file-brokered evidence above the inline limit retains whole-packet binding and every image byte', { timeout: 30_000 }, async t => {
+  const input = setup(t);
+  const trace = observeFixture(t, input.root, () => {});
+  const packet = JSON.parse(input.packet.toString('utf8'));
+  const png = new PNG({ width: 1024, height: 2048 });
+  let seed = 154;
+  for (let index = 0; index < png.data.length; index++) {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    png.data[index] = seed & 255;
+  }
+  const bytes = PNG.sync.write(png);
+  packet.evidence.renders.push({ ...packet.evidence.renders[0],
+    width: png.width, height: png.height, captureSha256: digest(bytes), pngBase64: bytes.toString('base64') });
+  packet.evidenceSha256 = digest(canonicalJson(packet.evidence));
+  packet.outputContract.fixedBindings.evidenceSha256 = packet.evidenceSha256;
+  const payload = Buffer.from(`${canonicalJson(packet)}\n`);
+  assert.ok(payload.byteLength > 8 * 1024 * 1024 && payload.byteLength < 16 * 1024 * 1024);
+  const results = await runPiReviewerLane({ ...input, packet: payload, signal: t.signal });
+  const imageHashes = packet.evidence.renders.map((image: { pngBase64: string }) =>
+    digest(Buffer.from(image.pngBase64, 'base64')));
+  const projectedText = JSON.stringify({
+    schema: packet.schema, evidenceSha256: packet.evidenceSha256,
+    candidateAlias: packet.evidence.candidateAlias, context: packet.evidence.context,
+    observationProjection: packet.evidence.observationProjection, outputContract: packet.outputContract,
+  });
+  for (const result of results) {
+    const { receipt } = verifySignedPiEyeRoleResult(result, input.root);
+    assert.equal(receipt.reviewerEvidence.packetSha256, digest(payload));
+    const events = trace().filter(event => event.pid === receipt.processPid).map(event => event.event);
+    assert.ok(events.includes(`evidence-packet:${digest(projectedText)}`));
+    assert.deepEqual(events.filter(event => event.startsWith('evidence-image:')),
+      imageHashes.map((hash: string) => `evidence-image:${hash}`));
+  }
+  assert.equal(digest(payload), digest(Buffer.from(`${canonicalJson(packet)}\n`)));
+});
+
+test('file-brokered evidence above its finite limit refuses before launching children', async t => {
+  const input = setup(t);
+  const trace = observeFixture(t, input.root, () => {});
+  await assert.rejects(() => runPiReviewerLane({
+    ...input, packet: Buffer.alloc(16 * 1024 * 1024 + 1), signal: t.signal,
+  }), error => error instanceof PiReviewerError && error.code === 'packet-too-large');
   assert.deepEqual(trace(), []);
 });
 

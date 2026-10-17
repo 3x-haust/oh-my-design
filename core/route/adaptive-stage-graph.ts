@@ -55,7 +55,7 @@ export const ADAPTIVE_STAGE_OWNERS = Object.freeze({ ...LEGACY_ADAPTIVE_STAGE_OW
   'art-direction': 'omd-art-director', 'candidate-generation': 'omd-art-director',
 });
 export const ADAPTIVE_STAGE_GRAPH: AdaptiveStageGraph = Object.freeze({ ...LEGACY_ADAPTIVE_STAGE_GRAPH,
-  'reference-board': { prerequisites: ['scout'], afterIfSelected: ['acquisition'] },
+  'reference-board': { prerequisites: ['domain', 'scout'], afterIfSelected: ['acquisition'] },
   copy: { prerequisites: [], afterIfSelected: [] },
   'candidate-generation': { prerequisites: ['frame'], afterIfSelected: ['content-grain', 'copy', 'scout', 'reference-selection'] },
   'art-direction': { prerequisites: [], afterIfSelected: ['depth', 'reference-selection', 'candidate-generation'] },

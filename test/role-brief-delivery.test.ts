@@ -57,4 +57,22 @@ test('chosen art settlement consumes real authenticated rendered choice without 
   write(f.root, '.omd/tokens.json', readFileSync(join(f.root, '.omd/tokens.json'), 'utf8') + '\n');
   assert.throws(() => readSelectedArtDirection(f.root, f.route.sourceContractSha256));
   assert.deepEqual(readFileSync(join(f.root, '.omd/art-direction.json')), old);
+  const replacement = publishCandidatePlan(f.root, {
+    ...f.plan, tokens: fileReceipt(f.root, '.omd/tokens.json'),
+    candidates: f.plan.candidates.map((candidate, index) => ({ ...candidate, id: index === 0 ? 'C' : 'D' })),
+  }, f.writer, f.invocation);
+  const beforeRegeneration = snapshot(f.root);
+  const regenerated = buildRoleBrief(f.root, 'candidate-generation', {
+    role: 'omd-sketch', mode: 'visual-study',
+    sketch: { schema: 'sketch-brief-v1', mode: 'visual-study', plan: replacement,
+      candidateId: 'C', sourceDirectory: '.omd/.cache/sketches/C' },
+  }, pack, f.invocation);
+  assert.ok('candidate' in regenerated && regenerated.candidate?.id === 'C');
+  assert.ok('artDirection' in regenerated && regenerated.artDirection === null);
+  assert.ok('selectedDirection' in regenerated && regenerated.selectedDirection === null);
+  assert.ok('tokens' in regenerated && regenerated.tokens === null);
+  assert.throws(() => buildRoleBrief(f.root, 'production', {
+    role: 'omd-hand', mode: 'source',
+  }, pack, f.invocation), /DIRECTION_CONTRACT/);
+  assert.deepEqual(snapshot(f.root), beforeRegeneration);
 });

@@ -195,7 +195,8 @@ export type PortablePiTool = Readonly<{
     onUpdate: OmdProgressCallback | undefined,
     context: PortablePiContext,
   ): Promise<{
-    content: Array<{ type: 'text'; text: string }>;
+    content: [{ type: 'text'; text: string }, ...Array<
+      { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string; text?: never }>];
     details: { code: number; killed: boolean; requestBinding?: PiRequestBindingInfo };
   }>;
 }>;
@@ -227,13 +228,13 @@ function boundedOutput(result: ExecResult, args: readonly string[]): string {
   if (result.code === 0 && !result.killed) {
     const route = compactPiRouteOutput(result.stdout, args);
     if (route !== undefined) return route;
-    if (args.includes('--json') && result.stderr.trim() === '') {
-      try {
-        JSON.parse(combined);
-        return combined;
-      } catch (error) {
-        if (!(error instanceof SyntaxError)) throw error;
-      }
+  }
+  if (!result.killed && result.stderr.trim() === '') {
+    try {
+      JSON.parse(combined);
+      return combined;
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
     }
   }
   return `${combined.slice(0, MAX_OUTPUT_CHARS)}\n[OMD output truncated]`;
@@ -297,10 +298,12 @@ export async function runOmd(
   }, budgetMs);
   let prepared: Readonly<{ args: readonly string[]; dispose(): void }> | undefined;
   try {
+    runtimeSnapshot.assertIntact();
     prepared = nativeRuns?.prepare(cwd, args, runtimeSnapshot.root);
     const result = await Promise.race([(pi.execOwned ?? runOwnedOmdProcess).call(pi, process.execPath, [runtimeSnapshot.entryPath, ...(prepared?.args ?? args)], { cwd, signal: controller.signal }), stopped]);
     if (timedOut) { await timeoutTeardown; throw new OmdTimeoutError(budgetMs, args); }
     if (signal?.aborted) throw new OmdCancelledError();
+    runtimeSnapshot.assertIntact();
     const text = boundedOutput(result, args);
     if (result.code !== 0 || result.killed) {
       throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
@@ -320,14 +323,23 @@ export async function runOmd(
 
 export function structuredToolDiagnostic(error: unknown, args: readonly string[]): OmdRunResult | null {
   const [root, action] = args;
+  const evaluation = root === 'lifecycle' && action === 'evaluate';
+  const finish = root === 'lifecycle' && action === 'finish';
   const expectedCheck = root === 'guard' || (root === 'route' && action === 'validate')
     || (root === 'brief' && args.includes('--check'))
+    || evaluation || finish
     || /^(?:check|validate|research-check|apply-check|apply-review-check|review-check|discover-batch)$/.test(action ?? '');
   if (!(error instanceof OmdCommandError) || error.code !== 1 || error.killed || !expectedCheck || !args.includes('--json')
     || error.stderr.trim() !== '' || error.stdout.trim() === '') return null;
   try {
     const parsed: unknown = JSON.parse(error.stdout);
     if (typeof parsed !== 'object' || parsed === null) return null;
+    if (finish && (Reflect.get(parsed, 'schema') !== 'model-led-completion-result-v1'
+      || Reflect.get(parsed, 'meaning') !== 'native-completion' || Reflect.get(parsed, 'ok') !== false
+      || typeof Reflect.get(parsed, 'diagnostic') !== 'object')) return null;
+    if (evaluation && (!('ok' in parsed) || parsed.ok !== false
+      || !('executionStatus' in parsed) || parsed.executionStatus !== 'fail'
+      || !('acceptanceStatus' in parsed) || parsed.acceptanceStatus !== 'review-required')) return null;
     if (root === 'ref' && action === 'discover-batch'
       && (!('ok' in parsed) || parsed.ok !== false
         || !('outcomes' in parsed) || !Array.isArray(parsed.outcomes))) return null;

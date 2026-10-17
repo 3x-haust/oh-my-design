@@ -20,16 +20,19 @@ import { checkCandidateReferenceReview } from './candidate-reference-review.ts';
 import { readReferenceBoardArtifacts, sha256 } from '../ref/board-artifacts.ts';
 import { requireDesignJudgmentForReferences } from '../design/judgment-files.ts';
 import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
+import { isModelLedProcess } from '../route/process-policy.ts';
 
 export type ProductionReadiness = Readonly<{
   schema: 'production-readiness-v1'; ok: boolean; blockers: readonly string[]; confidenceDebt: readonly ConfidenceDebt[];
   warnings: readonly string[];
+  sourceAuthoring: 'model' | 'native-maker';
 }>;
 
 /** Entry permission is not terminal acceptance. Failed authority/frame/safety checks never mutate. */
 export function checkProductionReadiness(root: string, invocation: ProjectRunInvocation, packRoot: string,
   target?: string | readonly string[]): ProductionReadiness {
   const blockers: string[] = [], debt: ConfidenceDebt[] = [], warnings: string[] = [];
+  let sourceAuthoring: ProductionReadiness['sourceAuthoring'] = 'native-maker';
   const attempt = (label: string, check: () => void): void => {
     try { check(); } catch (error) { blockers.push(`${label}: ${error instanceof Error ? error.message : String(error)}`); }
   };
@@ -37,6 +40,7 @@ export function checkProductionReadiness(root: string, invocation: ProjectRunInv
   attempt('route', () => {
     const route = readPersistedRoute(root, invocation);
     const currentProcess = route.sourceContract.processPolicy !== undefined;
+    if (isModelLedProcess(route.sourceContract)) sourceAuthoring = 'model';
     sourceContractSha256 = route.sourceContractSha256;
     const pendingDirection = directionCommitmentBlocker(root);
     if (pendingDirection) blockers.push(pendingDirection);
@@ -156,5 +160,5 @@ export function checkProductionReadiness(root: string, invocation: ProjectRunInv
   const recorded = !unique.length && sourceContractSha256 !== undefined
     ? recordConfidenceDebt(root, sourceContractSha256, items, invocation) : items;
   return { schema: 'production-readiness-v1', ok: unique.length === 0, blockers: unique, confidenceDebt: recorded,
-    warnings: [...new Set(warnings)] };
+    warnings: [...new Set(warnings)], sourceAuthoring };
 }

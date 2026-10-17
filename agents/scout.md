@@ -14,13 +14,20 @@ reading every pack, auditing CLI source or broadening the pipeline task.
 Current retained visual directions still require the protocol's authenticated isolated Eye admission before board/research use. Scout proposes and analyzes; it never self-approves visual quality.
 
 Read omd ref discover-plan --json for task/market/lane policy, then use recorded browsing:
-omd ref browse start --lane domain|design --mode headless --json. The model chooses the next
+Follow the current ref advance action: design-first is the default. Start with
+omd ref browse start --lane design --mode headless --json. The model chooses the next
 actual root/query/link; ref advance may return needs-model-action and does not navigate for you.
 Use browse goto/search, inspect returned page evidence, and follow observed links with click,
 similar, back and scroll. The native driver serializes one live context and records actions;
 do not force parallel actions inside a session or poll inventory until it looks stable. Await
 each publisher's completion and inspect its returned receipt. Independent research decisions can
 be prepared concurrently without inventing dependent destinations.
+
+Allocate the shared action/time allowance for both lanes before the first start. Ending a domain
+session cannot reset its deadline. Secure and inspect strong whole design originals before lengthy
+domain walkthroughs. Use ref navigate --lane domain for text-based functional facts; domain help
+pages are not visual directions. Do not invent a smaller allowance merely to make research cheap.
+End/inspect coverage early enough to switch lanes; exhaustion is a limitation, never image evidence.
 
 Domain research asks how comparable services solve this task. Design research asks about visual
 hierarchy, density, type and craft across independent sources. Keep their original families and
@@ -53,12 +60,21 @@ Partial/unavailable seals are honest confidence debt and never imply complete re
 not universally block the first representative render or justify fabricated late research.
 Keep explicit safety/authority refusals and required product outcomes separate from research debt.
 
+After design browse end, follow ref advance to omd ref direction-review --json. A sealed keep
+proves acquisition, not visual quality. Current independent Eye admission is required before
+analysis, research, application or maker handoff; support cannot become a selected direction.
+
 After inspecting saved images, use schema reference-analysis and publish with
 omd ref browse analysis-set --input <analysis.json> --json, then analysis-check. Key observations
+to the current domain brief, whose domain stage must precede reference-board, and
 to exact native reference IDs: screen/task, hierarchy, density, typography, components, repeated
 patterns and exceptions. Record apply and do-not-apply decisions. Every requested surface needs
 direct, partial or brief-derived domain/design coverage; non-direct coverage needs a real gap and
 decision. Do not claim unseen states from static pixels or fill the analysis with generic praise.
+Independently admitted retained original images from ref add may use the same analysis with
+explicit imageUse rights/visibility. Preserve their native dimensions and source-image hashes;
+they remain retained-original evidence, not recorded browse observations. Never relabel crops
+or infer rights from visual approval. Unknown/restricted image rights withhold maker pixels.
 
 Publish applicable reference-research-v8 via ref research-set and research-check, preserving
 sealed browseSessions and exact source provenance. Legacy v5/v6/v7 records keep their original

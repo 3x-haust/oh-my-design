@@ -18,10 +18,23 @@ service, provider, or runtime.
 
 Current research uses reference-research-v8 and the recorded `omd ref browse` interface documented
 in `core/ref/browse/README.md`. Scout chooses actions; the native driver records one live page.
-Start the domain/design lane, choose a real root or search, follow observed links/similarity, inspect
+Follow `ref advance`'s design-first start action. Establish the domain brief before this collection;
+that planning prerequisite does not require a domain browser walkthrough first. Allocate the shared
+action/time allowance across both lanes before starting: session end or lane switching never resets
+the deadline. Secure strong whole design originals before lengthy functional walkthroughs; domain
+facts may use `ref navigate --lane domain` without screenshots. Do not consume the cycle on help pages
+and then describe missing visual research as completed. Preserve budget refusal and honest limitations.
+Choose a real root or search, follow observed links/similarity, inspect
 actual whole-screen shots, and keep with a reason and rights/visibility context. `shot --selector img`
 retains the complete loaded image, not its wrapper or thumbnail. Crop is optional parent-linked
 detail, never the sole direction reference. Contact sheets are paginated; no middle screens vanish.
+
+The owned browse context captures viewport screenshots at DPR 2 in headless, profile and CDP
+modes. Keep CSS viewport dimensions separate from saved PNG dimensions: the native verifier
+requires actual pixels to equal the recorded viewport times DPR. A complete loaded source image
+keeps its native dimensions and bytes; do not enlarge it merely to label it 2x. Historical DPR 1
+records remain readable under their original bindings, not relabelled as current 2x evidence.
+The user's original CDP context/tab is not resized or re-emulated.
 
 Await command completion and use its native receipts. Do not poll inventory until it repeats, force
 parallel actions in one session, suppress overlays or infer an unvisited screen. Headless is default;
@@ -31,11 +44,35 @@ license attestation or research completeness. End at coverage, saturation, budge
 partial/unavailable seals become confidence debt without universally blocking first production.
 `ref advance` returns needs-model-action rather than selecting queries or navigating itself.
 
-After actual image inspection, Scout publishes `reference-analysis-v1` with browse analysis-set/check:
+After design `browse end`, follow `ref advance` to the existing `ref direction-review --json`
+owner. A sealed keep authenticates capture and provenance, not visual quality. Isolated Eye must
+classify every current design original before analysis, research, application or maker handoff.
+Missing, stale and rejected admission refuse; support may inform bounded partial lessons but
+cannot be selected as a visual direction. Domain text research does not acquire a visual gate.
+
+After actual image inspection and current independent admission, Scout publishes `reference-analysis-v1` with browse analysis-set/check:
 whole-screen hierarchy, density, typography, components, patterns/exceptions and apply/do-not-apply.
+Current routes selecting reference-board must select domain first: the analysis binds the current
+domain brief and its complete surface inventory. Route publication refuses the missing prerequisite
+before acquisition; it must not wait until the domain publisher is forbidden after research.
 Every current surface has domain/design direct, partial or brief-derived decisions; missing coverage
 has a precise gap and decision. Publish applicable research and ref apply-set/check through their
 existing publishers. A plan is not proof of rendered application or user approval.
+
+The same analysis accepts independently admitted, retained whole original images from `ref add`,
+including selected originals outside a recorded browse session. Bind the exact capture and PNG
+receipts and provide `imageUse:{rights:allowed|restricted|unknown,visibility:public|user-session}`.
+The original must retain source-image provenance and native dimensions; component crops, missing
+independent admission and changed bytes refuse before publication. `imageUse` is an accountable
+usage judgment, not proof of ownership, and cannot override a recorded browse permission.
+The handoff identifies this evidence as `retained-original`, never as a browser walkthrough.
+Unknown or restricted rights withhold images; static pixels do not prove interactions or features.
+For a user-supplied local image, `ref add <image-path> --as <name> --lane design --from-user --no-energy`
+uses the existing capture owner and retains the exact opened image document, not a thumbnail.
+Do not use the legacy `--image` flag, which records a path without acquiring the original.
+The local exception never permits following an embedded image to another local file. Preserve the
+supplied-source origin, obtain independent visual admission, and use the same analysis/handoff;
+local input does not become a browser walkthrough or evidence of observed product behavior.
 
 Art Director/Sketch/Typesetter use `ref browse handoff --for concept`; Composer and Hand use composer
 and hand. The validated maker payload carries selected rights-allowed whole screens, actual analysis,

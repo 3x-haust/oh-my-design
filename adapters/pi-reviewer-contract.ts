@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 export const PI_REVIEWER_TOOL = 'read_reviewer_evidence';
 export const PI_REVIEWER_EVENT_PREFIX = 'OMD_PI_REVIEWER_EVENT:';
 export const PI_REVIEWER_BRIDGE_SCHEMA = 'omd-pi-reviewer-bridge-v1';
-export type PiReviewerLane = 'blindLane' | 'fidelityLane' | 'protocolLane' | 'referenceAdmission' | 'firstRender' | 'candidateFidelity';
+export type PiReviewerLane = 'blindLane' | 'fidelityLane' | 'protocolLane' | 'referenceAdmission' | 'firstRender' | 'candidateFidelity' | 'candidateChoice';
 export type PiReviewerHostContext = Readonly<{
   nodePath: string; nodeSha256: string; cliPath: string; cliSha256: string;
   provider: string; model: string; thinkingLevel: string; parentSessionId: string;

@@ -128,7 +128,7 @@ function skip(value: unknown): AdaptiveSkip {
 }
 
 /** Inspect independent strategy fields without constructing a substitute publishable route. */
-export function diagnoseAdaptiveStrategyFields(value: unknown): readonly { path: string; code: string; message: string }[] {
+export function diagnoseAdaptiveStrategyFields(value: unknown, modelLed = false): readonly { path: string; code: string; message: string }[] {
   const findings: { path: string; code: string; message: string }[] = [];
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return findings;
   const strategy = value as Record<string, unknown>;
@@ -138,9 +138,9 @@ export function diagnoseAdaptiveStrategyFields(value: unknown): readonly { path:
     })],
     ['roles', () => ids(strategy.roles, false, true)],
     ['stages', () => ids(strategy.stages, false, true)],
-    ['methods', () => ids(strategy.methods, false, true)],
+    ['methods', () => ids(strategy.methods, modelLed, true)],
     ['executionWaves', () => parseAdaptiveExecutionWaves(strategy.executionWaves)],
-    ['attributionCategories', () => ids(strategy.attributionCategories, false, true)],
+    ['attributionCategories', () => ids(strategy.attributionCategories, modelLed, true)],
     ['aiAssets', () => parseAdaptiveAiAssets(strategy.aiAssets)],
     ['rationale', () => text(strategy.rationale)],
   ];
@@ -156,19 +156,19 @@ export function diagnoseAdaptiveStrategyFields(value: unknown): readonly { path:
   return findings;
 }
 
-export function parseAdaptiveStrategyDecision(value: unknown): AdaptiveStrategyDecision {
+export function parseAdaptiveStrategyDecision(value: unknown, modelLed = false): AdaptiveStrategyDecision {
   const item = fields(value, STRATEGY_KEYS);
   if (item.get('schema') !== ADAPTIVE_STRATEGY_DECISION_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   if (item.get('owner') !== 'user-selected-model') return failAdaptiveRoute('MODEL_OWNER_REQUIRED');
   const skips = array(item.get('skips')).map(skip);
   if (new Set(skips.map((entry) => entry.id)).size !== skips.length) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'strategyDecision.skips must have unique ids; remove duplicate entries, not the required skip reasons');
-  const attributionCategories = ids(item.get('attributionCategories'), false, true);
+  const attributionCategories = ids(item.get('attributionCategories'), modelLed, true);
   if (attributionCategories.some((category) => !ADAPTIVE_ATTRIBUTION_CATEGORIES.includes(category as never)))
     return failAdaptiveRoute('ATTRIBUTION_COVERAGE_INVALID');
   return Object.freeze({
     schema: ADAPTIVE_STRATEGY_DECISION_SCHEMA, owner: 'user-selected-model',
     roles: ids(item.get('roles'), false, true), stages: ids(item.get('stages'), false, true),
-    executionWaves: parseAdaptiveExecutionWaves(item.get('executionWaves')), methods: ids(item.get('methods'), false, true),
+    executionWaves: parseAdaptiveExecutionWaves(item.get('executionWaves')), methods: ids(item.get('methods'), modelLed, true),
     aiAssets: parseAdaptiveAiAssets(item.get('aiAssets')),
     attributionCategories: attributionCategories as readonly AdaptiveAttributionCategory[],
     skips: Object.freeze(skips), rationale: text(item.get('rationale')),
@@ -240,9 +240,10 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
     if (hasLearning) parseAdaptiveLearningContext(item.get('validatedLearningContext'));
     if (hasMode && item.get('deliveryMode') !== 'design-only') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'deliveryMode must be design-only, or omitted for implementation');
     if (item.get('schema') !== ADAPTIVE_ROUTE_INPUT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+    const processPolicy = hasProcess ? parseProcessPolicy(item.get('processPolicy')) : undefined;
     return Object.freeze({
       schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
-      ...(hasProcess ? { processPolicy: parseProcessPolicy(item.get('processPolicy')) } : {}),
+      ...(processPolicy === undefined ? {} : { processPolicy }),
       ...(hasReviewPurpose ? {
         reviewPurpose: parseReviewPurpose(item.get('reviewPurpose')),
         reviewPurposeAuthority: parseReviewPurposeAuthority(item.get('reviewPurposeAuthority')),
@@ -263,7 +264,7 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
       browserDecisionContext: parseAdaptiveBrowserContext(item.get('browserDecisionContext')),
       validatedLearningContext: UNSELECTED_LEARNING,
       ...(hasScope ? { learningScope: learningScope(item.get('learningScope')) } : {}),
-      strategyDecision: parseAdaptiveStrategyDecision(item.get('strategyDecision')),
+      strategyDecision: parseAdaptiveStrategyDecision(item.get('strategyDecision'), processPolicy?.schema === 'model-led-design-process-v1'),
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'AdaptiveRouteError') throw error;

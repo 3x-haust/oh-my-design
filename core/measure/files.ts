@@ -85,9 +85,11 @@ export function loadMeasurement(root: string, receipt: Receipt, options: { nativ
   const native = packet.binding.authority === 'native-local' && packet.attestation.kind === 'native-observation-v1' && packet.attestation.signature !== null;
   if (options.native !== false && !native) v.fail('external diagnostic cannot authorize completion');
   if (native && !verifyNativeObservation(realpathSync(root), 'visual-measurement-v1', packet.attestation.payloadSha256, packet.attestation.signature!)) v.fail('native measurement signature invalid');
-  const { contracts, inputs } = loadContracts(root);
-  if (options.current !== false) { checkPacketCurrent(root, packet, inputs); assertRequiredScope(packet, contracts); }
-  const replayKey = `${receipt.sha256}:${digest(contracts)}`, cached = replayed.has(replayKey), captures: RetainedCapture[] = [];
+  const selected = options.current === false ? null : loadContracts(root);
+  if (selected) { checkPacketCurrent(root, packet, selected.inputs); assertRequiredScope(packet, selected.contracts); }
+  else if (packet.binding.projectIdentitySha256 !== digest(realpathSync(root))) v.fail('project changed');
+  const replayKey = selected ? `${receipt.sha256}:${digest(selected.contracts)}` : null;
+  const cached = replayKey !== null && replayed.has(replayKey), captures: RetainedCapture[] = [];
   for (const binding of packet.captures) {
     const png = readArtifact(root, binding.capture.path), rawBytes = readArtifact(root, binding.ir.path);
     if (sha256(png) !== binding.capture.sha256 || sha256(rawBytes) !== binding.ir.sha256) v.fail('retained capture/IR changed');
@@ -98,13 +100,16 @@ export function loadMeasurement(root: string, receipt: Receipt, options: { nativ
     if (digest(raw.measurement) !== binding.stability.beforeProjectionSha256) v.fail('IR projection mismatch');
     captures.push({ view: packet.scope.find(s => s.id === binding.viewId)!, binding, raw, png });
   }
-  if (!cached) {
-    const replay = measureCaptures(captures, packet.scope, contracts, packet.method);
+  if (!cached && selected && replayKey !== null) {
+    const replay = measureCaptures(captures, packet.scope, selected.contracts, packet.method);
     for (const key of ['subjects', 'measurements', 'findings', 'summary'] as const) if (digest(packet[key]) !== digest(replay[key])) v.fail('measurement replay mismatch');
     replayed.add(replayKey);
     if (replayed.size > 128) replayed.delete(replayed.values().next().value!);
   }
-  if (native) { verified.set(packet, digest(packet)); freezeNativeJson(packet); immutable.add(packet); }
+  if (native) {
+    freezeNativeJson(packet);
+    if (selected) { verified.set(packet, digest(packet)); immutable.add(packet); }
+  }
   return packet;
 }
 export function currentMeasurementReceipt(root: string): Receipt {

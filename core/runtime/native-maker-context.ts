@@ -1,8 +1,9 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { makerFail, type MakerInput } from '../../adapters/pi-maker-contract.ts';
+import { makerFail, makerInputBranch, type MakerInput } from '../../adapters/pi-maker-contract.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
+import { readWholeScreenReferenceHandoff } from '../ref/reference-handoff.ts';
 import { loadRefs } from '../ref/store.ts';
 import { projection } from '../design-language/index.ts';
 import { readFrame } from '../frame/index.ts';
@@ -15,6 +16,7 @@ import { deriveTrustedEvaluationPlanFromProject } from './trusted-evaluation-pla
 import type { ProjectRunInvocation } from './invocation.ts';
 import { parseFunctionalRequirements } from '../completeness/index.ts';
 import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
+import { buildRoleBrief } from '../brief/role.ts';
 
 export type MakerDocument = Readonly<{ path: string; content: string }>;
 type JsonValue = null | boolean | number | string | readonly JsonValue[] | { readonly [key: string]: JsonValue };
@@ -66,9 +68,10 @@ export function makerSourcePaths(root: string, input: MakerInput, route: RouteRe
 
 /** A projection, not a source-aware brief export. Original records remain byte-for-byte untouched. */
 export function makerContext(root: string, route: RouteRecord, owner: Readonly<{
-  input: MakerInput; invocation: ProjectRunInvocation;
+  input: MakerInput; invocation: ProjectRunInvocation; packRoot?: string;
 }>) {
-  const { input, invocation } = owner;
+  const { input, invocation, packRoot } = owner;
+  const branch = makerInputBranch(input);
   const identities = new Set(loadRefs(root, { includeDomain: true }).map(ref => ref.source));
   const scrub = (text: string, literalDestination = false): string => {
     let result = text;
@@ -93,7 +96,8 @@ export function makerContext(root: string, route: RouteRecord, owner: Readonly<{
     '.omd/tokens.json', '.omd/content-grain.json', '.omd/task-flow-benchmark-projection.json',
     '.omd/design-system-decisions.md',
   ];
-  for (const path of contracts.filter(path => existsSync(join(root, path)))) {
+  for (const path of contracts.filter(path => existsSync(join(root, path))
+    && (path !== '.omd/composition.md' || route.strategy.stages.includes('composition')))) {
     const bytes = read(path);
     digests.push({ path, sha256: sha256(bytes) });
     const functional = path === '.omd/functional-requirements.json';
@@ -123,13 +127,26 @@ export function makerContext(root: string, route: RouteRecord, owner: Readonly<{
   const frameContract = frame === null ? null : {
     uxTask: frame.uxTask, uxFrequentAction: frame.uxFrequentAction, uxCostliestError: frame.uxCostliestError,
     uxSurface: frame.uxSurface, reality: frame.reality, entrySurface: frame.entrySurface,
+    surfacePlan: frame.surfacePlan, validationPlan: frame.validationPlan,
+    accessibilityPlan: frame.accessibilityPlan,
     taskCoverageMatrix: matrices[0] ?? null,
   };
   if (frame !== null) digests.push({ path: '.omd/frame.md', sha256: sha256(read('.omd/frame.md')) });
-  const handoff = route.strategy.stages.includes('art-direction')
-    ? readSelectedReferenceHandoff(root, input.role === 'omd-sketch' ? 'composer' : 'hand', {
+  const handoff = branch === 'standard' && route.strategy.stages.includes('art-direction')
+    ? route.sourceContract.processPolicy !== undefined
+      ? readWholeScreenReferenceHandoff(root, 'hand', {
+        sourceContractSha256: route.sourceContractSha256, request: route.request,
+      })
+      : readSelectedReferenceHandoff(root, input.role === 'omd-sketch' ? 'composer' : 'hand', {
       sourceContractSha256: route.sourceContractSha256, request: route.request,
     }) : null;
+  const currentSketchRole = branch === 'current-sketch'
+    ? buildRoleBrief(root, 'candidate-generation', {
+      role: 'omd-sketch',
+      mode: input.sketch?.mode ?? makerFail('current-sketch-brief'),
+      sketch: input.sketch ?? makerFail('current-sketch-brief'),
+    }, packRoot ?? makerFail('current-sketch-pack-root'), invocation)
+    : null;
   const context = project({
     taskOutcome: route.sourceContract.taskOutcome,
     projectMode: route.projectMode, namedDependencies: route.namedDependencies,
@@ -142,11 +159,12 @@ export function makerContext(root: string, route: RouteRecord, owner: Readonly<{
     designLanguage: projection(root, route),
     culturalDesign: route.sourceContract.localeDesign?.decision === 'research'
       ? readCurrentCulturalDesignProfile(root, invocation).projection : null,
-    evaluatorPlan: route.gates.includes('greenfield-task-flow-benchmark')
+    evaluatorPlan: route.sourceContract.processPolicy === undefined && route.gates.includes('greenfield-task-flow-benchmark')
       ? deriveTrustedEvaluationPlanFromProject({ root, invocation }) : null,
     transfer: handoff,
     developerCalibration: currentDeveloperCalibration(root, invocation),
     axis: input.axis,
+    currentSketchRole,
   });
   return {
     context, documents, digests,

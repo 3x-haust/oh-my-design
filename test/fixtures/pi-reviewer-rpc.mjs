@@ -54,6 +54,35 @@ function emitReady() {
 
 function handback(packet) {
   const contract = packet.outputContract;
+  if (contract.lane === 'candidateChoice') {
+    return {
+      schema: contract.schema, fixedBindings: contract.fixedBindings,
+      observations: packet.evidence.candidates.map(candidate => ({
+        alias: candidate.alias, feasibility: mode === 'candidate-choice-none' ? 'fail' : 'pass',
+        structureRelationship: 'The work object and primary action remain clear.',
+        densityTypeFit: 'The supplied content fits the measured views.',
+        responsiveFit: 'The task context remains visible at both widths.',
+        ...(mode === 'candidate-choice-no-quality' ? {} : {
+          qualityAssessments: candidate.viewIds.flatMap(viewId => contract.qualityAxes.map(axis => ({
+            axis, viewId,
+            verdict: mode === 'candidate-choice-none' || mode === 'candidate-choice-quality-fail'
+              ? 'fail' : mode === 'candidate-choice-quality-unassessed' ? 'unassessed' : 'pass',
+            observation: 'The offline fixture binds a pixel-grounded judgment to this exact candidate view.',
+            consequence: mode === 'candidate-choice-none' || mode === 'candidate-choice-quality-fail'
+              ? 'This direction requires visible craft repair before selection.'
+              : 'The supplied view independently qualifies for candidate selection.',
+          }))),
+        }),
+        findings: mode === 'candidate-choice-none' ? [{
+          viewId: candidate.viewIds[0], region: 'primary work object',
+          consequence: 'Visible composition and control craft require repair before selection.', blocking: false,
+        }] : [],
+      })),
+      winner: mode === 'candidate-choice-none' ? null : mode === 'candidate-choice-wrong-alias'
+        ? 'unknown-option' : packet.evidence.candidates.at(-1).alias,
+      limitations: ['Synthetic reviewer fixture, not human design approval.'],
+    };
+  }
   if (contract.lane === 'candidateFidelity') {
     const revise = mode === 'candidate-revise' || mode === 'candidate-source-payload';
     const counterparts = contract.responseTemplate.referenceFidelityAssessments.map(row => {
@@ -96,6 +125,12 @@ function handback(packet) {
     return {
       schema: contract.schema, fixedBindings: contract.fixedBindings,
       decision: mode === 'early-reframe' ? 'reframe' : revise ? 'revise' : 'retain',
+      ...(contract.fixedBindings.consultedReferencesSha256 === undefined || mode === 'early-missing-comparison' ? {} : {
+        referenceComparisons: contract.referenceComparisons.map(binding => ({
+          ...binding, verdict: 'pass', sourceIdentity: 'Inset work area with readable groups.',
+          preservedTraits: ['Inset grouping and relative proportions'], departures: [], findingIds: [],
+        })),
+      }),
       qualityAssessments: mode === 'early-missing-quality' ? [] : contract.qualityAxes.flatMap(axis => packet.evidence.renders.map(render => ({
         axis, viewport: render.viewport, captureSha256: render.captureSha256,
         verdict: reframe ? ['beautyDesirability', 'hierarchyComposition'].includes(axis) ? 'fail' : 'pass'
@@ -183,7 +218,12 @@ function handback(packet) {
       })),
     };
   }
-  const observations = (packet.evidence?.observationProjection ?? packet.observationProjection)?.observations ?? [];
+  const projection = packet.evidence?.observationProjection ?? packet.observationProjection;
+  const measuredEvidence = packet.evidence ?? packet;
+  const measured = contract.designQuality?.schema === 'design-quality-contract-v2';
+  const observations = Array.isArray(projection)
+    ? [...new Map(projection.map(row => [`${row.packetSha256}:${row.viewId}:${row.state}`, row])).values()]
+    : projection?.observations ?? [];
   return {
     schema: contract.schema,
     lane: contract.lane,
@@ -193,7 +233,16 @@ function handback(packet) {
       schema: contract.designQuality.schema,
       axes: contract.designQuality.axes.map(axis => ({
         axis, verdict: 'GREEN', score: 4, crossViewport: 'preserved', criticalFailure: null,
-        evidence: observations.map(observation => ({
+        evidence: observations.map(observation => measured ? ({
+          observationSha256: observation.observationSha256, captureSha256: observation.captureSha256,
+          packetSha256: observation.packetSha256, viewId: observation.viewId, state: observation.state,
+          regionSubjectIds: [],
+          measurementIds: measuredEvidence.measurementProjection.find(item => item.packetSha256 === observation.packetSha256)
+            .measurements.filter(item => item.viewIds.includes(observation.viewId) && item.coverage.status === 'complete'
+              && contract.designQuality.requiredMetricKinds[axis].includes(item.kind)).map(item => item.id),
+          visibleCondition: 'Offline fixture cites the actual supplied measured view.',
+          userConsequence: 'This verifies measured review transport, not human aesthetic quality.',
+        }) : ({
           observationSha256: observation.observationSha256,
           viewport: observation.viewport, state: observation.state,
           region: 'Fixture screenshot', visibleCondition: 'Offline transport fixture evidence.',
@@ -260,6 +309,10 @@ async function prompt(request) {
     emit({ type: 'message_end', message: toolResult });
     const text = result.content.find(item => item.type === 'text');
     if (!text) throw new Error('Evidence bridge supplied no packet text');
+    trace(`evidence-packet:${createHash('sha256').update(text.text).digest('hex')}`);
+    for (const image of result.content.filter(item => item.type === 'image')) {
+      trace(`evidence-image:${createHash('sha256').update(Buffer.from(image.data, 'base64')).digest('hex')}`);
+    }
     finalValue = handback(JSON.parse(text.text));
     emit({ type: 'omd_reviewer_provider_request', imageCount: mode === 'images-blocked' ? 0 : result.content.filter(item => item.type === 'image').length });
     if (mode === 'extension-error') emit({ type: 'extension_error', event: 'before_provider_request', error: 'Offline fixture extension failure' });

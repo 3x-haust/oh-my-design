@@ -164,6 +164,28 @@ async function collectInteractiveLabelFindings(
         && box.top < innerHeight
         && box.left < innerWidth;
       if (!visible) return [];
+      // Layout boxes can intersect the viewport while the entire control is outside
+      // a nested scroll port. Such a control is not painted; it is not a clipped label.
+      // Partially visible and out-of-flow controls retain the existing label checks.
+      let left = Math.max(box.left, 0), right = Math.min(box.right, innerWidth);
+      let top = Math.max(box.top, 0), bottom = Math.min(box.bottom, innerHeight);
+      let outOfFlow = style.position === 'fixed' || style.position === 'absolute';
+      let visibilityAncestor = element.parentElement;
+      while (visibilityAncestor !== null) {
+        const ancestorStyle = getComputedStyle(visibilityAncestor);
+        outOfFlow ||= ancestorStyle.position === 'fixed' || ancestorStyle.position === 'absolute';
+        const ancestorBox = visibilityAncestor.getBoundingClientRect();
+        if (['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowX)) {
+          left = Math.max(left, ancestorBox.left);
+          right = Math.min(right, ancestorBox.right);
+        }
+        if (['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowY)) {
+          top = Math.max(top, ancestorBox.top);
+          bottom = Math.min(bottom, ancestorBox.bottom);
+        }
+        visibilityAncestor = visibilityAncestor.parentElement;
+      }
+      if (!outOfFlow && (right <= left || bottom <= top)) return [];
       const textBoxes: DOMRect[] = [];
       let tokenSplit = false;
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -184,6 +206,41 @@ async function collectInteractiveLabelFindings(
       let clipped = element instanceof HTMLElement
         && (element.scrollWidth > element.clientWidth + 1
           || element.scrollHeight > element.clientHeight + 1);
+      const labelTop = Math.min(...textBoxes.map(textBox => textBox.top));
+      const labelBottom = Math.max(...textBoxes.map(textBox => textBox.bottom));
+      let recoverableY = false;
+      let scrollPort: Element | null = element;
+      while (textBoxes.length > 0 && scrollPort !== null) {
+        const portStyle = getComputedStyle(scrollPort);
+        const portBox = scrollPort.getBoundingClientRect();
+        if (portStyle.transform !== 'none') break;
+        if (scrollPort !== element && ['auto', 'scroll'].includes(portStyle.overflowY)
+          && scrollPort.scrollHeight > scrollPort.clientHeight + 1) {
+          let visibleTop = Math.max(0, portBox.top + scrollPort.clientTop);
+          let visibleBottom = Math.min(innerHeight, portBox.top + scrollPort.clientTop + scrollPort.clientHeight);
+          let outer = scrollPort.parentElement;
+          let transformed = false;
+          while (outer !== null) {
+            const outerStyle = getComputedStyle(outer);
+            transformed ||= outerStyle.transform !== 'none';
+            if (['hidden', 'clip', 'auto', 'scroll'].includes(outerStyle.overflowY)) {
+              const outerBox = outer.getBoundingClientRect();
+              visibleTop = Math.max(visibleTop, outerBox.top + outer.clientTop);
+              visibleBottom = Math.min(visibleBottom, outerBox.top + outer.clientTop + outer.clientHeight);
+            }
+            outer = outer.parentElement;
+          }
+          const minimum = Math.max(-scrollPort.scrollTop, labelBottom - visibleBottom);
+          const maximum = Math.min(scrollPort.scrollHeight - scrollPort.clientHeight - scrollPort.scrollTop,
+            labelTop - visibleTop);
+          recoverableY = !transformed && visibleBottom > visibleTop && minimum <= maximum + 1;
+          break;
+        }
+        if (['absolute', 'fixed', 'sticky'].includes(portStyle.position)
+          || (['hidden', 'clip'].includes(portStyle.overflowY)
+            && (labelTop < portBox.top - 1 || labelBottom > portBox.bottom + 1))) break;
+        scrollPort = scrollPort.parentElement;
+      }
       let viewportFixed = false;
       let ancestor: Element | null = element;
       while (ancestor !== null && ancestor !== document.documentElement) {
@@ -196,7 +253,7 @@ async function collectInteractiveLabelFindings(
           clipped ||= textBoxes.some((textBox) =>
             (clipsX && (textBox.left < ancestorBox.left - 1
               || textBox.right > ancestorBox.right + 1))
-            || (clipsY && (textBox.top < ancestorBox.top - 1
+            || (clipsY && !recoverableY && (textBox.top < ancestorBox.top - 1
               || textBox.bottom > ancestorBox.bottom + 1)));
         }
         ancestor = ancestor.parentElement;
@@ -209,11 +266,18 @@ async function collectInteractiveLabelFindings(
         ['hidden', 'clip'].includes(getComputedStyle(root).overflowY));
       clipped ||= textBoxes.some((textBox) =>
         textBox.left < -1 || textBox.right > innerWidth + 1
-        || ((textBox.top < -1 || textBox.bottom > innerHeight + 1)
+        || (!recoverableY && (textBox.top < -1 || textBox.bottom > innerHeight + 1)
           && (viewportFixed || documentClipsY
             || textBox.top + scrollY < -1
             || textBox.bottom + scrollY > scrollRoot.scrollHeight + 1)));
-      return [Object.freeze({ tokenSplit, clipped })];
+      const diagnosticBox = tokenSplit || clipped ? element.getBoundingClientRect() : null;
+      const target = diagnosticBox === null ? null : {
+        selector: element.id && document.querySelectorAll(`#${CSS.escape(element.id)}`).length === 1 ? `#${CSS.escape(element.id)}` : null,
+        tag: element.tagName.toLowerCase(), text: (element.textContent ?? '').slice(0, 240),
+        viewport: { width: innerWidth, height: innerHeight },
+        bounds: { x: diagnosticBox.x, y: diagnosticBox.y, width: diagnosticBox.width, height: diagnosticBox.height },
+      };
+      return [Object.freeze({ tokenSplit, clipped, target })];
     });
   });
   if (observed.some((item) => item.tokenSplit)) {
@@ -221,6 +285,11 @@ async function collectInteractiveLabelFindings(
   }
   if (observed.some((item) => item.clipped)) {
     findings.add(`interactive-label-clipped:${viewport.width}x${viewport.height}`);
+  }
+  for (const item of observed) if (item.target !== null) {
+    findings.add(`interactive-label-detail:${JSON.stringify({
+      view: `${viewport.width}x${viewport.height}`, ...item.target, tokenSplit: item.tokenSplit, clipped: item.clipped,
+    })}`);
   }
 }
 
@@ -383,13 +452,14 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   const actionLog: string[] = [];
   const captures: TrustedBrowserCapture[] = [];
   const measured: RetainedCapture[] = [];
+  const pendingCaptures: { path: string; bytes: Uint8Array }[] = [];
   const measurementMethod = measuredMode ? methodIdentity(browser.version()) : undefined;
   const capture = async (page: Page, view: ViewSpec, outcomeRef?: string): Promise<void> => {
     if (!measuredMode) {
       const url = page.url(), bytes = await page.screenshot({ fullPage: false });
       if (page.url() !== url) throw new Error('TRUSTED_BROWSER_CAPTURE_STATE_CHANGED');
       const hash = sha256(bytes), path = join(output, `${String(captures.length).padStart(3, '0')}-sha256-${hash}.png`);
-      input.artifacts.write(path, bytes);
+      pendingCaptures.push({ path, bytes });
       captures.push({ path, sha256: hash, ...view.viewport, ...(outcomeRef ? { outcomeRef } : {}), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
       return;
     }
@@ -397,7 +467,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
     measured.push(retained);
     const path = join(output, `${String(measured.length).padStart(3, '0')}-sha256-${retained.binding.capture.sha256}.png`);
     // This is the exact buffer whose pixels and DOM facts form the immutable measurement packet.
-    input.artifacts.write(path, retained.png);
+    pendingCaptures.push({ path, bytes: retained.png });
     captures.push({ path, sha256: retained.binding.capture.sha256, width: retained.binding.image.width, height: retained.binding.image.height,
       ...(outcomeRef === undefined ? {} : { outcomeRef }), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
   };
@@ -463,7 +533,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           }
           const actions = script.actions.filter((action) =>
             action.viewports === undefined || action.viewports.includes(viewport.id));
-          const transitionActions = actions.filter((action) => action.kind === 'click');
+          const transitionActions = actions.filter((action) => action.kind === 'click' || action.kind === 'press');
           // Attach each visible-state waiter before triggering actions, but convert rejection to a
           // measured boolean immediately so a fast timeout can never become an unhandled rejection.
           const initiallyVisible = await Promise.all(script.assertions.map((assertion) =>
@@ -480,8 +550,8 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             // immediately before the final triggering/barrier action so the bounded waiter measures
             // the resulting state rather than expiring while the script is still preparing it.
             if (actionIndex === actions.length - 1) signals = visibleSignals();
-            actionLog.push(`${action.kind === 'reload' ? 'reload' : `${action.kind} ${action.selector}`} @ ${viewport.width}x${viewport.height}`);
-            transcript.push(action.kind === 'reload' ? 'action-reload' : `action-${action.kind}:${sha256(Buffer.from(action.selector))}`);
+            actionLog.push(`${action.kind === 'reload' ? 'reload' : `${action.kind} ${action.selector}${action.kind === 'press' ? ` ${action.key}` : ''}`} @ ${viewport.width}x${viewport.height}`);
+            transcript.push(action.kind === 'reload' ? 'action-reload' : `action-${action.kind}:${action.kind === 'press' ? `${action.key}:` : ''}${sha256(Buffer.from(action.selector))}`);
             try {
               if (action.kind === 'reload') {
                 const response = await page.reload({ waitUntil: 'load' });
@@ -490,7 +560,26 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
                   safetyFindings.add('browser-navigation-failed');
                 }
               } else if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
-              else await page.locator(action.selector).fill(action.value, { timeout: 2_000 });
+              else if (action.kind === 'press') {
+                const focus = () => ({ tagName: document.activeElement?.tagName ?? null,
+                  id: document.activeElement?.id ?? null });
+                const before = await page.evaluate(focus);
+                await page.locator(action.selector).press(action.key, { timeout: 2_000 });
+                const after = await page.evaluate(focus);
+                transcript.push(`keyboard-focus:${JSON.stringify({ key: action.key,
+                  viewport: { width: viewport.width, height: viewport.height },
+                  before: { tagName: before.tagName,
+                    idSha256: before.id ? sha256(Buffer.from(before.id)) : null },
+                  after: { tagName: after.tagName,
+                    idSha256: after.id ? sha256(Buffer.from(after.id)) : null } })}`);
+              }
+              else {
+                const control = page.locator(action.selector);
+                const isSelect = await control.evaluate(element => element.tagName === 'SELECT',
+                  undefined, { timeout: 2_000 });
+                if (isSelect) await control.selectOption(action.value, { timeout: 2_000 });
+                else await control.fill(action.value, { timeout: 2_000 });
+              }
               if (request.browserZoom === 2) await ensureMeasuredLayoutZoom(page, request.viewport);
             } catch {
               findings.add('required-action-unavailable');
@@ -548,6 +637,11 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
       else await withLocalView(browser, input.root, { page: input.binding.productionPath, viewport: request.viewport, state }, inspect);
     }
     try {
+      served.assertSourceCurrent();
+      // Durable authenticated publication is not browser observation. Keep its
+      // validation/fsync cost outside every viewport's inspection deadline, and
+      // publish nothing if any viewport or pre-publication freshness check fails.
+      for (const capture of pendingCaptures) input.artifacts.write(capture.path, capture.bytes);
       served.assertSourceCurrent();
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown source mutation';

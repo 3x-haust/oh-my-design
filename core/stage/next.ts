@@ -15,21 +15,26 @@ import { canDeferMissingCopy, confidenceDebt, DEBT_CAPABLE_STAGES, readConfidenc
 import { evidenceBudget } from './evidence-budget.ts';
 import { candidateDirectionState, directionPresentation } from '../brief/candidate-choice.ts';
 import { refinementEscalation } from './refinement-work.ts';
+import { isModelLedProcess } from '../route/process-policy.ts';
 
 /** Fresh and interrupted runs use the same current-disk work pointer. No artifacts are fabricated. */
 export function nextStageWork(root: string, packRoot: string, invocation: ProjectRunInvocation) {
   const route = readPersistedRoute(root, invocation);
-  const escalation = route.sourceContract.processPolicy ? refinementEscalation(root, route.sourceContractSha256) : null;
+  const escalation = route.sourceContract.processPolicy && !isModelLedProcess(route.sourceContract)
+    ? refinementEscalation(root, route.sourceContractSha256) : null;
   if (escalation) {
-    const { defects, ...pending } = escalation;
+    const { defects, limitations, ...pending } = escalation;
+    const autonomous = route.sourceContract.processPolicy?.interactionMode === 'autonomous';
     return {
     schema: 'stage-next-v2', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
-    action: 'await-user', stage: 'production', owner: 'coordinator', reason: 'repeated-defect',
-    pending, escalationEvidence: defects, resumeAuthority: null,
+    action: autonomous ? 'stop-blocked' : 'await-user', stage: 'production', owner: 'coordinator', reason: 'repeated-defect',
+    pending: autonomous ? null : pending, escalationEvidence: defects, resumeAuthority: null,
     confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages: [] as string[],
     progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: null, validatedStages: [] as string[] },
-    problems: [], entryBlockers: [], planning: [], schemas: [], contracts: [], judgedBy: [], referenceWork: null,
-    next: null, instruction: 'Stop automatic repairs and completion retries. Preserve the actual three fixes/results and wait for renewed human authority; budget cannot waive a required defect.',
+    problems: autonomous ? limitations : [], entryBlockers: [], planning: [], schemas: [], contracts: [], judgedBy: [], referenceWork: null,
+    next: null, instruction: autonomous
+      ? 'Stop automatic repairs and completion retries. Preserve the existing artifact and actual fix/result evidence. Deliver the unresolved limitations without requesting a design decision or claiming quality approval.'
+      : 'Stop automatic repairs and completion retries. Preserve the actual three fixes/results and wait for renewed human authority; budget cannot waive a required defect.',
     };
   }
   const direction = route.sourceContract.processPolicy ? candidateDirectionState(root) : null;
@@ -61,7 +66,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     if (!output.problems.length && (route.sourceContract.processPolicy === undefined || !output.entry.blockers.length)) continue;
     const debtCapable = DEBT_CAPABLE_STAGES.has(output.stage)
       || (output.stage === 'copy' && !output.present && canDeferMissingCopy(route));
-    if (!debtCapable || route.sourceContract.processPolicy === undefined) { incomplete = output; break; }
+    if (!debtCapable || output.present && output.problems.length > 0
+      || route.sourceContract.processPolicy === undefined) { incomplete = output; break; }
     if (browseStop?.status === 'stopped-with-debt' && !output.present
       && ['acquisition', 'scout', 'reference-board', 'reference-selection', 'moodboard'].includes(output.stage)) {
       recordConfidenceDebt(root, route.sourceContractSha256,

@@ -6,6 +6,7 @@ import { formatCompletionHostCapabilities } from '../core/completion/host-capabi
 import type { RepairLoop } from './omd-repair-progress.ts';
 import type { RouteBootstrap } from './omd-route-bootstrap.ts';
 import { guardFailure, type OmdRunResult, type PortablePiApi, type PortablePiEvent } from './omd-runtime.ts';
+import { finishModelLedTurn } from './omd-model-led-completion.ts';
 
 type StagePlanning = Readonly<{ field: string; text: string }>;
 export type ReferenceWork = Readonly<{
@@ -168,7 +169,7 @@ export function parseStageWork(text: string): StageWorkPointer | null {
     stage,
     owner: typeof owner === 'string' ? owner : `${stage} owner`,
     action: autonomousReading ? 'resolve-design-reading' : recovering ? 'replan-discovery' : typeof action === 'string' ? action : 'repair-output',
-    next: autonomousReading ? 'omd schema design-language-input' : recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : `omd brief ${stage} --check --json`,
+    next: autonomousReading ? 'omd schema design-language-input' : recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : action === 'stop-blocked' ? '' : `omd brief ${stage} --check --json`,
     instruction: typeof instruction === 'string' ? instruction : 'Perform the owned work, then recompute stage next.',
     problems: stringList(Reflect.get(value, 'problems')),
     entryBlockers: stringList(Reflect.get(value, 'entryBlockers')),
@@ -240,6 +241,37 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       const result = await run(['stage', 'next', '--json'], cwd, signal);
       if (interrupted()) return;
       let work = parseStageWork(result.text);
+      if (work?.action === 'finish-model-led') {
+        const text = await finishModelLedTurn(task);
+        let visible = text;
+        if (text.startsWith('{')) {
+          const result: unknown = JSON.parse(text);
+          if (typeof result === 'object' && result !== null) {
+            const complete = Reflect.get(result, 'ok') === true;
+            const diagnostic = Reflect.get(result, 'diagnostic');
+            const category = typeof diagnostic === 'object' && diagnostic !== null ? Reflect.get(diagnostic, 'category') : null;
+            const canRepair = !complete && category !== 'authority' && category !== 'cancelled';
+            visible = koreanMessage(message, task.responseLocale)
+              ? complete
+                ? `구현과 실제 브라우저 동작, 독립 모델 검토가 완료됐습니다. 사람의 미적 평가를 받은 것은 아닙니다.\n결과: ${String(Reflect.get(result, 'finalEvidencePath'))}`
+                : `자동 검증의 ${String(Reflect.get(result, 'phase'))} 단계에서 문제가 확인됐습니다. ${canRepair ? '실제 결과와 검증 내용을 비교해 수정을 이어갑니다.' : '권한 또는 중단 상태를 해결하기 전에는 완료를 주장하지 않습니다.'}`
+              : complete ? `Implementation, real browser checks and isolated model review completed.\nEvidence: ${String(Reflect.get(result, 'finalEvidencePath'))}`
+                : `Completion is unverified at ${String(Reflect.get(result, 'phase'))}. ${canRepair ? 'Repair continues from the retained evidence.' : 'Authority or cancellation requires resolution.'}`;
+            const limitations = limitationList(Reflect.get(result, 'limitations'));
+            if (limitations.length) visible += `\n${limitations.join('\n')}`;
+          }
+        }
+        return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
+          { type: 'text', text: visible }] } };
+      }
+      if (work?.action === 'stop-blocked') {
+        task.onReferenceWork?.(null);
+        const status = koreanMessage(message, task.responseLocale)
+          ? `반복 수정 후에도 필수 결함이 남아 자동 수정을 중단했습니다. 품질 검증을 통과한 결과는 아닙니다. 현재 산출물과 검증 기록은 ${cwd}에 보존했습니다.`
+          : `Automatic repairs stopped with unresolved required defects. This is not quality approval. The current artifact and evidence remain in ${cwd}.`;
+        return { message: { ...message, content: [{ type: 'text' as const,
+          text: [status, ...work.problems, ...work.limitations].join('\n') }] } };
+      }
       if (work?.awaiting) {
         task.onReferenceWork?.(null);
         const pending = work.awaiting.pending, present = task.onAwaitUser?.(pending) ?? true;

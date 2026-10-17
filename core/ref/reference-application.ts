@@ -8,7 +8,7 @@ import { readPublishedReferenceResearch, validateReferenceResearch, REFERENCE_RE
 import { readResearchDiscoveryRoots } from './discovery-coverage.ts';
 import { readDomainObservation } from './domain-observation.ts';
 import { referenceServiceHost } from './design-discovery-sources.ts';
-import { currentReferenceDirectionSourceContract, requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
+import { requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
 import { loadRefs } from './store.ts';
 
 export const REFERENCE_APPLICATION_SCHEMA = 'reference-application-v2' as const;
@@ -160,8 +160,8 @@ function validate(root: string, application: ReferenceApplication, options: Opti
     if (key === 'design') {
       if (row.design.coverage === 'direct' && !row.design.referenceIds.some(id =>
         current.research.designReference.sources.some(source => source.id === id && source.visualRole === 'visual-direction'))) return fail(`${row.surface}: support-only evidence cannot claim direct visual coverage`);
-      const sourceContract = currentReferenceDirectionSourceContract(root);
-      if (sourceContract !== null && current.research.schema === 'reference-research-v8') for (const id of row.design.referenceIds) {
+      const sourceContract = options.expectedSourceContractSha256;
+      if (current.research.schema === 'reference-research-v8') for (const id of row.design.referenceIds) {
         const source = current.research.designReference.sources.find(item => item.id === id);
         const reference = source === undefined ? undefined : loadRefs(root, { includeDomain: true })
           .find(item => item.researchLane === 'design' && item.source === source.url);

@@ -286,14 +286,24 @@ export async function withBrowser<T>(
     });
   } catch (error) { await proxy?.close(); throw error; }
   if (!cdp) owner?.own(browser);
+  let operationFailure: Readonly<{ error: unknown }> | undefined;
   try { return await fn(browser); }
+  catch (error) { operationFailure = { error }; throw error; }
   finally {
-    if (!cdp) {
-      let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-      try { await Promise.race([browser.close(), new Promise<void>((_, reject) => {
-        cleanupTimer = setTimeout(() => reject(new Error(`browser cleanup timed out after ${BROWSER_CLEANUP_TIMEOUT_MS}ms`)), BROWSER_CLEANUP_TIMEOUT_MS);
-      })]); } finally { clearTimeout(cleanupTimer); await proxy?.close(); }
-    } else await browser.close(); // For connectOverCDP, close disconnects this client; it does not own Chromium.
+    try {
+      if (!cdp) {
+        let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+        try { await Promise.race([browser.close(), new Promise<void>((_, reject) => {
+          cleanupTimer = setTimeout(() => reject(new Error(`browser cleanup timed out after ${BROWSER_CLEANUP_TIMEOUT_MS}ms`)), BROWSER_CLEANUP_TIMEOUT_MS);
+        })]); } finally { clearTimeout(cleanupTimer); await proxy?.close(); }
+      } else await browser.close(); // For connectOverCDP, close disconnects this client; it does not own Chromium.
+    } catch (cleanupError) {
+      if (operationFailure === undefined) throw cleanupError;
+      const original = operationFailure.error;
+      throw new AggregateError([original, cleanupError],
+        `${original instanceof Error ? original.message : 'browser operation failed'}; ${cleanupError instanceof Error ? cleanupError.message : 'browser cleanup failed'}`,
+        { cause: original });
+    }
   }
 }
 
@@ -928,7 +938,8 @@ export async function capturePageForRef(
       }
     }
     opts.deadline?.assertLive();
-    return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
+    return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl,
+      httpStatus: finalUrl.startsWith('file:') ? null : httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
       ...(originalImage ? { sourceImage: originalImage.sourceUrl, sourceImageSha256: originalImage.sourceSha256,
         imageDimensions: { width: originalImage.width, height: originalImage.height } } : {}),

@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildBrief } from '../core/brief/index.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (path: string): string => readFileSync(join(root, path), 'utf8');
@@ -50,7 +52,14 @@ test('adaptive routing delegates selected requirements through checked role brie
   assert.match(skill, /Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step/);
 
   const brief = read('core/brief/index.ts');
-  assert.match(brief, /frame: \['frame', 'functional-requirements', 'reality-ledger'\]/);
+  const project = mkdtempSync(join(tmpdir(), 'omd-product-surface-'));
+  try {
+    const frameBrief = buildBrief(project, 'frame', join(root, 'core'));
+    assert.deepEqual(frameBrief.schemas.map(schema => schema.name),
+      ['frame', 'functional-requirements', 'reality-ledger', 'decision-entry']);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
   assert.match(brief, /omd complete check <page>/);
   assert.match(brief, /runBy: 'coordinator'/);
   assert.match(brief, /passMeans: 'current-entry-inputs-only'/);

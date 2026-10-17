@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { reviewerText, type ReviewerText } from '../core/runtime/reviewer-text.ts';
-import { MAX_INLINE_EVIDENCE_BYTES, ReviewerEvidenceProxy } from '../core/runtime/evidence-proxy.ts';
+import { MAX_BROKERED_EVIDENCE_BYTES, ReviewerEvidenceProxy } from '../core/runtime/evidence-proxy.ts';
 
 function expand(value: ReviewerText): string {
   if (typeof value === 'string') return value;
@@ -36,7 +36,7 @@ test('ordinary and incompressible input remains literal and oversized evidence s
   for (const value of ['', 'Q Q', '책 이름', 'x'.repeat(32), 'ab'.repeat(400)]) {
     assert.equal(reviewerText(value), value);
   }
-  const oversized = 'ab'.repeat(MAX_INLINE_EVIDENCE_BYTES / 2);
+  const oversized = 'ab'.repeat(MAX_BROKERED_EVIDENCE_BYTES / 2);
   const value = reviewerText(oversized);
   assert.equal(value, oversized);
   assert.throws(() => new ReviewerEvidenceProxy().create(JSON.stringify({ value })), /exceeds/);

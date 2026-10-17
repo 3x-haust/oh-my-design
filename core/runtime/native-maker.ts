@@ -1,12 +1,13 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { runPiMaker, requirePiMakerResult, type PiMakerResult } from '../../adapters/pi-maker-runtime.ts';
-import { makerFail, parseMakerHandback } from '../../adapters/pi-maker-contract.ts';
+import { makerFail, makerInputBranch, parseMakerHandback } from '../../adapters/pi-maker-contract.ts';
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import { CANDIDATE_EVIDENCE_FILES } from '../brief/candidate-selection.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { acquireProjectMutationLock, createProjectWriteAdapter, replaceProjectFileAtomically, validateProjectWritePath } from './project-write.ts';
 import { prepareNativeMaker, requirePreparedMaker, type NativeMakerContext, type PreparedNativeMaker } from './native-maker-packet.ts';
+import { preserveNativeMakerBaseline } from './native-maker-restore.ts';
 
 const consumed = new WeakSet<PiMakerResult>();
 export function publishNativeMaker(context: NativeMakerContext & Readonly<{
@@ -31,7 +32,7 @@ export function publishNativeMaker(context: NativeMakerContext & Readonly<{
         makerFail('source-target-not-regular');
       }
     }
-    if (prepared.input.role === 'omd-sketch') {
+    if (prepared.input.role === 'omd-sketch' && makerInputBranch(prepared.input) === 'standard') {
       const directory = `.omd/.cache/sketches/${prepared.input.candidateId}`;
       for (const name of CANDIDATE_EVIDENCE_FILES) {
         const path = `${directory}/${name}`;
@@ -45,6 +46,7 @@ export function publishNativeMaker(context: NativeMakerContext & Readonly<{
     }
     consumed.add(result);
     const writer = createProjectWriteAdapter(root, invocation);
+    preserveNativeMakerBaseline(context, prepared, result);
     // All scope/currentness/result checks precede the first source mutation.
     for (const file of handback.files) writer.write(file.path, file.content);
     const record = Buffer.from(canonicalJson(result));

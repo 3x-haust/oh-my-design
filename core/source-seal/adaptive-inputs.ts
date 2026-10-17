@@ -47,6 +47,7 @@ type StageBinding = Readonly<
 >;
 export type AdaptiveSourceSealRoute = Readonly<{
   schema: typeof ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA;
+  executionStyle?: 'model-led';
   pointer: Receipt;
   record: Receipt;
   sourcePointer: Receipt;
@@ -219,6 +220,7 @@ export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectR
   }
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA,
+    ...(record.sourceContract.processPolicy?.schema === 'model-led-design-process-v1' ? { executionStyle: 'model-led' as const } : {}),
     pointer: receipt(root, '.omd/route.json', 'adaptive route pointer'),
     record: receipt(root, routePath, 'adaptive route record'),
     sourcePointer: receipt(root, '.omd/route-source.json', 'adaptive route source pointer'),
@@ -283,7 +285,9 @@ export function adaptiveSourceSealInputHashes(route: AdaptiveSourceSealRoute): R
 }
 
 export function isAdaptiveSourceSealRoute(value: unknown): value is AdaptiveSourceSealRoute {
-  if (!object(value) || Object.keys(value).length !== (Object.hasOwn(value, 'referenceApplication') ? 9 : 8) || value.schema !== ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA) return false;
+  if (!object(value) || Object.keys(value).length !== 8 + (Object.hasOwn(value, 'referenceApplication') ? 1 : 0)
+    + (Object.hasOwn(value, 'executionStyle') ? 1 : 0) || value.schema !== ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA) return false;
+  if (Object.hasOwn(value, 'executionStyle') && value.executionStyle !== 'model-led') return false;
   if (Object.hasOwn(value, 'referenceApplication') && (!Array.isArray(value.referenceApplication)
     || value.referenceApplication.length !== 2 || !value.referenceApplication.every(isReceipt)
     || value.referenceApplication[0]?.path !== REFERENCE_APPLICATION_PATH

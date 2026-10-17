@@ -1,7 +1,7 @@
 import { browserTaskOutcomeContract } from '../brief/task-outcome.ts';
 import { loadMeasuredObservationBindings } from '../evidence/final-v2-browser-observations.ts';
 import { loadMeasuredQualityContext, assertMeasurementPacketsGreen } from '../evidence/final-v2-measurement.ts';
-import { MEASURED_DESIGN_QUALITY_AXES, MEASURED_DESIGN_QUALITY_FLOORS } from '../evidence/final-v2-measured-quality.ts';
+import { MEASURED_DESIGN_QUALITY_AXES, MEASURED_DESIGN_QUALITY_FLOORS, type MeasuredQualityContext } from '../evidence/final-v2-measured-quality.ts';
 import { measurementProjection } from '../measure/projection.ts';
 import { AXIS_METRICS } from '../measure/citations.ts';
 import { loadReviewPolicy } from '../measure/review-policy.ts';
@@ -11,9 +11,21 @@ import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { reviewProfileBinding } from './trusted-review-profile.ts';
 import { loadTerminalProcess } from '../evidence/final-v2-process.ts';
+import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
 
 export const MEASURED_REVIEW_TRANSPORT = 'measured-final-reviewer-transport-v1';
 export const MEASURED_REVIEW_HANDBACK = 'measured-final-reviewer-handback-v1';
+export function measuredAdvisoryDispositionContract(context: MeasuredQualityContext, measurements: readonly { path: string; sha256: string }[]) {
+  return {
+    policy: context.advisoryDispositionPolicy,
+    judgment: 'Inspect advisory findings alongside the whole captures in the existing axis assessments. No separate disposition form is required under integrated-final-review. Hard failures, evidence citations and quality floors remain binding.',
+    findings: measurements.flatMap(receipt => context.index.packet(receipt.sha256).findings
+      .filter(finding => finding.severity === 'advisory')
+      .map(finding => ({ packetSha256: receipt.sha256, findingId: finding.id, axes: finding.axes,
+        viewIds: finding.viewIds, measurementIds: finding.measurementIds })))
+      .sort((left, right) => `${left.packetSha256}:${left.findingId}`.localeCompare(`${right.packetSha256}:${right.findingId}`)),
+  };
+}
 export function measuredFinalRenderPacket(root: string, invocation: ProjectRunInvocation, observationSha256s: readonly string[], artDirectionSha256?: string): Buffer {
   const policy = loadReviewPolicy(root, invocation), route = readPersistedRoute(root, invocation);
   const process = loadTerminalProcess(root, invocation, observationSha256s);
@@ -31,7 +43,8 @@ export function measuredFinalRenderPacket(root: string, invocation: ProjectRunIn
   const benchmark = route.gates.includes('greenfield-task-flow-benchmark');
   const evidence = { schema: 'measured-final-reviewer-evidence-v1', candidateAlias: `candidate-${digest(observationSha256s).slice(0, 16)}`,
     context: { projectMode: route.projectMode, taskOutcome: browserTaskOutcomeContract(route.sourceContract.taskOutcome), designAxes: route.sourceContract.designAxes,
-      requiredOutcomes: route.requiredOutcomes, prohibitedOutcomes: route.prohibitedOutcomes },
+      requiredOutcomes: route.requiredOutcomes, prohibitedOutcomes: route.prohibitedOutcomes,
+      developerCalibration: currentDeveloperCalibration(root, invocation) },
     measurementProjection: [...new Map([...measurements.map(r => measurementProjection(context.index.packet(r.sha256), r.sha256)), ...process?.projections ?? []].map(p => [p.packetSha256, p])).values()],
     ...(process?.plan ? { surfaceContext: process.plan.surfaces.map(({ id, purpose, states, taskIds }) => ({ id, purpose, taskIds, states: states.map(({ id, required, primaryActionId }) => ({ id, required, primaryActionId })) })),
       surfaceReviewContract: { schema: 'surface-review-v1', rows: process.surfaceRows } } : {}),
@@ -45,7 +58,8 @@ export function measuredFinalRenderPacket(root: string, invocation: ProjectRunIn
     schema: MEASURED_REVIEW_HANDBACK, lane: 'blindLane', laneSchema: 'measured-blind-review-v1',
     verdictKeys: ['blindVisual', 'blindNarrative', ...(benchmark ? ['interactionBenchmarkFit', 'domainSpecificity'] : []), ...(route.projectMode === 'greenfield' ? ['realityFit'] : [])],
     criticalFloorKeys: ['composition', 'copy', ...(benchmark ? ['interactionQuality'] : [])],
-    designQuality: { schema: 'design-quality-contract-v2', axes: MEASURED_DESIGN_QUALITY_AXES, floors: MEASURED_DESIGN_QUALITY_FLOORS, requiredMetricKinds: AXIS_METRICS },
+    designQuality: { schema: 'design-quality-contract-v2', axes: MEASURED_DESIGN_QUALITY_AXES, floors: MEASURED_DESIGN_QUALITY_FLOORS, requiredMetricKinds: AXIS_METRICS,
+      advisoryDispositionContract: measuredAdvisoryDispositionContract(context, measurements) },
     reviewerFields: ['schema', 'lane', 'verdicts', 'criticalFloors', 'designQuality', ...(process?.plan ? ['surfaceReview'] : []), ...Object.keys(fixedBindings), 'findings'], fixedBindings,
   } });
 }

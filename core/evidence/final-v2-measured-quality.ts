@@ -7,9 +7,12 @@ export const MEASURED_DESIGN_QUALITY_FLOORS = Object.freeze({ typography: 3, spa
 export type MeasuredEvidence = { observationSha256: string; captureSha256: string; viewId: string; state: string; regionSubjectIds: string[]; packetSha256: string; measurementIds: string[]; visibleCondition: string; userConsequence: string };
 export type MeasuredAssessment = { axis: MeasuredAxis; verdict: 'GREEN' | 'RED'; score: number; crossViewport: 'preserved' | 'weakened' | 'contradicted'; criticalFailure: string | null; evidence: MeasuredEvidence[] };
 export type MeasuredDesignQuality = { schema: typeof MEASURED_DESIGN_QUALITY_SCHEMA; axes: MeasuredAssessment[] };
-export type MeasuredQualityContext = { index: MeasurementIndex; requiredViewIds: readonly string[]; policySha256: string; advisoryDispositionIds: readonly string[]; bindings: readonly { observationSha256: string; captureSha256: string; packetSha256: string; viewId: string; state: string; browserZoom: 1 | 2 }[] };
+export type MeasuredQualityContext = { index: MeasurementIndex; requiredViewIds: readonly string[]; policySha256: string; advisoryDispositionIds: readonly string[]; advisoryDispositionPolicy: 'separate-slop-review' | 'integrated-final-review'; bindings: readonly { observationSha256: string; captureSha256: string; packetSha256: string; viewId: string; state: string; browserZoom: 1 | 2 }[] };
 export function parseMeasuredDesignQuality(input: unknown): MeasuredDesignQuality {
-  v.object({ schema: v.enumeration(MEASURED_DESIGN_QUALITY_SCHEMA), axes: v.array(v.object({ axis: v.enumeration(...MEASURED_DESIGN_QUALITY_AXES), verdict: v.enumeration('GREEN', 'RED'), score: v.enumeration(0, 1, 2, 3, 4), crossViewport: v.enumeration('preserved', 'weakened', 'contradicted'), criticalFailure: v.nullable(v.text), evidence: v.array(v.object({ observationSha256: v.sha, captureSha256: v.sha, viewId: v.text, state: v.text, regionSubjectIds: v.array(v.text), packetSha256: v.sha, measurementIds: v.array(v.pattern(/^vm1:[a-f0-9]{64}$/)), visibleCondition: v.text, userConsequence: v.text })) })) })(input);
+  const assessment = (value: unknown) => {
+    v.object({ axis: v.enumeration(...MEASURED_DESIGN_QUALITY_AXES), verdict: v.enumeration('GREEN', 'RED'), score: v.enumeration(0, 1, 2, 3, 4), crossViewport: v.enumeration('preserved', 'weakened', 'contradicted'), criticalFailure: v.nullable(v.text), evidence: v.array(v.object({ observationSha256: v.sha, captureSha256: v.sha, viewId: v.text, state: v.text, regionSubjectIds: v.array(v.text), packetSha256: v.sha, measurementIds: v.array(v.pattern(/^vm1:[a-f0-9]{64}$/)), visibleCondition: v.text, userConsequence: v.text })) })(value);
+  };
+  v.object({ schema: v.enumeration(MEASURED_DESIGN_QUALITY_SCHEMA), axes: v.array(assessment) })(input);
   const c = input as MeasuredDesignQuality;
   if (c.axes.length !== MEASURED_DESIGN_QUALITY_AXES.length || c.axes.some((a, i) => a.axis !== MEASURED_DESIGN_QUALITY_AXES[i])) v.fail('all eleven independent axes are required in canonical order');
   for (const a of c.axes) {
@@ -32,7 +35,9 @@ export function assertMeasuredDesignQualityGreen(input: unknown, context: Measur
       const packet = context.index.packet(e.packetSha256), view = packet.scope.find(s => s.id === e.viewId), capture = packet.captures.find(s => s.viewId === e.viewId);
       for (const v of packet.scope) required.add(v.id);
       if (packet.summary.deterministicVerdict !== 'PASS') v.fail('deterministic RED/incomplete scope cannot be overruled by GREEN');
-      if (packet.findings.some(f => f.severity === 'advisory' && f.viewIds.includes(e.viewId) && f.axes.includes(a.axis) && !context.advisoryDispositionIds.includes(f.id))) v.fail('advisory finding needs a validated scoped disposition before GREEN');
+      if (context.advisoryDispositionPolicy !== 'integrated-final-review'
+        && packet.findings.some(f => f.severity === 'advisory' && f.viewIds.includes(e.viewId) && f.axes.includes(a.axis)
+          && !context.advisoryDispositionIds.includes(f.id))) v.fail('advisory finding needs a validated scoped disposition before GREEN');
       if (!view || view.state !== e.state || capture?.capture.sha256 !== e.captureSha256 || !context.bindings.some(b => b.observationSha256 === e.observationSha256 && b.captureSha256 === e.captureSha256 && b.packetSha256 === e.packetSha256 && b.viewId === e.viewId && b.state === e.state && b.browserZoom === view.browserZoom)) v.fail('measurement citation does not join the authenticated observation capture/state/zoom');
       context.index.assertAxis(a.axis, e.viewId, e.measurementIds.map(measurementId => ({ packetSha256: e.packetSha256, measurementId })), e.regionSubjectIds);
     }

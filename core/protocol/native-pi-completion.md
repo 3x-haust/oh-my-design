@@ -1,5 +1,24 @@
 # Native Pi implementation completion
 
+## Model-led default
+
+Ordinary implementation runs use the host-authenticated model-led process. The model chooses
+research, methods, delegation and candidate count, and writes scoped production source directly
+after production readiness. Unselected methods require neither a document nor a written skip.
+Explicitly selected methods retain their owner contracts. Design-only, benchmark/release and
+host-selected `OMD_DESIGN_WORKFLOW=structured` retain the structured procedures below.
+
+Author one outcome-bound browser proposal from actual controls and run `omd lifecycle finish --json`.
+The host can run this automatically after a proposal is ready. It runs declared package checks,
+real browser actions and desktop/mobile captures, records actual execution facts, launches isolated
+visual/outcome review, seals current inputs, publishes evidence and checks terminal acceptance.
+It returns concrete failed outcomes, control geometry and retained evidence paths. Repair changed
+inputs rather than repeating an unchanged attempt. Advisory craft findings are judged during final
+review; behavior, access, safety and visual quality remain required. A model review never claims
+human ratings. No unsupported product fact or external-action permission is manufactured.
+
+## Structured workflow and selected methods
+
 Use `omd_cli` in the actual Pi session. The extension observes the selected provider/model, Pi
 process and original request, and signs an exact command envelope. Never supply `--pi-command`,
 another host's activation or a replacement model. A standalone CLI cannot claim this authority.
@@ -18,17 +37,47 @@ These checks do not guess missing build paths or expand authority. An unknown en
 owner handoff to resolve from the real configuration. A late route correction still invalidates
 dependent provenance and studies; never rebind their hashes or weaken currentness to avoid replay.
 
-The selected owners still produce real inputs and decision records. Integrated Sketch candidates
+In the structured workflow selected owners still produce real inputs and decision records. Integrated Sketch candidates
 and Hand application source use `omd maker run --input <json> --json`, never coordinator writes.
 Inspect `omd schema native-maker --json`: Hand uses role `omd-hand`, null `candidateId`/`axis`
 and exact route-authorized source paths; `readPaths` separately names required first-party imports,
 callers, entry files and manifests outside that write grant, or `[]` when none are needed.
 Read context never expands write authority. Sketch keeps `readPaths: []` and receives no existing
-production source. Sketch uses `omd-sketch`, an anonymous candidate id,
+production source. Current `candidate-plan-v2` work uses the `currentSketchSkeleton` from
+`schema native-maker`: only schema, role `omd-sketch`, and the exact committed sketch brief.
+The host derives its owned `index.html`, hypothesis, content, tokens and views; it delivers
+rights-allowed whole reference images through the actual maker evidence tool.
+When the route omits Writer/copy, contextual candidate-content uses `copy: null` and candidate-plan
+uses `content.status: provisional`. Author the real representative strings and truthful demo/fact
+boundary there; do not invent an approved copy deck or select an unwanted copy stage to fill a
+starter receipt. Selected copy work retains its normal publication and validation requirements.
+After every planned candidate is authored, run `omd candidate capture --json`, then
+`omd candidate review --json`. The latter executes isolated Eye and publishes a feasible
+harness choice under the signed native host policy, without a human answer. No feasible
+winner means no selection, not a waived quality bar.
+
+Current-process maker context carries the complete requested outcomes without requiring an
+external task-flow benchmark before source exists. After rendering, author the existing
+`trusted-lifecycle-manifest` proposal from actual controls and states, covering every required
+outcome exactly once. Without a genuine benchmark, omit its `entrySurface` entirely and run
+`omd lifecycle evaluate --manifest .omd/.cache/trusted-lifecycle-manifest.json --json`.
+The existing native evaluator binds this proposal to the route and performs the real actions;
+independent outcome review still determines acceptance. This is not benchmark evidence.
+Legacy benchmark-derived evaluation and its provenance checks remain unchanged.
+
+Each native maker publication preserves its exact pre-write files and prior source-owner pointer
+in a signed, run/route-bound checkpoint. When observed repair results regress, use
+`omd maker restore --input <the-same-native-maker-input.json> --json` to restore that owner's
+previous files and remove only files introduced by that publication. It refuses unrelated later
+source or mode changes, forged checkpoints and changed run/route authority. An interrupted restore
+can resume only while every file still matches its recorded before/after bytes. Restoration is not
+quality approval: remeasure, recapture and rerun the affected independent checks before delivery.
+
+Historical directory-based Sketch work uses an anonymous candidate id,
 one exact current composition Candidate axes entry, and paths inside its assigned
 `.omd/.cache/sketches/<id>/` directory. Include index.html, noun-swap-test.json, selection.json
 and ux-models.json plus required local source assets. This selection.json describes the candidate;
-the coordinator retains actual winner selection through `omd candidate select`.
+the coordinator retains actual winner selection through the historical `omd candidate select` path.
 Repair the same governing candidate with the same candidate id and owned paths. This preserves
 its existing source and authenticated candidate-review lineage; a new id starts a separate
 exploration rather than continuing that repair. The host delivers the exact first-party captures
@@ -98,12 +147,16 @@ such passes do not attest independence. Non-native host contracts are unchanged.
 1. Finish the selected production checks, build the local entry and settle current input/source
    proofs. Run `omd source --seal` and its check when required by the route. Keep source unchanged
    while evidence and reviews run.
-   The native guard admits existing verification commands through direct `bash`, one command
+   Prefer `omd lifecycle verify install|ci|build|typecheck|test|lint --json` for native package
+   verification, especially on hosts that expose bash only inside an eval wrapper. It runs the
+   existing npm action in the bound project after the same production-readiness check, uses
+   owned process cancellation, and reports the actual exit code/output without approving
+   completion. Only those closed action names are accepted; it is not a generic shell tool.
+   The native guard also admits existing verification commands through direct `bash`, one command
    at a time: for example `npm test`, `npm run typecheck` and `npm run build`, in the already
    bound project directory. An `eval` wrapper, `cd` prefix or `&&` chain is not that closed
-   allowance. There is no `omd lifecycle build` command. If the host does not expose the direct
-   verification tool, identify that capability gap rather than inventing a CLI namespace or
-   claiming a build ran.
+   allowance. There is no `omd lifecycle build` command. A missing package script is a real
+   failure; repair it through the owned maker instead of claiming a build ran.
 2. Run `omd lifecycle evaluate --json`. It derives the fixed plan from current project contracts,
    executes real browser actions at the required viewports and publishes the observed results.
    A composition-selected native route first requires a current independent `retain` review
@@ -134,6 +187,22 @@ such passes do not attest independence. Non-native host contracts are unchanged.
    A revocation can prove changed helper access and retained applicant records
    together. Missing-before or deleted-after content fails preservation;
    preservation never substitutes for the required state change.
+   A required keyboard outcome uses actual authored `press(selector,key)`
+   actions and captured consequences, not clicks or a keyboard-help label.
+   Use the bounded keys from `omd schema trusted-lifecycle-manifest --json`.
+   The same trusted runner records actual key dispatch and before/after focus
+   with opaque DOM identities. Those records prove execution, not task or
+   accessibility acceptance; the existing independent protocol review still
+   decides whether the required keyboard journey is covered. Benchmark-derived
+   entry plans keep their fixed trigger and cannot be substituted.
+   A current authenticated failed evaluation routes to `repair-browser-evidence`.
+   Inspect its receipt, actual captures and executed assertions before another
+   evaluator run. Repair an incorrect coordinator-owned proposal without changing
+   requirements; send a real application defect to Hand's authorized maker.
+   The repair procedure is inspection-first, not an immediate evaluation retry.
+   Preserve failed records and rerun only after affected inputs change. Missing,
+   stale or unauthenticated evidence still needs valid fresh evaluation, not a
+   repair decision inferred from an old failure.
    `ok` and `executionStatus` describe assertion execution, not semantic acceptance;
    `acceptanceStatus: review-required` remains until independent review. The current receipt
    binds the exact executed plan, including its actions and assertions. A failed execution is

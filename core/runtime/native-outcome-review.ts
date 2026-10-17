@@ -62,6 +62,7 @@ export function nativeOutcomeExecutionEvidence(root: string, invocation: Project
       const actions = script.actions.map(action => {
         switch (action.kind) {
           case 'click': return action;
+          case 'press': return action;
           case 'reload': return action;
           case 'fill': return { ...action, value: reviewerText(action.value) };
           default: return action satisfies never;

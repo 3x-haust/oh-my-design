@@ -8,6 +8,10 @@ import type { ViewRequest } from '../measure/types.ts';
 
 export const TRUSTED_LIFECYCLE_MANIFEST_SCHEMA = 'trusted-lifecycle-manifest-v1' as const;
 export const MEASURED_LIFECYCLE_MANIFEST_SCHEMA = 'trusted-lifecycle-manifest-v2' as const;
+export const TRUSTED_EVALUATION_KEYS = [
+  'Tab', 'Shift+Tab', 'Enter', 'Space', 'Escape',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End',
+] as const;
 
 export type TrustedEvaluationContractErrorCode =
   | 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST'
@@ -35,6 +39,12 @@ export type TrustedEvaluationAction =
     viewports?: readonly TrustedEvaluationViewport[];
   }>
   | Readonly<{
+    kind: 'press';
+    selector: string;
+    key: typeof TRUSTED_EVALUATION_KEYS[number];
+    viewports?: readonly TrustedEvaluationViewport[];
+  }>
+  | Readonly<{
     kind: 'fill';
     selector: string;
     value: string;
@@ -57,7 +67,7 @@ export type TrustedEntrySurface = Readonly<{
   workObject: Readonly<{ selector: string; anchorSelector: string; anchorText: string }>;
   nextAction?: Readonly<{ selector: string; accessibleName: string }>;
   trigger: Exclude<TrustedEvaluationAction,
-    Readonly<{ kind: 'reload' }> | Readonly<{ viewports: readonly TrustedEvaluationViewport[] }>>;
+    Readonly<{ kind: 'reload' | 'press' }> | Readonly<{ viewports: readonly TrustedEvaluationViewport[] }>>;
   consequence: Readonly<{ selector: string; beforeText: string; afterText: string }>;
 }>;
 
@@ -92,6 +102,8 @@ const CLICK_ACTION_KEYS = new Set(['kind', 'selector']);
 const SCOPED_CLICK_ACTION_KEYS = new Set(['kind', 'selector', 'viewports']);
 const FILL_ACTION_KEYS = new Set(['kind', 'selector', 'value']);
 const SCOPED_FILL_ACTION_KEYS = new Set(['kind', 'selector', 'value', 'viewports']);
+const PRESS_ACTION_KEYS = new Set(['kind', 'selector', 'key']);
+const SCOPED_PRESS_ACTION_KEYS = new Set(['kind', 'selector', 'key', 'viewports']);
 const RELOAD_ACTION_KEYS = new Set(['kind']);
 const SCOPED_RELOAD_ACTION_KEYS = new Set(['kind', 'viewports']);
 const EVALUATION_VIEWPORTS = new Set<TrustedEvaluationViewport>(['1280x900', '390x844']);
@@ -251,6 +263,7 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
       const scoped = Object.hasOwn(action, 'viewports');
       if (action.kind === 'click') exact(action, scoped ? SCOPED_CLICK_ACTION_KEYS : CLICK_ACTION_KEYS);
       else if (action.kind === 'fill') exact(action, scoped ? SCOPED_FILL_ACTION_KEYS : FILL_ACTION_KEYS);
+      else if (action.kind === 'press') exact(action, scoped ? SCOPED_PRESS_ACTION_KEYS : PRESS_ACTION_KEYS);
       else if (action.kind === 'reload') {
         const keys = scoped ? SCOPED_RELOAD_ACTION_KEYS : RELOAD_ACTION_KEYS;
         exact(action, keys);
@@ -275,6 +288,12 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
         });
       }
       const selector = text(action.selector);
+      if (action.kind === 'press') {
+        const key = TRUSTED_EVALUATION_KEYS.find(candidate => candidate === action.key);
+        if (key === undefined) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+        return Object.freeze({ kind: 'press' as const, selector, key,
+          ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }) });
+      }
       if (action.kind === 'click') {
         return Object.freeze({
           kind: 'click' as const,

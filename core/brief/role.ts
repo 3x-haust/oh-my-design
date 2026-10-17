@@ -13,6 +13,7 @@ import { readWholeScreenReferenceHandoff } from '../ref/reference-handoff.ts';
 import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH, type DesignInventory } from '../tokens/inventory.ts';
 import { runtimeInventoryStatus, RUNTIME_INVENTORY_DOC } from '../tokens/runtime-inventory.ts';
 import { resolveSelectedTokens } from '../tokens/resolve.ts';
+import { selectedBaseTokens } from '../tokens/minimal.ts';
 import { isSelectedArtDirection, readSelectedArtDirection, selectedArtCopyProjection } from '../art-direction/selected.ts';
 
 export type RoleBriefOptions = Readonly<{ role: string; mode?: string; sketch?: SketchBrief; sourceRoot?: string }>;
@@ -76,7 +77,8 @@ export function buildRoleBrief(root: string, stage: BriefStage, options: RoleBri
   } else if (maker && route.references.decision === 'discover') gaps.push('Selected whole-screen reference analysis is missing; no grounded-reference claim.');
   let selected: ReturnType<typeof readCurrentCandidateSelection> | null = null;
   let tokens: ReturnType<typeof resolveSelectedTokens> | null = null;
-  if (maker && brief.direction?.selectionStatus === 'current') {
+  const currentSketch = options.role === 'omd-sketch' && route.sourceContract.processPolicy !== undefined;
+  if (maker && !currentSketch && brief.direction?.selectionStatus === 'current') {
     selected = readCurrentCandidateSelection(root);
     tokens = resolveSelectedTokens(root, selected);
   }
@@ -107,14 +109,18 @@ export function buildRoleBrief(root: string, stage: BriefStage, options: RoleBri
     images: references && 'images' in references ? references.images : [],
     selectedDirection: selected ? { id: selected.selectedId, inputDigest: selected.inputDigest, decidedBy: selected.decision.decidedBy,
       source: selected.selectedSource, previews: selected.previews, effectiveBaseTokensSha256: selected.effectiveBaseTokensSha256 } : null,
-    artDirection: isSelectedArtDirection(root) ? (() => {
+    artDirection: !currentSketch && isSelectedArtDirection(root) ? (() => {
       const art = readSelectedArtDirection(root, route.sourceContractSha256);
       return options.role === 'omd-writer' ? selectedArtCopyProjection(art) : maker ? art.decision : null;
     })() : null,
     tokens, sketch, candidate,
     candidateInputs: sketch ? (() => {
-      const { plan } = checkCandidatePlan(root, JSON.parse(v.readReceipt(root, sketch.plan).toString('utf8')), route.sourceContractSha256);
-      return { content: document(root, plan.content.receipt.path), tokens: document(root, plan.tokens.path), views: plan.views, representative: plan.representative };
+      const { plan, content, seed } = checkCandidatePlan(root, JSON.parse(v.readReceipt(root, sketch.plan).toString('utf8')), route.sourceContractSha256);
+      return { content: document(root, plan.content.receipt.path), tokens: document(root, plan.tokens.path), views: plan.views, representative: plan.representative,
+        renderContract: { schema: 'candidate-render-contract-v1',
+          matching: 'whitespace-normalized-visible-text-multiset', coverage: 'every-declared-view', extraText: 'forbidden',
+          contentOwnership: 'data-omd-content-id',
+          units: content.units, textStyles: selectedBaseTokens(seed, candidate!.primitiveOverrides).textStyles } };
     })() : null,
     contracts: brief.contracts, schemas: brief.schemas, checks: brief.judgedBy,
   };

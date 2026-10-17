@@ -8,6 +8,7 @@ import { hasPublishedTaskFlowBenchmark } from '../ref/reference-research.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
 import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
+import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
 import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
 import { validateCurrentOutcomeAssessments } from '../runtime/native-outcome-review.ts';
@@ -327,6 +328,10 @@ function validateAdaptiveGraphFiles(root: string, graphInput: unknown, fs: Adapt
     routeRecordValue,
     { root, invocation },
   );
+  const currentRoute = createAdaptiveSourceSealRoute(root, invocation);
+  if (canonicalRouteJson(graph.route) !== canonicalRouteJson(currentRoute)) {
+    fail('embedded adaptive route does not bind the exact current canonical route');
+  }
   const deferred = graph.omissions.filter(o => o.status === 'selected-with-debt');
   const limitations = validateFinalConfidenceDebt(root, record, graph.confidenceDebt, deferred,
     [...(graph.copy === undefined ? [] : [graph.copy]), graph.sourceSeal, graph.buildIdentity, ...[graph.blindLane, graph.fidelityLane, graph.protocolLane].flatMap(r => r ? [r] : []), ...graph.observations,

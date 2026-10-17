@@ -109,4 +109,18 @@ test('a label cropped by a non-scrollable ancestor still fails with a localized 
     ...result.receipt,
     transcript: [...result.receipt.transcript, 'access-finding:untrusted prose /some/path'],
   }), /MALFORMED_TRUSTED_BROWSER_RECEIPT/);
+  const prefix = 'access-finding:interactive-label-detail:';
+  const detailLine = result.receipt.transcript.find(line => line.startsWith(prefix));
+  assert.ok(detailLine);
+  const detail: unknown = JSON.parse(detailLine.slice(prefix.length));
+  assert.ok(typeof detail === 'object' && detail !== null);
+  for (const patch of [
+    { arbitrary: true }, { viewport: { width: -1, height: 844 } },
+    { view: '999x999' }, { clipped: false, tokenSplit: false },
+    { bounds: { x: 0, y: 0, width: '40', height: 44 } },
+  ]) {
+    assert.throws(() => parseTrustedBrowserReceipt({
+      ...result.receipt, transcript: [...result.receipt.transcript, `${prefix}${JSON.stringify({ ...detail, ...patch })}`],
+    }), /MALFORMED_TRUSTED_BROWSER_RECEIPT/);
+  }
 });

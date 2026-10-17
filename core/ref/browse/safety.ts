@@ -3,7 +3,7 @@ import { sha256 } from '../board-artifacts.ts';
 import { browseFail, type BrowseControl, type Consent, type Start } from './contract.ts';
 
 const TRANSACTION = /(?:check[\s_-]*out|cart\b|purchase|buy\b|payment|pay\b|trial|subscribe|unsubscribe|delete|remove|destroy|logout|log[\s_-]*out|sign[\s_-]*out|결제|구매|삭제|탈퇴|구독|무료\s*체험)/iu;
-const AUTH = /(?:log[\s_-]*in|sign[\s_-]*(?:in|up)|register|oauth|authorize|password|로그인|가입)/iu;
+const AUTH = /(?:\b(?:log[\s_-]*in|sign[\s_-]*(?:in|up)|register|oauth|authorize|password)|로그인|가입)/iu;
 const PRICE = /(?:pricing|plans|요금제)/iu;
 const SECRET = /^(?:access_token|refresh_token|id_token|token|code|password|passwd|secret|session|sessionid|sid|otp|authorization)$/iu;
 export function browseUrl(value: string): string {

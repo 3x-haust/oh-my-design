@@ -85,5 +85,6 @@ export function refinementEscalation(root: string, sourceContractSha256: string)
   });
   return { id: inputDigest, inputDigest, presentedSet: null, optionIds: [] as string[], decisionId: `repeated-defect-${inputDigest}`,
     question: `The same required defect survived three distinct repairs: ${described.join('; ')}. The three fix/result receipts are attached. Decide whether to change the actual constraint or supply a different repair approach; the failure is not waived.`,
+    limitations: described,
     defects: defects.map(d => ({ ...d, attempts: chain.filter(a => d.repairs.includes(a.repair.sha256)).map(a => ({ repair: a.repair, review: a.review, result: a.measurement })) })) };
 }

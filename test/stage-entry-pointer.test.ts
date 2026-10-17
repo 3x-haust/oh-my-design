@@ -19,6 +19,7 @@ import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
 import { createHash } from 'node:crypto';
 import { writeUserBrowserConsent } from '../core/ref/browser-consent.ts';
+import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 
 const pack = fileURLToPath(new URL('../core', import.meta.url));
 const deck = `# Copy deck
@@ -125,6 +126,12 @@ test('native Pi next work keeps production and browser output work after authore
   assert.deepEqual(readFileSync(join(root, '.omd/copy-deck.md')), before);
   assert.equal(nextStageWork(root, pack, local).stage, null);
   writeFileSync(join(root, '.omd/observation-v2.json'), '{}');
+  const missingDecision = nextStageWork(root, pack, invocation);
+  assert.equal(missingDecision.stage, 'production');
+  assert.equal(missingDecision.action, 'author-evaluation-decision');
+  assert.equal(missingDecision.owner, 'omd-hand');
+  assert.equal(missingDecision.next, 'omd schema decision-entry --json');
+  writeBrowserDecisionFixture(root);
   const forged = nextStageWork(root, pack, invocation);
   assert.equal(forged.stage, 'browser-evidence');
   assert.equal(forged.next, 'omd lifecycle evaluate --json');

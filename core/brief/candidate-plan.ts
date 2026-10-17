@@ -10,6 +10,7 @@ import { verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 import { servedProjectTreeSha256 } from '../render/serve.ts';
 import { parseVisualMeasurement } from '../measure/schema.ts';
 import { packetPayload, digest as measurementDigest } from '../measure/identity.ts';
+import { canonicalFontFamilies } from '../measure/font-family.ts';
 import { decodePng } from '../motion/energy.ts';
 import type { MeasuredIr } from '../measure/types.ts';
 import * as v from './candidate-data.ts';
@@ -155,9 +156,49 @@ export function checkCandidatePreview(root: string, preview: CandidatePreview, s
   if (png.width !== view.width || png.height !== view.height || v.hash(png.pixels) !== captured.stability.beforePixelSha256) v.fail('preview must be the native fixed-viewport PNG');
   const raw = JSON.parse(v.readReceipt(root, captured.ir).toString('utf8')) as MeasuredIr;
   if (measurementDigest(raw.measurement) !== captured.stability.beforeProjectionSha256) v.fail('preview IR projection changed');
-  const actual = raw.measurement.nodes.filter(n => n.text.trim()).map(n => normalizedText(n.text)).sort();
+  const owners = new Map<string, string>();
+  const nodesById = new Map(raw.measurement.nodes.map(node => [node.id, node]));
+  for (const node of raw.measurement.nodes) {
+    if (node.contentText === undefined) continue;
+    if (!node.contentId || !content.units.some(unit => unit.id === node.contentId)
+      || owners.has(node.contentId)) v.fail('unknown or duplicate content owner');
+    let parent = nodesById.get(node.parent ?? '');
+    while (parent) {
+      if (parent.contentText !== undefined) v.fail('nested content owner');
+      parent = nodesById.get(parent.parent ?? '');
+    }
+    owners.set(node.contentId, normalizedText(node.contentText));
+  }
+  const nativeOptions = raw.measurement.nodes.filter(node => node.contentId
+    && content.units.some(unit => unit.id === node.contentId)
+    && node.unsupported.includes('native-option-text'));
+  if (nativeOptions.length) v.fail(`required native option text has no verifiable glyph/type evidence; preserve the exact units in accessible DOM-painted choices, not semantic labels or hidden duplicates\n${JSON.stringify({
+    schema: 'candidate-content-unmeasurable-v1', reason: 'native-option-glyphs-unavailable',
+    viewId: preview.viewId, surfaceId: preview.surfaceId, stateId: preview.stateId,
+    subjects: nativeOptions.map(node => ({
+      contentId: node.contentId, box: node.box, visibleBox: node.visibleBox,
+      control: node.control, graphemes: node.graphemes, lines: node.lines.length,
+      leading: node.leading, unsupported: node.unsupported,
+    })),
+  })}`);
+  const actual = [...owners.values(), ...raw.measurement.nodes
+    .filter(n => n.text.trim() && !owners.has(n.contentId ?? ''))
+    .map(n => normalizedText(n.text))].sort();
   const expected = content.units.map(u => normalizedText(u.text)).sort();
-  if (v.digest(actual) !== v.digest(expected)) v.fail('all candidates must render exactly the same visible strings/data item set; do not remove difficult content');
+  if (v.digest(actual) !== v.digest(expected)) {
+    const missing = content.units.map(u => normalizedText(u.text)), extra: string[] = [];
+    for (const text of actual) {
+      const index = missing.indexOf(text);
+      if (index < 0) extra.push(text);
+      else missing.splice(index, 1);
+    }
+    const samples = (rows: string[]) => rows.slice(0, 8).map(text => ({ text: text.slice(0, 160), sha256: v.hash(text) }));
+    v.fail(`all candidates must render exactly the same visible strings/data item set; do not remove difficult content\n${JSON.stringify({
+      schema: 'candidate-content-mismatch-v1', viewId: preview.viewId, surfaceId: preview.surfaceId, stateId: preview.stateId,
+      expectedCount: expected.length, actualCount: actual.length, missingCount: missing.length, extraCount: extra.length,
+      missing: samples(missing), extra: samples(extra),
+    })}`);
+  }
   if (!captured.fonts.ready || captured.fonts.failedFamilies.length) v.fail('candidate fonts are not ready; disclose unavailable rendering instead of presenting a false type treatment');
   for (const unit of content.units) {
     const style = tokens.textStyles[unit.roleId]!;
@@ -166,11 +207,12 @@ export function checkCandidatePreview(root: string, preview: CandidatePreview, s
     const leading = tokens.primitives[style.lineHeightRef] as Extract<Primitive, { type: 'number' }>;
     const expectedLeading = leading.unit === 'px' ? leading.value : leading.value * size.value;
     const tracking = style.letterSpacingRef === null ? null : tokens.primitives[style.letterSpacingRef] as Extract<Primitive, { type: 'number' }>;
-    const nodes = raw.measurement.nodes.filter(n => normalizedText(n.text) === normalizedText(unit.text));
+    const nodes = raw.measurement.nodes.filter(n => n.text.trim()
+      && (owners.has(unit.id) ? n.contentId === unit.id : normalizedText(n.text) === normalizedText(unit.text)));
     if (nodes.some(n => Math.abs(n.size - size.value) > 0.25 || n.weight !== style.weight
       || n.leading === 'normal' || Math.abs(n.leading - expectedLeading) > 0.25
       || tracking !== null && Math.abs(n.tracking - tracking.value) > 0.25
-      || v.digest(n.families) !== v.digest(family.value.map(f => f.trim().toLowerCase())))) v.fail(`rendered type treatment differs from candidate overrides for ${unit.id}`);
+      || v.digest(canonicalFontFamilies(n.families)) !== v.digest(canonicalFontFamilies(family.value)))) v.fail(`rendered type treatment differs from candidate overrides for ${unit.id}`);
   }
   // Exclude color, filenames, IDs and authored hypotheses. Equal observed geometry/type across
   // every view cannot constitute structural exploration. A difference is NOT a creativity score.

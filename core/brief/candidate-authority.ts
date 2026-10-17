@@ -1,5 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { verifyNativeObservation } from '../runtime/self-signed-activation.ts';
+import { parseNativePiRun } from '../runtime/native-pi-run-record.ts';
+import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import * as v from './candidate-data.ts';
 export type DirectionUserInput = Readonly<{
   schema: 'direction-user-input-v1'; projectRoot: string; requestSha256: string; sourceContractSha256: string;
@@ -8,6 +10,10 @@ export type DirectionUserInput = Readonly<{
 }>;
 export type DirectionAutonomyGrant = Readonly<{ schema: 'direction-autonomy-grant-v1'; projectRoot: string; requestSha256: string;
   userMessage: string; policy: 'autonomous-direction'; source: 'pi-interactive' | 'pi-rpc' | 'host-user-input'; signature: string }>;
+export type NativeDirectionAuthority = Readonly<{
+  source: 'native-host-policy'; projectRoot: string; requestSha256: string; runId: string;
+  policy: 'autonomous-direction';
+}>;
 export function parseDirectionUserInput(value: unknown): DirectionUserInput {
   const u = v.object(value, ['schema', 'projectRoot', 'requestSha256', 'sourceContractSha256', 'inputDigest', 'displayedSet', 'pendingId', 'userMessage', 'source', 'resumeAuthority', 'signature']);
   return { schema: v.enumeration(u.schema, ['direction-user-input-v1']), projectRoot: v.text(u.projectRoot), requestSha256: v.sha(u.requestSha256), sourceContractSha256: v.sha(u.sourceContractSha256), inputDigest: v.sha(u.inputDigest), displayedSet: v.receipt(u.displayedSet), pendingId: v.sha(u.pendingId), userMessage: v.text(u.userMessage), source: v.enumeration(u.source, ['pi-interactive', 'pi-rpc', 'host-user-input']), resumeAuthority: v.nullableReceipt(u.resumeAuthority), signature: v.text(u.signature) };
@@ -18,8 +24,20 @@ export function verifyDirectionUserInput(root: string, value: unknown): Directio
   if (input.resumeAuthority) v.readReceipt(root, input.resumeAuthority);
   return input;
 }
-export function verifyDirectionAutonomyGrant(root: string, receipt: v.Receipt, request: string): DirectionAutonomyGrant {
-  const g = v.object(JSON.parse(v.readReceipt(root, receipt).toString('utf8')), ['schema', 'projectRoot', 'requestSha256', 'userMessage', 'policy', 'source', 'signature']);
+export function verifyDirectionAutonomyGrant(root: string, receipt: v.Receipt, request: string): DirectionAutonomyGrant | NativeDirectionAuthority {
+  const value = v.object(JSON.parse(v.readReceipt(root, receipt).toString('utf8')));
+  if (value.schema === 'native-pi-run-v1') {
+    v.object(value, ['schema', 'run', 'signature']);
+    const run = parseNativePiRun(value.run);
+    if (receipt.path !== '.omd/native-pi/run.json' || run.projectRoot !== realpathSync(root)
+      || run.briefSha256 !== v.hash(request) || run.designPolicy?.selectionActor !== 'harness'
+      || !verifyNativeObservation(realpathSync(root), 'pi-run', v.hash(canonicalRouteJson(run)), v.text(value.signature))) {
+      return v.fail('native design authority requires the current signed host policy and exact request');
+    }
+    return { source: 'native-host-policy', projectRoot: run.projectRoot, requestSha256: run.briefSha256,
+      runId: run.runId, policy: 'autonomous-direction' };
+  }
+  const g = v.object(value, ['schema', 'projectRoot', 'requestSha256', 'userMessage', 'policy', 'source', 'signature']);
   const grant: DirectionAutonomyGrant = { schema: v.enumeration(g.schema, ['direction-autonomy-grant-v1']), projectRoot: v.text(g.projectRoot), requestSha256: v.sha(g.requestSha256), userMessage: v.text(g.userMessage), policy: v.enumeration(g.policy, ['autonomous-direction']), source: v.enumeration(g.source, ['pi-interactive', 'pi-rpc', 'host-user-input']), signature: v.text(g.signature) };
   const { signature, ...payload } = grant;
   if (grant.projectRoot !== realpathSync(root) || grant.requestSha256 !== v.hash(request) || !verifyNativeObservation(realpathSync(root), 'direction-autonomy-grant-v1', v.digest(payload), signature)) v.fail('autonomous direction needs explicit current user/host authority; noninteractive execution and checkpoint:none are not grants');

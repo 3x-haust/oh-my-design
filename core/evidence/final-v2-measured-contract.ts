@@ -6,10 +6,13 @@ import type { TerminalProcessBinding } from './final-v2-process.ts';
 
 export type MeasuredTerminal = Readonly<{
   schema: 'measured-terminal-graph-v1'; measurements: readonly Receipt[]; reviewPolicy: ReviewPolicy;
-  slop: { checkpoint: Receipt; review: Receipt }; deterministicProtocol?: Receipt;
+  deterministicProtocol?: Receipt;
   process?: TerminalProcessBinding;
   lanes: Partial<Record<MeasuredLane, Receipt>>;
-}>;
+} & (
+  | { slop: { checkpoint: Receipt; review: Receipt }; slopPolicy?: never }
+  | { slop?: never; slopPolicy: 'integrated-final-review-v1' }
+)>;
 type LegacyReceipt = Readonly<Receipt & { schema: string }>;
 export type GraphReviewBindings = Readonly<
   | { measuredTerminal: MeasuredTerminal; blindLane?: never; fidelityLane?: never; protocolLane?: never }
@@ -24,7 +27,9 @@ export function parseMeasuredTerminal(input: unknown): MeasuredTerminal {
     routeSha256: v.sha, sourceContractSha256: v.sha, purpose: v.nullable(v.enumeration('ordinary', 'benchmark', 'release')), purposeAuthority: v.nullable(v.receipt),
     lanes: v.object({ blind: v.enumeration(1, 2), fidelity: v.enumeration(0, 1, 2), protocol: v.enumeration(0, 2) }), deterministicProtocol: value => { if (value !== true) v.fail('deterministic protocol is mandatory'); },
   }),
-    slop: v.object({ checkpoint: v.receipt, review: v.receipt }), ...(item.deterministicProtocol === undefined ? {} : { deterministicProtocol: v.receipt }),
+    ...(item.slopPolicy === undefined ? { slop: v.object({ checkpoint: v.receipt, review: v.receipt }) }
+      : { slopPolicy: v.enumeration('integrated-final-review-v1') }),
+    ...(item.deterministicProtocol === undefined ? {} : { deterministicProtocol: v.receipt }),
     ...(item.process === undefined ? {} : { process: () => {} }),
     lanes: raw => { if (!raw || typeof raw !== 'object' || Array.isArray(raw)) v.fail('measured lanes required');
       v.object(Object.fromEntries(Object.keys(raw as object).map(key => { if (!lanes.includes(key as MeasuredLane)) v.fail('unknown measured lane'); return [key, v.receipt]; })))(raw); } })(input);

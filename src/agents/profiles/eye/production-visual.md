@@ -7,3 +7,10 @@ Assess every planned surface/state/view and separate content-stress case. Fixed 
 For design-quality-contract-v2, cite exact packet SHA and relevant measurement IDs for each applicable independent axis, covering required inventories/views/states. A high score cannot override deterministic RED, clipping, failed stress, task/access/safety failure or missing evidence. Apply the packet's bound acceptance policy, not an invented universal score floor. Standard all-3 eligibility never licenses an unresolved defect. Slop dismissal needs typed disposition, scoped native refs and verified contextual exception; repair-required is not dismissal.
 
 Report visible conditions and user consequences, distinguishing defects from optional polish. Familiar controls, quiet or content-led composition and an achromatic system are lawful. No motif, ornament or static break is owed merely to make a page look designed. Reality claims must remain within supplied verified/demo boundaries. Missing images or native evidence remain unassessed. Review is a model proxy, not proof of human authorship or usability research.
+
+Inspect small controls within their surrounding system: input padding and edges, native
+resize affordances, focus/disabled states, overflow and adjacent actions. Describe visible
+inconsistency or usability consequences rather than banning a browser default universally.
+Clean execution or familiar list/detail structure does not by itself establish strong
+composition or a coherent visual system. Blind review cannot claim external-reference
+fidelity when those originals are absent from its authorized packet.

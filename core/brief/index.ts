@@ -186,12 +186,13 @@ export function projectRealityForBrief(
   root: string,
   stage: BriefStage,
   projectMode: 'greenfield' | 'existing',
+  required = true,
 ): Readonly<{ reality: RealityLedger | null; blocker: string | null }> {
   const consumer = (
     ['copy', 'composition', 'candidate-generation', 'production', 'independent-review', 'review'] as readonly BriefStage[]
   ).includes(stage);
   const reality = consumer ? readFrame(root)?.reality ?? null : null;
-  const blocker = consumer && projectMode === 'greenfield' && reality === null
+  const blocker = required && consumer && projectMode === 'greenfield' && reality === null
     ? 'greenfield reality ledger unavailable: run `omd frame set --reality <reality-ledger.json>`'
     : null;
   return Object.freeze({ reality, blocker });
@@ -268,14 +269,17 @@ const SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   'browser-evidence': ['design-quality-observation-projection'],
   domain: ['domain-brief'],
   depth: ['depth-input'],
-  frame: ['frame', 'functional-requirements', 'reality-ledger'],
+  frame: ['frame', 'functional-requirements', 'reality-ledger', 'decision-entry'],
   'content-grain': ['content-grain'],
   acquisition: ['acquisition-plan', 'reference-capture-preparation'],
   scout: ['reference-search', 'reference-research', 'reference-flow-input'],
   'reference-board': ['reference-board', 'reference-locale-binding'],
-  'art-direction': ['art-direction-check'],
-  copy: ['locale-contract'],
-  production: ['route-input'],
+  'art-direction': ['art-direction-check', 'decision-entry'],
+  'candidate-generation': ['decision-entry'],
+  'type-proof': ['decision-entry'],
+  composition: ['decision-entry'],
+  copy: ['locale-contract', 'decision-entry'],
+  production: ['route-input', 'decision-entry'],
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -628,11 +632,14 @@ export function buildBrief(
       }
     }
   }
-  const projectedReality = projectRealityForBrief(root, stage, route?.projectMode ?? 'existing');
+  const projectedReality = projectRealityForBrief(root, stage, route?.projectMode ?? 'existing',
+    route?.sourceContract.processPolicy?.schema !== 'model-led-design-process-v1' || route.strategy.stages.includes('frame'));
   if (projectedReality.blocker !== null) blockers.push(projectedReality.blocker);
   const designReview = route?.deliveryMode === 'design-only' && ['independent-review', 'review'].includes(stage);
   const native = invocation !== undefined && isNativePiInvocation(invocation) && !designReview
-    ? nativeCompletionBrief(stage, route?.references.decision === 'discover') : undefined;
+    ? nativeCompletionBrief(stage, route?.references.decision === 'discover',
+      route?.sourceContract.processPolicy !== undefined,
+      route?.sourceContract.processPolicy?.schema === 'model-led-design-process-v1') : undefined;
   const judgedBy = (designReview
     ? [{ command: 'omd completion design-check --input .omd/design-handoff.json --json', fails: 'design artifacts, reference evidence or write scope are missing or stale; this check does not attest review independence or application behavior' }]
     : stage === 'candidate-generation' && route?.sourceContract.processPolicy ? [

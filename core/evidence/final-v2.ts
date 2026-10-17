@@ -698,10 +698,10 @@ export function checkFinalEvidenceV2(rootInput: string, invocation?: ProjectRunI
 }
 
 function requireCurrentGraphIdentity(bindings: ReturnType<typeof validateFinalEvidenceV2GraphFiles>['bindings'], invocation: ProjectRunInvocation): void {
-  if (bindings.branch !== 'adaptive-omission'
-    && (bindings.activation.buildSha256 !== invocation.current.buildSha256
+  if (bindings.activation.buildSha256 !== invocation.current.buildSha256
     || bindings.activation.loadedSkillSha256 !== invocation.current.loadedSkillSha256
-    || bindings.activation.briefSha256 !== invocation.current.briefSha256)) {
+    || (bindings.branch !== 'adaptive-omission'
+      && bindings.activation.briefSha256 !== invocation.current.briefSha256)) {
     fail('graph activation, task, and source identities are not current');
   }
 }

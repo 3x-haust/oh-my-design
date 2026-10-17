@@ -30,7 +30,7 @@ export async function openBrowseBrowser(binding: Binding, dependencies: BrowseBr
     || canonicalJson(consent.allowAuthOrigins) !== canonicalJson(start.allowAuthOrigins)
     || consent.cdpEndpointSha256 !== (start.cdpUrl ? sha256(start.cdpUrl) : null))) browseFail('BROWSE_CONSENT_REQUIRED', 'missing or expired request-bound consent', 2);
   const proxy = await createPublicNetworkProxy();
-  const options = { viewport: start.viewport, deviceScaleFactor: 1, serviceWorkers: 'block' as const,
+  const options = { viewport: start.viewport, deviceScaleFactor: 2, serviceWorkers: 'block' as const,
     acceptDownloads: false, proxy: { server: proxy.server, bypass: '<-loopback>' } };
   let browser: Browser | undefined, context: BrowserContext | undefined;
   try {

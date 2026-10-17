@@ -12,6 +12,10 @@ import type { ReviewerText } from '../core/runtime/reviewer-text.ts';
 import { parseTrustedLifecycleManifest } from '../core/runtime/trusted-evaluation-contract.ts';
 import { observationV2Sha256, validateObservationV2 } from '../core/runtime/observation.ts';
 import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { publishConsultedReferences } from '../core/design/consulted-references.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { browserFixturePng } from './helpers/browser-observation-decision-links.ts';
+import { modelLedCompletionFingerprint } from '../core/runtime/model-led-execution.ts';
 
 test('final reviewer response identities distinguish handbacks from downstream lane records', () => {
   const fixture = prepareFinalRenderReviewFixture();
@@ -25,6 +29,41 @@ test('final reviewer response identities distinguish handbacks from downstream l
       assert.deepEqual(packet.outputContract.responseIdentity, { schema: 'adaptive-final-reviewer-handback-v1', lane });
       assert.notEqual(packet.outputContract.responseIdentity.schema, packet.outputContract.laneSchema);
     }
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('reported whole originals reach fidelity without leaking source locators or entering blind quality review', () => {
+  const fixture = prepareFinalRenderReviewFixture();
+  try {
+    const route = readPersistedRoute(fixture.root, fixture.invocation);
+    const png = browserFixturePng(16, 16);
+    writeFileSync(join(fixture.root, 'original.png'), png);
+    const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+    const observation = fixture.observationSha256s.at(-1);
+    assert.ok(observation);
+    const execution = nativeOutcomeExecutionEvidence(fixture.root, fixture.invocation, observation);
+    const manifest = parseTrustedLifecycleManifest(JSON.parse(readFileSync(
+      join(fixture.root, `.omd/evaluation-plans/sha256-${execution.executionPlanSha256}.json`), 'utf8')));
+    const beforeReferences = modelLedCompletionFingerprint(fixture.root, manifest);
+    const published = publishConsultedReferences(fixture.root, {
+      schema: 'consulted-references-input-v1', requestSha256: hash(route.request),
+      images: [{ path: 'original.png', sha256: hash(png), sourceUrl: 'https://example.com/studio', role: 'primary' }],
+    }, createTestProjectWriteAdapter(fixture.root, fixture.invocation));
+    assert.notEqual(modelLedCompletionFingerprint(fixture.root, manifest), beforeReferences);
+    const fidelity = JSON.parse(packets.nativeFinalLanePacket({ ...fixture, lane: 'fidelityLane' }).toString());
+    assert.equal(fidelity.evidence.consultedReferences.sha256, published.sha256);
+    assert.equal(fidelity.evidence.referenceRenders[0].role, 'consulted-external-original');
+    assert.equal(fidelity.evidence.referenceRenders[0].pngBase64, png.toString('base64'));
+    assert.equal(JSON.stringify(fidelity).includes('example.com'), false);
+    const protocol = JSON.parse(packets.nativeFinalLanePacket({ ...fixture, lane: 'protocolLane' }).toString());
+    assert.equal(protocol.evidence.referenceRenders.length, 0);
+    const blind = JSON.parse(finalRenderReviewerPacket({ ...fixture,
+      packetInput: { schema: 'adaptive-final-render-reviewer-packet-input-v1', observationSha256s: fixture.observationSha256s },
+    }).toString());
+    assert.equal(blind.evidence.consultedReferenceRenders, undefined);
+    writeFileSync(join(fixture.root, `.omd/consulted-references/images/${hash(png)}.png`), 'tampered');
+    assert.throws(() => packets.nativeFinalLanePacket({ ...fixture, lane: 'fidelityLane' }));
+    assert.throws(() => modelLedCompletionFingerprint(fixture.root, manifest));
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
 });
 

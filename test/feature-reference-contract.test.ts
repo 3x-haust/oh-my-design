@@ -37,7 +37,7 @@ test('selected reference owners receive native handoffs while production and rev
   const eye = read('src/agents/eye.agent.yaml');
 
   assert.match(scout, /omd ref discover-plan --json/);
-  assert.match(scout, /omd ref browse start --lane domain\|design --mode headless --json/);
+  assert.match(scout, /omd ref browse start --lane design --mode headless --json/);
   assert.match(scout, /omd ref browse analysis-set --input <analysis\.json> --json/);
   assert.match(scout, /ref browse handoff --for concept\|composer\|hand/);
   assert.match(scout, /Eye\/Glance\/blind handoffs exclude\s+reference images, identity and maker rationale/i);

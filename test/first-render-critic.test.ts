@@ -6,6 +6,7 @@ import { inputSkeleton } from '../core/schema/inputs.ts';
 
 test('the documented first-render schema exists and is accepted by the actual parser', () => {
   const input = inputSkeleton('first-render-surface');
+  assert.equal(input.command, 'omd first-render check --page <local-build.html> --json');
   assert.doesNotThrow(() => parseFirstRenderSurface(input.skeleton));
   assert.match(input.constraints!.join('\n'), /actual rendered viewport/);
 });

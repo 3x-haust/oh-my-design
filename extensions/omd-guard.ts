@@ -23,7 +23,8 @@ const OMD_MUTATING_ROOTS = /^(?:frame|domain|route|ref|copy|type|composition|slo
 const OMD_READ_ACTIONS = /^(?:show|check|validate|list|handoff|discover-plan|work-next|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/;
 const OMD_MUTATING_PAIRS = new Set([
   'stage deliver', 'grain set', 'acquisition set', 'candidate select', 'candidate plan', 'candidate packet', 'tokens extend', 'judgment publish', 'benchmark record',
-  'study create', 'study select', 'maker run',
+  'study create', 'study select', 'maker run', 'maker restore',
+  'candidate capture', 'candidate review',
 ]);
 
 export function isMutatingOmdCommand(args: readonly string[]): boolean {

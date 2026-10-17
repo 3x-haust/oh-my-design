@@ -631,6 +631,29 @@ test('sealed adaptive evidence finalizes under a continuation activation', () =>
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
+test('adaptive final evidence rejects a stale embedded route even when the source seal repeats it', () => {
+  const value = prepared();
+  try {
+    const forgedRoute = structuredClone(field(value.graph, 'route'));
+    Reflect.set(mutable(field(forgedRoute, 'selectedModel')), 'revision', 'stale-embedded-revision');
+    Reflect.set(mutable(value.graph), 'route', forgedRoute);
+    const sealPath = join(value.root, '.omd', 'source-seal.json');
+    const seal = JSON.parse(readFileSync(sealPath, 'utf8')) as unknown;
+    Reflect.set(mutable(seal), 'route', forgedRoute);
+    writeJson(value.root, '.omd/source-seal.json', seal);
+    Reflect.set(
+      mutable(field(value.graph, 'sourceSeal')),
+      'sha256',
+      sha(readFileSync(sealPath)),
+    );
+    authorizeGraph(value.root, value.invocation, value.graph);
+    assert.throws(
+      () => validateFinalEvidenceV2GraphFiles(value.root, value.graph, fs, value.invocation),
+      /exact current canonical route/,
+    );
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
 test('new routed final-v2 publication rejects absent functional requirements and completeness evidence', () => {
   const value = prepared();
   try {

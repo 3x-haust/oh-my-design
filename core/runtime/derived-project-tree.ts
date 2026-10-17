@@ -21,12 +21,12 @@ export function isFixedDerivedProjectPath(path: string): boolean {
   return fixedDerivedProjectRoot(path) !== undefined;
 }
 
-/** Resolves only npm's direct `.bin` links and never permits them to leave `node_modules`. */
+/** Resolves npm's root or nested dependency `.bin` links without leaving `node_modules`. */
 export function npmBinLinkTarget(path: string, target: string): string | undefined {
-  if (!/^node_modules\/\.bin\/[^/]+$/.test(path) || target === '' || target.includes('\0')
+  if (!/^node_modules\/(?:(?:@[^/]+\/)?[^/]+\/node_modules\/)*\.bin\/[^/]+$/.test(path) || target === '' || target.includes('\0')
     || target.includes('\\') || isAbsolute(target)) return undefined;
   const resolved = posix.normalize(posix.join(posix.dirname(path), target));
-  if (!resolved.startsWith('node_modules/') || resolved.startsWith('node_modules/.bin/')) return undefined;
+  if (!resolved.startsWith('node_modules/') || resolved.split('/').includes('.bin')) return undefined;
   return resolved;
 }
 

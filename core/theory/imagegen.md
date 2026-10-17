@@ -322,7 +322,11 @@ direction, and host capability; keep that decision separate from whether any gen
 
 Before rendering an unselected concept study, the coordinator binds the actual content units, their
 proposed spatial relationship, and the predicted observable consequence in the existing decision record
-and generation prompt. The consequence is a visible spatial/content relationship or an observed
+and generation prompt. Check the represented task's visible identity, state, ownership where relevant,
+and action labels before freezing shared units; use real or authorized demo values, never invented
+facts. Repair unclear presentation without deleting useful information. An incomplete projection
+returns to its content/plan owner and invalidates dependent studies, not the requested task.
+The consequence is a visible spatial/content relationship or an observed
 interaction state, not an inferred comprehension or conversion gain. For a whole-page request, carry
 that relationship through the beginning, middle, and end, including the relevant transition between
 them. Keep one horizontal image per section: a landscape-format study render of each section, not an

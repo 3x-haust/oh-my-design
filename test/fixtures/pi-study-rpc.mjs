@@ -52,11 +52,23 @@ function emitReady() {
   });
 }
 
+if (mode === 'startup-ready') emitReady();
+
 function handback(packet) {
   const bindings = packet.outputContract.fixedBindings;
   if (packet.schema === 'native-maker-transport-v1') {
+    const currentSketch = packet.evidence.context.currentSketchRole;
+    const currentContent = currentSketch?.candidateInputs?.content?.content;
+    const currentCandidate = currentSketch?.candidate;
+    const candidateHtml = currentContent && currentCandidate
+      ? (() => {
+        const content = JSON.parse(currentContent);
+        const columns = currentCandidate.id === 'A' ? 'display:block' : 'display:grid;grid-template-columns:1fr 1fr';
+        return `<!doctype html><html><head><title>Native candidate</title><style>body{margin:24px;color:#111;background:#fff;font:400 16px/1.5 system-ui}main{${columns};gap:24px}p{font:inherit;margin:0 0 24px}@media(max-width:600px){main{display:block}}</style></head><body><main>${content.units.map(unit => `<p data-omd-content-id="${unit.id}" data-omd-text-style="${unit.roleId}">${unit.text}</p>`).join('')}</main></body></html>`;
+      })()
+      : null;
     const files = packet.evidence.allowedPaths.map(path => ({ path,
-      content: path.endsWith('.html') ? '<!doctype html><html><body><main>maker-fixture<button>Continue</button></main></body></html>'
+      content: path.endsWith('.html') ? candidateHtml ?? '<!doctype html><html><body><main>maker-fixture<button>Continue</button></main></body></html>'
         : path.endsWith('.json') ? '{}' : `// maker-fixture ${path}\n` }));
     if (mode === 'extra-file') files.push({ path: 'outside.ts', content: 'unauthorized' });
     return { schema: packet.outputContract.schema, fixedBindings: bindings, files };
@@ -111,7 +123,14 @@ async function prompt(request) {
     : undefined;
   const result = projected?.result ?? await consumePiReviewerEvidence(config);
   trace('evidence');
-  emit({ type: 'tool_execution_end', toolCallId, toolName: 'read_reviewer_evidence', result, isError: false });
+  if (mode !== 'maker-missing-evidence-event') emit({
+    type: 'tool_execution_end', toolCallId, toolName: 'read_reviewer_evidence',
+    result: mode === 'maker-evidence-error' ? {
+      content: [{ type: 'text', text: 'fixture-evidence-failure' }],
+      data: 'PRIVATE_ERROR_DATA_SENTINEL',
+    } : result,
+    isError: mode === 'maker-evidence-error',
+  });
   messages.push({
     role: 'toolResult',
     toolCallId,
@@ -173,7 +192,7 @@ async function handle(request) {
         throw new Error('Study effort must be medium and turn-scoped');
       }
       thinkingLevel = mode === 'thinking-drift' ? parentThinkingLevel : request.level;
-      if (mode === 'configuration-update') {
+      if (mode === 'configuration-update' || mode === 'startup-ready') {
         messages.push({ role: 'configurationUpdate', content: [], effort: request.level, timestamp: Date.now() });
       }
       configured = true;

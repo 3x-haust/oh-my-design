@@ -1,9 +1,10 @@
 import type { Contracts } from './contracts.ts';
-import { hexColor, roleSize } from './contracts.ts';
+import { colorsForView, hexColor, roleSize } from './contracts.ts';
 import type { FindingCode, MeasureNode, MeasurementDom, MetricValues } from './types.ts';
-import { backdrop, parseFlatColor } from './color.ts';
+import { parseFlatColor, rolePaint } from './color.ts';
 import { minimalTokenScales } from '../tokens/contract.ts';
 import type { Primitive } from '../tokens/minimal.ts';
+import { canonicalFontFamilies } from './font-family.ts';
 export type ConformanceIssue = { code: FindingCode; subjects: string[]; field: string; expected: string; actual: string };
 export function assignRoles(dom: MeasurementDom, contracts: Contracts): void {
   if (!contracts.type) return;
@@ -14,7 +15,7 @@ export function assignRoles(dom: MeasurementDom, contracts: Contracts): void {
     else if (roles.length === 0 && n.role === 'body') n.role = contracts.type.defaultTextRole;
   }
 }
-export function conformance(dom: MeasurementDom, contracts: Contracts): { value: MetricValues['contract-conformance']; issues: ConformanceIssue[] } {
+export function conformance(dom: MeasurementDom, contracts: Contracts, viewId = ''): { value: MetricValues['contract-conformance']; issues: ConformanceIssue[] } {
   const observations: MetricValues['contract-conformance']['observations'] = [], issues: ConformanceIssue[] = [];
   const observe = (role: string, property: string, nodes: MeasureNode[], expected: unknown, actual: unknown[], pass: boolean, code: FindingCode, field: string, unmeasured = false) => {
     const exp = JSON.stringify(expected), act = actual.map(a => JSON.stringify(a));
@@ -33,10 +34,10 @@ export function conformance(dom: MeasurementDom, contracts: Contracts): { value:
       const size = tokens.primitives[style.sizeRef] as Extract<Primitive, { type: 'number' }>;
       const leading = tokens.primitives[style.lineHeightRef] as Extract<Primitive, { type: 'number' }>;
       const tracking = style.letterSpacingRef === null ? null : tokens.primitives[style.letterSpacingRef] as Extract<Primitive, { type: 'number' }>;
-      const expectedFamilies = family.value.map(f => f.trim().toLowerCase()), expectedLeading = leading.unit === 'px' ? leading.value : leading.value * size.value;
+      const expectedFamilies = canonicalFontFamilies(family.value), expectedLeading = leading.unit === 'px' ? leading.value : leading.value * size.value;
       observe(roleId, 'selected-size', [node], size.value, [node.size], Math.abs(size.value - node.size) <= 0.25, 'TYPE_ROLE_SIZE_MISMATCH', `selected-system.textStyles.${roleId}`);
       observe(roleId, 'selected-weight', [node], style.weight, [node.weight], style.weight === node.weight, 'TYPE_ROLE_WEIGHT_MISMATCH', `selected-system.textStyles.${roleId}`);
-      observe(roleId, 'selected-families', [node], expectedFamilies, [node.families], JSON.stringify(expectedFamilies) === JSON.stringify(node.families), 'TYPE_ROLE_FAMILY_MISMATCH', `selected-system.textStyles.${roleId}`);
+      observe(roleId, 'selected-families', [node], expectedFamilies, [node.families], JSON.stringify(expectedFamilies) === JSON.stringify(canonicalFontFamilies(node.families)), 'TYPE_ROLE_FAMILY_MISMATCH', `selected-system.textStyles.${roleId}`);
       observe(roleId, 'selected-leading', [node], expectedLeading, [node.leading], typeof node.leading === 'number' && Math.abs(expectedLeading - node.leading) <= 0.25, 'TYPE_ROLE_LEADING_MISMATCH', `selected-system.textStyles.${roleId}`);
       if (tracking) observe(roleId, 'selected-tracking', [node], tracking.value, [node.tracking], Math.abs(tracking.value - node.tracking) <= 0.25, 'TYPE_ROLE_TRACKING_MISMATCH', `selected-system.textStyles.${roleId}.tracking`);
     }
@@ -46,6 +47,11 @@ export function conformance(dom: MeasurementDom, contracts: Contracts): { value:
   else if (!contracts.type) observe('type', 'contract', [], 'selected measurable type-proof', [], false, 'CONTRACT_UNMEASURABLE', 'type-proof.Measurement contract', true);
   else {
     const c = contracts.type;
+    for (const n of dom.nodes.filter(n => n.visibleBox && n.unsupported.some(s => s === 'native-control-text' || s === 'native-option-text')
+      && c.assignments.some(a => n.assignments.includes(a.selector)))) {
+      observe(n.role, 'glyph-coverage', [n], 'measurable DOM text', [n.tag], false,
+        'CONTRACT_UNMEASURABLE', 'type-proof.assignments', true);
+    }
     for (const n of text) {
       const mappings = c.assignments.filter(a => n.assignments.includes(a.selector));
       const ambiguous = new Set(mappings.map(a => a.role)).size > 1;
@@ -57,10 +63,10 @@ export function conformance(dom: MeasurementDom, contracts: Contracts): { value:
         const scale = token.schema === 'token-commit-v3' ? minimalTokenScales(token).typeScale : token.schema === 'token-commit-v2' ? token.responsiveTypeScales.find(s => dom.viewport.innerWidth <= s.maxWidth)?.typeScale ?? token.typeScale : token.typeScale;
         observe(role.id, 'token-scale', [n], scale, [expectedSize], scale.some(s => Math.abs(s - expectedSize) <= 0.25), 'CONTRACT_INPUT_CONFLICT', `tokens.typeScale.${role.id}`);
       }
-      const family = c.families.find(f => f.id === role.familyId)!.stack.map(f => f.trim().replace(/^["']|["']$/g, '').toLowerCase());
+      const family = canonicalFontFamilies(c.families.find(f => f.id === role.familyId)!.stack);
       observe(role.id, 'size', [n], expectedSize, [n.size], Math.abs(n.size - expectedSize) <= 0.25 && n.size >= role.minimumReadablePx, 'TYPE_ROLE_SIZE_MISMATCH', `type-proof.roles.${role.id}.size`);
       observe(role.id, 'weight', [n], role.weights, [n.weight], role.weights.includes(n.weight), 'TYPE_ROLE_WEIGHT_MISMATCH', `type-proof.roles.${role.id}.weights`);
-      observe(role.id, 'families', [n], family, [n.families], JSON.stringify(family) === JSON.stringify(n.families), 'TYPE_ROLE_FAMILY_MISMATCH', `type-proof.families.${role.familyId}`);
+      observe(role.id, 'families', [n], family, [n.families], JSON.stringify(family) === JSON.stringify(canonicalFontFamilies(n.families)), 'TYPE_ROLE_FAMILY_MISMATCH', `type-proof.families.${role.familyId}`);
       const leading = role.leading === 'normal' ? n.leading === 'normal' : typeof n.leading === 'number' && Math.abs(n.leading / n.size - role.leading) <= 0.01;
       observe(role.id, 'leading', [n], role.leading, [n.leading === 'normal' ? 'normal' : n.leading / n.size], leading, 'TYPE_ROLE_LEADING_MISMATCH', `type-proof.roles.${role.id}.leading`);
     }
@@ -70,10 +76,12 @@ export function conformance(dom: MeasurementDom, contracts: Contracts): { value:
   else if (!contracts.composition) observe('composition', 'contract', [], 'selected measurable composition', [], false, 'CONTRACT_UNMEASURABLE', 'composition.Measurement contract', true);
   else {
     const c = contracts.composition;
-    for (const color of c.colors) {
+    for (const color of colorsForView(c, viewId)) {
       const nodes = dom.nodes.filter(n => n.visibleBox && n.assignments.includes(color.selector)), expected = hexColor(color.value);
-      const actual = color.role === 'canvas' ? [dom.rootCanvas] : nodes.map(n => color.property === 'text' ? n.foreground : backdrop(n));
-      observe(color.role, 'color', nodes, expected, actual, actual.length > 0 && actual.every(a => a.every((channel, i) => Math.abs(channel - expected[i]!) <= (i === 3 ? 0 : 1))), 'COLOR_ROLE_MISMATCH', `composition.colors.${color.role}`);
+      const rendered = nodes.map(n => rolePaint(n, color.property));
+      const actual = color.role === 'canvas' ? [dom.rootCanvas] : rendered.flatMap(p => p ?? []);
+      const unsupported = color.role !== 'canvas' && rendered.some(p => p === null);
+      observe(color.role, 'color', nodes, expected, actual, actual.length > 0 && actual.every(a => a.every((channel, i) => Math.abs(channel - expected[i]!) <= (i === 3 ? 0 : 1))), unsupported ? 'CONTRACT_UNMEASURABLE' : 'COLOR_ROLE_MISMATCH', `composition.colors.${color.role}`, unsupported);
       if (color.token) {
         const resolved = nodes.map(n => parseFlatColor(n.customProperties.find(p => p.name === color.token)?.value ?? ''));
         observe(color.role, 'token-value', nodes, expected, resolved, resolved.length > 0 && resolved.every(a => a !== null && a.every((channel, i) => Math.abs(channel - expected[i]!) <= (i === 3 ? 0 : 1))), resolved.some(c => c === null) ? 'CONTRACT_UNMEASURABLE' : 'COLOR_ROLE_MISMATCH', `composition.colors.${color.role}.token`, resolved.some(c => c === null));
@@ -82,6 +90,21 @@ export function conformance(dom: MeasurementDom, contracts: Contracts): { value:
     for (const region of c.regions) {
       const nodes = dom.nodes.filter(n => n.visibleBox && n.assignments.includes(region.selector));
       observe(region.role, 'visible-count', nodes, region.minimumVisible, [nodes.length], nodes.length >= region.minimumVisible, 'REQUIRED_OBJECT_MISSING', `composition.regions.${region.selector}`);
+      if (region.minimumTargetPx !== undefined) for (const node of nodes) {
+        const field = `composition.regions.${region.selector}.minimumTargetPx`;
+        if (node.disabled) {
+          observations.push({ role: region.role, property: 'target-size', subjectIds: [node.id], expected: String(region.minimumTargetPx),
+            actual: ['inactive-control'], result: 'not-applicable', field });
+          continue;
+        }
+        const probe = node.pointerProbe;
+        const unsupported = !node.interactive || !probe || probe.samples !== 5 || probe.hits !== probe.samples
+          || node.unsupported.some(reason => ['transformed-geometry', 'shadow-boundary', 'opaque-content'].includes(reason));
+        const box = node.visibleBox!;
+        observe(region.role, 'target-size', [node], region.minimumTargetPx, [{ width: box.w, height: box.h, hits: probe?.hits ?? null, samples: probe?.samples ?? null }],
+          box.w >= region.minimumTargetPx && box.h >= region.minimumTargetPx,
+          unsupported ? 'CONTRACT_UNMEASURABLE' : 'REQUIRED_TARGET_TOO_SMALL', field, unsupported);
+      }
     }
     for (const relationship of c.relationships) {
       const before = dom.nodes.filter(n => n.visibleBox && n.assignments.includes(relationship.before)), after = dom.nodes.filter(n => n.visibleBox && n.assignments.includes(relationship.after));

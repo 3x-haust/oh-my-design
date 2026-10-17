@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../ref/board-artifacts.ts';
+import { TRUSTED_EVALUATION_KEYS } from './trusted-evaluation-contract.ts';
 import type { Receipt, ViewSpec } from '../measure/types.ts';
 import { object as measurementObject, receipt as measurementReceipt, sha as measurementSha, text as measurementText, number as measurementNumber, enumeration } from '../measure/validation.ts';
 
@@ -135,6 +136,51 @@ function digest(value: unknown): string {
   return value;
 }
 
+function checkTranscript(entry: string): void {
+  if (TRANSCRIPT.test(entry)) return;
+  const detailPrefix = 'access-finding:interactive-label-detail:';
+  if (entry.startsWith(detailPrefix)) {
+    if (entry.length > 4_000) return malformed();
+    let input: unknown;
+    try { input = JSON.parse(entry.slice(detailPrefix.length)); } catch { return malformed(); }
+    const detail = record(input, new Set(['view', 'selector', 'tag', 'text', 'viewport', 'bounds', 'tokenSplit', 'clipped']));
+    const viewport = record(detail.viewport, new Set(['width', 'height']));
+    if (Object.values(viewport).some(n => typeof n !== 'number' || !Number.isSafeInteger(n) || n <= 0 || n > 16384)
+      || detail.view !== `${viewport.width}x${viewport.height}`
+      || (detail.selector !== null && (typeof detail.selector !== 'string' || !detail.selector.startsWith('#') || detail.selector.length > 1024))
+      || typeof detail.tag !== 'string' || !/^[a-z][a-z0-9-]{0,127}$/.test(detail.tag)
+      || typeof detail.text !== 'string' || detail.text.length > 240
+      || typeof detail.tokenSplit !== 'boolean' || typeof detail.clipped !== 'boolean'
+      || (!detail.tokenSplit && !detail.clipped)) return malformed();
+    const bounds = record(detail.bounds, new Set(['x', 'y', 'width', 'height']));
+    if (Object.values(bounds).some(n => typeof n !== 'number' || !Number.isFinite(n))
+      || (bounds.width as number) < 0 || (bounds.height as number) < 0) return malformed();
+    return;
+  }
+  if (entry.startsWith('action-press:')) {
+    const [, key, sha] = entry.split(':');
+    if (entry.split(':').length !== 3
+      || !TRUSTED_EVALUATION_KEYS.some(allowed => allowed === key)
+      || !SHA256.test(sha ?? '')) return malformed();
+    return;
+  }
+  if (!entry.startsWith('keyboard-focus:') || entry.length > 2_000) return malformed();
+  let input: unknown;
+  try { input = JSON.parse(entry.slice('keyboard-focus:'.length)); }
+  catch { return malformed(); }
+  const witness = record(input, new Set(['key', 'viewport', 'before', 'after']));
+  if (!TRUSTED_EVALUATION_KEYS.some(key => key === witness.key)) return malformed();
+  const viewport = record(witness.viewport, new Set(['width', 'height']));
+  if (Object.values(viewport).some(n => typeof n !== 'number'
+    || !Number.isSafeInteger(n) || n <= 0 || n > 16384)) return malformed();
+  for (const point of [witness.before, witness.after]) {
+    const focus = record(point, new Set(['tagName', 'idSha256']));
+    if (focus.tagName !== null && (typeof focus.tagName !== 'string'
+      || !/^[A-Z][A-Z0-9-]{0,127}$/.test(focus.tagName))) return malformed();
+    if (focus.idSha256 !== null) digest(focus.idSha256);
+  }
+}
+
 export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceipt {
   const candidate = input as Record<string, unknown> | null;
   const executionBound = candidate?.schema === TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA
@@ -173,7 +219,8 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
   }
   const floors = record(receipt.hardFloors, FLOOR_KEYS);
   if (Object.values(floors).some((value) => value !== 'pass' && value !== 'fail')) return malformed();
-  const transcript = strings(receipt.transcript, TRANSCRIPT, false);
+  const transcript = strings(receipt.transcript, undefined, false);
+  transcript.forEach(checkTranscript);
   for (const floor of ['access', 'safety'] as const) {
     if (floors[floor] === 'pass' && transcript.some((entry) => entry.startsWith(`${floor}-finding:`))) {
       return malformed();

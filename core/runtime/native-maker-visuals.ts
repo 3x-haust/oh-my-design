@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import { makerFail, type MakerInput } from '../../adapters/pi-maker-contract.ts';
@@ -6,18 +6,22 @@ import { piRecord, piText } from '../../adapters/pi-reviewer-contract.ts';
 import { readSelectedSourceStudy } from '../art-direction/source-study-records.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
 import { readCurrentCandidateSelection } from '../brief/candidate-choice.ts';
+import { CANDIDATE_REVIEW_FEEDBACK_PATH, readCandidateReviewFeedback, readCurrentCandidateReviewFeedback } from '../brief/candidate-review.ts';
 import { readCandidateReferenceHistory } from '../brief/candidate-reference-history.ts';
 import { baselineRenders, readFirstRenderReview } from '../design/first-render-review.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import type { RouteRecord } from '../route/index.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
-import { requireNativePiPayload } from './native-pi-run.ts';
+import { getNativePiRun, requireNativePiPayload } from './native-pi-run.ts';
 import { verifySignedPiEyeRoleResult } from './pi-role-receipt.ts';
 import type { MakerDocument } from './native-maker-context.ts';
 import { materializeProjectTree } from '../render/serve.ts';
 import { makerEvaluationLineage } from './native-maker-evaluation.ts';
 import { selectedReferenceMakerProjection } from './native-maker-reference-images.ts';
+import { readConfidenceDebt } from '../brief/confidence-debt.ts';
+import { measuredSlopRepairInput } from '../slop/measured-review.ts';
+import { qualitativeFeedbackProjection } from '../design/qualitative-feedback.ts';
 
 export type MakerRender = Readonly<{
   role: string; path: string; captureSha256: string; width: number; height: number; pngBase64: string;
@@ -29,19 +33,40 @@ export function makerVisuals(input: Readonly<{
   const documents: MakerDocument[] = [];
   const renders: MakerRender[] = [];
   const lineage: unknown[] = [];
+  const feedback = qualitativeFeedbackProjection(root, sha256(route.request));
+  if (feedback !== null) {
+    lineage.push({ kind: 'reported-qualitative-feedback', ...feedback.context });
+    for (const render of feedback.renders) renders.push({
+      ...render, path: `.omd/qualitative-feedback/images/${render.captureSha256}.png`,
+    });
+  }
   let candidateSelectionSha256: string | null = null;
   const bytesAt = (path: string) => readContainedRegularFile(root, path, 'maker first-party material');
   const image = (file: Readonly<{ path: string; sha256: string }>, role: string): void => {
     const bytes = bytesAt(file.path);
     if (sha256(bytes) !== file.sha256) makerFail('first-party-image-drift');
+    if (['first-party-browser-execution', 'first-party-measured-repair'].includes(role)
+      && renders.some(render => render.role === role && render.captureSha256 === file.sha256)) return;
     const png = PNG.sync.read(bytes);
     renders.push({ role, path: file.path, captureSha256: file.sha256,
       width: png.width, height: png.height, pngBase64: bytes.toString('base64') });
   };
-  const selectedReferences = selectedReferenceMakerProjection(root, route);
+  const selectedReferences = selectedReferenceMakerProjection(root, route, maker);
   documents.push(...selectedReferences.documents);
   renders.push(...selectedReferences.renders);
   lineage.push(...selectedReferences.lineage);
+  const choiceFeedback = (candidateId: string): void => {
+    if (!existsSync(join(root, CANDIDATE_REVIEW_FEEDBACK_PATH))) return;
+    const feedback = readCandidateReviewFeedback(root, getNativePiRun(invocation, root).runId,
+      route.sourceContractSha256, candidateId);
+    if (feedback === null) return;
+    lineage.push({ kind: 'prior-candidate-review', reviewSha256: feedback.receipt.sha256,
+      observation: feedback.observation });
+    for (const preview of feedback.previews) {
+      if (!renders.some(render => render.captureSha256 === preview.png.sha256)) image(preview.png, 'first-party-candidate-review-baseline');
+    }
+  };
+  if (maker.role === 'omd-sketch' && maker.candidateId !== null) choiceFeedback(maker.candidateId);
   if (maker.role === 'omd-sketch' && route.strategy.methods.includes('provisional-source-study')) {
     const study = readSelectedSourceStudy(root, invocation);
     documents.push({ path: study.html.path, content: bytesAt(study.html.path).toString('utf8') });
@@ -49,7 +74,15 @@ export function makerVisuals(input: Readonly<{
     lineage.push({ kind: 'provisional-study', selectionSha256: study.sha256,
       unresolvedConstraints: study.unresolvedConstraints });
   }
-  if (maker.role === 'omd-hand' && route.strategy.stages.includes('candidate-generation')) {
+  const deferredCandidate = maker.role === 'omd-hand'
+    && route.strategy.stages.includes('candidate-generation')
+    && route.sourceContract.processPolicy !== undefined
+    && lstatSync(join(root, CANDIDATE_SELECTION_POINTER_PATH), { throwIfNoEntry: false }) === undefined
+    && readCurrentCandidateReviewFeedback(root, getNativePiRun(invocation, root).runId,
+      route.sourceContractSha256) === null
+    && readConfidenceDebt(root, route.sourceContractSha256).some(item => item.stage === 'candidate-generation');
+  if (deferredCandidate) lineage.push({ kind: 'candidate-exploration-deferred', claim: 'not-verified' });
+  if (maker.role === 'omd-hand' && route.strategy.stages.includes('candidate-generation') && !deferredCandidate) {
     const pointer = validateCandidateSelectionPointer(JSON.parse(bytesAt(CANDIDATE_SELECTION_POINTER_PATH).toString('utf8')));
     candidateSelectionSha256 = sha256(canonicalJson(pointer));
     resolveCandidateSelection(root, pointer);
@@ -67,6 +100,7 @@ export function makerVisuals(input: Readonly<{
     }
     if ('selection' in pointer) {
       for (const preview of selected!.previews) image(preview.png, 'selected-first-party-candidate');
+      choiceFeedback(selected!.selectedId);
       lineage.push({ kind: 'selected-direction', selectionSha256: pointer.selection.sha256,
         selectedId: selected!.selectedId, decidedBy: selected!.decision.decidedBy,
         inputDigest: selected!.inputDigest });
@@ -114,6 +148,13 @@ export function makerVisuals(input: Readonly<{
   for (const execution of makerEvaluationLineage(root, invocation)) {
     lineage.push(execution);
     for (const capture of execution.captures) image(capture, 'first-party-browser-execution');
+  }
+  if (maker.role === 'omd-hand') {
+    const measured = measuredSlopRepairInput(root);
+    if (measured !== null) {
+      lineage.push({ kind: 'measured-slop', ...measured.lineage });
+      for (const capture of measured.captures) image(capture.capture, 'first-party-measured-repair');
+    }
   }
   // Project the authenticated current evaluator attempt, including rejected lanes, never its raw file.
   const finalPath = '.omd/final-review/native-current.json';

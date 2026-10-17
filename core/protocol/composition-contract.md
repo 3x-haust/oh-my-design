@@ -14,6 +14,23 @@ Optional crops supplement their parent, never replace whole-screen direction. Pr
 rights and visibility context; do not ship source pixels/assets/copy without permission. Blind
 reviewers receive none of those images or maker rationale. Read only relevant layout/UX contracts.
 
+Put task-specific production guidance in the existing sections below, not a second brief or a
+copy of every theory pack. For each consequential choice, connect the current task and information
+role to the chosen hierarchy/grouping/treatment, its evidence or reversible hypothesis, and a
+visible condition that could reject it. Pure preference stays attributed as preference.
+Hand consumes this selected composition through its sealed maker packet; blind quality reviewers
+do not receive its rationale.
+
+Choose only guidance that applies to the named region and reachable states. Lists/tables need
+scan order, field priority, density, comparison and the action after selection. Forms need labels,
+validation timing, input preservation, cancellation and contextual recovery. Marketing needs the
+visitor's question order, lawful evidence and next action. Mobile needs recomposed priority,
+measured hit areas and real input/navigation alternatives. Full-page/media work needs complete
+content order, media meaning and applicable behavior. Reuse the relevant component/UX contracts;
+do not impose every pattern on a small change or create missing states to fill a checklist.
+Carry the chosen criteria into the existing responsive, state and browser evidence, rather than
+treating having read a rule as proof of its rendered result.
+
 Use these H2 sections exactly and keep each non-empty. `## Colour roles` is the additive
 current-authoring boundary: historical composition artifacts without it remain readable and retain
 byte identity, but every newly authored composition and terminal publication must include and pass
@@ -181,6 +198,22 @@ must cover every cell and case. Product task/semantic/access evidence remains se
 Publish the closed composition-measurement-contract-v1 JSON block described by visual-measurement.md:
 actual colour consumers/tokens, regions, spacing/order, applicable frequent action and required
 views. Native measurements and owner contracts must agree; prose cannot waive RED.
+
+Declare necessary UI/state paint in these existing color rows with `contrastKind: "non-text"`
+and the actual `background`, `border` or `outline` consumer. Use optional `viewIds` to bind
+state-specific paint to required views where it is present. This is Composer's applicability
+judgment, not a naming heuristic or a demand that all decorative lines contrast at 3:1.
+Keep inactive/unsupported exceptions and alternate non-color state cues explicit; follow the
+existing visual-measurement protocol for actual browser paint and text thresholds.
+
+When a required control has a project target-size promise, bind its existing region row to
+the actual interactive selector with `minimumTargetPx` (for example 44 for a touch contract).
+Native conformance observes both dimensions of the rendered visible control box and pointer
+hit samples in each measured state/view. A 44px declared height with a 24px actual width fails;
+a 24px icon inside a real 44px button can pass. A wrapper or nominal CSS rule is not proof.
+This project promise is separate from WCAG's 24px floor and spacing/equivalent/inline exceptions:
+omit the numeric promise where an applicable exception instead requires scoped access evidence.
+Absence of the promise does not certify accessibility or remove keyboard/touch behavior checks.
 
 
 ## Colour roles

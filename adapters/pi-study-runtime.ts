@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
-import { MAX_INLINE_EVIDENCE_BYTES } from '../core/runtime/evidence-proxy.ts';
+import { MAX_BROKERED_EVIDENCE_BYTES } from '../core/runtime/evidence-proxy.ts';
 import { getNativePiRun } from '../core/runtime/native-pi-run.ts';
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { validateCurrentProjectRun } from '../core/runtime/invocation.ts';
@@ -96,7 +96,7 @@ export async function runPiSourceStudy(input: PiSourceStudyInput): Promise<PiSou
   validateCurrentProjectRun(input.invocation);
   const run = getNativePiRun(input.invocation, input.root);
   requirePiStudyExecutable(run.host);
-  if (input.packet.byteLength > MAX_INLINE_EVIDENCE_BYTES) throw new PiReviewerError('study-packet-too-large');
+  if (input.packet.byteLength > MAX_BROKERED_EVIDENCE_BYTES) throw new PiReviewerError('study-packet-too-large');
   const packet = parseBoundSourceStudyPacket(input.packet, input.invocation.current);
   const host: PiReviewerHostContext = Object.freeze({ ...run.host, thinkingLevel: SOURCE_STUDY_EFFORT });
   const packetSha256 = piHash(input.packet);
@@ -142,8 +142,10 @@ export async function runPiSourceStudy(input: PiSourceStudyInput): Promise<PiSou
     const sessionId = piText(initial.sessionId, 'study-session');
     if (sessionId === host.parentSessionId) throw new PiReviewerError('study-parent-session-reused');
     const ready = await rpc.waitEvent('omd_reviewer_ready', 30_000);
+    // Startup effort is observed before the turn-scoped update. requireState
+    // above verifies the configured role effort before any prompt is sent.
     if (ready.sessionId !== sessionId || ready.provider !== host.provider || ready.model !== host.model
-      || ready.thinkingLevel !== SOURCE_STUDY_EFFORT || ready.modelMessageCount !== 0
+      || ready.modelMessageCount !== 0
       || !Array.isArray(ready.tools) || ready.tools.join(',') !== PI_REVIEWER_TOOL) {
       throw new PiReviewerError('study-child-isolation');
     }

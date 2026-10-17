@@ -156,7 +156,11 @@ export async function consumePiReviewerEvidence(configInput: unknown, signal?: A
       }
       content = [];
       const projected: Record<string, unknown> = { ...evidence };
-      for (const field of ['renders', 'referenceRenders', 'priorRenders']) {
+      if (evidence.feedbackRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
+        throw new PiReviewerError('opaque-feedback-renders');
+      if (evidence.consultedReferenceRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
+        throw new PiReviewerError('opaque-consulted-reference-renders');
+      for (const field of ['renders', 'referenceRenders', 'priorRenders', 'feedbackRenders', 'consultedReferenceRenders']) {
         const rows = evidence[field];
         if (rows === undefined) continue;
         if (!Array.isArray(rows)) throw new PiReviewerError('opaque-renders');

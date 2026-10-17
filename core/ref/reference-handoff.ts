@@ -408,13 +408,13 @@ export function readWholeScreenReferenceHandoff(root: string, role: 'composer' |
     return { ...summary, sha256: sha256(canonicalJson(summary)) };
   }
   const selected = references.filter(item => analysis.selectedReferenceIds.includes(item.item.referenceId));
-  const eligible = selected.filter(item => item.verified.keep.rights === 'allowed');
+  const eligible = selected.filter(item => item.evidence.rights === 'allowed');
   const payload = { schema: 'whole-screen-reference-handoff-v1', role, sourceContractSha256: current.sourceContractSha256,
     analysis: { receipt, observations: eligible.map(({ item: { capture: _capture, image: _image, ...observation } }) => observation),
       patterns: analysis.patterns, screens: analysis.screens },
-    images: eligible.map(({ item, verified }) => ({ referenceId: item.referenceId, path: item.image.path, sha256: item.image.sha256,
-      sourceApp: verified.keep.sourceApp, sourceUrl: verified.keep.sourceUrl, referenceUnit: 'whole-screen', visibility: verified.keep.visibility,
-      rights: verified.keep.rights, use: 'study-only-not-production-asset' })),
-    withheld: selected.filter(item => item.verified.keep.rights !== 'allowed').map(item => ({ referenceId: item.item.referenceId, reason: 'rights-not-allowed' })), screens };
+    images: eligible.map(({ item, evidence }) => ({ referenceId: item.referenceId, path: item.image.path, sha256: item.image.sha256,
+      sourceApp: evidence.sourceApp, sourceUrl: evidence.sourceUrl, referenceUnit: 'whole-screen', visibility: evidence.visibility,
+      provenance: evidence.provenance, rights: evidence.rights, use: 'study-only-not-production-asset' })),
+    withheld: selected.filter(item => item.evidence.rights !== 'allowed').map(item => ({ referenceId: item.item.referenceId, reason: 'rights-not-allowed' })), screens };
   return { ...payload, sha256: sha256(canonicalJson(payload)) };
 }

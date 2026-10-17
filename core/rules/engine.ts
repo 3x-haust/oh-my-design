@@ -90,7 +90,9 @@ export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categorie
     if (opts.layers && !opts.layers.includes(rule.layer)) continue;
     if (opts.categories && !opts.categories.includes(rule.category)) continue;
 
-    for (const node of ir.nodes) {
+    const candidates = rule.when === 'node.parent === null'
+      ? ir.nodes.filter(node => node.parent === null) : ir.nodes;
+    for (const node of candidates) {
       if (!evalExpr(rule.id, rule.when, node, ir, null)) continue;
 
       const value = (rule.value ? evalExpr(rule.id, rule.value, node, ir, null) : null) as RuleValue;

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { createReviewerMcpAdapter } from '../adapters/reviewer-mcp.ts';
 import { ACTIVATION_CONTEXT_SCHEMA_VERSION, validateActivationContext, type ActivationContext } from '../core/runtime/activation.ts';
-import { createReviewerEvidenceProxy, MAX_INLINE_EVIDENCE_BYTES, ReviewerIsolationError } from '../core/runtime/evidence-proxy.ts';
+import { createReviewerEvidenceProxy, MAX_INLINE_EVIDENCE_BYTES, MAX_BROKERED_EVIDENCE_BYTES, ReviewerIsolationError } from '../core/runtime/evidence-proxy.ts';
 import { requireReviewerIsolationInvocation, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { assertProjectRunMutationInventory, inventoryProjectRunMutations } from '../core/runtime/project-write-inventory.ts';
 import { acquireProjectLock, acquireProjectMutationLock, ProjectWriteError, writeContentAddressedProjectFile, writeImmutableProjectFile, writeProjectFile } from '../core/runtime/project-write.ts';
@@ -740,7 +740,12 @@ test('reviewer isolation returns metadata-only brokered evidence and rejects too
   assert.equal('payload' in receipt, false);
   assert.throws(() => proxy.create({ tool: 'Read' }), ReviewerIsolationError);
   assert.throws(() => proxy.create({ tools: ['Bash'] }), ReviewerIsolationError);
-  assert.throws(() => proxy.create(new Uint8Array(MAX_INLINE_EVIDENCE_BYTES + 1)), ReviewerIsolationError);
+  const large = new Uint8Array(MAX_BROKERED_EVIDENCE_BYTES);
+  const largeReceipt = proxy.create(large);
+  assert.equal(largeReceipt.kind, 'brokered');
+  assert.equal('payload' in largeReceipt, false);
+  assert.equal(largeReceipt.sha256, createHash('sha256').update(large).digest('hex'));
+  assert.throws(() => proxy.create(new Uint8Array(MAX_BROKERED_EVIDENCE_BYTES + 1)), ReviewerIsolationError);
 });
 
 test('loopback aliases expose metadata only and reject public probing and reuse', () => {

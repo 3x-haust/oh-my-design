@@ -246,12 +246,23 @@ queries, a broader search, a direct contact option). A zero-results page that sa
 
 ### Shared dimensions and state rules
 
-Use four control heights deliberately: 32px for dense desktop tables and expert toolbars, 36px for
-compact product forms, 40px as the general desktop default, and 44px for touch-first controls.
+Choose control dimensions from the existing system, actual content and input context. Heights
+such as 32px for dense desktop tables, 36px for compact forms, 40px for general desktop work
+and 44px for touch-first controls are starting examples, not a compulsory four-size system.
 Text inputs and adjacent buttons in one row share a height. A pointer target must meet WCAG 2.2
 2.5.8, at least 24 by 24 CSS px or satisfy its spacing exception. Aim for 44 by 44px on touch even
 when the visible control is smaller. Body and control labels normally start at 14px in dense UI,
 never 8 to 10px decorative microcopy.
+
+Reuse existing components and semantic tokens for peers with the same role and state; distinguish
+primary action, navigation, cancellation and destructive actions rather than flattening them into
+one treatment. Icons share the product's family and visual weight, and ambiguous actions need an
+appropriate accessible name or visible explanation. Emoji is not an automatic control-icon
+replacement. Visible affordances must survive without color or position alone. A hover-only action
+needs a keyboard/touch path; a swipe gesture does not authorize removing the alternate control.
+Check actual rendered target width and height, not only declared CSS height or the icon's bounds.
+Use the existing composition region's minimumTargetPx only for an applicable project promise and
+retain separate access evidence for WCAG exceptions and actual keyboard/touch operation.
 
 Every interactive component needs a default, hover when a pointing device supports it,
 focus-visible, and disabled state when disabling is legitimate. Add pressed while activation is in

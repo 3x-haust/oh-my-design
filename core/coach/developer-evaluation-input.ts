@@ -1,5 +1,6 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { PNG } from 'pngjs';
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import {
   DeveloperEvaluationError,
@@ -85,12 +86,9 @@ function stableImage(image: unknown, label: string): ComparedImage {
     const after = fstatSync(descriptor);
     if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs
       || bytes.byteLength === 0 || sha256(bytes) !== expected) return fail(`${label} bytes do not match SHA-256`);
-    const magic = bytes.subarray(0, 12);
-    const png = magic.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-    const jpeg = magic[0] === 0xff && magic[1] === 0xd8 && magic[2] === 0xff;
-    const gif = magic.subarray(0, 6).toString('ascii') === 'GIF87a' || magic.subarray(0, 6).toString('ascii') === 'GIF89a';
-    const webp = magic.subarray(0, 4).toString('ascii') === 'RIFF' && magic.subarray(8, 12).toString('ascii') === 'WEBP';
-    if (!png && !jpeg && !gif && !webp) return fail(`${label} is not a recognized image`);
+    const png = bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    if (!png) return fail(`${label} must be a decodable PNG`);
+    try { PNG.sync.read(bytes); } catch { return fail(`${label} must be a decodable PNG`); }
     return Object.freeze({ path, sha256: expected });
   } catch (error) {
     if (error instanceof DeveloperEvaluationError) throw error;
@@ -148,6 +146,10 @@ function interview(value: unknown, label: string, allowEmpty = false): Interview
     }
     const answerText = answer.text;
     if (optionIds.length === 0 && answerText === null) return fail(`${label} cannot treat an absent answer as approval`);
+    if (optionIds.length === 1 && answerText !== null
+      && answerText !== question.options.find(option => option.id === optionIds[0])?.label) {
+      return fail(`${label} selected option text must preserve its displayed option label`);
+    }
     return Object.freeze({ questionId, optionIds, text: answerText });
   });
   if (new Set(answers.map((answer) => answer.questionId)).size !== questions.length) {
@@ -176,26 +178,108 @@ function role(value: unknown, label: string): EvaluationRole {
     own(value, ['kind'], label);
     return Object.freeze({ kind: 'development' });
   }
-  const item = own(value, ['kind', 'candidateRecordId', 'candidateImage', 'caseDecision'], label);
+  const item = own(value, [
+    'kind', 'candidateRecordId', 'candidateRecordSha256', 'experimentId', 'experimentalSnapshotId',
+    'experimentRunEvidenceSha256', 'nativeRunId', 'requestSha256', 'candidateImage',
+    'resultImageSha256s', 'criteria', 'caseDecision',
+  ], label);
   if (item.kind !== 'held-out' || (item.candidateImage !== 'a' && item.candidateImage !== 'b')
     || !['approve', 'reject', 'uncertain'].includes(item.caseDecision as string)) return fail(`${label} is invalid`);
+  const resultImages = own(item.resultImageSha256s, ['a', 'b'], `${label}.resultImageSha256s`);
+  const digest = (entry: unknown, name: string): string => {
+    const result = text(entry, name, 64);
+    if (!HASH.test(result)) return fail(`${name} is invalid`);
+    return result;
+  };
+  if (!Array.isArray(item.criteria) || item.criteria.length === 0 || item.criteria.length > 16) {
+    return fail(`${label}.criteria must be bounded`);
+  }
+  const criteria = item.criteria.map((entry, index) => {
+    const criterion = own(entry, ['id', 'outcome'], `${label}.criteria[${index}]`);
+    if (!['pass', 'fail', 'uncertain'].includes(criterion.outcome as string)) {
+      return fail(`${label}.criteria[${index}].outcome is invalid`);
+    }
+    return Object.freeze({
+      id: id(criterion.id, `${label}.criteria[${index}].id`),
+      outcome: criterion.outcome as 'pass' | 'fail' | 'uncertain',
+    });
+  });
+  if (new Set(criteria.map(entry => entry.id)).size !== criteria.length) {
+    return fail(`${label}.criteria must be unique`);
+  }
   return Object.freeze({
     kind: 'held-out', candidateRecordId: id(item.candidateRecordId, `${label}.candidateRecordId`),
+    candidateRecordSha256: digest(item.candidateRecordSha256, `${label}.candidateRecordSha256`),
+    experimentId: digest(item.experimentId, `${label}.experimentId`),
+    experimentalSnapshotId: digest(item.experimentalSnapshotId, `${label}.experimentalSnapshotId`),
+    experimentRunEvidenceSha256: digest(item.experimentRunEvidenceSha256, `${label}.experimentRunEvidenceSha256`),
+    nativeRunId: digest(item.nativeRunId, `${label}.nativeRunId`),
+    requestSha256: digest(item.requestSha256, `${label}.requestSha256`),
     candidateImage: item.candidateImage, caseDecision: item.caseDecision as 'approve' | 'reject' | 'uncertain',
+    resultImageSha256s: Object.freeze({
+      a: digest(resultImages.a, `${label}.resultImageSha256s.a`),
+      b: digest(resultImages.b, `${label}.resultImageSha256s.b`),
+    }),
+    criteria: Object.freeze(criteria),
   });
+}
+
+function answerOption(response: InterviewResponse, questionId: string, label: string): string {
+  const question = response.questions.find(entry => entry.id === questionId);
+  const answer = response.answers.find(entry => entry.questionId === questionId);
+  if (question === undefined || answer === undefined || answer.optionIds.length !== 1
+    || !question.options.some(option => option.id === answer.optionIds[0])) {
+    return fail(`${label} must be backed by one explicit raw interview option`);
+  }
+  return answer.optionIds[0] as string;
 }
 
 function parseInput(value: unknown, verifyImages: boolean): DeveloperEvaluationRecordInput {
   const item = own(value, [
     'recordId', 'requestId', 'taskId', 'capturedAt', 'scope', 'role', 'images', 'humanResponse',
-    'relations', 'changes', 'modelInterpretation', 'experiment', 'reuse',
+    'relations', 'changes', 'modelInterpretation', 'experiment', 'reuse', 'imageUse',
   ], 'record');
   const scope = parseDeveloperEvaluationScope(item.scope);
-  const images = own(item.images, ['a', 'b'], 'record.images');
-  const human = own(item.humanResponse, ['interview', 'comparisonChoice', 'satisfaction', 'postChange'], 'record.humanResponse');
+  const hasReferences = typeof item.images === 'object' && item.images !== null && Object.hasOwn(item.images, 'references');
+  const images = own(item.images, ['a', 'b', ...(hasReferences ? ['references'] : [])], 'record.images');
+  const references = hasReferences ? own(images.references, ['a', 'b'], 'record.images.references') : undefined;
+  const human = own(item.humanResponse, [
+    'interview', 'comparisonChoice', 'satisfaction', 'satisfactionCandidate', 'referencePreference', 'postChange',
+  ], 'record.humanResponse');
   if (!['a', 'b', 'tie', 'neither', 'uncertain'].includes(human.comparisonChoice as string)
-    || !['satisfied', 'mixed', 'unsatisfied', 'uncertain'].includes(human.satisfaction as string)) {
+    || !['satisfied', 'mixed', 'unsatisfied', 'uncertain'].includes(human.satisfaction as string)
+    || (human.satisfactionCandidate !== 'a' && human.satisfactionCandidate !== 'b')
+    || (human.referencePreference !== null
+      && !['a', 'b', 'tie', 'neither', 'uncertain'].includes(human.referencePreference as string))) {
     return fail('record human comparison choice or satisfaction is invalid');
+  }
+  const parsedInterview = interview(human.interview, 'record.humanResponse.interview');
+  const parsedRole = role(item.role, 'record.role');
+  if (parsedRole.kind === 'held-out') {
+    if (answerOption(parsedInterview, 'validation-decision', 'record.role.caseDecision') !== parsedRole.caseDecision) {
+      return fail('validation decision conflicts with the authoritative raw answer');
+    }
+    for (const criterion of parsedRole.criteria) {
+      if (answerOption(parsedInterview, `criterion:${criterion.id}`, 'record.role.criteria') !== criterion.outcome) {
+        return fail('validation criterion conflicts with the authoritative raw answer');
+      }
+    }
+  }
+  if (answerOption(parsedInterview, 'comparison', 'record.humanResponse.comparisonChoice') !== human.comparisonChoice) {
+    return fail('record comparison summary conflicts with the authoritative raw answer');
+  }
+  const satisfactionQuestionId = `application-satisfaction-${human.satisfactionCandidate}`;
+  if (answerOption(parsedInterview, satisfactionQuestionId, 'record.humanResponse.satisfaction') !== human.satisfaction) {
+    return fail('record satisfaction summary conflicts with the authoritative candidate-specific raw answer');
+  }
+  const rawReferencePreference = parsedInterview.questions.some(question => question.id === 'reference-preference')
+    ? answerOption(parsedInterview, 'reference-preference', 'record.humanResponse.referencePreference')
+    : null;
+  if (rawReferencePreference !== human.referencePreference) {
+    return fail('record reference preference summary conflicts with the authoritative raw answer');
+  }
+  if ((rawReferencePreference !== null) !== hasReferences) {
+    return fail('reference preference requires its actual displayed reference image pair');
   }
   const relations = own(item.relations, ['references', 'design'], 'record.relations');
   const changes = own(item.changes, ['attempted', 'preserved'], 'record.changes');
@@ -209,18 +293,40 @@ function parseInput(value: unknown, verifyImages: boolean): DeveloperEvaluationR
   if (reuse.consent !== 'allow-private-advisory-reuse' && reuse.consent !== 'deny') return fail('record.reuse.consent is invalid');
   const reuseScope = parseDeveloperEvaluationScope(reuse.scope, 'record.reuse.scope');
   if (canonicalJson(scope) !== canonicalJson(reuseScope)) return fail('record reuse scope must exactly match its structural request scope');
+  const rawReuse = answerOption(parsedInterview, 'reuse', 'record.reuse.consent');
+  const expectedReuse = rawReuse === 'allow' ? 'allow-private-advisory-reuse' : rawReuse === 'deny' ? 'deny' : null;
+  if (expectedReuse === null || expectedReuse !== reuse.consent) {
+    return fail('record reuse summary conflicts with the authoritative raw answer');
+  }
+  const imageUse = own(item.imageUse, [
+    'modelDisclosure', 'retention', 'externalShare', 'productAssetReuse',
+  ], 'record.imageUse');
+  if (imageUse.modelDisclosure !== 'allow-current-developer-session'
+    || imageUse.retention !== 'allow-private-evidence-copy'
+    || imageUse.externalShare !== 'deny' || imageUse.productAssetReuse !== 'deny') {
+    return fail('record image permissions must explicitly authorize only private evaluation use');
+  }
+  if (answerOption(parsedInterview, 'image-permission', 'record.imageUse') !== 'allow') {
+    return fail('record image permissions conflict with the authoritative raw answer');
+  }
   return deepFreeze({
     recordId: id(item.recordId, 'record.recordId'), requestId: id(item.requestId, 'record.requestId'),
     taskId: id(item.taskId, 'record.taskId'), capturedAt: timestamp(item.capturedAt, 'record.capturedAt'),
-    scope, role: role(item.role, 'record.role'),
+    scope, role: parsedRole,
     images: {
       a: verifyImages ? stableImage(images.a, 'record.images.a') : imageReference(images.a, 'record.images.a'),
       b: verifyImages ? stableImage(images.b, 'record.images.b') : imageReference(images.b, 'record.images.b'),
+      ...(references === undefined ? {} : { references: {
+        a: verifyImages ? stableImage(references.a, 'record.images.references.a') : imageReference(references.a, 'record.images.references.a'),
+        b: verifyImages ? stableImage(references.b, 'record.images.references.b') : imageReference(references.b, 'record.images.references.b'),
+      } }),
     },
     humanResponse: {
-      interview: interview(human.interview, 'record.humanResponse.interview'),
+      interview: parsedInterview,
       comparisonChoice: human.comparisonChoice as DeveloperEvaluationRecordInput['humanResponse']['comparisonChoice'],
       satisfaction: human.satisfaction as DeveloperEvaluationRecordInput['humanResponse']['satisfaction'],
+      satisfactionCandidate: human.satisfactionCandidate,
+      referencePreference: human.referencePreference as DeveloperEvaluationRecordInput['humanResponse']['referencePreference'],
       postChange: interview(human.postChange, 'record.humanResponse.postChange', true),
     },
     relations: {
@@ -241,6 +347,12 @@ function parseInput(value: unknown, verifyImages: boolean): DeveloperEvaluationR
       criteriaVersion: id(experiment.criteriaVersion, 'record.experiment.criteriaVersion'),
     },
     reuse: { consent: reuse.consent, scope: reuseScope },
+    imageUse: {
+      modelDisclosure: 'allow-current-developer-session',
+      retention: 'allow-private-evidence-copy',
+      externalShare: 'deny',
+      productAssetReuse: 'deny',
+    },
   });
 }
 export function parseDeveloperEvaluationInput(value: unknown): DeveloperEvaluationRecordInput {

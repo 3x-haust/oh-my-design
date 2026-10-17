@@ -9,6 +9,7 @@ import { readFrame } from '../frame/index.ts';
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readPersistedRoute } from '../route/index.ts';
+import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { currentMakerSource } from './native-maker-state.ts';
 
@@ -20,6 +21,16 @@ export function nativeReframeWork(root: string, invocation: ProjectRunInvocation
     || review.bindings.briefSha256 !== invocation.current.briefSha256) makerFail('reframe-lineage-stale');
   const route = readPersistedRoute(root, invocation);
   const repair = { reviewSha256: review.sha256, findings: review.findings, baselines: review.baselines };
+  if (isModelLedProcess(route.sourceContract)) {
+    const report = piRecord(JSON.parse(readContainedRegularFile(root,
+      `.omd/first-render/reports/${review.bindings.captureReportSha256}.json`, 'model-led reframe report').toString('utf8')), 'model-led-reframe-report');
+    return {
+      stage: 'production' as const, owner: 'coordinator', action: 'repair-model-led-render',
+      next: `omd first-render check --page ${JSON.stringify(piText(report.page, 'reframe-page'))} --json`,
+      instruction: 'Repair direction/composition directly within the current production scope, rebuild and independently re-review against the preserved findings and failed baselines. No candidate competition, maker relay or design document is required. Behavior evaluation and completion remain refused until the reframe is resolved.',
+      problems: ['NATIVE_REFRAME_REVIEW_REQUIRED'], repair,
+    };
+  }
   const candidateWork = {
     stage: 'candidate-generation' as const, owner: 'omd-sketch', action: 'author-reframe-candidate',
     next: 'omd schema native-maker --json',
@@ -53,7 +64,7 @@ export function nativeReframeWork(root: string, invocation: ProjectRunInvocation
   };
   const report = piRecord(JSON.parse(read(`.omd/first-render/reports/${review.bindings.captureReportSha256}.json`).toString('utf8')), 'reframe-report');
   const page = readFrame(root)?.entrySurface?.entryPath ?? piText(report.page, 'reframe-page');
-  const next = `omd first-render check --page ${JSON.stringify(page)} --input .omd/.cache/first-render-surface.json --json`;
+  const next = `omd first-render check --page ${JSON.stringify(page)} --json`;
   return {
     stage: 'production' as const, owner: 'coordinator', action: 'recapture-reframe',
     next,

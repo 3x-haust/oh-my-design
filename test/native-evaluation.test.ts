@@ -8,11 +8,21 @@ import { fileURLToPath } from 'node:url';
 import { createBuildIdentityFromSource } from '../adapters/build.ts';
 import { parseEntrySurfaceContract } from '../core/frame/entry-surface-contract.ts';
 import { writeFrame } from '../core/frame/write.ts';
-import { publishAdaptiveRoute, readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { publishAdaptiveRoute, readPersistedRoute, adaptiveRouteRecordSha256 } from '../core/route/adaptive-route-persistence.ts';
 import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
+import { modelLedRouteInput } from '../core/schema/candidate-selection.ts';
+import { recordModelLedExecution } from '../core/runtime/model-led-execution.ts';
+import { checkRouteMeasuredSlopReview } from '../core/slop/measured-review.ts';
+import { parseMeasuredTerminal } from '../core/evidence/final-v2-measured-contract.ts';
+import { assertMeasurementPacketsGreen } from '../core/evidence/final-v2-measurement.ts';
+import { loadReviewPolicy } from '../core/measure/review-policy.ts';
+import { validateDecisionGraph } from '../core/deliberation/contracts.ts';
+import { captureDesignExecutionPolicy } from '../core/config/design-execution.ts';
+import { capturePiRequest } from '../extensions/omd-request-source.ts';
+import { observePiReviewPurpose } from '../extensions/omd-review-purpose.ts';
 import { runNativeEvaluation } from '../core/runtime/native-evaluation.ts';
-import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
+import { createTestNativePiInvocation, getNativePiRun } from '../core/runtime/native-pi-run.ts';
 import { readCurrentObservationV2, observationV2Sha256 } from '../core/runtime/observation.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { parseTrustedBrowserReceipt } from '../core/runtime/trusted-browser-receipt.ts';
@@ -24,11 +34,18 @@ import { writeBrowserDecisionFixture } from './helpers/browser-observation-decis
 import { nativeCompletionWork } from '../core/stage/native-completion.ts';
 import { makerEvaluationLineage } from '../core/runtime/native-maker-evaluation.ts';
 import { publishDesignJudgment } from '../core/design/judgment-files.ts';
-import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
-import { runFirstRenderReview } from '../core/design/first-render-review.ts';
+import { checkFirstRenderEvidence, publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
+import { firstRenderReviewPacket, runFirstRenderReview } from '../core/design/first-render-review.ts';
 import { finalRenderReviewerPacket } from '../core/runtime/final-render-review.ts';
 import type { DeveloperEvaluationSnapshot } from '../core/coach/developer-evaluation-contract.ts';
 import { calibrationFixture } from './helpers/developer-calibration.ts';
+import { loadMeasuredObservationBindings } from '../core/evidence/final-v2-browser-observations.ts';
+import { validateTrustedOutcomeEvidence } from '../core/evidence/final-v2-outcome-gate.ts';
+import { nativeOutcomeExecutionEvidence } from '../core/runtime/native-outcome-review.ts';
+import { makerVisuals } from '../core/runtime/native-maker-visuals.ts';
+import { installNativeFidelityReferences } from './helpers/native-reference-fidelity.ts';
+import { nativeReframeWork, requireResolvedNativeReframe } from '../core/runtime/native-reframe.ts';
+import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
 
 const runtimeRoot = fileURLToPath(new URL('..', import.meta.url));
 const packRoot = join(runtimeRoot, 'core');
@@ -37,26 +54,29 @@ const request = 'Build a shipment evidence review workspace';
 
 function fixture(t: TestContext, options: Readonly<{
   broken?: boolean; mixedPhases?: boolean; unrelatedOutcome?: boolean; composition?: boolean;
-  calibration?: DeveloperEvaluationSnapshot;
+  calibration?: DeveloperEvaluationSnapshot; modelLed?: boolean; reviewer?: boolean;
 }> = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-native-evaluation-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const local = createTestProjectRunInvocation(root, request);
   const build = createBuildIdentityFromSource(runtimeRoot);
-  const cliPath = options.composition
+  const cliPath = options.composition || options.reviewer
     ? fileURLToPath(new URL('fixtures/pi-reviewer-rpc.mjs', import.meta.url))
     : join(runtimeRoot, 'bin/omd.mjs');
   const invocation = createTestNativePiInvocation({ root,
+    ...(options.modelLed ? { designPolicy: captureDesignExecutionPolicy({}) } : {}),
     ...(options.calibration === undefined ? {} : { calibration: options.calibration }), current: {
     ...local.current, buildSha256: build.buildSha256, loadedSkillSha256: build.sourceSkillSha256,
+    ...(options.modelLed ? { briefSha256: hash(request) } : {}),
   }, host: { nodePath: process.execPath, nodeSha256: hash(readFileSync(process.execPath)),
     cliPath, cliSha256: hash(readFileSync(cliPath)), provider: 'openai-codex', model: 'gpt-6-luna',
     thinkingLevel: 'medium', parentSessionId: 'native-evaluation-fixture' } });
   const writer = createTestProjectWriteAdapter(root, invocation);
-  const skeleton = structuredClone(inputSkeleton('product-route-input').skeleton);
+  const skeleton = structuredClone((options.modelLed
+    ? modelLedRouteInput(inputSkeleton('product-route-input')) : inputSkeleton('product-route-input')).skeleton);
   assert.ok(typeof skeleton === 'object' && skeleton !== null && !Array.isArray(skeleton));
   const strategy = Reflect.get(skeleton, 'strategyDecision') as { methods: string[]; skips: { id: string }[] };
-  for (const id of ['design-strategy-balanced-delivery', 'model-capability-probe']) {
+  for (const id of options.modelLed ? [] : ['design-strategy-balanced-delivery', 'model-capability-probe']) {
     if (!strategy.methods.includes(id)) strategy.methods.push(id);
     strategy.skips = strategy.skips.filter(skip => skip.id !== id);
   }
@@ -94,6 +114,16 @@ function fixture(t: TestContext, options: Readonly<{
   };
   mkdirSync(join(root, '.omd/review-purpose-authorities'), { recursive: true });
   writeFileSync(join(root, reviewPurposeAuthority.path), purposeBytes);
+  if (options.modelLed) {
+    const run = getNativePiRun(invocation, root);
+    mkdirSync(join(root, '.omd/native-pi'), { recursive: true });
+    writeFileSync(join(root, '.omd/native-pi/run.json'), canonicalRouteJson({
+      schema: 'native-pi-run-v1', run,
+      signature: signNativeObservation(root, 'pi-run', hash(canonicalRouteJson(run))),
+    }));
+    capturePiRequest(root, request);
+    observePiReviewPurpose(root, request, 'pi-rpc');
+  }
   publishAdaptiveRoute(root, { ...skeleton, request, reviewPurpose: 'ordinary', reviewPurposeAuthority,
     taskOutcome: { schema: 'task-outcome-contract-v1', goal: 'Review shipment evidence',
       mustHave: [options.unrelatedOutcome ? 'Revoke helper access and retain the applicant record'
@@ -139,6 +169,307 @@ function fixture(t: TestContext, options: Readonly<{
     document.querySelector('[data-omd-consequence-for]').textContent='${options.broken ? 'Awaiting evidence' : 'Evidence reviewed'}';};</script></body></html>`);
   return { root, packRoot, invocation, writer, local, route };
 }
+
+function decisionGraphAt(path: string) {
+  const checked = validateDecisionGraph(JSON.parse(readFileSync(path, 'utf8')));
+  assert.ok(checked.value, JSON.stringify(checked.findings));
+  return checked.value;
+}
+
+test('model-led first render reaches isolated review without authored design documents or a browser plan', async t => {
+  const value = fixture(t, { modelLed: true, reviewer: true });
+  rmSync(join(value.root, '.omd/frame.md'));
+  rmSync(join(value.root, '.omd/task-flow-benchmark-projection.json'));
+  const source = readFileSync(join(value.root, 'index.html'));
+  const checked = await publishFirstRenderCheck(value.root, 'index.html', undefined, value.writer, value.invocation);
+  assert.equal(checked.schema, 'first-render-check-v4');
+  assert.throws(() => checkFirstRenderEvidence(value.root, 'review'), /authenticated model-led invocation/);
+  assert.throws(() => checkFirstRenderEvidence(value.root, 'review', value.local), /hypothesis|native|authority/i);
+  const packet = JSON.parse(firstRenderReviewPacket(value.root, value.invocation).packet.toString('utf8'));
+  assert.equal(packet.evidence.hypothesis, undefined);
+  assert.equal(packet.evidence.taskContext.sourceContractSha256, value.route.sourceContractSha256);
+  assert.deepEqual(packet.evidence.renders.map((row: { viewport: string }) => row.viewport), ['desktop', 'mobile']);
+  const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-revise';
+  t.after(() => {
+    if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+    else process.env.PI_REVIEWER_FIXTURE_MODE = previous;
+  });
+  const review = await runFirstRenderReview(value.root, value.invocation, t.signal);
+  assert.equal(review.decision, 'revise');
+  for (const path of ['frame.md', 'design-judgment.json', '.cache/trusted-lifecycle-manifest.json', 'final-v2.json']) {
+    assert.equal(existsSync(join(value.root, '.omd', path)), false, path);
+  }
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), source);
+  const pointer = readFileSync(join(value.root, '.omd/first-render/review.json'));
+  value.writer.write('index.html', `${source.toString('utf8')}\n<!-- changed after review -->`);
+  await assert.rejects(() => runFirstRenderReview(value.root, value.invocation, t.signal), /changed|stale/i);
+  assert.deepEqual(readFileSync(join(value.root, '.omd/first-render/review.json')), pointer);
+});
+
+function shipmentOutcomeManifest() {
+  return {
+    schema: 'trusted-lifecycle-manifest-v1', entryPath: 'index.html', scripts: [
+      { outcomeRef: 'mustHave:0', actions: [],
+        assertions: [{ kind: 'visible-text', selector: '[data-omd-purpose]', text: 'Review shipment evidence' }] },
+      { outcomeRef: 'mustNotHave:0', actions: [],
+        assertions: [{ kind: 'absent-text', selector: 'body', text: 'Invented approval' }] },
+      { outcomeRef: 'completionEvidence:0', actions: [{ kind: 'click', selector: 'button' }],
+        assertions: [{ kind: 'visible-text', selector: '[data-omd-consequence-for]', text: 'Evidence reviewed' }] },
+    ],
+  };
+}
+
+test('model-led reframe permits direct repair but refuses behavior until independent re-review', async t => {
+  const value = fixture(t, { modelLed: true, reviewer: true });
+  rmSync(join(value.root, '.omd/frame.md'));
+  const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-reframe';
+  t.after(() => {
+    if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+    else process.env.PI_REVIEWER_FIXTURE_MODE = previous;
+  });
+  await publishFirstRenderCheck(value.root, 'index.html', undefined, value.writer, value.invocation);
+  const rejected = await runFirstRenderReview(value.root, value.invocation, t.signal);
+  assert.equal(rejected.decision, 'reframe');
+  assert.equal(rejected.next, 'repair-model-led-source-and-recapture');
+  assert.deepEqual(rejected.repairOwners, ['coordinator']);
+  const work = nativeReframeWork(value.root, value.invocation);
+  assert.equal(work?.action, 'repair-model-led-render');
+  const ready = checkProductionReadiness(value.root, value.invocation, value.packRoot, 'index.html');
+  assert.equal(ready.ok, true, ready.blockers.join('; '));
+  await assert.rejects(() => runNativeEvaluation({ ...value, manifest: shipmentOutcomeManifest() }), /NATIVE_REFRAME_UNRESOLVED/);
+  assert.equal(existsSync(join(value.root, '.omd/observation-v2.json')), false);
+  const source = readFileSync(join(value.root, 'index.html'), 'utf8');
+  value.writer.write('index.html', `${source}<style>body{max-width:70rem}</style>`);
+  await publishFirstRenderCheck(value.root, 'index.html', undefined, value.writer, value.invocation);
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'success';
+  const repaired = await runFirstRenderReview(value.root, value.invocation, t.signal);
+  assert.equal(repaired.decision, 'retain');
+  assert.equal(nativeReframeWork(value.root, value.invocation), null);
+  assert.doesNotThrow(() => requireResolvedNativeReframe(value.root, value.invocation));
+  for (const path of ['frame.md', 'design-judgment.json', 'candidate-selection.json', 'final-v2.json']) {
+    assert.equal(existsSync(join(value.root, '.omd', path)), false, path);
+  }
+});
+
+test('model-led evaluation records execution automatically without inventing a design judgment', async t => {
+  const value = fixture(t, { modelLed: true });
+  const manifest = shipmentOutcomeManifest();
+  rmSync(join(value.root, '.omd/decision-graph.json'));
+  rmSync(join(value.root, '.omd/frame.md'));
+  rmSync(join(value.root, '.omd/task-flow-benchmark-projection.json'));
+  const source = readFileSync(join(value.root, 'index.html'));
+  const result = await runNativeEvaluation({ ...value, manifest });
+  assert.equal(result.ok, true);
+  const graph = decisionGraphAt(join(value.root, '.omd/decision-graph.json'));
+  assert.equal(graph.decisions.length, 1);
+  const execution = graph.decisions[0];
+  assert.ok(execution?.origin);
+  assert.equal(execution.origin.kind, 'harness-execution-v1');
+  assert.equal(execution.origin.entryPath, manifest.entryPath);
+  assert.equal(execution.origin.runId, getNativePiRun(value.invocation, value.root).runId);
+  assert.equal(execution.origin.productionRevisionSha256, result.receipt.productionRevisionSha256);
+  assert.equal(execution.alternatives.length, 1);
+  assert.equal(result.receipt.outcomeResults.length, 3);
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), source);
+  const next = nativeCompletionWork(value.root, value.invocation);
+  assert.equal(next.action, 'author-browser-plan', JSON.stringify(next));
+});
+
+test('model-led finish repairs a failed real execution and completes without intermediate design paperwork', { timeout: 240_000 }, async t => {
+  const { runModelLedCompletion } = await import('../bin/model-led-completion-command.ts');
+  const { checkFinalEvidenceV2 } = await import('../core/evidence/final-v2.ts');
+  const { validateAdaptiveFinalEvidenceV2Graph } = await import('../core/evidence/final-v2-adaptive-contract.ts');
+  const value = fixture(t, { modelLed: true, reviewer: true });
+  for (const path of ['.omd/decision-graph.json', '.omd/frame.md', '.omd/task-flow-benchmark-projection.json']) {
+    rmSync(join(value.root, path));
+  }
+  const source = readFileSync(join(value.root, 'index.html'), 'utf8');
+  value.writer.write('index.html', source.replace("textContent='Evidence reviewed'", "textContent='Awaiting evidence'"));
+  const failed = await runModelLedCompletion({ ...value, manifest: shipmentOutcomeManifest() });
+  assert.equal(failed.ok, false);
+  assert.equal(failed.phase, 'browser');
+  assert.ok(failed.evaluation);
+  const failedReceipt = readFileSync(join(value.root, failed.evaluation.receiptPath));
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
+  value.writer.write('index.html', source);
+  const result = await runModelLedCompletion({ ...value, manifest: shipmentOutcomeManifest() });
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.phase, 'complete');
+  assert.deepEqual(readFileSync(join(value.root, failed.evaluation.receiptPath)), failedReceipt);
+  const graph = validateAdaptiveFinalEvidenceV2Graph(checkFinalEvidenceV2(value.root, value.invocation).graph);
+  assert.equal(graph.route.executionStyle, 'model-led');
+  assert.equal(parseMeasuredTerminal(graph.measuredTerminal).slopPolicy, 'integrated-final-review-v1');
+  for (const path of ['.omd/frame.md', '.omd/composition.md', '.omd/slop/latest.json',
+    '.omd/functional-requirements.json', '.omd/completeness-current.json']) {
+    assert.equal(existsSync(join(value.root, path)), false, path);
+  }
+});
+
+test('model-led finish returns early visual rejection before full behavior execution', { timeout: 60_000 }, async t => {
+  const { runModelLedCompletion } = await import('../bin/model-led-completion-command.ts');
+  const value = fixture(t, { modelLed: true, reviewer: true });
+  rmSync(join(value.root, '.omd/frame.md'));
+  const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-revise';
+  t.after(() => {
+    if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+    else process.env.PI_REVIEWER_FIXTURE_MODE = previous;
+  });
+  const source = readFileSync(join(value.root, 'index.html'));
+  const result = await runModelLedCompletion({ ...value, manifest: shipmentOutcomeManifest() });
+  assert.equal(result.ok, false);
+  assert.equal(result.phase, 'review');
+  assert.equal(result.diagnostic?.code, 'FIRST_RENDER_VISUAL_REPAIR');
+  assert.equal(result.evaluation, undefined);
+  assert.equal(existsSync(join(value.root, '.omd/observation-v2.json')), false);
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), source);
+});
+
+test('model-led host automatically finishes changed inputs but does not repeat an unchanged failure', async t => {
+  const { finishModelLedTurn } = await import('../extensions/omd-model-led-completion.ts');
+  const { OmdCommandError } = await import('../extensions/omd-runtime.ts');
+  const { nextStageWork } = await import('../core/stage/next.ts');
+  const value = fixture(t, { modelLed: true });
+  rmSync(join(value.root, '.omd/frame.md'));
+  assert.equal(nextStageWork(value.root, value.packRoot, value.invocation).action, 'author-browser-plan');
+  mkdirSync(join(value.root, '.omd/.cache'), { recursive: true });
+  writeFileSync(join(value.root, '.omd/.cache/trusted-lifecycle-manifest.json'), JSON.stringify(shipmentOutcomeManifest()));
+  assert.equal(nextStageWork(value.root, value.packRoot, value.invocation).action, 'finish-model-led');
+  let calls = 0, prompts = 0;
+  const task = { cwd: value.root, interrupted: () => false,
+    run: async () => {
+      calls++;
+      const text = JSON.stringify({ schema: 'model-led-completion-result-v1', meaning: 'native-completion', ok: calls > 1,
+        diagnostic: { category: 'behavior-or-proposal', message: 'x'.repeat(60_000) } });
+      if (calls === 1) throw new OmdCommandError('bounded display', text, '', 1, false);
+      return { text, details: { code: 0, killed: false } };
+    },
+    pi: { registerCommand() {}, sendMessage() { prompts++; } },
+  };
+  assert.ok((await finishModelLedTurn(task)).includes('x'.repeat(60_000)));
+  await finishModelLedTurn(task);
+  assert.equal(calls, 1);
+  assert.equal(prompts, 1);
+  value.writer.write('index.html', `${readFileSync(join(value.root, 'index.html'), 'utf8')}\n<footer>Repaired</footer>`);
+  await finishModelLedTurn(task);
+  assert.equal(calls, 2);
+  assert.equal(prompts, 1);
+});
+
+test('model-led package failure stops before browser execution or approval', async t => {
+  const { runModelLedCompletion } = await import('../bin/model-led-completion-command.ts');
+  const value = fixture(t, { modelLed: true });
+  value.writer.write('package.json', JSON.stringify({ scripts: { test: 'node -e \"process.exit(7)\"' } }));
+  const result = await runModelLedCompletion({ ...value, manifest: shipmentOutcomeManifest() });
+  assert.equal(result.ok, false);
+  assert.equal(result.phase, 'verification');
+  assert.equal(result.verification.at(-1)?.code, 7);
+  assert.equal(result.evaluation, undefined);
+  assert.equal(existsSync(join(value.root, '.omd/observation-v2.json')), false);
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
+});
+
+test('model-led finish preserves actual behavior failure and never starts approval', { timeout: 60_000 }, async t => {
+  const { runModelLedCompletion } = await import('../bin/model-led-completion-command.ts');
+  const value = fixture(t, { modelLed: true, reviewer: true, broken: true });
+  rmSync(join(value.root, '.omd/decision-graph.json'));
+  const result = await runModelLedCompletion({ ...value, manifest: shipmentOutcomeManifest() });
+  assert.equal(result.ok, false);
+  assert.equal(result.phase, 'browser');
+  assert.equal(result.diagnostic?.category, 'behavior-or-proposal');
+  assert.equal(existsSync(join(value.root, '.omd/observation-v2.json')), true);
+  assert.equal(existsSync(join(value.root, '.omd/final-review/native-current.json')), false);
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
+});
+
+test('model-led finish refuses malformed plans, cancellation and structured authority without source mutation', async t => {
+  const { runModelLedCompletion } = await import('../bin/model-led-completion-command.ts');
+  const value = fixture(t, { modelLed: true });
+  const original = readFileSync(join(value.root, 'index.html'));
+  rmSync(join(value.root, '.omd/decision-graph.json'));
+  const invalid = await runModelLedCompletion({ ...value, manifest: { schema: 'not-a-browser-plan' } });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.diagnostic?.category, 'proposal');
+  assert.equal(existsSync(join(value.root, '.omd/decision-graph.json')), false);
+  const controller = new AbortController();
+  controller.abort();
+  const cancelled = await runModelLedCompletion({ ...value, manifest: shipmentOutcomeManifest(), signal: controller.signal });
+  assert.equal(cancelled.ok, false);
+  assert.equal(cancelled.diagnostic?.category, 'cancelled');
+  const structured = fixture(t);
+  const refused = await runModelLedCompletion({ ...structured, manifest: shipmentOutcomeManifest() });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.diagnostic?.category, 'authority');
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), original);
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
+});
+
+test('model-led execution retains authored decisions, is idempotent and rejects invalid present graphs', t => {
+  const value = fixture(t, { modelLed: true });
+  const path = join(value.root, '.omd/decision-graph.json');
+  const authored = decisionGraphAt(path).decisions;
+  recordModelLedExecution(value.root, value.invocation, 'index.html');
+  const first = readFileSync(path);
+  const graph = decisionGraphAt(path);
+  assert.deepEqual(graph.decisions.filter(d => d.origin === undefined), authored);
+  recordModelLedExecution(value.root, value.invocation, 'index.html');
+  assert.deepEqual(readFileSync(path), first);
+  value.writer.write('index.html', `${readFileSync(join(value.root, 'index.html'), 'utf8')}\n<footer>Updated production record</footer>`);
+  recordModelLedExecution(value.root, value.invocation, 'index.html');
+  const updated = decisionGraphAt(path);
+  assert.equal(updated.decisions.length, graph.decisions.length);
+  const currentExecution = updated.decisions.at(-1), previousExecution = graph.decisions.at(-1);
+  assert.ok(currentExecution?.origin && previousExecution?.origin);
+  assert.notEqual(currentExecution.origin.productionRevisionSha256, previousExecution.origin.productionRevisionSha256);
+  const invalid = '{"schema":"decision-graph-v1","decisions":[]}';
+  writeFileSync(path, invalid);
+  assert.throws(() => recordModelLedExecution(value.root, value.invocation, 'index.html'), /NATIVE_EVALUATION_DECISION_GRAPH_INVALID/);
+  assert.equal(readFileSync(path, 'utf8'), invalid);
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
+});
+
+test('model-led craft review is integrated, never a missing or malformed evidence waiver', t => {
+  const value = fixture(t, { modelLed: true });
+  const packet = { path: `.omd/visual-measurements/sha256-${hash('packet')}.json`, sha256: hash('packet') };
+  const terminal = { schema: 'measured-terminal-graph-v1', measurements: [packet],
+    reviewPolicy: loadReviewPolicy(value.root, value.invocation), lanes: {},
+    slopPolicy: 'integrated-final-review-v1' as const };
+  assert.equal(parseMeasuredTerminal(terminal).slopPolicy, terminal.slopPolicy);
+  assert.equal(checkRouteMeasuredSlopReview(value.root, value.invocation, terminal), null);
+  assert.throws(() => assertMeasurementPacketsGreen(value.root, [packet]));
+  const { slopPolicy: _policy, ...missing } = terminal;
+  assert.throws(() => parseMeasuredTerminal(missing));
+  assert.throws(() => parseMeasuredTerminal({ ...terminal, slop: { checkpoint: packet, review: packet } }));
+  mkdirSync(join(value.root, '.omd/slop'), { recursive: true });
+  writeFileSync(join(value.root, '.omd/slop/latest.json'), '{}');
+  assert.throws(() => checkRouteMeasuredSlopReview(value.root, value.invocation, terminal));
+  assert.equal(readFileSync(join(value.root, '.omd/slop/latest.json'), 'utf8'), '{}');
+  const strict = fixture(t);
+  assert.throws(() => checkRouteMeasuredSlopReview(strict.root, strict.invocation, terminal));
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
+});
+
+test('native completion routes missing and empty decision ledgers to the owning publisher without mutation', t => {
+  const value = fixture(t);
+  const source = readFileSync(join(value.root, 'index.html'));
+  const graphPath = join(value.root, '.omd/decision-graph.json');
+  const original = readFileSync(graphPath);
+  for (const bytes of [undefined, Buffer.from('{"schema":"decision-graph-v1","decisions":[]}')]) {
+    if (bytes === undefined) rmSync(graphPath); else writeFileSync(graphPath, bytes);
+    const next = nativeCompletionWork(value.root, value.invocation);
+    assert.equal(next.action, 'author-evaluation-decision');
+    assert.equal(next.owner, 'omd-hand');
+    assert.equal(next.next, 'omd schema decision-entry --json');
+    assert.deepEqual(readFileSync(join(value.root, 'index.html')), source);
+    assert.equal(existsSync(graphPath), bytes !== undefined);
+    if (bytes !== undefined) assert.deepEqual(readFileSync(graphPath), bytes);
+  }
+  writeFileSync(graphPath, original);
+  assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'evaluate-production');
+});
 
 test('composition-selected native evaluation refuses missing retained visual review before publication', async t => {
   const value = fixture(t, { composition: true });
@@ -200,7 +531,14 @@ test('native evaluation executes the project-derived plan and publishes source-b
   assert.ok(receipt.transcript.some(row => row.startsWith('action-click:')));
   assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
   const next = nativeCompletionWork(value.root, value.invocation);
-  assert.equal(next.action, 'evaluate-production');
+  assert.equal(next.action, 'author-surface-coverage');
+  assert.equal(next.owner, 'omd-hand');
+  assert.equal(next.next, 'omd schema surface-captures --json');
+  assert.ok('procedure' in next);
+  assert.deepEqual(next.procedure?.steps, [
+    'omd schema surface-captures --json',
+    'omd lifecycle surface-captures --input .omd/.cache/surface-captures-input.json --json',
+  ]);
   assert.match(next.problems.join('\n'), /DIRECTION_CONTRACT: current selected Frame requires native surface coverage/);
 });
 
@@ -238,6 +576,106 @@ test('native evaluation accepts a complete outcome-bound browser plan without fr
   assert.equal(result.receipt.entrySurface, undefined);
   assert.equal(result.receipt.outcomeResults.length, 3);
   assert.ok(result.receipt.captures.length > 0);
+  const before = readFileSync(join(value.root, '.omd/observation-v2.json'));
+  assert.equal(loadMeasuredObservationBindings(value.root, value.invocation,
+    [observationV2Sha256(result.observation)]).length, result.receipt.captures.length);
+  assert.throws(() => validateTrustedOutcomeEvidence({
+    root: value.root, invocation: value.invocation, branch: 'adaptive-omission', required: true,
+    observations: [result.observation],
+    expected: { routeSha256: adaptiveRouteRecordSha256(value.route),
+      sourceContractSha256: value.route.sourceContractSha256, sourceContract: value.route.sourceContract,
+      buildSha256: value.invocation.current.buildSha256, entrySurfaceRequired: true },
+  }), /FINAL_ACCESS_FAILED/);
+  assert.deepEqual(readFileSync(join(value.root, '.omd/observation-v2.json')), before);
+});
+
+for (const selection of ['reviewed', 'missing-option'] as const) {
+test(`native select ${selection} is executed without changing application source`, async t => {
+  const value = fixture(t);
+  const { entrySurface: _entrySurface, ...plan } = deriveTrustedEvaluationPlanFromProject(value);
+  rmSync(join(value.root, '.omd/frame.md'));
+  rmSync(join(value.root, '.omd/task-flow-benchmark-projection.json'));
+  const html = readFileSync(join(value.root, 'index.html'), 'utf8')
+    .replace('<button data-omd-task-id="inspect-evidence">Inspect evidence</button>',
+      '<label>Evidence status <select data-omd-task-id="inspect-evidence" style="min-height:44px;width:240px;font:inherit"><option value="pending">Awaiting evidence</option><option value="reviewed">Evidence reviewed</option></select></label>')
+    .replace("document.querySelector('button').onclick=()=>{",
+      "document.querySelector('select').onchange=()=>{");
+  value.writer.write('index.html', html);
+  const manifest = { ...plan, scripts: plan.scripts.map(script => ({
+    ...script, actions: script.actions.map(action => action.kind === 'click'
+      ? { kind: 'fill' as const, selector: '[data-omd-task-id="inspect-evidence"]', value: selection }
+      : action),
+  })) };
+  const result = await runNativeEvaluation({ ...value, manifest });
+  assert.equal(result.ok, selection === 'reviewed');
+  assert.equal(result.acceptanceStatus, 'review-required');
+  if (selection === 'reviewed') {
+    assert.ok(result.receipt.outcomeResults.every(outcome => outcome.status === 'pass'));
+  } else {
+    assert.ok(result.receipt.outcomeResults.some(outcome =>
+      outcome.findings.includes('required-action-unavailable')));
+  }
+  assert.equal(readFileSync(join(value.root, 'index.html'), 'utf8'), html);
+});
+}
+
+test('native keyboard activation and navigation retain actual focus evidence', async t => {
+  const value = fixture(t);
+  const { entrySurface: _entrySurface, ...plan } = deriveTrustedEvaluationPlanFromProject(value);
+  rmSync(join(value.root, '.omd/frame.md'));
+  rmSync(join(value.root, '.omd/task-flow-benchmark-projection.json'));
+  const html = readFileSync(join(value.root, 'index.html'), 'utf8')
+    .replace('</button>', '</button><input id="keyboard-next" aria-label="Evidence note">');
+  value.writer.write('index.html', html);
+  const manifest = { ...plan, scripts: plan.scripts.map(script => ({
+    ...script, actions: script.actions.flatMap(action => action.kind === 'click'
+      ? [{ kind: 'press' as const, selector: action.selector, key: 'Enter' as const },
+        { kind: 'press' as const, selector: action.selector, key: 'Tab' as const }]
+      : [action]),
+  })) };
+  const result = await runNativeEvaluation({ ...value, manifest });
+  assert.equal(result.ok, true);
+  assert.equal(result.acceptanceStatus, 'review-required');
+  const witnesses = result.receipt.transcript.filter(line => line.startsWith('keyboard-focus:'))
+    .map(line => JSON.parse(line.slice('keyboard-focus:'.length)) as {
+      key: string; viewport: { width: number; height: number };
+      after: { tagName: string; idSha256: string | null };
+    });
+  for (const width of [1280, 390]) {
+    assert.ok(witnesses.some(row => row.viewport.width === width && row.key === 'Enter'));
+    assert.ok(witnesses.some(row => row.viewport.width === width && row.key === 'Tab'
+      && row.after.tagName === 'INPUT' && row.after.idSha256 === hash('keyboard-next')));
+  }
+  assert.equal(readFileSync(join(value.root, 'index.html'), 'utf8'), html);
+  const review = nativeOutcomeExecutionEvidence(value.root, value.invocation, result.observationSha256);
+  assert.equal(review.receiptSha256, result.receiptSha256);
+  assert.deepEqual(review.transcript, result.receipt.transcript);
+  assert.ok(review.outcomes.some(outcome => outcome.actions.some(action => action.kind === 'press')));
+  for (const invalid of [
+    'action-press:Meta+Q:' + hash('body'),
+    'keyboard-focus:' + JSON.stringify({ ...witnesses[0], extra: 'untrusted' }),
+    'keyboard-focus:' + JSON.stringify({ ...witnesses[0],
+      after: { tagName: 'INPUT', idSha256: 'keyboard-next' } }),
+  ]) {
+    assert.throws(() => parseTrustedBrowserReceipt({
+      ...result.receipt, transcript: [...result.receipt.transcript, invalid],
+    }), /MALFORMED_TRUSTED_BROWSER_RECEIPT/);
+  }
+});
+
+test('unsupported native keyboard shortcuts refuse before browser evidence mutation', async t => {
+  const value = fixture(t);
+  const { entrySurface: _entrySurface, ...plan } = deriveTrustedEvaluationPlanFromProject(value);
+  rmSync(join(value.root, '.omd/frame.md'));
+  rmSync(join(value.root, '.omd/task-flow-benchmark-projection.json'));
+  const before = readFileSync(join(value.root, 'index.html'));
+  const manifest = { ...plan, scripts: plan.scripts.map(script => ({
+    ...script, actions: [{ kind: 'press', selector: 'body', key: 'Meta+Q' }],
+  })) };
+  await assert.rejects(() => runNativeEvaluation({ ...value, manifest }),
+    /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/);
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), before);
+  assert.equal(existsSync(join(value.root, '.omd/observation-v2.json')), false);
 });
 
 test('native evaluation cannot certify an unimplemented outcome from an unrelated entry label', async t => {
@@ -335,8 +773,111 @@ test('native evaluation records the measured failure when a prerequisite has no 
   assert.equal(result.receipt.entrySurface?.status, 'fail');
   assert.ok(result.receipt.outcomeResults.some(row => row.status === 'fail'));
   assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
-  assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'evaluate-production');
+  const sourceBefore = readFileSync(join(value.root, 'index.html'));
+  const pointerBefore = readFileSync(join(value.root, '.omd/observation-v2.json'));
+  const receiptBefore = readFileSync(join(value.root, result.receiptPath));
+  const next = nativeCompletionWork(value.root, value.invocation);
+  assert.equal(next.action, 'repair-browser-evidence');
+  assert.equal(next.owner, 'omd-hand');
+  assert.equal(next.next, 'omd brief browser-evidence --json');
+  assert.ok('procedure' in next && next.procedure);
+  assert.deepEqual(next.procedure.steps,
+    ['omd brief browser-evidence --json', 'omd schema trusted-lifecycle-manifest --json']);
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), sourceBefore);
+  assert.deepEqual(readFileSync(join(value.root, '.omd/observation-v2.json')), pointerBefore);
+  assert.deepEqual(readFileSync(join(value.root, result.receiptPath)), receiptBefore);
+
+  value.writer.write('index.html', `${sourceBefore.toString('utf8')}\n`);
+  assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'evaluate-production',
+    'a stale failed evaluation requests fresh evidence rather than authorizing repair from it');
+  assert.deepEqual(readFileSync(join(value.root, '.omd/observation-v2.json')), pointerBefore);
 });
+
+test('a current clipped control routes to evidence repair without promoting successful behavior', async t => {
+  const value = fixture(t);
+  const html = readFileSync(join(value.root, 'index.html'), 'utf8')
+    .replace('<button data-omd-task-id="inspect-evidence">',
+      '<button id="clipped-action" style="width:40px;overflow:hidden;white-space:nowrap" data-omd-task-id="inspect-evidence">');
+  value.writer.write('index.html', html);
+  const result = await runNativeEvaluation(value);
+  assert.equal(result.receipt.hardFloors.behavior, 'pass');
+  assert.equal(result.receipt.hardFloors.access, 'fail');
+  const detailPrefix = 'access-finding:interactive-label-detail:';
+  const targets: unknown[] = result.receipt.transcript.filter(line => line.startsWith(detailPrefix))
+    .map(line => JSON.parse(line.slice(detailPrefix.length)) as unknown);
+  assert.ok(targets.some(target => typeof target === 'object' && target !== null
+    && Reflect.get(target, 'selector') === '#clipped-action' && Reflect.get(target, 'view') === '390x844'
+    && Reflect.get(target, 'clipped') === true));
+  const next = nativeCompletionWork(value.root, value.invocation);
+  assert.equal(next.action, 'repair-browser-evidence');
+  assert.deepEqual(next.problems, ['FINAL_ACCESS_FAILED']);
+  assert.equal(readFileSync(join(value.root, 'index.html'), 'utf8'), html);
+  assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
+});
+
+for (const scenario of [
+  { overflow: 'auto', oversized: false },
+  { overflow: 'hidden', oversized: false },
+  { overflow: 'auto', oversized: true },
+] as const) {
+test(`partially clipped labels inside nested ${scenario.overflow}${scenario.oversized ? ' oversized' : ''} content retain real recoverability checks`, async t => {
+  const value = fixture(t);
+  const { entrySurface: _entrySurface, ...plan } = deriveTrustedEvaluationPlanFromProject(value);
+  rmSync(join(value.root, '.omd/frame.md'));
+  rmSync(join(value.root, '.omd/task-flow-benchmark-projection.json'));
+  const html = readFileSync(join(value.root, 'index.html'), 'utf8')
+    .replace('</style>', 'html,body{height:100%;overflow:hidden}</style>')
+    .replace('</section>', `</section>
+      <div style="position:absolute;top:400px;left:20px;width:200px;height:50px;overflow:hidden">
+        <div id="nested-port" style="height:50px;overflow-y:${scenario.overflow}">
+          <button style="display:block;width:180px;height:35px;padding:0;border:0;font:14px/20px sans-serif;white-space:nowrap">First action</button>
+          <button id="nested-second" style="display:block;width:180px;height:${scenario.oversized ? 75 : 35}px;padding:0;border:0;font:14px/20px sans-serif;white-space:nowrap">${scenario.oversized ? 'Second<br>action<br>label' : 'Second action'}</button>
+        </div>
+      </div><p id="nested-proof"></p>`)
+    .replace('</script>', `document.querySelector('#nested-port').addEventListener('scroll',()=>{
+      const port=document.querySelector('#nested-port').getBoundingClientRect();
+      const range=document.createRange();range.selectNodeContents(document.querySelector('#nested-second'));
+      const label=range.getBoundingClientRect();
+      if(label.top>=port.top&&label.bottom<=port.bottom)
+        document.querySelector('#nested-proof').textContent='Nested scroll exposed the complete label';
+    });</script>`);
+  value.writer.write('index.html', html);
+  const recoverable = scenario.overflow === 'auto' && !scenario.oversized;
+  const manifest = { ...plan, scripts: plan.scripts.map(script => ({
+    ...script,
+    actions: [...script.actions, ...(script.actions.some(action => action.kind === 'click') ? [{
+      kind: 'press' as const, selector: '#nested-second', key: 'Enter' as const,
+    }] : [])],
+    assertions: [...script.assertions, ...(recoverable && script.actions.some(action => action.kind === 'click') ? [{
+      kind: 'visible-text' as const, selector: '#nested-proof', text: 'Nested scroll exposed the complete label',
+    }] : [])],
+  })) };
+  const result = await runNativeEvaluation({ ...value, manifest });
+  assert.equal(result.receipt.hardFloors.behavior, 'pass', JSON.stringify(result.receipt.outcomeResults));
+  assert.equal(result.receipt.hardFloors.access, recoverable ? 'pass' : 'fail');
+  assert.equal(result.ok, recoverable);
+  assert.equal(readFileSync(join(value.root, 'index.html'), 'utf8'), html);
+});
+}
+
+for (const overflow of ['auto', 'visible'] as const) {
+test(`control outside ${overflow} scroll port preserves actual visibility checks`, async t => {
+  const value = fixture(t);
+  const html = readFileSync(join(value.root, 'index.html'), 'utf8')
+    .replace('</style>', 'html{height:100%;overflow:hidden}body{height:calc(100vh - 48px);overflow:hidden}</style>')
+    .replace('</section>', `</section><section style="height:100px;overflow-y:${overflow}">
+      <div id="spacer"></div><button id="outside-port" style="height:100px">Unavailable action</button></section>`)
+    .replace('</script>', `const spacer=document.querySelector('#spacer');
+      spacer.style.height=(innerHeight-30-spacer.getBoundingClientRect().top)+'px';</script>`);
+  value.writer.write('index.html', html);
+  const result = await runNativeEvaluation(value);
+  assert.equal(result.receipt.hardFloors.behavior, 'pass');
+  assert.equal(result.receipt.hardFloors.access, overflow === 'auto' ? 'pass' : 'fail');
+  assert.equal(result.ok, overflow === 'auto');
+  assert.equal(result.acceptanceStatus, 'review-required');
+  assert.equal(readFileSync(join(value.root, 'index.html'), 'utf8'), html);
+});
+}
 
 test('initial violations cannot pass when a preceding outcome requires a later prerequisite state', async t => {
   // Given an initial violation that disappears when the prerequisite is completed.
@@ -365,6 +906,23 @@ test('maker repair projection retains failed native evaluator results and exact 
   assert.deepEqual(lineage[0]?.outcomeResults, result.receipt.outcomeResults);
   assert.deepEqual(lineage[0]?.captures, result.receipt.captures);
   assert.equal(lineage[0]?.hardFloors.behavior, 'fail');
+  installNativeFidelityReferences(t, value.root);
+  const visual = makerVisuals({
+    root: value.root, invocation: value.invocation,
+    route: readPersistedRoute(value.root, value.invocation),
+    maker: { schema: 'native-maker-input-v1', role: 'omd-hand', candidateId: null,
+      paths: ['index.html'], readPaths: [], axis: null },
+  });
+  const renders = visual.renders.filter(render => render.role === 'first-party-browser-execution');
+  const distinct = new Set(result.receipt.captures.map(capture => capture.sha256));
+  assert.ok(result.receipt.captures.length > distinct.size, 'the real evaluator repeats identical captures');
+  assert.equal(renders.length, distinct.size, 'deliver identical whole images once while preserving every lineage capture');
+  assert.deepEqual(new Set(renders.map(render => render.captureSha256)), distinct);
+  for (const render of renders) {
+    assert.equal(hash(Buffer.from(render.pngBase64, 'base64')), render.captureSha256);
+  }
+  assert.deepEqual(visual.lineage.filter(row => typeof row === 'object' && row !== null
+    && Reflect.get(row, 'kind') === 'browser-execution'), lineage);
 });
 
 for (const kind of ['manifest', 'graph', 'local', 'serialized'] as const) {

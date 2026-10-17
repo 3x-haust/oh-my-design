@@ -98,7 +98,16 @@ export class PiReviewerRpc {
     const response = this.#promise(pending => this.#pending.set(id, pending), timeoutMs);
     this.child.stdin.write(`${JSON.stringify({ ...payload, id })}\n`);
     const value = await response;
-    if (value.success === false || value.error !== undefined) throw new PiReviewerError('rpc-command-failed');
+    if (value.success === false || value.error !== undefined) {
+      const error = value.error;
+      const remote = typeof error === 'object' && error !== null && !Array.isArray(error)
+        ? piRecord(error, 'rpc-error') : undefined;
+      throw new PiReviewerError('rpc-command-failed', {
+        type: 'rpc-response', event: payload.type ?? payload.method,
+        error: typeof error === 'string' ? error : remote?.message,
+        reason: typeof remote?.code === 'number' || typeof remote?.code === 'string' ? String(remote.code) : undefined,
+      });
+    }
     return value;
   }
   waitEvent(type: string, timeoutMs = 10 * 60_000): Promise<Record<string, unknown>> {

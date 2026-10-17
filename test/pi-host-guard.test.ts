@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -7,26 +7,52 @@ import omdExtension, { type PortablePiApi, type PortablePiHook, type PortablePiT
 import { classifyPiWrite, isMutatingOmdCommand, isPreproductionReadCommand } from '../extensions/omd-guard.ts';
 import { RepairLoop } from '../extensions/omd-repair-progress.ts';
 
-function harness(exec?: PortablePiApi['exec'], sendMessage?: PortablePiApi['sendMessage']) {
+function harness(exec?: PortablePiApi['exec'], sendMessage?: PortablePiApi['sendMessage'], workflow: 'model-led' | 'structured' = 'structured') {
   const hooks = new Map<string, PortablePiHook>();
   const calls: Array<{ args: readonly string[]; cwd: string }> = [];
   let tool!: PortablePiTool;
   let pass = false;
-  omdExtension({
+  const previousWorkflow = process.env.OMD_DESIGN_WORKFLOW;
+  process.env.OMD_DESIGN_WORKFLOW = workflow;
+  try { omdExtension({
     ...(sendMessage === undefined ? {} : { sendMessage }),
     on: (name, hook) => { hooks.set(name, hook); },
     registerCommand: () => {}, registerTool: t => { tool = t; },
     execOwned(command, args, options) { return this.exec(command, args, options); },
     exec: exec ?? (async (_command, args, options) => {
       calls.push({ args: args.slice(1), cwd: options.cwd });
-      return { stdout: JSON.stringify({ ok: pass, blockers: pass ? [] : ['copy deck missing', 'review loop incomplete'] }), stderr: '', code: pass ? 0 : 1, killed: false };
+      return { stdout: JSON.stringify({ ok: pass, sourceAuthoring: workflow === 'model-led' ? 'model' : 'native-maker', blockers: pass ? [] : ['copy deck missing', 'review loop incomplete'] }), stderr: '', code: pass ? 0 : 1, killed: false };
     }),
-  });
+  }); } finally {
+    if (previousWorkflow === undefined) delete process.env.OMD_DESIGN_WORKFLOW;
+    else process.env.OMD_DESIGN_WORKFLOW = previousWorkflow;
+  }
   const cwd = mkdtempSync(join(tmpdir(), 'omd-pi-guard-'));
   return { cwd, calls, tool, hooks, pass: () => { pass = true; }, emit: (name: string, event: Parameters<PortablePiHook>[0]) => hooks.get(name)!(event, { cwd }) };
 }
 const final = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: '구현했습니다.' }] };
 const blocked = (value: unknown) => (value as { block?: boolean } | undefined)?.block === true;
+
+test('model-led tool dispatch uses the production gate and preserves publisher/path protection', async () => {
+  const h = harness(undefined, undefined, 'model-led');
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.ts' } })), true);
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'eval', input: { code: 'build()' } })), true);
+  h.pass();
+  for (const toolName of ['write', 'edit', 'bash', 'eval', 'task']) {
+    assert.equal(await h.emit('tool_call', { toolName, input: { path: 'src/main.ts', command: 'npm run build' } }), undefined, toolName);
+  }
+  assert.equal(await h.emit('tool_call', { toolName: 'apply_patch', input: {
+    input: '*** Begin Patch\n*** Add File: src/main.ts\n+export const ready = true;\n*** End Patch\n',
+  } }), undefined);
+  for (const path of ['.omd/route.json', '.omd/final-evidence-v2.json', '../outside.ts']) {
+    assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path } })), true, path);
+  }
+  assert.equal(blocked(await h.emit('tool_call', { toolName: 'apply_patch', input: {
+    input: '*** Begin Patch\n*** Add File: src/main.ts\n+export const ready = true;\n*** Add File: .omd/route.json\n+{}\n*** End Patch\n',
+  } })), true);
+  rmSync(h.cwd, { recursive: true, force: true });
+});
 
 test('reference work-next is inspection and advance is an owned mutation', () => {
   assert.equal(isMutatingOmdCommand(['ref', 'work-next', '--json']), false);

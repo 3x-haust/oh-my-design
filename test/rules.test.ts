@@ -114,6 +114,37 @@ test('node-only rule evaluation does not clone the entire IR', (t) => {
   assert.equal(graphClones, 0);
 });
 
+test('exact root predicates snapshot only matching roots regardless of graph order', t => {
+  for (const rootCount of [1, 2]) {
+    const children = Array.from({ length: 151 }, (_, i): RawNode => ({
+      id: `child-${i}`, name: `Child ${i}`, type: 'FRAME', path: `Root/Child${i}`,
+      parent: 'root-0', box: { x: 0, y: i, w: 100, h: 1 }, children: [],
+    }));
+    const roots = Array.from({ length: rootCount }, (_, i): RawNode => ({
+      id: `root-${i}`, name: `Root ${i}`, type: 'FRAME', path: `Root${i}`,
+      parent: null, box: { x: 0, y: 0, w: 100, h: 200 },
+      children: i === 0 ? children.map(child => child.id) : [],
+    }));
+    const graph = normalize({ nodes: [...children.slice(0, 75), ...roots, ...children.slice(75)] });
+    const before = structuredClone(graph);
+    const clone = globalThis.structuredClone;
+    let nodeSnapshots = 0;
+    const cloneSpy = t.mock.method(globalThis, 'structuredClone',
+      <T>(value: T, options?: Parameters<typeof structuredClone>[1]): T => {
+        if (typeof value === 'object' && value !== null && 'computed' in value && 'box' in value) nodeSnapshots += 1;
+        return clone(value, options);
+      });
+    const rule: Rule = { id: 'ROOT-ONLY', layer: 1, category: 'system', severity: 'warn',
+      when: 'node.parent === null', value: 'node.id', assert: 'false', message: '{value}' };
+    const findings = check(graph, [rule]);
+    cloneSpy.mock.restore();
+    assert.equal(nodeSnapshots, rootCount * 3);
+    assert.deepEqual(findings.map(f => [f.nodeId, f.value]), roots.map(root => [root.id, root.id]));
+    assert.deepEqual(check(graph, [{ ...rule, when: '(node.parent === null)' }]), findings);
+    assert.deepEqual(graph, before);
+  }
+});
+
 test('rule IR mutations and reassignment stay isolated between expressions', () => {
   const before = structuredClone(ir);
   const rootName = JSON.stringify(must(ir.nodes[0], 'root node').name);

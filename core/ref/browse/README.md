@@ -37,6 +37,8 @@ omd ref browse drop [<keep-id>] --reason <one-line-20..500-characters>
 omd ref browse contact-sheet [--page <positive-integer>] [--columns 2|3|4]
 omd ref browse status
 omd ref browse end [--reason complete|budget|saturated|interrupted]
+omd ref advance --json
+omd ref direction-review --json
 
 omd schema reference-analysis
 omd ref browse analysis-set --input <reference-analysis.json>
@@ -136,5 +138,5 @@ Visual saturation is conservative and advisory: two inspected directions, five n
 - Selector zoom details must match the kept viewport exactly. Image-coordinate zoom of original gallery media is not a separate command yet.
 - A driver loss before any authenticated checkpoint cannot be invented into browser continuity. Proven-prefix recovery is supported; ambiguous ownership requires diagnosis rather than killing/reusing a process.
 - The initial cycle is bounded and cannot be extended by restarting. A dedicated same-contract user budget-extension grant is not implemented.
-- Analysis/maker whole-screen admission is native-browse-first. Old component crops are not silently relabelled whole screens. Existing legacy/user-image APIs remain historical/explicit paths.
+- Analysis/maker whole-screen admission requires independent Eye classification for design browse keeps and retained original images. A seal authenticates acquisition, not visual quality; follow `ref advance` to `ref direction-review` after design collection. Support cannot authorize selection as direction. Non-browse originals retain explicit image-use context, source-image digest and native dimensions; they never acquire invented browse/DOM evidence. Old component crops are not relabelled whole screens.
 - Host continuation, role allowlists, brief routing and prompt/protocol wording are outside this module's ownership. They must recognize the new work/debt outcomes and call the new maker/analysis surface; strict completion must not be weakened.

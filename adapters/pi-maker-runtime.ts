@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
-import { MAX_INLINE_EVIDENCE_BYTES } from '../core/runtime/evidence-proxy.ts';
+import { MAX_BROKERED_EVIDENCE_BYTES } from '../core/runtime/evidence-proxy.ts';
 import { getNativePiRun } from '../core/runtime/native-pi-run.ts';
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { validateCurrentProjectRun } from '../core/runtime/invocation.ts';
@@ -90,7 +90,7 @@ export async function runPiMaker(input: PiMakerInput) {
   requirePiStudyExecutable(run.host);
   const prepared = requirePreparedMaker(input.prepared, input.root, input.invocation);
   const packetBytes = prepared.packet;
-  if (packetBytes.byteLength > MAX_INLINE_EVIDENCE_BYTES) throw new PiReviewerError('maker-packet-too-large');
+  if (packetBytes.byteLength > MAX_BROKERED_EVIDENCE_BYTES) throw new PiReviewerError('maker-packet-too-large');
   const host: PiReviewerHostContext = Object.freeze({ ...run.host, thinkingLevel: MAKER_EFFORT });
   const packetSha256 = piHash(packetBytes);
   const bridgeSha256 = piHash(readFileSync(bridgePath));
@@ -135,8 +135,10 @@ export async function runPiMaker(input: PiMakerInput) {
     const sessionId = piText(initial.sessionId, 'maker-session');
     if (sessionId === host.parentSessionId) throw new PiReviewerError('maker-parent-session-reused');
     const ready = await rpc.waitEvent('omd_reviewer_ready', 30_000);
+    // session_start precedes the turn-scoped effort update. requireState above
+    // verifies configured effort; ready binds the isolated startup identity.
     if (ready.sessionId !== sessionId || ready.provider !== host.provider || ready.model !== host.model
-      || ready.thinkingLevel !== MAKER_EFFORT || ready.modelMessageCount !== 0
+      || ready.modelMessageCount !== 0
       || !Array.isArray(ready.tools) || ready.tools.join(',') !== PI_REVIEWER_TOOL) {
       throw new PiReviewerError('maker-child-isolation');
     }
@@ -192,7 +194,22 @@ export async function runPiMaker(input: PiMakerInput) {
     if (failure !== undefined) throw new PiReviewerError('maker-child-context-or-extension-failure', failure);
     const tools = rpc.events.filter(event => event.type === 'tool_execution_end');
     if (tools.length !== 1 || tools[0]?.toolName !== PI_REVIEWER_TOOL || tools[0]?.isError !== false) {
-      throw new PiReviewerError('maker-evidence-tool-execution');
+      const failed = tools.find(event => event.isError === true);
+      const result = failed?.result;
+      const content = typeof result === 'object' && result !== null ? Reflect.get(result, 'content') : undefined;
+      const error = Array.isArray(content) ? content.slice(0, 8).flatMap((part: unknown) => {
+        if (typeof part !== 'object' || part === null || Reflect.get(part, 'type') !== 'text') return [];
+        const text = Reflect.get(part, 'text');
+        return typeof text === 'string' ? [text.slice(0, 2_000)] : [];
+      }).join('\n').slice(0, 2_000) : undefined;
+      throw new PiReviewerError('maker-evidence-tool-execution', {
+        type: 'tool_execution_end', error,
+        reason: JSON.stringify({ count: tools.length,
+          tools: tools.slice(0, 8).map(event => ({
+            toolName: typeof event.toolName === 'string' ? event.toolName.slice(0, 128) : null,
+            isError: event.isError === true ? true : event.isError === false ? false : null,
+          })) }),
+      });
     }
     const details = piRecord(piRecord(tools[0].result, 'maker-tool-result').details, 'maker-tool-result-details');
     if (details.packetSha256 !== packetSha256) throw new PiReviewerError('maker-tool-result-packet');

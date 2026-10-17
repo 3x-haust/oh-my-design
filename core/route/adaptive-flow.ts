@@ -40,6 +40,9 @@ import { isVerifiedJudgment, verifiedJudgmentReceipt, type VerifiedJudgment } fr
 import { publishedRouteLearning } from './adaptive-learning.ts';
 import { verifyDirectionAutonomyGrant } from '../brief/candidate-authority.ts';
 import { verifyReviewPurposeAuthority } from './review-purpose-authority.ts';
+import { bindNativeDesignRouteInput } from './native-design-policy.ts';
+import { isModelLedProcess } from './process-policy.ts';
+import { getNativePiRun, isNativePiInvocation } from '../runtime/native-pi-run.ts';
 
 function validateRecommendation(strategy: AdaptiveStrategyDecision, value: RecommendedMethodDecision): void {
   const skipped = strategy.skips.some((entry) => entry.id === value.id);
@@ -174,6 +177,7 @@ function requiresTaskFlowBenchmark(
   input: ValidatedAdaptiveRouteInput,
 ): boolean {
   return (
+    !isModelLedProcess(input) &&
     input.projectMode === 'greenfield' &&
     input.referenceDiscovery.taskNeed === 'new-product'
   );
@@ -214,7 +218,11 @@ function validated(value: unknown, localeDesign?: LocaleDesignRoute): ValidatedA
     taskOutcome: routeTaskOutcome(sourceContract.taskOutcome),
     uxPolicy: checkUxPolicy(sourceContract.uxPolicy),
     evidenceClaims: sourceContract.evidenceClaims,
-    referenceDiscovery: routeReferenceDiscovery(sourceContract.referenceDiscovery),
+    referenceDiscovery: routeReferenceDiscovery(isModelLedProcess(sourceContract)
+      && !input.strategyDecision.stages.some(stage => ['scout', 'acquisition', 'reference-board'].includes(stage))
+      && !input.strategyDecision.methods.includes('reference-discovery')
+      ? { ...sourceContract.referenceDiscovery, skipReason: 'Reference-discovery method not selected for this model-led pass; no external-reference or fidelity claim is authorized.' }
+      : sourceContract.referenceDiscovery),
     designAxes: routeDesignAxes(sourceContract.designAxes),
     modelCapability: routeModelCapabilityProbe(
       sourceContract.modelCapability.routingInput,
@@ -255,7 +263,15 @@ function checkAdaptiveInput(
   check('uxPolicy', () => validateSafety(input));
   check('strategyDecision.methods', () => validateContextMethods(input));
   if (authority && input.processPolicy?.interactionMode === 'autonomous') check('processPolicy.autonomyGrant', () => {
-    try { verifyDirectionAutonomyGrant(authority.root, input.processPolicy!.autonomyGrant!, input.request); }
+    try {
+      const grant = verifyDirectionAutonomyGrant(authority.root, input.processPolicy!.autonomyGrant!, input.request);
+      if (isModelLedProcess(input)
+        && (grant.source !== 'native-host-policy' || !isNativePiInvocation(authority.invocation)
+          || getNativePiRun(authority.invocation, authority.root).designPolicy?.criteriaVersion !== 'model-led-design-v1'
+          || input.reviewPurpose !== 'ordinary')) {
+        failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', 'model-led execution requires the matching native host policy and ordinary review purpose');
+      }
+    }
     catch (error) { failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', error instanceof Error ? error.message : String(error)); }
   });
   const reviewPurpose = input.reviewPurpose;
@@ -277,7 +293,7 @@ function checkAdaptiveInput(
     if (strategy.stages.includes('reference-board')) {
       validateAdaptiveStageOrder({
         ...strategy,
-        stages: strategy.stages.filter(stage => ['frame', 'acquisition', 'scout', 'reference-board'].includes(stage)),
+        stages: strategy.stages.filter(stage => ['domain', 'frame', 'acquisition', 'scout', 'reference-board'].includes(stage)),
       }, input.deliveryMode, input.processPolicy !== undefined);
     }
   });
@@ -315,6 +331,11 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
         : (error.message.split(':')[0] ?? 'MALFORMED_ADAPTIVE_ROUTE');
       // Unexpected exceptions are bugs, not model-repairable input diagnostics.
       if (!/^[A-Z][A-Z0-9_]+$/.test(code)) throw error;
+      if (code === 'CONTRADICTORY_DESIGN_AXIS_STATE') {
+        diagnostics.push({ path: 'designAxes.uxNeed', code,
+          message: `${code}: failureRisk=high requires uxNeed=rigorous; preserve the risk assessment and set designAxes.uxNeed to rigorous.` });
+        return;
+      }
       diagnostics.push({ path, code, ...(error instanceof AdaptiveRouteError && error.requiredRoles !== undefined
         ? { requiredRoles: error.requiredRoles } : {}), message: error.message === code
         ? `${code}: ${path} has an invalid required shape or enum; run omd schema route-input for its field contract`
@@ -343,7 +364,9 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
   }
   if (input === undefined && typeof value === 'object' && value !== null && 'strategyDecision' in value) {
     const raw = value.strategyDecision;
-    diagnostics.push(...diagnoseAdaptiveStrategyFields(raw));
+    const policy = Reflect.get(value, 'processPolicy');
+    diagnostics.push(...diagnoseAdaptiveStrategyFields(raw, typeof policy === 'object' && policy !== null
+      && Reflect.get(policy, 'schema') === 'model-led-design-process-v1'));
     if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
       const strategy = raw as Record<string, unknown>;
       const lists = [strategy.roles, strategy.stages, strategy.methods];
@@ -369,7 +392,8 @@ export function routeAdaptiveFlow(
   localeDesign?: LocaleDesignRoute,
   options: Readonly<{ replay?: boolean }> = {},
 ): AdaptiveRouteRecord {
-  const input = validated(value, localeDesign);
+  const bound = authority && !options.replay ? bindNativeDesignRouteInput(authority.root, authority.invocation, value) : value;
+  const input = validated(bound, localeDesign);
   const strategy = input.strategyDecision;
   checkAdaptiveInput(input, (_path, check) => check(), authority, options.replay ?? false);
   const marketAuthority = input.localeDesign?.decision === 'research' && authority?.marketJudgment

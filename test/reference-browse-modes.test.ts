@@ -50,8 +50,10 @@ test('profile is opt-in, persists only browser state and does not pretend to con
   try {
     await assert.rejects(openBrowseBrowser({ ...value, consent: null }, { profilePath: profile }), /CONSENT_REQUIRED/);
     const first = await openBrowseBrowser(value, { profilePath: profile });
-    await first.context.addCookies([{ name: 'session', value: 'fixture-private-cookie', url: 'https://app.fixture.test', expires: Math.floor(Date.now() / 1000) + 3600 }]);
-    await first.close();
+    try {
+      assert.equal(await first.page.evaluate(() => devicePixelRatio), 2);
+      await first.context.addCookies([{ name: 'session', value: 'fixture-private-cookie', url: 'https://app.fixture.test', expires: Math.floor(Date.now() / 1000) + 3600 }]);
+    } finally { await first.close(); }
     const second = await openBrowseBrowser({ ...value, sessionId: 'd'.repeat(32) }, { profilePath: profile });
     try { assert.equal((await second.context.cookies('https://app.fixture.test')).find(cookie => cookie.name === 'session')?.value, 'fixture-private-cookie'); assert.equal(second.page.url(), 'about:blank'); }
     finally { await second.close(); }
@@ -81,13 +83,17 @@ test('CDP creates a guarded separate context, imports only approved cookies and 
     });
     original = await chromium.connectOverCDP(endpoint);
     const originalContext = original.contexts()[0]!, tab = originalContext.pages()[0]!;
+    const originalDpr = await tab.evaluate(() => devicePixelRatio);
     await tab.setContent('<title>Original tab survives</title><h1>User content</h1>');
     await originalContext.addCookies([{ name: 'approved', value: 'yes', url: 'https://app.fixture.test' }, { name: 'unrelated', value: 'no', url: 'https://other.fixture.test' }]);
     const value = binding(root, ['start', '--lane', 'design', '--mode', 'cdp', '--cdp-url', endpoint, '--user-opt-in', '--allow-auth-origin', 'https://app.fixture.test']);
     const browser = await openBrowseBrowser(value);
-    assert.notEqual(browser.context, originalContext);
-    assert.deepEqual((await browser.context.cookies()).map(cookie => cookie.name), ['approved']);
-    await browser.close();
+    try {
+      assert.notEqual(browser.context, originalContext);
+      assert.equal(await browser.page.evaluate(() => devicePixelRatio), 2);
+      assert.deepEqual((await browser.context.cookies()).map(cookie => cookie.name), ['approved']);
+    } finally { await browser.close(); }
+    assert.equal(await tab.evaluate(() => devicePixelRatio), originalDpr);
     assert.equal(await tab.title(), 'Original tab survives'); assert.equal(original.isConnected(), true);
   } finally {
     await original?.close();

@@ -15,8 +15,53 @@ import { checkProductionReadiness } from '../core/runtime/production-reference-g
 import { publishAdaptiveRoute } from '../core/route/adaptive-route-persistence.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { verifyNativeObservation } from '../core/runtime/self-signed-activation.ts';
+import { writeSourceSeal } from '../core/source-seal/index.ts';
 
 const execute = promisify(execFile);
+
+test('native CLI source check consumes current authority without resealing changed source', async t => {
+  const context = fixture(t);
+  const runtimeRoot = join(repo, 'test/fixtures/native-cli');
+  const sealPath = writeSourceSeal(context.root, context.invocation);
+  const sealedBytes = readFileSync(sealPath);
+  const run = async () => {
+    const staged = stageNativePiCommand({ run: getNativePiRun(context.invocation, context.root),
+      runtimeRoot, argv: ['source', '--check', '--json'] });
+    t.after(staged.dispose);
+    return execute(nodePath, [join(runtimeRoot, 'bin/omd.ts'), ...staged.argv],
+      { cwd: context.root, timeout: 30_000 });
+  };
+  assert.deepEqual(JSON.parse((await run()).stdout), []);
+  context.writer.write(input.paths[0]!, 'export const confirmation = "changed after seal";');
+  const changedBytes = readFileSync(join(context.root, input.paths[0]!));
+  await assert.rejects(run(), (error: unknown) => {
+    assert.ok(error instanceof Error && 'stdout' in error);
+    assert.equal(typeof error.stdout, 'string');
+    const findings: unknown = JSON.parse(String(error.stdout));
+    assert.ok(Array.isArray(findings) && findings.some(finding =>
+      typeof finding === 'object' && finding !== null && 'path' in finding
+      && finding.path === input.paths[0]));
+    return true;
+  });
+  assert.deepEqual(readFileSync(sealPath), sealedBytes);
+  assert.deepEqual(readFileSync(join(context.root, input.paths[0]!)), changedBytes);
+});
+
+test('native CLI source check refuses conflicting external activation before source mutation', async t => {
+  const context = fixture(t);
+  const runtimeRoot = join(repo, 'test/fixtures/native-cli');
+  const sealPath = writeSourceSeal(context.root, context.invocation);
+  const sealedBytes = readFileSync(sealPath);
+  const sourceBytes = readFileSync(join(context.root, input.paths[0]!));
+  const staged = stageNativePiCommand({ run: getNativePiRun(context.invocation, context.root),
+    runtimeRoot, argv: ['source', '--check', '--json'] });
+  t.after(staged.dispose);
+  await assert.rejects(execute(nodePath, [join(runtimeRoot, 'bin/omd.ts'), ...staged.argv],
+    { cwd: context.root, timeout: 30_000, env: { ...process.env, OMD_ACTIVATION_PATH: 'untrusted.json' } }),
+  /NATIVE_PI_AUTHORITY: expected one native command descriptor and no external activation/);
+  assert.deepEqual(readFileSync(sealPath), sealedBytes);
+  assert.deepEqual(readFileSync(join(context.root, input.paths[0]!)), sourceBytes);
+});
 
 test('native CLI maker run consumes an authenticated command envelope and writes real source', async t => {
   // Given the same actual command transport used by the native Pi extension.

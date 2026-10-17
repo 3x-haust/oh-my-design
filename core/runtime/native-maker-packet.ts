@@ -6,8 +6,9 @@ import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { adaptiveRouteRecordSha256, readPersistedRoute, pathsOutsideScope } from '../route/index.ts';
 import { MAKER_HANDBACK, MAKER_TRANSPORT, makerFail, parseMakerInput,
-  type MakerBindings, type MakerInput } from '../../adapters/pi-maker-contract.ts';
+  makerInputBranch, type MakerBindings, type MakerInput } from '../../adapters/pi-maker-contract.ts';
 import { getNativePiRun } from './native-pi-run.ts';
+import { piDigest, piRecord } from '../../adapters/pi-reviewer-contract.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { validateProjectWritePath } from './project-write.ts';
 import { makerContext, makerSourcePaths } from './native-maker-context.ts';
@@ -39,8 +40,17 @@ export function prepareNativeMaker(context: NativeMakerContext): PreparedNativeM
   const { root, invocation, packRoot } = context;
   getNativePiRun(invocation, root);
   const input = parseMakerInput(context.input);
+  const branch = makerInputBranch(input);
   const route = readPersistedRoute(root, invocation);
   const stage = input.role === 'omd-sketch' ? 'candidate-generation' : 'production';
+  if (input.role === 'omd-sketch') {
+    if (branch === 'current-sketch' && route.sourceContract.processPolicy === undefined) {
+      makerFail('current-sketch-requires-current-process');
+    }
+    if (branch === 'standard' && route.sourceContract.processPolicy !== undefined) {
+      makerFail('historical-sketch-input-on-current-process');
+    }
+  }
   const entry = checkBriefEntry(root, stage, packRoot, invocation);
   if (entry.blockers.length > 0) makerFail(`stage-entry:${entry.blockers.join('; ')}`);
   if (!route.strategy.roles.includes(input.role) || !route.strategy.stages.includes(stage)) makerFail('role-not-selected');
@@ -50,7 +60,7 @@ export function prepareNativeMaker(context: NativeMakerContext): PreparedNativeM
     const stat = lstatSync(target, { throwIfNoEntry: false });
     if (stat !== undefined && (!stat.isFile() || stat.isSymbolicLink())) makerFail('source-target-not-regular');
   }
-  if (input.role === 'omd-sketch') {
+  if (input.role === 'omd-sketch' && branch === 'standard') {
     const missing = CANDIDATE_EVIDENCE_FILES.filter(name => {
       const path = `.omd/.cache/sketches/${input.candidateId}/${name}`;
       return !input.paths.includes(path)
@@ -58,7 +68,7 @@ export function prepareNativeMaker(context: NativeMakerContext): PreparedNativeM
     });
     if (missing.length > 0) makerFail(`candidate-file-required-in-grant:${missing.join(',')}`);
   }
-  const projected = makerContext(root, route, { input, invocation });
+  const projected = makerContext(root, route, { input, invocation, packRoot });
   const sourcePaths = makerSourcePaths(root, input, route);
   const source = sourcePaths.filter(path => existsSync(join(root, path))).map(projected.source);
   if (source.reduce((sum, file) => sum + Buffer.byteLength(file.content), 0) > 4 * 1024 * 1024) makerFail('source-byte-limit');
@@ -77,7 +87,19 @@ export function prepareNativeMaker(context: NativeMakerContext): PreparedNativeM
     source, renders: visual.renders,
     evaluatorLineage: projected.project(visual.lineage),
   };
+  const deliveredCalibration = piRecord(evidence.context, 'maker-context').developerCalibration;
+  let calibration: MakerBindings['calibration'];
+  if (deliveredCalibration !== null && deliveredCalibration !== undefined) {
+    const value = piRecord(deliveredCalibration, 'maker-calibration');
+    if (!Array.isArray(value.cases)) return makerFail('calibration-cases');
+    const caseIds = value.cases.map(row => piDigest(piRecord(row, 'maker-calibration-case').caseId, 'calibration-case-id'));
+    if (caseIds.length > 0) calibration = Object.freeze({
+      snapshotSha256: piDigest(value.snapshotSha256, 'calibration-snapshot'),
+      caseIds: Object.freeze(caseIds),
+    });
+  }
   const bindings: MakerBindings = Object.freeze({
+    ...(calibration === undefined ? {} : { calibration }),
     buildSha256: invocation.current.buildSha256, briefSha256: invocation.current.briefSha256,
     routeSha256: adaptiveRouteRecordSha256(route),
     baselineSha256: sha256(canonicalJson({ baseline, contracts: projected.digests,

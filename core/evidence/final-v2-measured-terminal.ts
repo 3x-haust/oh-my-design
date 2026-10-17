@@ -12,7 +12,7 @@ import * as v from '../measure/validation.ts';
 import { assertMeasurementPacketsGreen } from './final-v2-measurement.ts';
 import { aggregateMeasuredDesignQuality } from './final-v2-measured-quality.ts';
 import { measuredLanePacket, parseMeasuredHandback, policyLane, type MeasuredLane } from '../../adapters/measured-reviewer-publication.ts';
-import { checkMeasuredSlopReview } from '../slop/measured-review.ts';
+import { checkRouteMeasuredSlopReview } from '../slop/measured-review.ts';
 import { validateFinalProductionEvidence } from './final-v2-graph.ts';
 import { stageArtifactProblems } from '../stage/output.ts';
 import { stageDefinition } from '../stage/contract.ts';
@@ -33,7 +33,9 @@ function load(root: string, receipt: Receipt) {
 function productionProjection(graph: Graph) {
   const t = parseMeasuredTerminal(graph.measuredTerminal);
   // No protocol receipt or reviewer artifact is a dependency of deterministic protocol facts.
-  return { ...graph, measuredTerminal: { schema: t.schema, measurements: t.measurements, reviewPolicy: t.reviewPolicy, slop: t.slop, ...(t.process ? { process: t.process } : {}), lanes: {} } };
+  return { ...graph, measuredTerminal: { schema: t.schema, measurements: t.measurements, reviewPolicy: t.reviewPolicy,
+    ...(t.slop === undefined ? { slopPolicy: t.slopPolicy } : { slop: t.slop }),
+    ...(t.process ? { process: t.process } : {}), lanes: {} } };
 }
 function protocolFacts(root: string, graph: Graph, invocation: ProjectRunInvocation) {
   const terminal = parseMeasuredTerminal(graph.measuredTerminal), policy = loadReviewPolicy(root, invocation);
@@ -42,7 +44,8 @@ function protocolFacts(root: string, graph: Graph, invocation: ProjectRunInvocat
   if (digest(policy) !== digest(terminal.reviewPolicy)) v.fail('terminal review policy is not current authority');
   assertMeasurementPacketsGreen(root, terminal.measurements);
   const slopMeasurements = [...new Map([...terminal.measurements, ...process?.binding.surface?.measurements ?? []].map(r => [r.sha256, r])).values()];
-  checkMeasuredSlopReview(root, { measurements: slopMeasurements, slop: terminal.slop });
+  checkRouteMeasuredSlopReview(root, invocation, { measurements: slopMeasurements,
+    ...(terminal.slop === undefined ? { slopPolicy: terminal.slopPolicy } : { slop: terminal.slop }) });
   const production = validateFinalProductionEvidence(root, productionProjection(graph), nodeStableProjectFileSystem(), invocation);
   const route = readPersistedRoute(root, invocation);
   const debt = graph.confidenceDebt as FinalConfidenceDebt | undefined;
@@ -51,7 +54,9 @@ function protocolFacts(root: string, graph: Graph, invocation: ProjectRunInvocat
   for (const stage of checkedStages) { const problems = stageArtifactProblems(root, stage, invocation); if (problems.length) v.fail(`deterministic protocol ${stage}: ${problems.join('; ')}`); }
   return { schema: 'deterministic-terminal-protocol-v1' as const, routeSha256: policy.routeSha256, sourceContractSha256: policy.sourceContractSha256,
     reviewPolicySha256: digest(policy), productionRootHash: production.rootHash, measurements: terminal.measurements,
-    observations: graph.observations, slop: terminal.slop, ...(process ? { process: process.binding } : {}), unverifiedStages, checkedStages: checkedStages.map(stage => {
+    observations: graph.observations,
+    ...(terminal.slop === undefined ? { slopPolicy: terminal.slopPolicy } : { slop: terminal.slop }),
+    ...(process ? { process: process.binding } : {}), unverifiedStages, checkedStages: checkedStages.map(stage => {
       const path = stageDefinition(stage).artifact;
       return { stage, artifact: { path, sha256: sha256(readArtifact(root, path)) } };
     }) };

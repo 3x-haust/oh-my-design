@@ -24,6 +24,8 @@ import { publishCompletenessRun, publishTypographyApplicability, renderedIrEvide
 import { publishFinalEvidenceV2 } from '../core/evidence/final-v2.ts';
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
 import { verifySignedPiEyeRoleResult } from '../core/runtime/pi-role-receipt.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
+import { nativeCompletionWork } from '../core/stage/native-completion.ts';
 
 test('trusted v2 captures initial and outcome pixels in one immutable native measurement transaction', async t => {
   const f = await measuredTerminalFixture(t, { zoom: true });
@@ -48,11 +50,44 @@ test('trusted v2 captures initial and outcome pixels in one immutable native mea
   assert.throws(() => parseTrustedBrowserReceipt(malformed), /MALFORMED/);
   assert.throws(() => loadMeasuredQualityContext(f.root, f.invocation, [], f.observationSha256s), /receipts required/);
   const supplemental = await measureProject({ root: f.root, entry: f.entry, writer: f.writer, invocation: f.invocation });
-  const scope = { schema: 'slop-measured-scope-v2', measurements: [...f.measurements, supplemental.packet] };
+  assert.throws(() => captureMeasuredSlopCheckpoint(f.root,
+    inputSkeleton('slop-scope').skeleton, f.writer, f.invocation), /VISUAL_MEASUREMENT/);
+  assert.equal(existsSync(join(f.root, '.omd/slop/latest.json')), false);
+  const starter = inputSkeleton('slop-measured-scope');
+  assert.equal(starter.command, 'omd slop checkpoint --input .omd/.cache/slop-measured-scope.json --json');
+  assert.deepEqual(starter.skeleton, { schema: 'slop-measured-scope-v2', measurements: [] });
+  assert.throws(() => captureMeasuredSlopCheckpoint(f.root, starter.skeleton,
+    f.writer, f.invocation), /current measurement receipts required/);
+  assert.equal(existsSync(join(f.root, '.omd/slop/latest.json')), false);
+  assert.ok(typeof starter.skeleton === 'object' && starter.skeleton !== null
+    && !Array.isArray(starter.skeleton));
+  const scope = { ...starter.skeleton, measurements: [...f.measurements, supplemental.packet] };
   const checkpoint = captureMeasuredSlopCheckpoint(f.root, scope, f.writer, f.invocation);
   assert.deepEqual(checkpoint.findings, []);
   publishMeasuredSlopReview(f.root, { ...checkpoint.reviewInput, summary: 'Reviewed both exact native capture transactions, including their shared viewport IDs.' }, f.writer, f.invocation);
   assert.deepEqual(checkMeasuredSlopReview(f.root).measurements, scope.measurements);
+});
+
+test('native completion sends passing measured execution to its slop owner before independent review', async t => {
+  const f = await measuredTerminalFixture(t);
+  const nodePath = realpathSync(process.execPath);
+  const cliPath = fileURLToPath(new URL('fixtures/measured-pi-reviewer-rpc.mjs', import.meta.url));
+  const invocation = createTestNativePiInvocation({ root: f.root, current: f.invocation.current,
+    host: { nodePath, nodeSha256: sha256(readFileSync(nodePath)), cliPath,
+      cliSha256: sha256(readFileSync(cliPath)), provider: 'fixture-provider',
+      model: 'fixture-model', thinkingLevel: 'high', parentSessionId: 'slop-owner-parent' } });
+  authorizeNativePiPayload(invocation, f.root, 'product-probe-result',
+    Buffer.from(`${canonicalJson(f.evaluation.receipt)}\n`));
+  const source = readFileSync(join(f.root, f.entry));
+  const work = nativeCompletionWork(f.root, invocation);
+  assert.equal(work.action, 'review-rendered-findings');
+  assert.equal(work.owner, 'omd-hand');
+  assert.equal(work.next, 'omd schema slop-measured-scope --json');
+  assert.deepEqual(readFileSync(join(f.root, f.entry)), source);
+  assert.equal(existsSync(join(f.root, '.omd/slop/latest.json')), false);
+  reviewedMeasuredGraph(f);
+  assert.equal(nativeCompletionWork(f.root, invocation).action, 'run-independent-review');
+  assert.deepEqual(readFileSync(join(f.root, f.entry)), source);
 });
 
 test('signed all-green measured publication uses policy quorum, native protocol, exact slop and replayed graph', async t => {

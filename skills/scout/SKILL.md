@@ -5,10 +5,14 @@ description: Find, inspect and analyze whole-screen references for actual task a
 
 # Scout
 
-Inside an already delegated Scout task, this skill is bootstrap only: follow the injected role, do not spawn another Scout or expand into standalone work.
+Follow the injected role; never spawn another Scout.
 
-Read the current brief and protocol/reference-assembly.md. Use the recorded `omd ref browse` session: choose roots/searches, follow actual links/similarity, inspect whole-screen shots, keep with a reason and rights context. Optional crops supplement the kept parent. Domain and design lanes remain independent; preserve market policy and actual access failures. No guessed evidence or overlay removal.
+Read the brief and protocol/reference-assembly.md. Follow ref advance's design-first action. Budget both lanes before starting; session end never resets time. In `omd ref browse`, choose roots/searches, follow observed links, inspect whole screens and keep with reasons/rights. Details supplement parents. Preserve distinct lanes, market policy and access failures. No guessed evidence or overlay removal.
 
-End at coverage, saturation or native budget with honest debt. Await command completion, not inventory polling. Inspect actual images, publish reference-analysis with browse analysis-set/check, then applicable research and ref apply-set/check. Every requested surface has direct/partial/brief-derived decisions and real gaps. Makers receive selected whole screens plus analysis; blind Eye/Glance receive neither imagery nor rationale. Study rights do not permit asset shipping.
+Domain facts use `ref navigate <url> --lane domain` without screenshots. Switch failed searches/pages to public alternatives or official task help and complete originals.
 
-Return receipts, previews, analysis and limitations. A browse success is not research completeness, visual quality or user approval. Do not implement or ask the user to choose references; representative direction choice is a later step.
+End at coverage, saturation or budget with honest debt. Await completion; do not poll inventory. Inspect pixels, publish reference-analysis through browse analysis-set/check, then applicable research and ref apply-set/check. Cover every requested surface with direct/partial/brief-derived decisions and precise gaps. Makers receive selected whole images/analysis; blind Eye/Glance receive neither. Study rights do not permit asset shipping.
+
+Return receipts, previews, analysis and limitations, never inferred completeness, quality or approval. Do not implement or request reference selection.
+
+Independently admitted `ref add` originals use the same analysis with explicit `imageUse` rights/visibility. Preserve native dimensions/source hashes and retained-original provenance; never invent browser walkthroughs, relabel component crops or infer permission from visual approval. Unknown/restricted rights withhold maker pixels.

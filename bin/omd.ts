@@ -96,6 +96,9 @@ interface Opts {
   candidate?: string;
   stack?: string;
   viewport?: string;
+  checkpoint?: string;
+  offset?: string;
+  limit?: string;
   preparation?: string;
   lane?: string;
   problem?: string;
@@ -882,7 +885,7 @@ async function cmdCheck(opts: Opts): Promise<never> {
     ...designViolations, ...interactionViolations, ...frameUxViolations,
   ].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
 
-  if (opts.json) process.stdout.write(JSON.stringify(combined));
+  if (opts.json) await new Promise<void>(done => process.stdout.write(JSON.stringify(combined), () => done()));
   else for (const v of combined) console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
 
   if (!opts.noLog) {
@@ -3408,7 +3411,7 @@ function cmdSource(mode: string | undefined, opts: Opts): never {
     process.exit(0);
   }
   if (mode === '--check') {
-    const invocation = activationInputPath(opts) === undefined
+    const invocation = nativePiInvocation === undefined && activationInputPath(opts) === undefined
       ? undefined
       : invocationFromActivation(opts, 'omd source --check', sourceRoot);
     const findings = validateSourceSeal(sourceRoot, invocation);
@@ -3550,12 +3553,80 @@ async function cmdIntent(mode: string | undefined, opts: Opts): Promise<never> {
 }
 
 async function contextualSchema(entry: import('../core/schema/inputs.ts').InputSkeleton, opts: Opts): Promise<import('../core/schema/inputs.ts').InputSkeleton> {
-  if (!['frame', 'domain-brief', 'reference-research', 'reference-search-leads'].includes(entry.name)
+  if (['route-input', 'product-route-input'].includes(entry.name)) {
+    const { getNativePiRun, isNativePiInvocation } = await import('../core/runtime/native-pi-run.ts');
+    const invocation = invocationFromActivation(opts, `omd schema ${entry.name}`);
+    if (isNativePiInvocation(invocation) && getNativePiRun(invocation, process.cwd()).designPolicy?.criteriaVersion === 'model-led-design-v1') {
+      const { readPiRequest } = await import('../extensions/omd-request-source.ts');
+      const { readPiReviewPurpose } = await import('../extensions/omd-review-purpose.ts');
+      const request = readPiRequest(process.cwd())?.request;
+      if (request === undefined || readPiReviewPurpose(process.cwd(), request).reviewPurpose !== 'ordinary') return entry;
+      const { modelLedRouteInput } = await import('../core/schema/candidate-selection.ts');
+      return modelLedRouteInput(entry);
+    }
+    return entry;
+  }
+  if (!['frame', 'domain-brief', 'reference-analysis', 'reference-research', 'reference-search-leads', 'trusted-lifecycle-manifest', 'candidate-content', 'candidate-plan', 'surface-captures'].includes(entry.name)
     || !existsSync(join(process.cwd(), '.omd/route.json'))) return entry;
   try {
     const { readPersistedRoute } = await import('../core/route/index.ts');
     const route = readPersistedRoute(process.cwd(), invocationFromActivation(opts, `omd schema ${entry.name}`));
     const skeleton = structuredClone(entry.skeleton) as Record<string, unknown>;
+    if (entry.name === 'reference-analysis') {
+      const { readContainedRegularFile } = await import('../core/ref/reference-selection.ts');
+      const { validateDomainBrief } = await import('../core/domain/domain-brief.ts');
+      const { sha256 } = await import('../core/ref/board-artifacts.ts');
+      const bytes = readContainedRegularFile(process.cwd(), '.omd/domain-brief.json', 'current domain brief');
+      const domain = validateDomainBrief(JSON.parse(bytes.toString('utf8')));
+      if (domain.request !== route.request) throw new Error('reference analysis domain request differs from current route');
+      skeleton.domainBriefSha256 = sha256(bytes);
+    }
+    if (entry.name === 'trusted-lifecycle-manifest' && route.sourceContract.processPolicy !== undefined) {
+      delete skeleton.entrySurface;
+      return { ...entry, skeleton,
+        command: route.sourceContract.processPolicy.schema === 'model-led-design-process-v1'
+          ? 'omd lifecycle finish --json'
+          : 'omd lifecycle evaluate --manifest .omd/.cache/trusted-lifecycle-manifest.json --json' };
+    }
+    if (entry.name === 'surface-captures') {
+      const { readFrame } = await import('../core/frame/index.ts');
+      const { requiredSurfaceCells } = await import('../core/frame/process-plan.ts');
+      const { requiredContentCells } = await import('../core/brief/surface-coverage.ts');
+      const plan = readFrame(process.cwd())?.surfacePlan;
+      if (!plan) return entry;
+      const receipt = (path: string) => ({ path, sha256: '0'.repeat(64) });
+      skeleton.captures = requiredSurfaceCells(plan).map(cell => ({
+        ...cell,
+        packet: receipt('.omd/visual-measurements/sha256-<measurement-packet-sha256>.json'),
+        capture: receipt('.omd/visual-measurement-captures/sha256-<capture-sha256>.png'),
+      }));
+      skeleton.contentProofs = requiredContentCells(plan)
+        .map(() => receipt('.omd/surface-content-proofs/sha256-<content-proof-sha256>.json'));
+      if (!route.strategy.stages.includes('composition')) {
+        skeleton.mappings = requiredSurfaceCells(plan).map(cell => ({
+          ...cell,
+          route: '/<actual-local-route>',
+          state: '<actual measured state>',
+          stateRecipeSha256: '0'.repeat(64),
+        }));
+        const missingSkip = !route.strategy.skips.some(skip => skip.id === 'composition');
+        return {
+          ...entry,
+          keys: [...entry.keys, 'mappings'],
+          constraints: [
+            ...(entry.constraints ?? []),
+            ...(missingSkip ? ['CURRENT ROUTE REPAIR REQUIRED: composition is omitted without its explicit applicability skip. The route owner must publish that skip before Hand can publish surface mappings; this schema does not infer or authorize it.'] : []),
+          ],
+          skeleton,
+        };
+      }
+    }
+    if (!route.strategy.stages.includes('copy')) {
+      if (entry.name === 'candidate-content') skeleton.copy = null;
+      if (entry.name === 'candidate-plan' && typeof skeleton.content === 'object' && skeleton.content !== null) {
+        Reflect.set(skeleton.content, 'status', 'provisional');
+      }
+    }
     if (entry.name === 'frame') {
       if (typeof skeleton.problem === 'string') skeleton.problem = route.request;
       const reality = skeleton.reality as Record<string, unknown> | undefined;
@@ -3596,6 +3667,10 @@ async function cmdSchema(name: string | undefined, opts: Opts): Promise<never> {
       for (const constraint of entry.constraints) console.log(`- ${constraint}`);
     }
     console.log(JSON.stringify(entry.skeleton, null, 2));
+    if (entry.currentSketchSkeleton !== undefined) {
+      console.log('current Sketch input:');
+      console.log(JSON.stringify(entry.currentSketchSkeleton, null, 2));
+    }
   }
   process.exit(0);
 }
@@ -3747,7 +3822,7 @@ async function cmdCue(opts: Opts): Promise<never> {
 
 async function cmdCandidate(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'help' || Object.hasOwn(opts, 'help') || Object.hasOwn(opts, 'h')) {
-    console.log('omd candidate content|plan|check|packet|select --input <json> --json\nomd candidate check --current --json\nomd candidate study-check --input <study.json> --brief <sketch-brief.json> --json\nSchemas: candidate-content, candidate-plan, candidate-set, candidate-selection-v2. Plan and packet are guarded publishers; content, check and study-check are read-only. Select records actual host user input or an explicitly authorized isolated Eye choice.'); process.exit(0);
+    console.log('omd candidate content|plan|check|packet|select --input <json> --json\nomd candidate capture|review --json\nomd candidate check --current --json\nomd candidate study-check --input <study.json> --brief <sketch-brief.json> --json\nSchemas: candidate-content, candidate-plan, candidate-set, candidate-selection-v2. Plan, capture and packet are guarded publishers; content, check and study-check are read-only. Review runs isolated Eye and publishes a feasible harness choice, never user approval.'); process.exit(0);
   }
   if (mode === 'study-check') {
     if (typeof opts.input !== 'string' || !opts.input || typeof opts.brief !== 'string' || !opts.brief || opts.current || opts._.length) {
@@ -3764,6 +3839,20 @@ async function cmdCandidate(mode: string | undefined, opts: Opts): Promise<never
   const { publishCandidatePlan, checkCandidateSet, parseCandidateContent, candidateContentProjection, checkCandidatePlan } = await import('../core/brief/candidate-plan.ts');
   const { publishCandidatePacket, publishCandidateSelection, candidateDirectionState, directionRoute, readCurrentCandidateSelection } = await import('../core/brief/candidate-choice.ts');
   if (opts._.length) throw new Error('candidate commands do not accept positional arguments');
+  if (mode === 'capture') {
+    if (opts.input || opts.current) throw new Error('usage: omd candidate capture [--json]');
+    const invocation = invocationFromActivation(opts, 'omd candidate capture');
+    const { captureAndPublishCandidateSet } = await import('../core/brief/candidate-capture.ts');
+    console.log(JSON.stringify(await captureAndPublishCandidateSet(process.cwd(), projectWriter(invocation), invocation)));
+    process.exit(0);
+  }
+  if (mode === 'review') {
+    if (opts.input || opts.current) throw new Error('usage: omd candidate review [--json]');
+    const { runNativeCandidateChoice } = await import('../core/brief/candidate-native-review.ts');
+    const result = await runNativeCandidateChoice(process.cwd(), invocationFromActivation(opts, 'omd candidate review'));
+    console.log(JSON.stringify(result));
+    process.exit(0);
+  }
   if (mode === 'check' && opts.current && !opts.input) {
     const state = candidateDirectionState(process.cwd());
     if (state.selectionStatus === 'current') readCurrentCandidateSelection(process.cwd());
@@ -5112,6 +5201,14 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
 }
 
 async function cmdSlop(sub: string | undefined, opts: Opts): Promise<never> {
+  if (sub === 'review-input') {
+    const { measuredSlopReviewInput } = await import('../core/slop/measured-review.ts');
+    if (typeof opts.checkpoint !== 'string' || opts._.length) throw new Error('usage: omd slop review-input --checkpoint <sha256> [--offset N] [--limit 1..8] --json');
+    const result = measuredSlopReviewInput(process.cwd(), opts.checkpoint,
+      opts.offset === undefined ? 0 : Number(opts.offset), opts.limit === undefined ? 1 : Number(opts.limit));
+    await new Promise<void>(done => process.stdout.write(`${JSON.stringify(result, null, opts.json ? 0 : 2)}\n`, () => done()));
+    process.exit(0);
+  }
   if (sub === 'checkpoint' || sub === 'review-set' || sub === 'review-check') {
     const { captureSlopCheckpoint, publishSlopReview, checkSlopReview } = await import('../core/slop/review.ts');
     if (sub !== 'review-check' && !opts.input) throw new Error('slop checkpoint/review-set requires --input <json>');
@@ -5121,13 +5218,13 @@ async function cmdSlop(sub: string | undefined, opts: Opts): Promise<never> {
       return sub === 'checkpoint' ? captureSlopCheckpoint(process.cwd(), input, writer, invocation)
         : publishSlopReview(process.cwd(), input, writer, invocation);
     })();
-    console.log(JSON.stringify(result, null, opts.json ? 0 : 2));
+    await new Promise<void>(done => process.stdout.write(`${JSON.stringify(result, null, opts.json ? 0 : 2)}\n`, () => done()));
     process.exit(0);
   }
-  if (sub !== 'scan' && sub !== 'score') throw new Error('usage: omd slop scan [root] [--json] | omd slop score --input <invariants.json> --corpus <corpus.json> [--json]');
+  if (sub !== 'scan' && sub !== 'score') throw new Error('usage: omd slop scan [root] [--json] | omd slop review-input --checkpoint <sha256> [--offset N] [--limit 1..8] --json | omd slop score --input <invariants.json> --corpus <corpus.json> [--json]');
   if (sub === 'scan') {
     const result = scanSlopSource(opts._[0] ?? process.cwd());
-    if (opts.json) process.stdout.write(JSON.stringify(result));
+    if (opts.json) await new Promise<void>(done => process.stdout.write(JSON.stringify(result), () => done()));
     else {
       console.log(`source candidates: ${result.candidates.length} (${result.filesScanned} files scanned)`);
       for (const item of result.candidates) {
@@ -5246,7 +5343,10 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'validate') {
     if (!opts.input || opts._.length > 0) throw new Error('usage: omd route validate --input <route-input.json> [--json]');
     const { diagnoseAdaptiveRouteInput, routeAdaptiveFlow } = await import('../core/route/adaptive-flow.ts');
-    const input = inputJson(opts.input, 'omd route validate');
+    const rawInput = inputJson(opts.input, 'omd route validate');
+    const { bindNativeDesignRouteInput } = await import('../core/route/native-design-policy.ts');
+    const input = nativePiInvocation === undefined ? rawInput
+      : bindNativeDesignRouteInput(process.cwd(), nativePiInvocation, rawInput);
     let localeDesign: import('../core/locale/design-context.ts').LocaleDesignRoute | undefined;
     if (opts.localeContext !== undefined) {
       if (resolve(opts.localeContext) !== resolve(process.cwd(), '.omd/locale-design-context.json')) {
@@ -5276,7 +5376,10 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
 
   if (mode === 'classify') {
     if (!opts.input) throw new Error('usage: omd route classify --input <route-input.json> [--activation <host-issued-invocation.json>] [--json]');
-    const input = validateRouteInput(inputJson(opts.input, 'omd route classify'));
+    const rawInput = inputJson(opts.input, 'omd route classify');
+    const { bindNativeDesignRouteInput } = await import('../core/route/native-design-policy.ts');
+    const input = validateRouteInput(nativePiInvocation === undefined ? rawInput
+      : bindNativeDesignRouteInput(process.cwd(), nativePiInvocation, rawInput));
     if (input.processPolicy && (input.reviewPurpose === undefined || input.reviewPurposeAuthority == null)) {
       throw new Error('ROUTE_AUTHORITY_REQUIRED: current-process routes require a genuine host review-purpose-origin-v1 receipt, including ordinary review; starter null is not publication authority');
     }
@@ -5568,10 +5671,6 @@ async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<nev
   if (mode !== 'check' || opts.input !== undefined || opts.page === undefined) {
     throw new Error('usage: omd first-render check --page <local-build.html> [--json]; remove --input (agent-authored surfaces are no longer accepted)');
   }
-  const hypothesis = readDesignJudgment(process.cwd());
-  if (hypothesis === null) {
-    throw new Error('DESIGN_JUDGMENT_REQUIRED: publish the composition hypothesis before checking a render');
-  }
   const invocation = invocationFromActivation(opts, 'omd first-render check');
   const checked = await publishFirstRenderCheck(process.cwd(), opts.page, undefined, projectWriter(invocation), invocation);
   const { runFirstRenderReview } = await import('../core/design/first-render-review.ts');
@@ -5827,6 +5926,8 @@ function usage(exitCode = 1): never {
     + '  config set direction-policy interactive|autonomous  preference only; autonomy still requires a run grant\n'
     + '  copy v2 check [--json]                      validate selected register and stable v2 Beat IDs\n'
     + '  language translate --input <json> --json | language check --json  bind measurable design language to the current request\n'
+    + '  feedback report --input <json> --json  preserve reported qualitative feedback and whole shown PNGs for comparison\n'
+    + '  ref context --input <json> --json      preserve consulted whole originals for private comparison, not admission\n'
     + '  feedback translate --input <json> --page <entry> --json | feedback check --page <entry> --json  measure current design feedback\n'
     + '  composition --check [--activation <invocation>] [--json]  validate composition sections and input freshness\n'
     + '  capture --check --input <receipt.json> [--json]  validate fixed-viewport settlement and pixel coherence\n'
@@ -5955,6 +6056,9 @@ async function main(): Promise<never> {
       'Usage:',
       '  omd lifecycle plan [--project <dir>] [--output .omd/.cache/trusted-lifecycle-manifest.json] [--activation <json>]',
       '  omd lifecycle evaluate [--project <dir>] [--manifest <json>] [--json] (native Pi; --manifest supplies an explicit browser plan, otherwise derive from frame/benchmark)',
+      '  omd lifecycle finish [--project <dir>] [--manifest <json>] [--json] (model-led native Pi; package checks, browser, isolated review and publication)',
+      '  omd lifecycle surface-captures --input .omd/.cache/surface-captures-input.json [--project <dir>] [--json]',
+      '  omd lifecycle verify install|ci|build|typecheck|test|lint [--json] (native Pi; owned package verification, not completion)',
       '  omd review run [--json] (native Pi; isolated current-model review lanes)',
       '  omd lifecycle repair --project <dir> --activation <json> --review <json> --mirror <dir> --owner-receipt <json>',
       '  omd lifecycle refinement-evidence --project <dir> --activation <json> --json',
@@ -5964,6 +6068,21 @@ async function main(): Promise<never> {
       '  omd lifecycle finalize --project <dir> --activation <json> --input <final-v2.json> (brokered host)',
     ].join('\n'));
     process.exit(0);
+  }
+  if (cmd === 'lifecycle' && sub === 'verify') {
+    const opts = parseArgs(args.slice(2));
+    if (opts._.length !== 1 || Object.keys(opts).some(key => !['_', 'project', 'json'].includes(key))) {
+      throw new Error('usage: omd lifecycle verify install|ci|build|typecheck|test|lint [--project <dir>] [--json]');
+    }
+    const project = realpathSync(resolve(opts.project ?? process.cwd()));
+    const invocation = invocationFromActivation(opts, 'omd lifecycle verify', project);
+    const { runNativeVerification } = await import('./native-verification-command.ts');
+    const { withNativeCommandSignal } = await import('./native-command-signal.ts');
+    const result = await withNativeCommandSignal(signal => runNativeVerification({
+      root: project, packRoot: join(root, 'core'), invocation, command: opts._[0], signal,
+    }));
+    await new Promise<void>(done => process.stdout.write(`${JSON.stringify(result)}\n`, () => done()));
+    process.exit(result.code === 0 && !result.killed ? 0 : result.code || 1);
   }
   if (cmd === 'lifecycle' && sub === 'plan') {
     const opts = parseArgs(args.slice(2));
@@ -5981,6 +6100,39 @@ async function main(): Promise<never> {
     writer.write(canonicalOutput, trustedEvaluationPlanBytes(manifest));
     console.log(opts.json ? JSON.stringify(manifest) : canonicalOutput);
     process.exit(0);
+  }
+  if (cmd === 'lifecycle' && sub === 'surface-captures') {
+    const opts = parseArgs(args.slice(2));
+    if (opts._.length > 0 || !opts.input) {
+      throw new Error('usage: omd lifecycle surface-captures --input .omd/.cache/surface-captures-input.json [--project <dir>] [--json]');
+    }
+    const project = realpathSync(resolve(opts.project ?? process.cwd()));
+    const invocation = invocationFromActivation(opts, 'omd lifecycle surface-captures', project);
+    const { publishSurfaceCaptureInventory } = await import('../core/evidence/surface-capture-inventory.ts');
+    const receipt = publishSurfaceCaptureInventory(
+      project,
+      inputJson(resolve(project, opts.input), 'omd lifecycle surface-captures'),
+      projectWriter(invocation, project),
+      invocation,
+    );
+    console.log(opts.json ? JSON.stringify(receipt) : receipt.path);
+    process.exit(0);
+  }
+  if (cmd === 'lifecycle' && sub === 'finish') {
+    const opts = parseArgs(args.slice(2));
+    const help = 'usage: omd lifecycle finish [--project <dir>] [--manifest <json>] [--json]';
+    if (args.includes('--help')) { console.log(help); process.exit(0); }
+    if (opts._.length > 0) throw new Error(help);
+    const project = realpathSync(resolve(opts.project ?? process.cwd()));
+    const invocation = invocationFromActivation(opts, 'omd lifecycle finish', project);
+    const { runModelLedCompletion } = await import('./model-led-completion-command.ts');
+    const { withNativeCommandSignal } = await import('./native-command-signal.ts');
+    const result = await withNativeCommandSignal(signal => runModelLedCompletion({
+      root: project, packRoot: join(root, 'core'), invocation, signal,
+      ...(opts.manifest === undefined ? {} : { manifest: inputJson(resolve(project, opts.manifest), 'native browser plan') }),
+    }));
+    await new Promise<void>(done => process.stdout.write(`${JSON.stringify(result)}\n`, () => done()));
+    process.exit(result.ok ? 0 : 1);
   }
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'lifecycle' && (sub === 'run' || sub === 'evaluate')) {
@@ -6194,6 +6346,19 @@ async function main(): Promise<never> {
     }
     const opts = parseArgs(args.slice(2));
     if (sub === 'tidy') return cmdRefTidy(opts);
+    if (sub === 'context') {
+      if (!opts.input || opts._.length) throw new Error('usage: omd ref context --input <json> --json');
+      const invocation = invocationFromActivation(opts, 'omd ref context');
+      const { publishConsultedReferences } = await import('../core/design/consulted-references.ts');
+      const { readPersistedRoute } = await import('../core/route/index.ts');
+      const { sha256 } = await import('../core/ref/board-artifacts.ts');
+      const input = inputJson(opts.input, 'omd ref context');
+      if (typeof input !== 'object' || input === null
+        || Reflect.get(input, 'requestSha256') !== sha256(readPersistedRoute(process.cwd(), invocation).request))
+        throw new Error('CONSULTED_REFERENCES: request scope');
+      console.log(JSON.stringify(publishConsultedReferences(process.cwd(), input, projectWriter(invocation))));
+      process.exit(0);
+    }
     if (sub === 'navigate') return cmdRefNavigate(opts);
     if (sub === 'control-observe') return cmdRefControlObserve(opts);
     if (sub === 'cookie-control') return cmdRefCookieControl(opts);
@@ -6246,6 +6411,20 @@ async function main(): Promise<never> {
 
   if (cmd === 'language' || cmd === 'feedback') {
     const opts = parseArgs(args.slice(2));
+    if (cmd === 'feedback' && sub === 'report') {
+      if (!opts.input || opts._.length) throw new Error('usage: omd feedback report --input <json> --json');
+      const invocation = invocationFromActivation(opts, 'omd feedback report');
+      const { publishQualitativeFeedback } = await import('../core/design/qualitative-feedback.ts');
+      const { readPersistedRoute } = await import('../core/route/index.ts');
+      const { sha256 } = await import('../core/ref/board-artifacts.ts');
+      const input = inputJson(opts.input, 'omd feedback report');
+      if (typeof input !== 'object' || input === null
+        || Reflect.get(input, 'requestSha256') !== sha256(readPersistedRoute(process.cwd(), invocation).request))
+        throw new Error('QUALITATIVE_FEEDBACK: request scope');
+      const result = publishQualitativeFeedback(process.cwd(), input, projectWriter(invocation));
+      console.log(JSON.stringify(result));
+      process.exit(0);
+    }
     if (sub !== 'translate' && sub !== 'check') throw new Error(`usage: omd ${cmd} translate --input <json> --json | omd ${cmd} check --json`);
     const kind = cmd === 'language' ? 'intake' : 'feedback';
     const { publishTranslation, readTranslation, parseInput, chosenCopyTone, requireCopyToneReview } = await import('../core/design-language/index.ts');
@@ -6341,10 +6520,10 @@ async function main(): Promise<never> {
   if (cmd === 'maker') {
     if (nativePiInvocation === undefined) throw new Error('NATIVE_PI_AUTHORITY: maker requires an authenticated native Pi invocation');
     const opts = parseArgs(args.slice(2));
-    if (opts._.length || !opts.input) throw new Error('usage: omd maker run --input <native-maker-input.json> [--json]');
+    if (opts._.length || !opts.input) throw new Error('usage: omd maker run|restore --input <native-maker-input.json> [--json]');
     const { nativeMakerCommand } = await import('./native-maker-command.ts');
     const result = await nativeMakerCommand(sub, { root: process.cwd(), packRoot: join(root, 'core'),
-      input: inputJson(opts.input, 'omd maker input'), invocation: invocationFromActivation(opts, 'omd maker run') });
+      input: inputJson(opts.input, 'omd maker input'), invocation: invocationFromActivation(opts, `omd maker ${sub}`) });
     console.log(JSON.stringify(result));
     process.exit(0);
   }

@@ -101,6 +101,50 @@ export async function captureBrowseObservation(page: Page, observer: DocumentObs
   if (options.readySelector) await page.locator(options.readySelector).waitFor({ state: 'visible', timeout: options.timeout });
   await page.waitForFunction(() => document.fonts.status === 'loaded', undefined, { timeout: options.timeout });
   for (let attempt = 0; attempt < 2; attempt++) {
+    const settled = await page.evaluate(browserCallback(async (timeout: number) => {
+      const visible = (element: Element) => {
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && box.right > 0 && box.bottom > 0
+          && box.x < innerWidth && box.y < innerHeight
+          && element.checkVisibility({ checkVisibilityCSS: true });
+      };
+      const images = Array.from(document.images).filter(image => !image.complete && visible(image));
+      const loaded = await Promise.all(images.map(image => new Promise<boolean>(resolve => {
+        const finish = () => done(true);
+        const done = (ready: boolean) => {
+          clearTimeout(deadline);
+          image.removeEventListener('load', finish);
+          image.removeEventListener('error', finish);
+          resolve(ready);
+        };
+        const deadline = setTimeout(() => done(false), timeout);
+        image.addEventListener('load', finish, { once: true });
+        image.addEventListener('error', finish, { once: true });
+        if (image.complete) finish();
+      })));
+      if (!loaded.every(Boolean)) return false;
+      const animations = document.getAnimations().filter(animation => {
+        const effect = animation.effect;
+        return effect instanceof KeyframeEffect && effect.target instanceof Element && visible(effect.target)
+          && Number.isFinite(effect.getComputedTiming().endTime)
+          && (animation.playState === 'running' || animation.pending);
+      });
+      const finished = await Promise.all(animations.map(animation => new Promise<boolean>(resolve => {
+        const finish = () => done(true);
+        const done = (ready: boolean) => {
+          clearTimeout(deadline);
+          animation.removeEventListener('finish', finish);
+          animation.removeEventListener('cancel', finish);
+          resolve(ready);
+        };
+        const deadline = setTimeout(() => done(false), timeout);
+        animation.addEventListener('finish', finish, { once: true });
+        animation.addEventListener('cancel', finish, { once: true });
+        if (!animation.pending && animation.playState !== 'running') finish();
+      })));
+      return finished.every(Boolean);
+    }), options.timeout);
+    if (!settled) browseFail('BROWSE_UNSTABLE_RENDER', 'visible images or finite transitions did not settle; no capture evidence was accepted');
     const url = browseUrl(page.url()), binding = await observer.current(), before = await inspectVisible(page);
     let crop: Box | null = null, mediaUrl: string | null = null, kind: BrowseObservation['kind'] = 'page';
     let invariants: BrowseObservation['invariants'] = null, blueprint: BrowseObservation['blueprint'] = null;

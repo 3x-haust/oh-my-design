@@ -30,6 +30,10 @@ export type ConstraintTradeoff = {
   readonly resultEvidence: readonly string[];
 };
 export type DesignDecision = {
+  /** Mechanical execution provenance, never an owner-authored design judgment. */
+  readonly origin?: Readonly<{
+    kind: 'harness-execution-v1'; runId: string; entryPath: string; productionRevisionSha256: string;
+  }>;
   readonly id: string;
   readonly stage: DecisionStage;
   readonly risk: DecisionRisk;
@@ -171,7 +175,16 @@ export function validateDecisionGraph(value: unknown): { readonly value?: Decisi
   if (decisions.length === 0) finding(out, 'DECISION-GRAPH-EMPTY', 'decisions', 'at least one consequential decision is required');
   for (let i = 0; i < decisions.length; i++) {
     const d = decisions[i]; const path = `decisions[${i}]`;
-    if (!record(d) || !exact(d, DECISION_KEYS)) { finding(out, 'DECISION-INVALID', path, 'decision has unknown or missing keys'); continue; }
+    if (!record(d) || !exact(d, Object.hasOwn(d, 'origin') ? [...DECISION_KEYS, 'origin'] : DECISION_KEYS)) { finding(out, 'DECISION-INVALID', path, 'decision has unknown or missing keys'); continue; }
+    const execution = Object.hasOwn(d, 'origin');
+    if (execution && (!record(d.origin) || !exact(d.origin, ['kind', 'runId', 'entryPath', 'productionRevisionSha256'])
+      || d.origin.kind !== 'harness-execution-v1' || typeof d.origin.runId !== 'string' || !/^[a-f0-9]{64}$/.test(d.origin.runId)
+      || typeof d.origin.productionRevisionSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(d.origin.productionRevisionSha256)
+      || typeof d.origin.entryPath !== 'string' || !text(d.origin.entryPath)
+      || d.origin.entryPath.startsWith('/') || d.origin.entryPath.split('/').includes('..')
+      || d.stage !== 'production' || d.owner !== 'omd-hand' || d.risk !== 'low')) {
+      finding(out, 'DECISION-EXECUTION-ORIGIN', `${path}.origin`, 'execution records require current native run, production entry and revision bindings; they are not design judgments');
+    }
     if (!slug(d.id)) finding(out, 'DECISION-ID', `${path}.id`, 'id must be a lowercase kebab slug');
     else if (ids.has(d.id)) finding(out, 'DECISION-DUPLICATE', `${path}.id`, `duplicate decision id ${d.id}`); else ids.add(d.id);
     if (!STAGES.has(d.stage as DecisionStage)) finding(out, 'DECISION-STAGE', `${path}.stage`, 'unknown decision stage');
@@ -179,7 +192,7 @@ export function validateDecisionGraph(value: unknown): { readonly value?: Decisi
     if (STAGES.has(d.stage as DecisionStage) && d.owner !== OWNER_BY_STAGE[d.stage as DecisionStage]) finding(out, 'DECISION-OWNER', `${path}.owner`, `${d.stage} decisions belong to ${OWNER_BY_STAGE[d.stage as DecisionStage]}, not the coordinator`);
     if (!text(d.question)) finding(out, 'DECISION-QUESTION', `${path}.question`, 'question must be substantive');
     const alternativesValid = Array.isArray(d.alternatives)
-      && d.alternatives.length >= (d.stage === 'art-direction' ? 1 : 2)
+      && d.alternatives.length >= (execution || d.stage === 'art-direction' ? 1 : 2)
       && d.alternatives.every((a) => record(a) && exact(a, ['id', 'label']) && slug(a.id) && text(a.label));
     if (!alternativesValid) finding(out, 'DECISION-NO-DIVERGENCE', `${path}.alternatives`, 'a decision needs at least two named alternatives');
     const alternativeIds = Array.isArray(d.alternatives)

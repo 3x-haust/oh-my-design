@@ -9,6 +9,9 @@ import type { MeasuredQualityContext } from './final-v2-measured-quality.ts';
 import { fail } from '../measure/validation.ts';
 import { checkMeasuredSlopReview, hasMeasuredSlopReview } from '../slop/measured-review.ts';
 import { loadTerminalProcess } from './final-v2-process.ts';
+import { projectPathEntryExists } from '../runtime/project-path-entry.ts';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { isModelLedProcess } from '../route/process-policy.ts';
 /** Native observation-to-packet join. Caller view names and plain screenshot hashes are not authority. */
 export function loadMeasuredQualityContext(root: string, invocation: ProjectRunInvocation, receipts: readonly Receipt[], observationSha256s: readonly string[]): MeasuredQualityContext {
   const index = new MeasurementIndex(root, receipts), policy = loadReviewPolicy(root, invocation);
@@ -32,14 +35,16 @@ export function loadMeasuredQualityContext(root: string, invocation: ProjectRunI
   }
   if (bindings.length !== observed.length) fail('authenticated observation contains an unmeasured or duplicate view');
   let advisoryDispositionIds: string[] = [];
-  if (hasMeasuredSlopReview(root)) {
+  let advisoryDispositionPolicy: MeasuredQualityContext['advisoryDispositionPolicy'] = 'separate-slop-review';
+  if (projectPathEntryExists(root, '.omd/slop/latest.json')) {
+    if (!hasMeasuredSlopReview(root)) fail('current measured quality cannot use a legacy slop review pointer');
     const slop = checkMeasuredSlopReview(root);
     const process = loadTerminalProcess(root, invocation, observationSha256s);
     const expected = [...new Map([...receipts, ...process?.binding.surface?.measurements ?? []].map(r => [r.sha256, r])).values()];
     if (digest(slop.measurements) !== digest(expected)) fail('slop review does not cover the exact measurement packets');
     advisoryDispositionIds = slop.advisoryDispositionIds;
-  }
-  return { index, requiredViewIds: [...new Set(requiredViewIds)], policySha256: digest(policy), advisoryDispositionIds, bindings };
+  } else if (isModelLedProcess(readPersistedRoute(root, invocation).sourceContract)) advisoryDispositionPolicy = 'integrated-final-review';
+  return { index, requiredViewIds: [...new Set(requiredViewIds)], policySha256: digest(policy), advisoryDispositionIds, advisoryDispositionPolicy, bindings };
 }
 /** Deterministic publication prerequisite; returns facts, never a beauty score. */
 export function assertMeasurementPacketsGreen(root: string, receipts: readonly Receipt[]): void {

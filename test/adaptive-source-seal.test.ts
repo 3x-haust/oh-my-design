@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
+import { validateSourceSeal, validateSourceSealArtifact, writeSourceSeal } from '../core/source-seal/index.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { confidenceDebt, recordConfidenceDebt } from '../core/brief/confidence-debt.ts';
 import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
@@ -186,6 +186,34 @@ test('adaptive source check rejects route pointer or route path swaps after seal
     writeFileSync(pointerPath, original);
     writeFileSync(join(directory, '.omd', 'route.json'), JSON.stringify({ schema: 'adaptive-route-pointer-v1', record: `route-records/sha256-${sha256('swapped')}.json`, sha256: sha256('swapped') }));
     assert.ok(validateSourceSeal(directory, invocation).some((finding) => finding.path === '.omd/route.json'));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('schema-v1 human-process seals remain valid while forged model-led execution style is refused', () => {
+  const directory = root();
+  try {
+    writeApprovedInput(directory, 'copy-deck.md');
+    const invocation = publishTestAdaptiveRoute(directory, fixture('copy-only'), 'execution-style-binding');
+    writeSourceSeal(directory, invocation);
+    const sealPath = join(directory, '.omd', 'source-seal.json');
+    const original: unknown = JSON.parse(readFileSync(sealPath, 'utf8'));
+    const validated = validateSourceSealArtifact(original);
+    assert.equal(validated.schemaVersion, 1);
+    assert.equal(validated.route?.executionStyle, undefined);
+    assert.deepEqual(validateSourceSeal(directory, invocation), []);
+
+    const forged = structuredClone(original);
+    assert.ok(typeof forged === 'object' && forged !== null);
+    const route = Reflect.get(forged, 'route');
+    assert.ok(typeof route === 'object' && route !== null);
+    Reflect.set(route, 'executionStyle', 'model-led');
+    writeFileSync(sealPath, `${JSON.stringify(forged, null, 2)}\n`);
+    const findings = validateSourceSeal(
+      directory,
+      undefined,
+      route as Parameters<typeof validateSourceSeal>[2],
+    );
+    assert.ok(findings.some((finding) => /signed process schema/.test(finding.message)));
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 

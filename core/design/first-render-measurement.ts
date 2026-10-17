@@ -20,12 +20,12 @@ export function deriveFirstRenderProjection(packet: VisualMeasurement, receipt: 
       measurementRefs: metrics.filter(m => ['contract-conformance', 'salience-regions', 'first-viewport-density', 'empty-canvas'].includes(m.kind)).map(m => ({ packetSha256: receipt.sha256, measurementId: m.id })) };
   });
 }
-export function critiqueMeasuredFirstRender(hypothesis: DesignHypothesis, packet: VisualMeasurement, receipt: Receipt) {
+export function critiqueMeasuredFirstRender(hypothesis: DesignHypothesis | null, packet: VisualMeasurement, receipt: Receipt) {
   const projection = deriveFirstRenderProjection(packet, receipt);
   const findings: { id: string; severity: 'critical' | 'advisory'; viewIds: string[]; message: string; measurementRefs: MeasurementRef[] }[] = packet.findings.map(f => ({ id: f.id, severity: f.severity === 'blocking' ? 'critical' : 'advisory', viewIds: f.viewIds, message: f.code, measurementRefs: f.measurementIds.map(measurementId => ({ packetSha256: receipt.sha256, measurementId })) }));
   for (const view of projection) {
     if (view.taskObjectCount === null) findings.push({ id: `TASK_MAPPING_UNKNOWN:${view.viewId}`, severity: 'advisory', viewIds: [view.viewId], message: 'No owner-selected task-region mapping; dominance is unmeasured.', measurementRefs: view.measurementRefs });
-    if (hypothesis.comparisonRequired && view.taskObjectCount !== null && view.taskObjectCount < 2) findings.push({ id: `COMPARISON_THIN:${view.viewId}`, severity: 'advisory', viewIds: [view.viewId], message: 'Fewer than two mapped comparison objects are visible.', measurementRefs: view.measurementRefs });
+    if (hypothesis?.comparisonRequired && view.taskObjectCount !== null && view.taskObjectCount < 2) findings.push({ id: `COMPARISON_THIN:${view.viewId}`, severity: 'advisory', viewIds: [view.viewId], message: 'Fewer than two mapped comparison objects are visible.', measurementRefs: view.measurementRefs });
   }
   return { schema: 'first-render-measured-critic-v1' as const, verdict: findings.some(f => f.severity === 'critical') ? 'revise' as const : 'retain' as const, hypothesisSha256: digest(hypothesis), projection, findings,
     qualitativeQuestions: ['Does the initial viewport communicate its purpose?', 'Does the visible evidence justify trust?', 'Does the task object have the right priority?'] };

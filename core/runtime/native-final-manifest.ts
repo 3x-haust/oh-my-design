@@ -15,7 +15,7 @@ import { getNativePiRun } from './native-pi-run.ts';
 import { parseMeasuredTerminal, type GraphReviewBindings } from '../evidence/final-v2-measured-contract.ts';
 import { loadReviewPolicy, requiresMeasuredTerminal } from '../measure/review-policy.ts';
 import { loadMeasuredObservationBindings } from '../evidence/final-v2-browser-observations.ts';
-import { checkMeasuredSlopReview } from '../slop/measured-review.ts';
+import { checkRouteMeasuredSlopReview } from '../slop/measured-review.ts';
 import { digest } from '../measure/identity.ts';
 import { loadTerminalProcess } from '../evidence/final-v2-process.ts';
 import { readSelectedArtDirection } from '../art-direction/selected.ts';
@@ -140,11 +140,13 @@ function nativeFinalManifest(root: string, invocation: ProjectRunInvocation, act
   const reviews: GraphReviewBindings = draft ? (() => {
     const bindings = loadMeasuredObservationBindings(root, invocation, observed.map(o => o.receipt.sha256));
     const measurements = [...new Map(bindings.map(b => [b.measurement.packet.sha256, b.measurement.packet])).values()];
-    const slop = checkMeasuredSlopReview(root);
+    const slop = checkRouteMeasuredSlopReview(root, invocation);
     const process = loadTerminalProcess(root, invocation, observed.map(o => o.receipt.sha256));
     const slopMeasurements = [...new Map([...measurements, ...process?.binding.surface?.measurements ?? []].map(r => [r.sha256, r])).values()];
-    if (digest(slop.measurements) !== digest(slopMeasurements)) fail('native slop review does not bind current measured captures');
-    return { measuredTerminal: { schema: 'measured-terminal-graph-v1', measurements, reviewPolicy: loadReviewPolicy(root, invocation), slop: { checkpoint: slop.checkpoint, review: slop.review }, ...(process ? { process: process.binding } : {}), lanes: {} } };
+    if (slop && digest(slop.measurements) !== digest(slopMeasurements)) fail('native slop review does not bind current measured captures');
+    return { measuredTerminal: { schema: 'measured-terminal-graph-v1', measurements, reviewPolicy: loadReviewPolicy(root, invocation),
+      ...(slop ? { slop: { checkpoint: slop.checkpoint, review: slop.review } } : { slopPolicy: 'integrated-final-review-v1' as const }),
+      ...(process ? { process: process.binding } : {}), lanes: {} } };
   })() : currentLanes(root, invocation);
   const graph = {
     schema: productionSchema,

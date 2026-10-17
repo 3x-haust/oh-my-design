@@ -65,6 +65,13 @@ grammar for everything downstream.
   site with a signup path). Name which screens belong to which grammar instead of applying
   one grammar to all of them.
 
+For marketing work, state conversion, awareness, or their explicit priority in the existing
+frame task and narrative. Connect that purpose to information order, the next action, performance,
+motion and observable validation conditions. If purpose lacks user authority, record a reversible
+working decision, not a business fact or a required taste interview. Conversion work still needs
+beauty; awareness work still needs usability. Without actual user or outcome evidence, do not claim
+improved conversion or understanding.
+
 The misclassification failure is one-directional in practice: generated products default
 to the marketing grammar everywhere, because most public web pages a model has seen are
 marketing pages. The result is documented in every heuristic audit of AI-generated

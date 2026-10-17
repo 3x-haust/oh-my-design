@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { browseFixture } from './helpers/browse-fixture.ts';
 import { parseBrowseCommand } from '../core/ref/browse/parser.ts';
-import { authorizeBrowseConsent, browseUrl, searchUrl } from '../core/ref/browse/safety.ts';
+import { authorizeBrowseConsent, authorizeBrowseDestination, browseUrl, searchUrl } from '../core/ref/browse/safety.ts';
 import { executeBrowseCommand } from '../core/ref/browse/client.ts';
 import { runBrowseDriver } from '../core/ref/browse/driver.ts';
 import { verifyBrowseSession } from '../core/ref/browse/verification.ts';
@@ -25,6 +25,17 @@ import { verifiedCodexBrowseProgress } from '../adapters/codex-browser-operation
 const contract = 'a'.repeat(64);
 const route = { sourceContractSha256: contract, request: 'Inspect comparable dashboard references' };
 function temp() { return mkdtempSync(join(tmpdir(), 'omd-browse-')); }
+
+test('public assigning guide does not impersonate a sign-in navigation', () => {
+  const start = parseBrowseCommand(['start', '--lane', 'domain']).action as Start;
+  const guide = 'https://docs.helpscout.com/article/842-assigning-conversations';
+  assert.equal(authorizeBrowseDestination(guide, start), guide);
+  for (const path of ['/login', '/sign-in', '/sign_up', '/oauth/callback', '/oauth2/callback',
+    '/password-reset', '/로그인', '/checkout', '/pricing']) {
+    assert.throws(() => authorizeBrowseDestination(`https://docs.example${path}`, start),
+      /BROWSE_SENSITIVE_ACTION/, path);
+  }
+});
 
 test('strict command parsing, URL builders and explicit consent refuse malformed requests', () => {
   for (const argv of [[], ['start', '--lane', 'design', '--mode', 'profile'], ['start', '--lane', 'design', '--headed'], ['click', '--selector', '#x', '--text', 'x'], ['keep', '--reason', 'short'], ['scroll', '--amount', '0'], ['status', '--surprise'], ['status', '--json', '--json'], ['goto', 'http://example.org', '--reason', 'root'], ['start', '--lane', 'domain', '--cdp-url', 'http://127.0.0.1:9222']]) assert.throws(() => parseBrowseCommand(argv));
@@ -72,6 +83,11 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     const item = await run(['click', '--selector', '#item']); assert.equal(item.ok, true, JSON.stringify(item.error));
     const orphan = await run(['crop', '--selector', '#component']); assert.equal(orphan.ok, false); assert.match(orphan.error!.code, /DETAIL_PARENT/);
     const shot = await run(['shot']); assert.equal(shot.ok, true, JSON.stringify(shot.error));
+    assert.equal(shot.observation!.dpr, 2);
+    assert.deepEqual(shot.observation!.viewport, { width: 640, height: 800 });
+    const viewportPixels = decodePng(readFileSync(join(root, shot.observation!.screenshot.path)));
+    assert.equal(viewportPixels.width, 1280);
+    assert.equal(viewportPixels.height, 1600);
     const keep = await run(['keep', '--source-app', 'Fixture Service', '--rights', 'allowed', '--reason', 'The full account overview makes the task hierarchy and content density visible.']); assert.equal(keep.ok, true, JSON.stringify(keep.error));
     const detail = await run(['crop', '--selector', '#component']); assert.equal(detail.ok, true, JSON.stringify(detail.error)); assert.equal(detail.tray[0]!.details.length, 1);
     const rejectDetail = await run(['keep', '--capture', detail.head!, '--reason', 'This detail cannot replace its whole-screen parent reference.']); assert.equal(rejectDetail.ok, false);
@@ -99,6 +115,9 @@ test('real stateful browser: whole-screen keeps, attached details, original item
       assert.equal(ref.referenceUnit, 'whole-screen'); assert.equal(verifyBrowseRetention(root, ref).reference.source, 'https://design.fixture.test/item');
       assert.equal(inspectDesignReferenceAdmission(root, ref).eligible, true, 'unknown provider admitted by native trace');
     }
+    const pageReference = refs.find(ref => ref.kind !== 'image')!;
+    assert.ok(pageReference.imagePath);
+    assert.equal(decodePng(readFileSync(join(root, pageReference.imagePath))).width, 1280);
     const fullImage = refs.find(ref => ref.kind === 'image')!; assert.equal(fullImage.viewport, undefined, 'image pixels do not invent the pictured app CSS viewport or DPR'); assert.equal(fullImage.invariants, null);
     const verified = verifyBrowseSession(root, ended.seal!); assert.equal(verified.seal.keeps.length, 2);
     const sheetReceipt = verified.seal.assets.find(receipt => receipt.path.includes('/sheets/') && receipt.path.endsWith('.png'))!;
@@ -110,6 +129,38 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     assert.throws(() => verifyBrowseSession(root, ended.seal!), /BROWSE_DIGEST/); writeFileSync(tracePath, original);
     const ref = refs[0]!; assert.throws(() => verifyBrowseRetention(root, { ...ref, source: 'https://forged.example/' }), /PROJECTION/);
   } finally { for (const driver of drivers) await driver.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('spoofed page DPR cannot promote pixels with a mismatched or unsupported density', { timeout: 90_000 }, async () => {
+  for (const dpr of [1, 3]) {
+    const root = temp(), invocation = createTestProjectRunInvocation(root);
+    const writer = createTestProjectWriteAdapter(root, invocation);
+    const drivers: Awaited<ReturnType<typeof runBrowseDriver>>[] = [];
+    let clock = 0;
+    const run = (args: string[]) => executeBrowseCommand(root, parseBrowseCommand(args), route, invocation, writer, {
+      launch: async binding => {
+        const driver = await runBrowseDriver(binding, { monotonic: () => clock += 1001,
+          transport: async request => request.fulfill({ contentType: 'text/html',
+            body: `<script>Object.defineProperty(window,'devicePixelRatio',{value:${dpr}})</script><main><h1>Recorded work</h1><p>A populated public task record</p></main>` }) });
+        drivers.push(driver);
+        return driver;
+      },
+    });
+    try {
+      await run(['start', '--lane', 'design', '--viewport', '640x800']);
+      await run(['goto', 'https://density.fixture.test/work', '--reason', 'Inspect a populated public work screen.']);
+      const shot = await run(['shot']);
+      assert.equal(shot.ok, true);
+      assert.equal(shot.observation!.dpr, dpr);
+      assert.equal(decodePng(readFileSync(join(root, shot.observation!.screenshot.path))).width, 1280);
+      await run(['keep', '--rights', 'allowed', '--reason', 'The work screen is useful but its density must be independently verified.']);
+      await assert.rejects(run(['end']), dpr === 1 ? /BROWSE_VIEWPORT/ : /BROWSE_OBSERVATION_BINDING/);
+      assert.equal(loadRefs(root).length, 0);
+    } finally {
+      for (const driver of drivers) await driver.close();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
 });
 
 test('verified adapter progress uses the latest cumulative cycle counter across lane sessions', { timeout: 90_000 }, async () => {
@@ -151,6 +202,30 @@ test('authority refusal has no mutation; budget stops acquisition but seals hone
     const end = await run(['end', '--reason', 'budget']); assert.equal(end.retained!.length, 0); assert.ok(end.confidenceDebt!.some(item => item.code === 'budget-exhausted'));
     assert.ok(readBrowseConfidenceDebtRecord(root, contract).items.some(item => item.kind === 'budget-exhausted'));
     await assert.rejects(run(['start', '--lane', 'design', '--budget-actions', '1']), /BROWSE_CYCLE_BUDGET/);
+  } finally { await driver?.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('unavailable account access permits a public alternative without asking for references or consent', { timeout: 60_000 }, async () => {
+  const root = temp(), fixture = await browseFixture();
+  const invocation = createTestProjectRunInvocation(root), writer = createTestProjectWriteAdapter(root, invocation);
+  let driver: Awaited<ReturnType<typeof runBrowseDriver>> | undefined, clock = 0;
+  const run = (args: string[]) => executeBrowseCommand(root, parseBrowseCommand(args), route, invocation, writer, {
+    launch: async binding => driver = await runBrowseDriver(binding, {
+      transport: fixture.transport, monotonic: () => clock += 1001,
+    }),
+  });
+  try {
+    await run(['start', '--lane', 'design']);
+    const unavailable = await run(['goto', 'https://app.fixture.test/password', '--reason', 'Inspect whether the requested product screen is publicly accessible.']);
+    assert.equal(unavailable.ok, false);
+    assert.equal(fixture.requests.some(request => request.includes('/password')), false);
+    const alternative = await run(['goto', 'https://public.fixture.test/item', '--reason', 'Use this permitted public product screen instead of requesting account access.']);
+    assert.equal(alternative.ok, true);
+    assert.equal((await run(['shot'])).ok, true);
+    assert.equal((await run(['keep', '--rights', 'allowed', '--reason', 'The public whole screen supplies the visible record grouping without an account.'])).ok, true);
+    const ended = await run(['end']);
+    assert.equal(ended.retained?.length, 1);
+    assert.equal(loadRefs(root)[0]?.source, 'https://public.fixture.test/item');
   } finally { await driver?.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

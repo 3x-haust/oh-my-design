@@ -5,6 +5,7 @@
 // key list, which costs a stage retry when it guesses wrong. `omd schema <name>` prints these.
 
 import { closestNames } from './suggestions.ts';
+import { TRUSTED_EVALUATION_KEYS } from '../runtime/trusted-evaluation-contract.ts';
 import { DEPTH_INPUT_KEYS, DEPTH_INPUT_SCHEMA, DEPTH_SCOPES } from '../deliberation/depth.ts';
 import { DESIGN_JUDGMENT_INPUT } from './design-judgment.ts';
 import { CANDIDATE_SELECTION_INPUT } from './candidate-selection.ts';
@@ -67,6 +68,7 @@ export type InputSkeleton = {
   /** Validator constraints that JSON alone cannot express. */
   readonly constraints?: readonly string[];
   readonly skeleton: unknown;
+  readonly currentSketchSkeleton?: unknown;
 };
 
 const DEPTH_INPUT: InputSkeleton = {
@@ -287,7 +289,7 @@ const FRAME_INPUT: InputSkeleton = {
     'Use the current user brief and actual observations, never the example as evidence. Publish the complete frame atomically; frame show is inspection, frame check validates UX anchors.',
     'uxSurface is marketing, product, editorial, or mixed. Product/mixed requires the seven-field taskCoverageMatrix string; marketing/editorial must omit it. Each task uses a unique T1, T2, ... ID.',
     'viewports is desktop,mobile or one of them; requirements is none or invalid-submit,transient. Only recovery may use N/A: <reason>.',
-    'Greenfield Copy consumes this frame\'s reality ledger; unknown facts do not ship and demo facts stay labelled. For a selected benchmark, add entrySurface from omd schema entry-surface-contract after the actual benchmark exists.',
+    'Greenfield Copy consumes this frame\'s reality ledger; unknown facts do not ship and demo facts stay labelled. Native implementation uses omd schema entry-surface-contract to declare its destination entry and requested task witnesses, not observed behavior. Benchmark-derived evaluation additionally requires the genuine benchmark projection; current request-bound proposals do not invent one.',
   ],
   skeleton: {
     schema: 'frame-input-v1', problem: '<user task and current difficulty>', reframe: '<evidence-grounded framing>',
@@ -348,16 +350,21 @@ const DOMAIN_BRIEF: InputSkeleton = {
   },
 };
 
-const DECISION_GRAPH: InputSkeleton = {
-  name: 'decision-graph',
-  path: '.omd/decision-graph.json',
-  command: 'omd deliberate check --json',
-  keys: ['schema', 'decisions'],
+const DECISION_ENTRY: InputSkeleton = {
+  name: 'decision-entry',
+  path: '.omd/.cache/decision-entry.json',
+  command: 'omd deliberate append --input .omd/.cache/decision-entry.json --json',
+  keys: ['id', 'stage', 'risk', 'owner', 'question', 'alternatives', 'selected', 'evidence',
+    'constraints', 'rejected', 'affects', 'dependsOn', 'reversible', 'tradeoffs'],
+  constraints: [
+    'The stage owner authors this entry from its actual decision and durable evidence. The coordinator only appends the unchanged returned entry; it must not invent alternatives or attribute its own interpretation to the owner.',
+    'Ownership: frame=omd-framer; copy=omd-writer; type=omd-typesetter; composition=omd-composer; structure=omd-eye; production/refinement=omd-hand; concept/art-direction=omd-art-director.',
+    'Use at least two genuine alternatives and reject every unselected one. High/critical risk requires a complete observed tradeoff; low/medium may use tradeoffs: []. No invented failure evidence.',
+    'After append, run omd deliberate check --json. A decision entry is not browser execution, approval or completion.',
+  ],
   skeleton: {
-    schema: DECISION_GRAPH_SCHEMA,
-    decisions: [{
       id: '<kebab-case-decision-id>',
-      stage: '<frame|copy|type|composition|structure|production|refinement>',
+      stage: '<frame|copy|type|composition|structure|production|refinement|concept|art-direction>',
       risk: '<low|medium|high|critical>',
       owner: '<the role that owns that stage, never the coordinator>',
       question: '<the consequential question this decision answered>',
@@ -380,7 +387,17 @@ const DECISION_GRAPH: InputSkeleton = {
         compromise: '<what shipped instead>',
         resultEvidence: ['<observed result>'],
       }],
-    }],
+    },
+};
+const DECISION_GRAPH: InputSkeleton = {
+  name: 'decision-graph',
+  path: '.omd/decision-graph.json',
+  command: 'omd deliberate check --json',
+  keys: ['schema', 'decisions'],
+  constraints: ['Inspect the joined graph. Author individual owner entries with omd schema decision-entry; publish through deliberate append, never patch the final graph directly.'],
+  skeleton: {
+    schema: DECISION_GRAPH_SCHEMA,
+    decisions: [DECISION_ENTRY.skeleton],
   },
 };
 
@@ -491,6 +508,7 @@ const ROUTE_INPUT: InputSkeleton = {
     'taskOutcome.mustHave, mustNotHave, and completionEvidence contain product/surface outcomes with browser-observable evidence. Preserve execution-only requirements verbatim in taskOutcome.executionRequirements instead of asking page text to prove authorship, scope, independent review, or future finalization. Inside Pi, omd_cli route validate/classify replaces a missing or placeholder request from the authenticated user input; do not paste a long brief into the authored JSON or summarize it. Outside Pi, the route input must carry the exact complete request. This partition is made before route publication; do not remove or reclassify a failed product behavior to make a published run pass.',
     `Optional taskOutcome.executionRequirements entries have exactly requirement and enforcedBy; enforcedBy is a nonempty unique subset of: ${EXECUTION_REQUIREMENT_GATES.join(', ')}. These are existing mandatory host gates, not caller verdicts or generic external verification. Unsupported requirements stay blocked; native mobile installation is not a browser or host-gate claim.`,
     'designAxes values: taskSize=small|medium|large; failureRisk=low|moderate|high; uxNeed=baseline|focused|rigorous; expressiveDesignNeed=restrained|balanced|showpiece. The art-direction register confident is not a designAxes value; balanced permits confident visual craft.',
+    'failureRisk=high requires uxNeed=rigorous. Preserve the assessed risk instead of lowering it to repair this contradiction; high risk also requires an enforced hard_safety_rail in uxPolicy.',
     'Before choosing or skipping visual methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. An exploration skip names the current supplied direction or existing visible evidence that settles the content-to-form relationship. Functional simplicity, quietness, no metaphor, no shipped bitmap, or future review alone do not settle it. A bounded change to a current visual target may skip experiments; do not reopen that target or impose a candidate quota.',
     `referenceDiscovery.taskNeed is one of: ${REFERENCE_DISCOVERY_TASK_NEEDS.join(', ')}`,
     'referenceDiscovery.uncertainty is unresolved or resolved; existingEvidence is none, insufficient, or sufficient; a new marketing page uses new-marketing even when its user-supplied content is complete',
@@ -891,11 +909,33 @@ const REFERENCE_ANALYSIS: InputSkeleton = {
   constraints: [
     'Inspect every whole-screen image before authoring its screenType, mainTask, hierarchy, density, typography and components. Filenames/descriptions are not visual analysis.',
     'references entries bind native refIdentity ids and exact retained capture/image receipts from browse end. Only whole real-app viewports or full item images are reference units; zoom details cannot be substituted.',
+    'referenceId is the final ref-<16 hex digits> segment of the retained capture filename, not its browse component, capture event hash or image hash. capture and image are each {path,sha256} copied from browse end. components and doNotTransfer are strings, not arrays. Omit imageUse for recorded-browse references; their native keep owns rights and visibility.',
+    'Replace every example and zero digest before publication. The contextual starter binds the current route source contract and exact domain brief bytes when available; otherwise read the current pointed route record and domain brief. Never invent hashes, receipts or observed state. A structurally parseable starter is not evidence or approval.',
+    'An independently admitted retained original image from ref add can also enter analysis with imageUse:{rights:allowed|restricted|unknown,visibility:public|user-session}. It must retain native dimensions, source-image digest and exact admitted capture/PNG bytes. This does not turn it into a recorded browser observation or license certificate. Unknown/restricted rights withhold pixels; imageUse cannot override browse permissions.',
     'patterns: [{pattern,referenceIds,decision:apply|do-not-apply,reason}]. Every referenceId must exist. selectedReferenceIds names the whole screens makers should see; unknown/restricted rights withhold pixels.',
     'screens uses the existing ref apply-set v2 screen contract: surface,target:{route,state},domain/design:{referenceIds,coverage:direct|partial|brief-derived,gap,application,doNotTransfer,reason},checks. Cover every current domain surface; partial/brief-derived require a gap and decision. brief-derived has no reference ids.',
     'browse handoff --for composer|hand|concept returns selected whole-screen paths/hashes and analysis; eye/glance/fidelity or --blind receive a source-free coverage summary only.',
   ],
-  skeleton: { schema: 'reference-analysis-v1', sourceContractSha256: '0'.repeat(64), domainBriefSha256: '0'.repeat(64), references: [], selectedReferenceIds: [], patterns: [], screens: [] },
+  skeleton: {
+    schema: 'reference-analysis-v1', sourceContractSha256: '0'.repeat(64), domainBriefSha256: '0'.repeat(64),
+    references: [{
+      referenceId: 'ref-0000000000000000',
+      capture: { path: '.omd/refs/design/<exact-retained-capture>.json', sha256: '0'.repeat(64) },
+      image: { path: '.omd/refs/design/<exact-retained-image>.png', sha256: '0'.repeat(64) },
+      screenType: '<observed screen type>', mainTask: '<observed source task>',
+      hierarchy: '<visible reading order and grouping>', density: '<visible content density>',
+      typography: '<visible hierarchy, not invented measurements>', components: '<visible component relationships>',
+    }],
+    selectedReferenceIds: [], patterns: [],
+    screens: [{
+      surface: '<exact current domain surface>', target: { route: '/', state: '<destination state>' },
+      domain: { referenceIds: [], coverage: 'brief-derived', gap: '<unobserved functional evidence>',
+        application: '<request-grounded application>', doNotTransfer: '<excluded source features>', reason: '<task-grounded reason>' },
+      design: { referenceIds: [], coverage: 'brief-derived', gap: '<unobserved visual evidence>',
+        application: '<destination design decision>', doNotTransfer: '<excluded source appearance>', reason: '<reason or explicit hypothesis>' },
+      checks: ['<observable destination check>'],
+    }],
+  },
 };
 
 const REFERENCE_RESEARCH: InputSkeleton = {
@@ -1068,11 +1108,11 @@ const TRUSTED_LIFECYCLE_MANIFEST: InputSkeleton = {
   command: 'omd lifecycle plan --project . --output .omd/.cache/trusted-lifecycle-manifest.json --activation <host-issued-invocation.json>',
   keys: ['schema', 'entryPath', 'scripts', 'entrySurface'],
   constraints: [
-    '`entrySurface` is required only when the active route includes `greenfield-task-flow-benchmark`.',
-    '`omd lifecycle plan` is benchmark-only. For other routes, author this manifest, omit entrySurface entirely, then use `omd lifecycle run --project . --manifest <path> --activation <host-issued-invocation.json>`.',
+    'Current native Pi may author a request-bound evaluation proposal without an external benchmark: omit entrySurface entirely and run omd lifecycle evaluate --manifest .omd/.cache/trusted-lifecycle-manifest.json --json. It must cover every actual required outcome; the native evaluator and independent review remain authoritative.',
+    '`omd lifecycle plan` is the genuine benchmark-derived path. Its entrySurface must bind the actual benchmark. Legacy benchmark-applicable plans retain that requirement; never fabricate a benchmark or label an authored proposal benchmark-derived.',
     'scripts uses canonical short outcomeRef values (mustHave:0, mustHave:1, mustNotHave:0, completionEvidence:0), not requirement prose or hashed outcome refs; cover every current task-outcome item exactly once in mustHave, mustNotHave, completionEvidence order.',
-    'Actions support click(selector), fill(selector,value), and reload with no selector, URL or value. Each may use the existing viewports restriction. reload actually reloads the current local document; use it when proving persistence instead of removing that requirement or adding a test-only app control.',
-    'Use preserved-text for a record that must be visibly present both before and after the script actions. visible-text after a click proves a newly visible result; preserved-text does not replace that transition assertion. Combine both when an action changes one state while retaining another.',
+    `Actions support click(selector), fill(selector,value), press(selector,key), and reload with no selector, URL or value. press keys are limited to ${TRUSTED_EVALUATION_KEYS.join(', ')}. Each may use the existing viewports restriction. reload actually reloads the current local document; use it when proving persistence instead of removing that requirement or adding a test-only app control.`,
+    'Use preserved-text for a record that must be visibly present both before and after the script actions. visible-text after a click or press proves a newly visible result; preserved-text does not replace that transition assertion. Combine both when an action changes one state while retaining another. Keyboard claims require actual press actions and their outcome captures; click plus static keyboard-help text is not keyboard evidence. The trusted receipt retains observed focus before/after presses, without exposing raw DOM ids.',
     'Each script has nonempty assertions: absent-text for mustNotHave; visible-text for mustHave and completionEvidence. The current browser evaluator cannot verify source/build, filesystem scope, review completion, or future finalization. Execution-only requirements belong in the original route taskOutcome.executionRequirements and are checked by their named host gates, not browser scripts; do not substitute page text for these requirements or silently remove them from the task contract. Do not omit a product behavior or silently rewrite a published task contract.',
     '`benchmarkProjectionSha256` is the SHA-256 of the current projection file bytes.',
     '`dependentTaskId.dependsOn` must directly include `prerequisiteTaskId`.',
@@ -1134,7 +1174,7 @@ const ENTRY_SURFACE_CONTRACT: InputSkeleton = {
     'executionRequirements is source-bound host-gate data, not an outcomeWitness kind. Do not invent a DOM witness for it. If execution-only prose was placed in a browser outcome, return the exact classification error to the coordinator; do not delete, reinterpret, or publish a textual proxy for that requirement.',
     'mustNotHave uses absent-text; mustHave and completionEvidence use visible-text',
     'nextActionName is the exact dependent action name, or null when the edge ends in an observable consequence without another action',
-    'task IDs are canonical frame IDs (T1, T2, ...) or lowercase kebab-case, at most 64 characters; preserve exact IDs from a direct edge in the current benchmark projection',
+    'task IDs are canonical frame IDs (T1, T2, ...) or lowercase kebab-case, at most 64 characters. Benchmark-derived evaluation preserves exact IDs from its genuine projection edge; current request-bound evaluation uses the declared frame task IDs without claiming benchmark evidence.',
   ],
   skeleton: {
     schema: ENTRY_SURFACE_CONTRACT_SCHEMA,
@@ -1313,17 +1353,17 @@ const PRODUCT_ROUTE_INPUT: InputSkeleton = {
   name: 'product-route-input',
   constraints: [...(ROUTE_INPUT.constraints ?? []),
     'This is a greenfield product implementation example, not a universal sequence or a design-only handoff. Use new-marketing for a marketing task, not a fictitious product workflow. Keep every real user requirement and choose optional work deliberately.',
-    'Replace allowedPaths with the selected stack\'s actual source, asset, manifest, lockfile and build-config paths before publication. namedDependencies preserves libraries explicitly requested by the user (for example react); examples do not authorize an unrelated dependency or stack change.',
+    'Replace allowedPaths with the selected stack\'s actual source, asset, manifest, lockfile, build-config and compiled browser-entry paths before publication. Include the actual build output used by evaluation (dist/** for this Vite example) before candidate generation: a later scope change invalidates source-bound plans and judgments. namedDependencies preserves libraries explicitly requested by the user (for example react); examples do not authorize an unrelated dependency or stack change.',
   ],
   skeleton: {
     ...ROUTE_INPUT.skeleton as object,
     projectMode: 'greenfield',
-    allowedPaths: ['src/**', 'public/**', 'package.json', 'package-lock.json', 'index.html', 'vite.config.*', 'tsconfig*.json'],
+    allowedPaths: ['src/**', 'public/**', 'dist/**', 'package.json', 'package-lock.json', 'index.html', 'vite.config.*', 'tsconfig*.json'],
     referenceDiscovery: { schema: 'reference-discovery-input-v1', taskNeed: 'new-product', uncertainty: 'unresolved', existingEvidence: 'none', intendedUse: '<domain flows and separate visual references>', existingEvidenceUse: null, skipReason: null },
     strategyDecision: {
       schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
       roles: ['omd-framer', 'omd-scout', 'omd-hand', 'omd-eye'],
-      stages: ['frame', 'acquisition', 'scout', 'reference-board', 'production', 'browser-evidence', 'independent-review'],
+      stages: ['domain', 'frame', 'acquisition', 'scout', 'reference-board', 'production', 'browser-evidence', 'independent-review'],
       executionWaves: [
         { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
         { id: 'research', mode: 'concurrent', roles: ['omd-scout'] },
@@ -1350,6 +1390,31 @@ const DESIGN_HANDOFF: InputSkeleton = {
     schema: 'design-handoff-v1', sourceContractSha256: '0'.repeat(64),
     artifacts: ['screen-map', 'state-model', 'ux-ui-direction', 'content', 'accessibility-trust', 'implementation-handoff', 'open-questions'].map((id) => ({ id, path: `.omd/design/${id}.md`, sha256: '0'.repeat(64) })),
     review: { path: '.omd/design/review.md', sha256: '0'.repeat(64) },
+  },
+};
+
+const SURFACE_CAPTURES: InputSkeleton = {
+  name: 'surface-captures',
+  path: '.omd/.cache/surface-captures-input.json',
+  command: 'omd lifecycle surface-captures --input .omd/.cache/surface-captures-input.json --json',
+  keys: ['schema', 'captures', 'contentProofs'],
+  constraints: [
+    'Hand authors only the mapping from exact current Frame cells to real successful lifecycle measurement packets and PNG receipts. The publisher reopens every receipt and refuses stale, forged, incomplete, duplicate, RED, wrong-route, wrong-state, wrong-recipe, wrong-build or wrong-viewport evidence.',
+    'captures covers every required Frame surface/state/view cell exactly once. Use captures[].measurement.packet from the successful trusted lifecycle receipt and the matching retained PNG receipt; one packet/view identity cannot stand in for another cell.',
+    'When composition is selected, the publisher consumes its exact Expansion mapping and the input must omit mappings. When composition is omitted, the current route must contain an explicit composition applicability skip and mappings must cover the exact Frame cells; absence of the stage alone is not authority.',
+    'contentProofs contains one immutable surface-content-proof-v1 receipt for every declared Frame content-case/state/view. Empty is valid only when Frame declares no content stress cases. The publisher checks actual fixture text, separate stress capture identity, current direction/tokens, complete measurements and no blocking findings.',
+    'Publication establishes current capture inventory only. Successful behavior assertions are not semantic/design approval; measured slop and independent review remain separate required owners.',
+  ],
+  skeleton: {
+    schema: 'surface-capture-inventory-v1',
+    captures: [{
+      surfaceId: '<exact Frame surface id>',
+      stateId: '<exact required Frame state id>',
+      viewId: '<exact Frame view id>',
+      packet: { path: '.omd/visual-measurements/sha256-<measurement-packet-sha256>.json', sha256: '0'.repeat(64) },
+      capture: { path: '.omd/visual-measurement-captures/sha256-<capture-sha256>.png', sha256: '0'.repeat(64) },
+    }],
+    contentProofs: [],
   },
 };
 
@@ -1413,17 +1478,30 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   },
   {
     name: 'first-render-surface', path: '.omd/.cache/first-render-surface.json',
-    command: 'omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json --json',
+    command: 'omd first-render check --page <local-build.html> --json',
     keys: ['heading', 'landmarks', 'repeatedObjects', 'trustSignals', 'visibleText', 'dominantAreaShare'],
     constraints: [
       'Publish the reference-bound design judgment before checking a render. A composition note is not a design judgment.',
       'Replace every example with the actual rendered viewport observations. Arrays may be empty when a feature is absent; do not invent evidence to obtain retain.',
       'dominantAreaShare is the measured dominant-object fraction from 0 to 1. All six keys are required.',
       'This diagnostic projection does not replace browser action evidence, saved captures or independent review.',
+      'The native CLI derives this diagnostic projection from the actual page. Do not pass --input; authored surface JSON cannot replace the captured observation.',
       'The CLI captures fixed desktop 1280x900 and mobile 390x844 views and binds both to the current hypothesis/source/build. Set optional hypothesis.comparisonRequired=true only for an actual comparison task. Numeric findings remain advisory. On native Pi, check also runs an isolated early visual Eye: retain continues, revise requires owner repair/rebuild/recapture, and reframe returns to Composer. Repeated identical evidence reuses its existing review. Other hosts inspect both images through their preproduction Eye; this is not final approval.',
     ],
     skeleton: { heading: '<visible heading>', landmarks: ['<visible landmark in reading order>'],
       repeatedObjects: [], trustSignals: [], visibleText: ['<visible text>'], dominantAreaShare: 0 },
+  },
+  {
+    name: 'slop-measured-scope', path: '.omd/.cache/slop-measured-scope.json',
+    command: 'omd slop checkpoint --input .omd/.cache/slop-measured-scope.json --json',
+    keys: ['schema', 'measurements'],
+    constraints: [
+      'For measured terminal review, use the current authenticated measurement receipts from trusted browser captures[].measurement.packet and any required supplemental surface measurement packets. Deduplicate by packet SHA, not viewport names.',
+      'Populate measurements with at least one actual {path,sha256} receipt. Do not invent receipts, reuse stale packets or substitute historical slop-scope-v1 screenshots.',
+      'Inspect the retained whole captures and fill every returned slop-review-v2 finding with its scoped measurement IDs and applicable owner contract evidence. Deterministic failures cannot be dismissed by prose.',
+      'Publish the returned reviewInput through slop review-set and run slop review-check. Successful execution or structural closure is not independent visual approval.',
+    ],
+    skeleton: { schema: 'slop-measured-scope-v2', measurements: [] },
   },
   {
     name: 'slop-scope', path: '.omd/.cache/slop-scope.json', command: 'omd slop checkpoint --input .omd/.cache/slop-scope.json --json',
@@ -1444,6 +1522,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   DESIGN_ROUTE_INPUT,
   PRODUCT_ROUTE_INPUT,
   DESIGN_HANDOFF,
+  SURFACE_CAPTURES,
   ROUTE_AI_ASSET,
   REALITY_LEDGER,
   DOMAIN_BRIEF,
@@ -1469,6 +1548,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   FUNCTIONAL_REQUIREMENTS,
   FRAME_INPUT,
   DECISION_GRAPH,
+  DECISION_ENTRY,
   ENTRY_SURFACE_CONTRACT,
   FINAL_RENDER_REVIEWER_PACKET_INPUT,
   TRUSTED_LIFECYCLE_MANIFEST,

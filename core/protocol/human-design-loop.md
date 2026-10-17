@@ -25,6 +25,34 @@ Reference discovery is selected from task need, uncertainty, and existing eviden
 discovery researches the named unresolved decision and stops at coverage. A justified skip uses and
 records sufficient existing evidence. No route has a universal capture or candidate quota.
 
+For ordinary model-led work, consulted external originals can be preserved without selecting
+the structured board workflow. Before contextual review, publish exact whole PNGs and reported
+source URLs with `omd ref context --input <json> --json` (`consulted-references-input-v1`).
+The owner checks request scope, contained original bytes, dimensions and digests before publishing
+a signed comparison-only record. This records reported consultation, not acquisition authentication,
+reference admission, selection, approval or human satisfaction. Missing context supplies no
+external-fidelity evidence; malformed or changed present context refuses rather than disappearing.
+Contextual early and final fidelity review receive the original pixels and opaque role/hash labels,
+not source locators or maker rationale. Blind final visual-quality review remains source-free.
+First-party candidate targets and rejected output baselines retain their separate evidence roles.
+Compare the original's whole visual identity, not only the few qualities implemented in production.
+For a primary consulted original, contextual early review must return a separate
+`referenceComparisons` assessment for each current production viewport, binding the
+exact original digest and current capture digest. Describe the original identity,
+preserved traits and material departures before issuing a comparison verdict.
+Typography character/weight/scale, proportions, grouping, density and control anatomy
+are visual evidence; a generic list/detail relationship is insufficient. Destination
+constraints justify only the departures they actually require. Supplemental material
+does not become an additional primary system, and a desktop original does not prove
+source mobile behavior. The model judges fidelity; code verifies coverage, hashes,
+closed verdicts and finding bindings, never natural-language keywords.
+Missing comparison refuses publication; failed or insufficient comparison requires
+viewport-matching unresolved findings and prevents retain. Signed rejected handbacks
+remain preserved without publishing the current review pointer. Historical v3 records
+remain readable under their original handback/task contract but cannot satisfy the
+current packet or unchanged-review reuse path. This is fidelity evidence, not
+source admission, absolute beauty or human satisfaction.
+
 When `parallel-reference-acquisition` is selected, its Scout/Writer wave contract applies.
 Otherwise, parallelize independent searches, captures and lookups where useful, while preserving
 actual data dependencies and the selected execution waves. Sequential research is not an
@@ -294,19 +322,25 @@ Commit the direction count and its evidence-based rationale before generation. M
 ## Current human-design process
 
 A human-design-process-v1 route uses Frame requested scope + Scout whole-screen analysis + Writer
-real copy, then a minimal token seed and 2-3 real concepts of ONE representative surface with the
+real copy, then a minimal token seed and the justified number of real concepts of ONE representative surface with the
 same content/state/view set. Art Director owns seed/plan/aggregate direction; independent Sketch
 calls own separate source directories. Commit the plan before source. Structural mode is optional
 diagnostic work; visual-study explores structure, density and provisional type together. No final
 beauty floor, full component library or late composition prerequisite gates these decision samples.
 
-Present all actual previews with IDs and concise tradeoffs. Interactive sessions ask ONE routine
+Native Pi defaults to harness selection under its signed run policy. Produce each committed
+Sketch through native maker, measure through candidate capture, then use candidate review for
+isolated selection. The ordinary user never has to choose a reference or candidate.
+Present all actual previews with IDs and concise tradeoffs only for an explicitly interactive
+historical route or a host-enabled developer evaluation. Interactive sessions ask ONE routine
 question: which direction should be developed? Preserve the actual user answer and displayed inputs.
 Only explicit signed autonomy permits a fresh isolated Eye concept-selection; child execution,
 missing tools, checkpoint:none or silence is not consent. Current selection is not asked again.
 Changed consumed content, seed/overrides or previews stale it and require the same checkpoint;
 additive downstream tokens or unaffected scope additions do not. Typed await-user stops retries and
 full expansion, while representative inspection/repair/rendering remains available.
+Autonomous repeated-defect exhaustion instead preserves the artifact and reports unresolved
+limitations without another design question, retry or quality approval.
 
 Typesetter proves chosen type in real/dynamic containers. Composer formalizes only needed components
 and full surface/state/view expansion, then Hand implements every requested surface. Resolve the

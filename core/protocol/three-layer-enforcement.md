@@ -5,9 +5,18 @@ stage retains its owner and selection; an explicit route skip remains a skip. Mi
 
 ## Layer 1 — declaration
 
+Ordinary native Pi runs default to the signed `model-led-design-process-v1`. The model chooses
+methods and delegation; unselected methods require no authored skip or intermediate document.
+Production readiness authorizes direct scoped source tools. `lifecycle finish` owns package checks,
+browser execution facts, isolated final craft/outcome review and publication. Unchanged failed
+inputs are not automatically retried; changed repairs have no arbitrary three-attempt cutoff.
+Selected methods and structured/design-only/benchmark routes retain their existing procedures.
+This exception removes paperwork, not request scope, source authority, consent, evidence honesty,
+behavior/access/safety floors or independent visual quality. Tests cover both refusal and success.
+
 | Rule | Required outcome | Executable boundary |
 | --- | --- | --- |
-| Direction authority | Explicit interactive process routes use a representative direction checkpoint; autonomous selection requires actual signed user/host origin. A mode flag never substitutes for that origin or converts a harness choice into a human choice. A ready/stale interactive choice pauses expansion, not representative inspection. | candidate plan/set/select currentness; stage-next-v2 await-user; Pi original-input binding |
+| Direction authority | Native Pi defaults to autonomous selection bound to its signed run and original request. Explicit historical interactive routes retain their representative checkpoint. A model-authored mode flag never grants authority or converts a harness choice into a human choice. | native policy binding; candidate capture/review/select currentness; isolated Eye receipt; interactive await-user and autonomous bounded-stop handling |
 | Role delivery | Makers get current whole-screen images, actual analysis and system material; blind profiles get no raw brief or references. | buildRoleBrief; closed profile manifest/digest; native isolated packet transport |
 | Full scope | Every surface's own required states x views and every declared stress case needs actual capture/review. | requiredSurfaceCells; native surface/content coverage joins; final publisher integration |
 | Repeated defect | Three distinct failed repairs of one stable issue pause; initial discovery/rechecks do not count. Budget cannot waive failures. | signed refinement observation chain; stage-next-v2 repeated-defect |
@@ -184,7 +193,10 @@ Scout does not impersonate the interpreter; Composer consumes the result. A chan
 new interpretation, not a new hash attached to an old verdict.
 For selected candidates, enter the Sketch stage and dispatch the isolated candidate work. Sketch
 owns its assigned directory, not the selection pointer. The coordinator records the actual rendered
-selection, reads `schema candidate-selection`, and publishes it through `candidate select`. A legacy
+current v2 set with `candidate capture`; `candidate review` runs isolated Eye and publishes a
+feasible harness decision without a user response. The native run's signed policy authorizes
+this choice, not an invented human message. Historical selection reads
+`schema candidate-selection` and publishes through `candidate select`. A legacy
 folder name, missing pointer or changed candidate bytes never completes this selected stage.
 For native Pi reference-based work, `candidate select` compares the fixed initial first-party pair
 and declared complementary state pairs with

@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
+import { chromium } from 'playwright';
+import { EventEmitter, once } from 'node:events';
 import type { UserBrowserDriver, UserBrowserSession } from '../core/browser/contracts.ts';
 import { createReferenceAcquisitionSession } from '../core/ref/acquisition-session.ts';
 import { browserExpression } from '../core/ref/browser-evaluation.ts';
@@ -67,6 +69,76 @@ function fake(options: { challenge?: boolean; login?: boolean; helpOutcome?: str
       identification: { needsChoice: false, candidates: [] }, primary: { id: 'aside', label: 'Aside' }, browsers: [{}] }),
     userBrowserBridgeOnboard: async () => { throw Error('unexpected install'); } };
 }
+test('browser operation and cleanup failures are both retained without reporting success', async () => {
+  for (const operationFails of [true, false]) {
+    const operationError = new Error('REFERENCE_CAPTURE_VISUAL_OBSTRUCTION');
+    const cleanupError = new Error('CLEANUP_FAILURE');
+    let disconnected = false;
+    const connector = {
+      connectOverCDP: chromium.connectOverCDP.bind(chromium),
+      launch: async (options: Parameters<typeof chromium.launch>[0]) => {
+        const browser = await chromium.launch(options);
+        const close = browser.close.bind(browser);
+        browser.once('disconnected', () => { disconnected = true; });
+        browser.close = async () => { await close(); throw cleanupError; };
+        return browser;
+      },
+    };
+    await assert.rejects(withBrowser(async () => {
+      if (operationFails) throw operationError;
+      return 'completed-operation';
+    }, undefined, { reference: true, config: { mode: 'default' }, connector }), error => {
+      if (operationFails) {
+        assert.ok(error instanceof AggregateError);
+        assert.deepEqual(error.errors, [operationError, cleanupError]);
+        assert.equal(error.cause, operationError);
+        assert.match(error.message, /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+        assert.match(error.message, /CLEANUP_FAILURE/);
+      } else assert.equal(error, cleanupError);
+      return true;
+    });
+    assert.equal(disconnected, true);
+  }
+});
+
+test('cleanup deadline preserves the rejected operation and the real cleanup timeout', async t => {
+  const operationError = new Error('REFERENCE_CAPTURE_VISUAL_OBSTRUCTION');
+  const lifecycle = new EventEmitter();
+  const closing = once(lifecycle, 'closing', { signal: AbortSignal.timeout(15000) });
+  let closeUnderlying: (() => Promise<void>) | undefined;
+  const connector = {
+    connectOverCDP: chromium.connectOverCDP.bind(chromium),
+    launch: async (options: Parameters<typeof chromium.launch>[0]) => {
+      const browser = await chromium.launch(options);
+      closeUnderlying = browser.close.bind(browser);
+      browser.close = async () => {
+        lifecycle.emit('closing');
+        return new Promise<void>(() => {});
+      };
+      return browser;
+    },
+  };
+  const rejected = assert.rejects(withBrowser(async browser => {
+    assert.ok(closeUnderlying);
+    await closeUnderlying();
+    assert.equal(browser.isConnected(), false);
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    throw operationError;
+  }, undefined, { reference: true, config: { mode: 'default' }, connector }), error => {
+    assert.ok(error instanceof AggregateError);
+    assert.equal(error.cause, operationError);
+    assert.equal(error.errors[0], operationError);
+    assert.match(error.message, /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+    assert.match(error.message, /browser cleanup timed out after 5000ms/);
+    return true;
+  });
+  try {
+    await closing;
+    t.mock.timers.tick(5000);
+    await rejected;
+  } finally { t.mock.timers.reset(); }
+});
+
 test('reference viewport uses explicit per-tab 2x emulation without resizing the browser window', async t => {
   const root = discoveryFixture(t); writeUserBrowserConsent('consented', root);
   let windowResizes = 0;

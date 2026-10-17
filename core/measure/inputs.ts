@@ -55,7 +55,9 @@ export function loadContracts(root: string): { contracts: Contracts; inputs: Vis
     const skipped: NonNullable<Contracts['routeSkipped']> = {};
     for (const [kind, id] of [['type', 'type-proof'], ['composition', 'composition']] as const) {
       const skip = route.strategy.skips.find(s => s.id === id);
-      if (contracts[kind] === null && !existsSync(resolve(root, `.omd/${id}.md`)) && skip && !route.strategy.stages.includes(id)) skipped[kind] = skip.reason;
+      const reason = skip?.reason ?? (route.sourceContract.processPolicy?.schema === 'model-led-design-process-v1'
+        ? `Standalone ${id} was not selected; judge the actual rendered result in final review.` : undefined);
+      if (contracts[kind] === null && !existsSync(resolve(root, `.omd/${id}.md`)) && reason && !route.strategy.stages.includes(id)) skipped[kind] = reason;
     }
     if (Object.keys(skipped).length) {
       contracts.routeSkipped = skipped;

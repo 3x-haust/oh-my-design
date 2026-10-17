@@ -299,6 +299,10 @@ function createContinuationSourceSeal(
   // Continuation is read-only, but purpose origins remain live authority, not merely a hash
   // embedded in previously sealed route/source bytes.
   const record = parseRouteRecord(JSON.parse(readStableSourceFile(root, join(root, route.record.path)).toString('utf8')));
+  const modelLed = record.sourceContract.processPolicy?.schema === 'model-led-design-process-v1';
+  if ((route.executionStyle === 'model-led') !== modelLed) {
+    throw new Error('adaptive route execution style does not match the signed process schema');
+  }
   const purpose = record.sourceContract.reviewPurpose;
   const authority = record.sourceContract.reviewPurposeAuthority;
   if (purpose && authority) verifyReviewPurposeAuthority(root, authority, purpose, record.sourceContract.request);

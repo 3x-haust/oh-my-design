@@ -137,6 +137,32 @@ View confirmation opens the existing confirmation.
 Read aloud; direct language and one next action.
 `;
 
+test('reference analysis schema binds current route and domain bytes without publishing analysis', async t => {
+  const { sha256 } = await import('../core/ref/board-artifacts.ts');
+  const cwd = project(t), h = harness(cwd);
+  await h.start();
+  await h.author('.omd/.cache/domain.json', domain());
+  await h.command(['domain', 'set', '--input', '.omd/.cache/domain.json', '--json']);
+  const printed = JSON.parse(await h.command(['schema', 'reference-analysis', '--json'])) as {
+    skeleton: { sourceContractSha256: string; domainBriefSha256: string; selectedReferenceIds: string[] };
+  };
+  const pointer = JSON.parse(readFileSync(join(cwd, '.omd/route.json'), 'utf8')) as { record: string };
+  const route = JSON.parse(readFileSync(join(cwd, '.omd', pointer.record), 'utf8')) as { sourceContractSha256: string };
+  const bytes = readFileSync(join(cwd, '.omd/domain-brief.json'));
+  assert.equal(printed.skeleton.sourceContractSha256, route.sourceContractSha256);
+  assert.equal(printed.skeleton.domainBriefSha256, sha256(bytes));
+  assert.deepEqual(printed.skeleton.selectedReferenceIds, []);
+  assert.equal(existsSync(join(cwd, '.omd/reference-analysis.json')), false);
+  assert.deepEqual(readFileSync(join(cwd, '.omd/domain-brief.json')), bytes);
+  writeFileSync(join(cwd, '.omd/domain-brief.json'), JSON.stringify({ ...domain(), request: 'another request' }));
+  const stale = JSON.parse(await h.command(['schema', 'reference-analysis', '--json'])) as {
+    skeleton: { sourceContractSha256: string; domainBriefSha256: string };
+  };
+  assert.equal(stale.skeleton.sourceContractSha256, '0'.repeat(64));
+  assert.equal(stale.skeleton.domainBriefSha256, '0'.repeat(64));
+  assert.equal(existsSync(join(cwd, '.omd/reference-analysis.json')), false);
+});
+
 test('cold start traverses real CLI framing, independent research/copy entry and type dependency, without allowing premature source', async t => {
   const cwd = project(t), h = harness(cwd);
   // Help is actually read-only, including before any route exists.
@@ -144,6 +170,13 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /--task-matrix/);
   assert.deepEqual(readdirSync(cwd), []);
   await h.start('product-route-input', true);
+  await assert.rejects(h.command(['lifecycle', 'verify', 'build', '--json']), /NATIVE_PI_AUTHORITY/);
+  assert.equal(existsSync(join(cwd, 'package.json')), false);
+  const evaluationStarter = JSON.parse(await h.command(['schema', 'trusted-lifecycle-manifest', '--json']));
+  assert.equal(Object.hasOwn(evaluationStarter.skeleton, 'entrySurface'), false);
+  assert.equal(evaluationStarter.command,
+    'omd lifecycle evaluate --manifest .omd/.cache/trusted-lifecycle-manifest.json --json');
+  assert.equal(JSON.parse(await h.command(['schema', 'candidate-content', '--json'])).skeleton.copy.path, '.omd/copy-deck.md');
   const concepts = JSON.parse(await h.enter('candidate-generation'));
   assert.equal(concepts.owner, 'omd-art-director');
   assert.equal(concepts.conceptProcedure.planBeforeSource, true);
@@ -229,6 +262,8 @@ test('cold start traverses real CLI framing, independent research/copy entry and
 
 test('planning gaps are named early, cannot be inferred away, and no-progress recovery resets only on real input', async t => {
   const cwd = project(t), h = harness(cwd); await h.start();
+  assert.equal(JSON.parse(await h.command(['schema', 'candidate-content', '--json'])).skeleton.copy, null);
+  assert.equal(JSON.parse(await h.command(['schema', 'candidate-plan', '--json'])).skeleton.content.status, 'provisional');
   const brief = domain(); delete (brief.planning.successSignal as { userEvidence?: unknown }).userEvidence;
   Object.assign(brief.planning.successSignal, { disposition: 'omit-from-production-claims' });
   await h.author('.omd/domain-brief.json', brief);
@@ -236,7 +271,9 @@ test('planning gaps are named early, cannot be inferred away, and no-progress re
   assert.deepEqual(checked.unconfirmedPlanning, ['successSignal']);
   const work = JSON.parse(await h.command(['stage', 'next', '--json']));
   assert.equal(work.schema, 'stage-next-v2');
-  assert.deepEqual(work.planning, [], 'an unselected domain document does not become a production prerequisite');
+  assert.deepEqual(work.planning, [{
+    field: 'successSignal', text: 'Inspect confirmation', disposition: 'omit-from-production-claims',
+  }], 'selected domain planning preserves the explicit omission instead of inventing confirmation');
   for (let i = 0; i < 3; i++) await h.emit('message_end', { message: final });
   assert.equal(h.sent.length, 3);
   await h.emit('message_end', { message: final });
@@ -276,7 +313,7 @@ test('a domain brief for a different request stays with its owner and earns no s
   const brief = domain(); brief.request = 'A different or shortened request.';
   await h.author('.omd/domain-brief.json', brief);
   const blocked = JSON.parse(await h.command(['stage', 'next', '--json']));
-  assert.equal(blocked.stage, 'frame');
+  assert.equal(blocked.stage, 'domain');
   assert.equal(blocked.progress.validatedStages.includes('domain'), false);
   await h.author('.omd/domain-brief.json', domain());
   const repaired = JSON.parse(await h.command(['stage', 'next', '--json']));

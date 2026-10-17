@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
@@ -20,12 +19,14 @@ import { requiresMeasuredTerminal, loadReviewPolicy } from '../measure/review-po
 import { validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
 import { validateFinalEvidenceV2Graph } from '../evidence/final-v2-graph.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { projectPathEntryExists } from '../runtime/project-path-entry.ts';
 
 export type CompletionTypographyBinding = Readonly<
   | { id: 'type-proof'; status: 'selected'; path: string; sha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'not-selected'; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'legacy-unassessed'; reason: string }
+  | { id: 'type-proof'; status: 'measured-review'; routeSha256: string; authoritySha256: string }
 >;
 export type CompletionPublicationResult = Readonly<{
   completeness?: CompletenessRun;
@@ -98,9 +99,9 @@ function typographyBinding(
   applicability: TypographyApplicabilityEvidence,
   continuationRoute?: AdaptiveSourceSealRoute,
 ): CompletionTypographyBinding {
-  if (!existsSync(`${root}/.omd/route.json`)) {
+  if (!projectPathEntryExists(root, '.omd/route.json')) {
     const path = '.omd/type-proof.md';
-    if (!existsSync(resolve(root, path))) return Object.freeze({ id: 'type-proof', status: 'legacy-unassessed', reason: 'optional typography proof was not published' });
+    if (!projectPathEntryExists(root, path)) return Object.freeze({ id: 'type-proof', status: 'legacy-unassessed', reason: 'optional typography proof was not published' });
     let bytes: Buffer;
     try { bytes = readStableProjectFile({ root, path: resolve(root, path), label: 'selected typography proof', fs }); }
     catch { return fail('selected typography proof is not a stable regular file'); }
@@ -125,7 +126,7 @@ export function checkCompletionPublicationPrerequisites(
   invocation: ProjectRunInvocation,
 ): CompletionPublicationResult {
   const graph = graphReceipts(manifest);
-  if (existsSync(resolve(root, '.omd/route.json')) && requiresMeasuredTerminal(readPersistedRoute(root, invocation))) {
+  if (projectPathEntryExists(root, '.omd/route.json') && requiresMeasuredTerminal(readPersistedRoute(root, invocation))) {
     loadReviewPolicy(root, invocation); // Revalidate the signed host/user purpose under every publication lock.
     if (!graph.raw.measuredTerminal) fail('current implemented-UI completion requires immutable measured terminal graph evidence');
     validateMeasuredTerminal(root, validateFinalEvidenceV2Graph(graph.raw), invocation);
@@ -133,7 +134,7 @@ export function checkCompletionPublicationPrerequisites(
   const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
     ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route
     : undefined;
-  const hasWorkflow = existsSync(`${root}/.omd/workflow-plan.json`);
+  const hasWorkflow = projectPathEntryExists(root, '.omd/workflow-plan.json');
   if (hasWorkflow) {
     if (graph.schema !== 'final-evidence-v2-workflow-graph-v1' && graph.schema !== 'final-evidence-v2-selected-direction-graph-v1') fail('current workflow requires the additive workflow final graph');
     const workflow = checkAdaptiveWorkflow(root, invocation).binding;
@@ -154,9 +155,25 @@ export function checkCompletionPublicationPrerequisites(
       fail(`current composition contract is invalid: ${compositionFindings.map((finding) => `${finding.id} ${finding.path}`).join(', ')}`);
     }
   }
-  if (!existsSync(`${root}/.omd/functional-requirements.json`)) {
-    if (existsSync(`${root}/.omd/route.json`)) {
+  if (!projectPathEntryExists(root, '.omd/functional-requirements.json')) {
+    if (continuationRoute?.executionStyle === 'model-led'
+      && !continuationRoute.stages.some(stage => stage.id === 'type-proof' && stage.status === 'selected')
+      && !projectPathEntryExists(root, '.omd/completeness-current.json')
+      && !projectPathEntryExists(root, '.omd/type-proof.md')) {
+      return Object.freeze({ typography: Object.freeze({
+        id: 'type-proof', status: 'measured-review',
+        routeSha256: continuationRoute.record.sha256, authoritySha256: continuationRoute.authority.sha256,
+      }) });
+    }
+    if (projectPathEntryExists(root, '.omd/route.json')) {
       fail('current routed publication requires functional requirements and a completeness run');
+    }
+    if (projectPathEntryExists(root, '.omd/completeness-current.json')) {
+      fail('optional completeness pointer exists without functional requirements');
+    }
+    if (projectPathEntryExists(root, '.omd/type-proof.md')) {
+      try { readStableProjectFile({ root, path: resolve(root, '.omd/type-proof.md'), label: 'optional typography proof', fs }); }
+      catch { fail('optional typography proof is not a stable regular file'); }
     }
     return Object.freeze({ typography: Object.freeze({
       id: 'type-proof',

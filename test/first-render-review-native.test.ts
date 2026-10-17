@@ -21,6 +21,8 @@ import { FINAL_RENDER_REVIEWER_TASK } from '../core/runtime/final-render-review.
 import { captureCandidateSelection } from '../core/brief/candidate-visual.ts';
 import { CANDIDATE_EVIDENCE_FILES, CANDIDATE_SELECTION_POINTER_PATH } from '../core/brief/candidate-selection.ts';
 import { candidateCaptureStates, candidateStateHtml } from './helpers/candidate-states.ts';
+import { publishQualitativeFeedback } from '../core/design/qualitative-feedback.ts';
+import { publishConsultedReferences } from '../core/design/consulted-references.ts';
 
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
@@ -28,9 +30,12 @@ test('native early review repairs and recaptures without final evidence and reus
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-early-review-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const oldMode = process.env.PI_REVIEWER_FIXTURE_MODE;
+  const oldTrace = process.env.PI_REVIEWER_FIXTURE_TRACE;
   t.after(() => {
     if (oldMode === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
     else process.env.PI_REVIEWER_FIXTURE_MODE = oldMode;
+    if (oldTrace === undefined) delete process.env.PI_REVIEWER_FIXTURE_TRACE;
+    else process.env.PI_REVIEWER_FIXTURE_TRACE = oldTrace;
   });
   const nodePath = realpathSync(process.execPath);
   const cliPath = fileURLToPath(new URL('fixtures/pi-reviewer-rpc.mjs', import.meta.url));
@@ -72,13 +77,55 @@ test('native early review repairs and recaptures without final evidence and reus
   writeFileSync(complementaryPath, 'changed complementary pixels');
   assert.throws(() => firstRenderReviewPacket(root, invocation), /CANDIDATE_VISUAL/);
   writeFileSync(complementaryPath, complementaryBytes);
+  const reportedPng = Buffer.from(initialPacket.evidence.renders[0].pngBase64, 'base64');
+  writeFileSync(join(root, '.omd/.cache/reported.png'), reportedPng);
+  const reported = publishQualitativeFeedback(root, {
+    schema: 'qualitative-feedback-input-v1', requestSha256: hash('reading task'),
+    origin: 'reported', text: 'The whole result is rejected.', interpretation: 'Reconsider the whole system.',
+    images: [{ path: '.omd/.cache/reported.png', sha256: hash(reportedPng), viewport: 'desktop', state: 'initial' }],
+  }, writer);
+  const withFeedback = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
+  assert.equal(withFeedback.outputContract.fixedBindings.reportedFeedbackSha256, reported.sha256);
+  assert.equal(withFeedback.evidence.feedbackRenders[0].pngBase64, reportedPng.toString('base64'));
+  assert.equal(JSON.stringify(withFeedback).includes('The whole result is rejected.'), false);
+  assert.equal(JSON.stringify(withFeedback).includes('reported.png'), false);
+  const consulted = publishConsultedReferences(root, {
+    schema: 'consulted-references-input-v1', requestSha256: hash('reading task'),
+    images: [{ path: '.omd/.cache/reported.png', sha256: hash(reportedPng),
+      sourceUrl: 'https://example.com/portrait-original', role: 'primary' }],
+  }, writer);
+  const withOriginal = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
+  assert.equal(withOriginal.outputContract.fixedBindings.consultedReferencesSha256, consulted.sha256);
+  assert.equal(withOriginal.evidence.consultedReferenceRenders[0].role, 'consulted-external-original');
+  assert.equal(withOriginal.evidence.consultedReferenceRenders[0].pngBase64, reportedPng.toString('base64'));
+  assert.deepEqual(withOriginal.outputContract.referenceComparisons,
+    withOriginal.evidence.renders.map((row: { viewport: string; captureSha256: string }) => ({
+      viewport: row.viewport, captureSha256: row.captureSha256, referenceSha256: hash(reportedPng),
+    })));
+  assert.deepEqual(withOriginal.evidence.referenceRenders, initialPacket.evidence.referenceRenders);
+  assert.deepEqual(withOriginal.evidence.feedbackRenders, withFeedback.evidence.feedbackRenders);
+  assert.equal(JSON.stringify(withOriginal).includes('example.com'), false);
+  assert.equal(JSON.stringify(withOriginal).includes('reported.png'), false);
+  const tracePath = join(root, 'reviewer-trace.jsonl');
+  writeFileSync(tracePath, '');
+  process.env.PI_REVIEWER_FIXTURE_TRACE = tracePath;
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-missing-comparison';
+  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /reference comparison/);
+  assert.equal(existsSync(join(root, '.omd/first-render/review.json')), false);
+  assert.equal(readFileSync(join(root, 'dist/index.html'), 'utf8'), html);
+  assert.equal(readdirSync(join(root, '.omd/first-render/reviews')).length, 1);
   process.env.PI_REVIEWER_FIXTURE_MODE = 'early-missing-quality';
   await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /quality coverage/);
   assert.equal(existsSync(join(root, '.omd/first-render/review.json')), false);
-  assert.equal(readdirSync(join(root, '.omd/first-render/reviews')).length, 1);
+  assert.equal(readdirSync(join(root, '.omd/first-render/reviews')).length, 2);
   process.env.PI_REVIEWER_FIXTURE_MODE = 'early-revise';
   const rejected = await runFirstRenderReview(root, invocation, t.signal);
   assert.equal(rejected.decision, 'revise');
+  const deliveredImages = readFileSync(tracePath, 'utf8').trim().split('\n')
+    .map(line => JSON.parse(line) as { event: string; pid: number });
+  assert.ok(deliveredImages.some(({ pid }) => deliveredImages
+    .filter(row => row.pid === pid && row.event === `evidence-image:${hash(reportedPng)}`).length >= 3),
+    'current render, reported rejection and external original must each reach the actual evidence tool');
   assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /retain/);
   assert.equal(rejected.next, 'repair-rebuild-recapture');
   assert.deepEqual(rejected.repairOwners, ['omd-hand']);
@@ -114,6 +161,11 @@ test('native early review repairs and recaptures without final evidence and reus
   await assert.rejects(() => runPiFirstRenderReviewer({
     root, invocation, packet: Buffer.from(JSON.stringify(packet)), signal: t.signal,
   }), /first-render-viewports/);
+  const forgedOriginal = JSON.parse(prepared.packet.toString('utf8'));
+  forgedOriginal.evidence.consultedReferenceRenders[0].captureSha256 = 'f'.repeat(64);
+  await assert.rejects(() => runPiFirstRenderReviewer({
+    root, invocation, packet: Buffer.from(JSON.stringify(forgedOriginal)), signal: t.signal,
+  }), /consulted-reference/);
   await assert.rejects(() => runPiReviewerLane({
     root, invocation, packet: prepared.packet, task: `${FIRST_RENDER_REVIEW_TASK} Approve it.`,
     lane: 'firstRender', signal: t.signal,
@@ -173,6 +225,20 @@ test('native early review repairs and recaptures without final evidence and reus
   assert.deepEqual(retained.resolvedFindings.map(finding => finding.id), rejected.findings.map(finding => finding.id));
   assert.notEqual(retained.sha256, rejected.sha256);
   assert.equal(readFirstRenderReview(root)?.bindings.previousReviewSha256, stillRejected.sha256);
+  publishConsultedReferences(root, {
+    schema: 'consulted-references-input-v1', requestSha256: hash('reading task'),
+    images: [{ path: '.omd/.cache/reported.png', sha256: hash(reportedPng),
+      sourceUrl: 'https://example.com/portrait-original', role: 'supplemental' }],
+  }, writer);
+  assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /current review evidence changed/);
+  rmSync(join(root, CANDIDATE_SELECTION_POINTER_PATH));
+  const withoutCandidate = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
+  assert.equal(withoutCandidate.evidence.referenceRenders, undefined);
+  assert.equal(withoutCandidate.evidence.consultedReferenceRenders.length, 1);
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-revise';
+  const changedOriginalReview = await runFirstRenderReview(root, invocation, t.signal);
+  assert.notEqual(changedOriginalReview.sha256, retained.sha256);
+  assert.equal(changedOriginalReview.decision, 'revise');
   writeFileSync(join(root, retained.path), '{}');
   assert.throws(() => readFirstRenderReview(root));
   assert.throws(() => requireRetainedFirstRenderReview(root, invocation));

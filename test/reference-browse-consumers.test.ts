@@ -14,16 +14,23 @@ import { verifyBrowseSession } from '../core/ref/browse/verification.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import { loadRefs } from '../core/ref/store.ts';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
-import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenceResearch } from '../core/ref/reference-research.ts';
+import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenceResearch, validateReferenceResearch } from '../core/ref/reference-research.ts';
+import { referenceApplicationPlan } from '../core/ref/reference-application.ts';
 import { publishReferenceAnalysis, readReferenceAnalysis } from '../core/ref/reference-analysis.ts';
 import { readWholeScreenReferenceHandoff } from '../core/ref/reference-handoff.ts';
 import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { advanceReferenceDiscoveryWork } from '../core/ref/discovery-advance.ts';
-import { routeAdaptiveFlow } from '../core/route/index.ts';
+import { routeAdaptiveFlow, readPersistedRoute } from '../core/route/index.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
 import { assertProjectRunMutationInventory } from '../core/runtime/project-write-inventory.ts';
 import { validateBrowseMarketLocal, validateBrowseMarketFallback, readBrowseMarketExecutions } from '../core/ref/browse/market.ts';
 import type { ResearchSource } from '../core/ref/reference-research-types.ts';
 import { validateBrowseSourceCoverage } from '../core/ref/reference-research-browse.ts';
+import { selectedReferenceMakerProjection } from '../core/runtime/native-maker-reference-images.ts';
+import { sha256 } from '../core/ref/board-artifacts.ts';
+import { REFERENCE_DIRECTION_ADMISSION_POINTER } from '../core/ref/reference-direction-admission.ts';
+import { admitBrowseDirections } from './helpers/browse-admission.ts';
+import { testSearchReceipt } from './helpers/search-execution.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 
@@ -124,8 +131,17 @@ test('browse market claims require visible source-bound bytes, not hidden copy o
 });
 test('v8 mixed research admits whole-screen browse evidence into the real image board; analysis feeds maker-only handoff', { timeout: 90_000 }, async t => {
   const fixture = designAdmissionFixture(t), site = await browseFixture();
-  const { root } = fixture, invocation = createTestProjectRunInvocation(root), writer = createTestProjectWriteAdapter(root, invocation);
-  const current = { sourceContractSha256: fixture.research.sourceContractSha256, request: 'Inspect whole-screen dashboard references' };
+  const { root } = fixture;
+  const skeleton = inputSkeleton('product-route-input').skeleton;
+  assert.ok(typeof skeleton === 'object' && skeleton !== null && !Array.isArray(skeleton));
+  const invocation = publishTestAdaptiveRoute(root, { ...skeleton, request: 'Inspect whole-screen dashboard references' });
+  const route = readPersistedRoute(root, invocation), writer = createTestProjectWriteAdapter(root, invocation);
+  fixture.research.sourceContractSha256 = route.sourceContractSha256;
+  const current = { sourceContractSha256: route.sourceContractSha256, request: route.request };
+  fixture.research.domainReference.searches = [testSearchReceipt(root, 'domain',
+    fixture.research.domainReference.queries[0]!, fixture.research.domainReference.sources.map(source => source.url))];
+  fixture.research.designReference.searches = [testSearchReceipt(root, 'design',
+    fixture.research.designReference.queries[0]!, [fixture.gallery.source])];
   let driver: Awaited<ReturnType<typeof runBrowseDriver>> | undefined, clock = 0;
   const run = (args: string[]) => executeBrowseCommand(root, parseBrowseCommand(args), current, invocation, writer, {
     launch: async binding => driver = await runBrowseDriver(binding, { transport: site.transport, monotonic: () => clock += 1001 }),
@@ -149,11 +165,16 @@ test('v8 mixed research admits whole-screen browse evidence into the real image 
           reason: 'The complete task screen provides a coherent grouping reference.', flowCaptures: [] } },
       provenance: { kind: 'recorded-browse', session: ended.seal!, capture: native.browse!.capture, keep: native.browse!.keep },
       discovery: { kind: 'recorded-browse', url: native.source, access: 'public', qualityReason: 'Whole task screen provides a coherent independent hierarchy.', session: ended.seal!, entry: { seq: entry.seq, hash: entry.hash } } };
-    fixture.board.candidates[0]!.pieces.push({ ...fixture.board.candidates[0]!.pieces[0]!, sourceKind: 'image-fragment', referenceId: fragment.id, slotId: 'whole-screen', targetComponent: 'Workspace', targetSelector: '#workspace', grid: { column: 1, span: 12, order: 1 } });
+    fixture.board.candidates[0]!.pieces = [{ ...fixture.board.candidates[0]!.pieces[0]!, sourceKind: 'image-fragment', referenceId: fragment.id, slotId: 'whole-screen', targetComponent: 'Workspace', targetSelector: '#workspace', grid: { column: 1, span: 12, order: 1 } }];
     fixture.refreshBoard();
     const input = { ...fixture.research, schema: 'reference-research-v8', marketCoverage: null,
-      designReference: { ...fixture.research.designReference, browseSessions: [ended.seal!], sources: [...fixture.research.designReference.sources, source] } };
-    const research = parseReferenceResearch(input); publishReferenceResearch(root, research, { expectedSourceContractSha256: current.sourceContractSha256, benchmarkRequired: false }, writer);
+      designReference: { ...fixture.research.designReference, browseSessions: [ended.seal!], sources: [source] } };
+    const research = parseReferenceResearch(input);
+    const publish = () => publishReferenceResearch(root, research, { expectedSourceContractSha256: current.sourceContractSha256, benchmarkRequired: false }, writer);
+    assert.throws(publish, /REFERENCE_DIRECTION_ADMISSION_MISSING/);
+    assert.equal(existsSync(join(root, '.omd/refs/design/research.json')), false);
+    await admitBrowseDirections(t, root, invocation, current, [native]);
+    publish();
     assert.equal(readPublishedReferenceResearch(root).schema, 'reference-research-v8');
     assert.equal(JSON.parse(readFileSync(join(root, '.omd/refs/design/research.json'), 'utf8')).schema, 'design-references-v3');
     assert.throws(() => parseReferenceResearch({ ...input, schema: 'reference-research-v7' }), /KEYS/);
@@ -174,6 +195,39 @@ test('v8 mixed research admits whole-screen browse evidence into the real image 
         design: { referenceIds: [source.id], coverage: 'partial', gap: 'Responsive states remain unobserved.', application: 'Retain task context and readable hierarchy.', doNotTransfer: 'Do not copy source branding.', reason: 'Observed grouping fits the task.' }, checks: ['Inspect task context at the destination viewport.'] }] };
     publishReferenceAnalysis(root, analysis, current, writer); assert.equal(readReferenceAnalysis(root, current).analysis.patterns.length, 1);
     const maker = readWholeScreenReferenceHandoff(root, 'composer', current); assert.ok('images' in maker); assert.equal(maker.images!.length, 1); assert.equal(maker.images![0]!.path, native.imagePath);
+    const strategy = routeAdaptiveFlow(JSON.parse(readFileSync(
+      new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8'))).strategy;
+    const delivered = selectedReferenceMakerProjection(root, {
+      strategy,
+      sourceContractSha256: current.sourceContractSha256,
+      request: current.request,
+    }, { role: 'omd-sketch', branch: 'current-sketch' });
+    assert.equal(delivered.renders.length, 1);
+    assert.equal(sha256(Buffer.from(delivered.renders[0]!.pngBase64, 'base64')), retained.image.sha256);
+    const guidance = JSON.parse(delivered.documents[0]!.content);
+    assert.equal(guidance.references[0].take.observed.hierarchy, 'Task heading precedes work');
+    assert.ok(guidance.references[0].avoid.some((item: { reason: string }) => item.reason === analysis.screens[0]?.design.doNotTransfer));
+    assert.equal(guidance.references[0].adaptation[0].target.route, '/');
+    assert.doesNotMatch(JSON.stringify(guidance), /sourceUrl|DOM selector|independent\.fixture/);
+    const approval = readFileSync(join(root, REFERENCE_DIRECTION_ADMISSION_POINTER));
+    const publishedResearch = readFileSync(join(root, '.omd/reference-research.json'));
+    writer.remove(REFERENCE_DIRECTION_ADMISSION_POINTER);
+    const options = { expectedSourceContractSha256: current.sourceContractSha256, benchmarkRequired: false };
+    assert.throws(() => validateReferenceResearch(root, research, options), /REFERENCE_DIRECTION_ADMISSION_MISSING/);
+    assert.throws(() => referenceApplicationPlan(root, options), /REFERENCE_DIRECTION_ADMISSION_MISSING/);
+    assert.throws(() => selectedReferenceMakerProjection(root, {
+      strategy, sourceContractSha256: current.sourceContractSha256, request: current.request,
+    }, { role: 'omd-sketch', branch: 'current-sketch' }), /REFERENCE_DIRECTION_ADMISSION_MISSING/);
+    assert.deepEqual(readFileSync(join(root, '.omd/reference-research.json')), publishedResearch);
+    writer.write(REFERENCE_DIRECTION_ADMISSION_POINTER, approval);
+    const originalImage = readFileSync(join(root, retained.image.path));
+    writeFileSync(join(root, retained.image.path), Buffer.from('stale image'));
+    assert.throws(() => selectedReferenceMakerProjection(root, {
+      strategy,
+      sourceContractSha256: current.sourceContractSha256,
+      request: current.request,
+    }, { role: 'omd-sketch', branch: 'current-sketch' }), /image|drift|changed|evidence bytes differ/i);
+    writeFileSync(join(root, retained.image.path), originalImage);
     const blind = readWholeScreenReferenceHandoff(root, 'eye', current); assert.equal('images' in blind, false); assert.doesNotMatch(JSON.stringify(blind), /independent|\.omd\/|pattern|sourceUrl/);
     const before = readFileSync(join(root, '.omd/reference-analysis.json'));
     assert.throws(() => publishReferenceAnalysis(root, { ...analysis, selectedReferenceIds: ['missing'] }, current, writer), /unknown/);

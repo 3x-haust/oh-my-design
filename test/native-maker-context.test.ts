@@ -9,6 +9,37 @@ import { parseMakerInput } from '../adapters/pi-maker-contract.ts';
 import { prepareNativeMaker } from '../core/runtime/native-maker-packet.ts';
 import { runPiMaker } from '../adapters/pi-maker-runtime.ts';
 import { makeNativeSource } from '../core/runtime/native-maker.ts';
+import { frameInput } from './helpers/phase6-process.ts';
+import { parseFrameInput } from '../core/frame/input.ts';
+import { writeFrameRecord } from '../core/frame/write.ts';
+import { readFrame } from '../core/frame/index.ts';
+import { piRecord } from '../adapters/pi-reviewer-contract.ts';
+
+test('sealed maker packet preserves scoped surface, validation and accessibility plans', t => {
+  const context = fixture(t);
+  writeFrameRecord(context.root, parseFrameInput(frameInput()), context.writer);
+  const frameBytes = readFileSync(join(context.root, '.omd/frame.md'));
+  const frame = readFrame(context.root);
+  assert.ok(frame);
+  const prepared = prepareNativeMaker(context);
+  const packet = piRecord(JSON.parse(prepared.packet.toString('utf8')), 'maker packet');
+  const evidence = piRecord(packet.evidence, 'maker evidence');
+  const delivered = piRecord(piRecord(evidence.context, 'maker context').frame, 'maker frame');
+  assert.deepEqual(delivered.surfacePlan, frame.surfacePlan);
+  assert.deepEqual(delivered.validationPlan, frame.validationPlan);
+  assert.deepEqual(delivered.accessibilityPlan, frame.accessibilityPlan);
+  assert.deepEqual(readFileSync(join(context.root, '.omd/frame.md')), frameBytes);
+});
+
+test('malformed current frame plans refuse maker preparation without source mutation', t => {
+  const context = fixture(t);
+  context.writer.write('.omd/frame.md', '---\nsurfacePlan: {schema: surface-plan-v1}\n---\n');
+  const sourcePath = input.paths[0];
+  assert.ok(sourcePath);
+  const sourceBytes = readFileSync(join(context.root, sourcePath));
+  assert.throws(() => prepareNativeMaker(context), /DIRECTION_CONTRACT/);
+  assert.deepEqual(readFileSync(join(context.root, sourcePath)), sourceBytes);
+});
 
 test('approved typography projection excludes source-aware alternatives', t => {
   // Given a selected typography proof with separate approved and private sections.
@@ -53,14 +84,31 @@ test('a font alternatives section cannot authorize a typography contract', t => 
     invocation: context.invocation }), /approved-type-contract-required/);
 });
 
-test('skipped typography never delivers an old proof as a new constraint', t => {
+test('skipped visual stages never deliver old proofs as new maker constraints', t => {
   // Given an explicitly skipped stage with stale material still on disk.
   const context = fixture(t);
   context.writer.write('.omd/type-proof.md', '## Approved type contract\nOLD_TYPE_SENTINEL');
+  context.writer.write('.omd/composition.md', 'OLD_COMPOSITION_SENTINEL');
   // When the packet is built for the current route.
   const packet = JSON.parse(prepareNativeMaker(context).packet.toString('utf8'));
   // Then the skipped proof is absent.
   assert.equal(packet.evidence.documents.some((row: { path: string }) => row.path === 'approved-type-contract'), false);
+  assert.equal(packet.evidence.documents.some((row: { path: string }) => row.path === '.omd/composition.md'), false);
+  assert.equal(JSON.stringify(packet).includes('OLD_COMPOSITION_SENTINEL'), false);
+  assert.equal(packet.outputContract.fixedBindings.compositionSha256, null);
+});
+
+test('selected composition remains in the maker projection and its fingerprint', t => {
+  const context = fixture(t);
+  const route = readPersistedRoute(context.root, context.invocation);
+  const selected = { ...route, strategy: { ...route.strategy,
+    stages: [...route.strategy.stages, 'composition' as const] } };
+  const content = 'SELECTED_COMPOSITION_SENTINEL';
+  context.writer.write('.omd/composition.md', content);
+  const projected = makerContext(context.root, selected,
+    { input: parseMakerInput(input), invocation: context.invocation });
+  assert.equal(projected.documents.find(row => row.path === '.omd/composition.md')?.content, content);
+  assert.ok(projected.digests.some(row => row.path === '.omd/composition.md'));
 });
 
 test('maker receives the complete functional task matrix without other frame research', t => {

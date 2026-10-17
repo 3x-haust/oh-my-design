@@ -48,7 +48,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   const final = checkFinalEvidenceV2(root, invocation) as FinalEvidenceV2ManifestVariant;
   const prerequisites = checkCompletionPublicationPrerequisites(root, final, invocation);
   if (final.graph.measuredTerminal) validateMeasuredTerminal(root, final.graph, invocation);
-  checkSlopFinalGraph(root, final.graph);
+  checkSlopFinalGraph(root, final.graph, invocation);
   // Planning the user never confirmed is not a design decision to be repaired later; refuse here,
   // before any completion artifact publishes an invented business goal as delivered.
   const unconfirmedPlanning = requireConfirmedPlanningForProduction(root);
@@ -65,7 +65,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   // A completed render must have survived the earlier gestalt read. The final Eye is intentionally
   // not the first reader: if the benefit/card composition never communicated the task, polishing its
   // pixels into a final review packet is late and expensive.
-  try { checkFirstRenderEvidence(root); }
+  try { checkFirstRenderEvidence(root, 'acceptance', invocation); }
   catch (error) { throw new CompletionPreflightError(`first-render gestalt critic: ${error instanceof Error ? error.message : String(error)}`); }
   const hostCapabilities = completionHostCapabilities(invocation);
   const requirements = route?.sourceContract.taskOutcome.executionRequirements;

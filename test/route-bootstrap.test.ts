@@ -120,6 +120,22 @@ test('sanitized test-013 input treats process omissions as advisory without muta
   assert.ok(record.strategy.stages.includes('copy'));
 });
 
+test('high-risk axis diagnostics identify the repairable UX field without changing input', () => {
+  const input = fixture();
+  input.designAxes.failureRisk = 'high';
+  input.designAxes.uxNeed = 'baseline';
+  const before = JSON.stringify(input);
+  const diagnostics = diagnoseAdaptiveRouteInput(input);
+  assert.deepEqual(diagnostics.map(({ path, code }) => ({ path, code })), [{
+    path: 'designAxes.uxNeed', code: 'CONTRADICTORY_DESIGN_AXIS_STATE',
+  }]);
+  assert.equal(JSON.stringify(input), before);
+  assert.throws(() => routeAdaptiveFlow(input), /CONTRADICTORY_DESIGN_AXIS_STATE/);
+  input.designAxes.uxNeed = 'rigorous';
+  assert.deepEqual(diagnoseAdaptiveRouteInput(input), []);
+  assert.equal(routeAdaptiveFlow(input).sourceContract.designAxes.failureRisk, 'high');
+});
+
 test('every route starter has consistent prerequisites; examples do not waive real high-risk safety', () => {
   for (const name of ['route-input', 'product-route-input', 'design-route-input']) {
     const input = structuredClone(inputSkeleton(name).skeleton) as ReturnType<typeof fixture>;

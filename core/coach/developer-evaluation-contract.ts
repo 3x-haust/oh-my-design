@@ -1,6 +1,7 @@
 import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 
-export const DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA = 'developer-evaluation-snapshot-v1';
+export const DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA = 'developer-evaluation-snapshot-v2';
+export const HISTORICAL_DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA = 'developer-evaluation-snapshot-v1';
 
 export type DeveloperEvaluationNamespace = 'real' | 'fixture';
 export type ComparisonChoice = 'a' | 'b' | 'tie' | 'neither' | 'uncertain';
@@ -33,7 +34,15 @@ export type EvaluationRole =
   | Readonly<{
     kind: 'held-out';
     candidateRecordId: string;
+    candidateRecordSha256: string;
+    experimentId: string;
+    experimentalSnapshotId: string;
+    experimentRunEvidenceSha256: string;
+    nativeRunId: string;
+    requestSha256: string;
     candidateImage: 'a' | 'b';
+    resultImageSha256s: Readonly<{ a: string; b: string }>;
+    criteria: readonly Readonly<{ id: string; outcome: 'pass' | 'fail' | 'uncertain' }>[];
     caseDecision: 'approve' | 'reject' | 'uncertain';
   }>;
 export type DeveloperEvaluationRecordInput = Readonly<{
@@ -43,11 +52,14 @@ export type DeveloperEvaluationRecordInput = Readonly<{
   capturedAt: string;
   scope: DeveloperEvaluationScope;
   role: EvaluationRole;
-  images: Readonly<{ a: ComparedImage; b: ComparedImage }>;
+  images: Readonly<{ a: ComparedImage; b: ComparedImage;
+    references?: Readonly<{ a: ComparedImage; b: ComparedImage }> }>;
   humanResponse: Readonly<{
     interview: InterviewResponse;
     comparisonChoice: ComparisonChoice;
     satisfaction: Satisfaction;
+    satisfactionCandidate: 'a' | 'b';
+    referencePreference: ComparisonChoice | null;
     postChange: InterviewResponse;
   }>;
   relations: Readonly<{ references: readonly string[]; design: readonly string[] }>;
@@ -63,14 +75,24 @@ export type DeveloperEvaluationRecordInput = Readonly<{
     consent: 'allow-private-advisory-reuse' | 'deny';
     scope: DeveloperEvaluationScope;
   }>;
+  imageUse: Readonly<{
+    modelDisclosure: 'allow-current-developer-session';
+    retention: 'allow-private-evidence-copy';
+    externalShare: 'deny';
+    productAssetReuse: 'deny';
+  }>;
 }>;
 export type DeveloperEvaluationRecord = Readonly<DeveloperEvaluationRecordInput & {
-  schema: 'developer-evaluation-record-v1';
+  schema: 'developer-evaluation-record-v2';
   namespace: DeveloperEvaluationNamespace;
   revision: number;
   revisesSha256: string | null;
   revisionReason: string | null;
   revisedAt: string | null;
+  recordSha256: string;
+}>;
+export type HistoricalDeveloperEvaluationRecord = Readonly<Record<string, unknown> & {
+  schema: 'developer-evaluation-record-v1';
   recordSha256: string;
 }>;
 export type DeveloperEvaluationRevocation = Readonly<{
@@ -109,6 +131,23 @@ export type DeveloperEvaluationCase = Readonly<DeveloperEvaluationCaseProjection
 }>;
 export type DeveloperEvaluationSnapshot = Readonly<{
   schema: typeof DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA;
+  mode: 'validated' | 'experimental';
+  snapshotId: string;
+  pinIdentity: string;
+  pinnedAt: string;
+  cases: readonly DeveloperEvaluationCaseProjection[];
+  experiment: Readonly<{
+    experimentId: string;
+    sourceRecordSha256: string;
+    sourceRevision: number;
+    runtimeSourceSha256: string;
+    plannedHeldOutRequestSha256s: readonly string[];
+    criteriaIds: readonly string[];
+  }> | null;
+  digest: string;
+}>;
+export type HistoricalDeveloperEvaluationSnapshot = Readonly<{
+  schema: typeof HISTORICAL_DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA;
   snapshotId: string;
   requestRunId: string;
   pinnedAt: string;
@@ -180,7 +219,7 @@ export function parseDeveloperEvaluationScope(value: unknown, label = 'scope'): 
     task: id(item.task, `${label}.task`),
   });
 }
-const parseProjection = (value: unknown, label: string): DeveloperEvaluationCaseProjection => {
+const parseProjection = (value: unknown, label: string, experimental = false): DeveloperEvaluationCaseProjection => {
   const item = own(value, [
     'caseId', 'sourceRecordSha256', 'heldOutRecordSha256s', 'scope', 'developerSignal',
     'designRelations', 'changeSummary', 'advisory', 'advisorySource',
@@ -192,8 +231,12 @@ const parseProjection = (value: unknown, label: string): DeveloperEvaluationCase
   }
   const heldOutRecordSha256s = stringArray(item.heldOutRecordSha256s, `${label}.heldOutRecordSha256s`, 16);
   heldOutRecordSha256s.forEach((entry, index) => hash(entry, `${label}.heldOutRecordSha256s[${index}]`));
-  if (heldOutRecordSha256s.length < 2 || new Set(heldOutRecordSha256s).size !== heldOutRecordSha256s.length) {
-    throw new DeveloperEvaluationError(`${label} needs distinct held-out records`);
+  if ((!experimental && heldOutRecordSha256s.length < 2)
+    || (experimental && heldOutRecordSha256s.length !== 0)
+    || new Set(heldOutRecordSha256s).size !== heldOutRecordSha256s.length) {
+    throw new DeveloperEvaluationError(experimental
+      ? `${label} cannot claim held-out validation`
+      : `${label} needs distinct held-out records`);
   }
   const signal = own(item.developerSignal, ['comparisonChoice', 'satisfaction'], `${label}.developerSignal`);
   if (!['a', 'b', 'tie', 'neither', 'uncertain'].includes(signal.comparisonChoice as string)
@@ -224,27 +267,95 @@ const parseProjection = (value: unknown, label: string): DeveloperEvaluationCase
 };
 
 export function parseDeveloperEvaluationSnapshot(value: unknown): DeveloperEvaluationSnapshot {
-  const item = own(value, ['schema', 'snapshotId', 'requestRunId', 'pinnedAt', 'cases', 'digest'], 'snapshot');
+  const item = own(value, ['schema', 'mode', 'snapshotId', 'pinIdentity', 'pinnedAt', 'cases', 'experiment', 'digest'], 'snapshot');
   if (item.schema !== DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA) {
     throw new DeveloperEvaluationError('snapshot.schema is invalid');
+  }
+  if (item.mode !== 'validated' && item.mode !== 'experimental') {
+    throw new DeveloperEvaluationError('snapshot.mode is invalid');
   }
   if (!Array.isArray(item.cases) || item.cases.length > 128) {
     throw new DeveloperEvaluationError('snapshot.cases must be a bounded array');
   }
-  const cases = Object.freeze(item.cases.map((entry, index) => parseProjection(entry, `snapshot.cases[${index}]`)));
+  const cases = Object.freeze(item.cases.map((entry, index) =>
+    parseProjection(entry, `snapshot.cases[${index}]`, item.mode === 'experimental')));
   if (new Set(cases.map((entry) => entry.caseId)).size !== cases.length) {
     throw new DeveloperEvaluationError('snapshot cases must be unique');
   }
+  let experiment: DeveloperEvaluationSnapshot['experiment'] = null;
+  if (item.experiment !== null) {
+    const input = own(item.experiment, [
+      'experimentId', 'sourceRecordSha256', 'sourceRevision', 'runtimeSourceSha256',
+      'plannedHeldOutRequestSha256s', 'criteriaIds',
+    ], 'snapshot.experiment');
+    if (!Number.isSafeInteger(input.sourceRevision) || (input.sourceRevision as number) < 1) {
+      throw new DeveloperEvaluationError('snapshot.experiment.sourceRevision is invalid');
+    }
+    const plannedHeldOutRequestSha256s = stringArray(
+      input.plannedHeldOutRequestSha256s,
+      'snapshot.experiment.plannedHeldOutRequestSha256s',
+      8,
+    );
+    plannedHeldOutRequestSha256s.forEach((entry, index) =>
+      hash(entry, `snapshot.experiment.plannedHeldOutRequestSha256s[${index}]`));
+    if (plannedHeldOutRequestSha256s.length < 2
+      || new Set(plannedHeldOutRequestSha256s).size !== plannedHeldOutRequestSha256s.length) {
+      throw new DeveloperEvaluationError('snapshot.experiment needs distinct predeclared held-out requests');
+    }
+    const criteriaIds = stringArray(input.criteriaIds, 'snapshot.experiment.criteriaIds', 16);
+    criteriaIds.forEach((entry, index) => id(entry, `snapshot.experiment.criteriaIds[${index}]`));
+    if (criteriaIds.length === 0 || new Set(criteriaIds).size !== criteriaIds.length) {
+      throw new DeveloperEvaluationError('snapshot.experiment needs distinct predeclared criteria');
+    }
+    experiment = Object.freeze({
+      experimentId: hash(input.experimentId, 'snapshot.experiment.experimentId'),
+      sourceRecordSha256: hash(input.sourceRecordSha256, 'snapshot.experiment.sourceRecordSha256'),
+      sourceRevision: input.sourceRevision as number,
+      runtimeSourceSha256: hash(input.runtimeSourceSha256, 'snapshot.experiment.runtimeSourceSha256'),
+      plannedHeldOutRequestSha256s: Object.freeze(plannedHeldOutRequestSha256s),
+      criteriaIds: Object.freeze(criteriaIds),
+    });
+  }
+  if ((item.mode === 'experimental') !== (experiment !== null)
+    || (item.mode === 'validated' && experiment !== null)) {
+    throw new DeveloperEvaluationError('snapshot mode and experiment binding disagree');
+  }
   const snapshot = {
     schema: DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA,
-    requestRunId: id(item.requestRunId, 'snapshot.requestRunId'),
+    mode: item.mode,
+    pinIdentity: hash(item.pinIdentity, 'snapshot.pinIdentity'),
     pinnedAt: timestamp(item.pinnedAt, 'snapshot.pinnedAt'),
     cases,
+    experiment,
   } as const;
   const snapshotId = hash(item.snapshotId, 'snapshot.snapshotId');
   const digest = hash(item.digest, 'snapshot.digest');
   if (digest !== sha256(canonicalJson(snapshot)) || snapshotId !== digest) {
     throw new DeveloperEvaluationError('snapshot digest does not match its safe advisory content');
+  }
+  return Object.freeze({ ...snapshot, snapshotId, digest });
+}
+
+export function parseHistoricalDeveloperEvaluationSnapshot(value: unknown): HistoricalDeveloperEvaluationSnapshot {
+  const item = own(value, ['schema', 'snapshotId', 'requestRunId', 'pinnedAt', 'cases', 'digest'], 'historical snapshot');
+  if (item.schema !== HISTORICAL_DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA) {
+    throw new DeveloperEvaluationError('historical snapshot.schema is invalid');
+  }
+  if (!Array.isArray(item.cases) || item.cases.length > 128) {
+    throw new DeveloperEvaluationError('historical snapshot.cases must be a bounded array');
+  }
+  const cases = Object.freeze(item.cases.map((entry, index) =>
+    parseProjection(entry, `historical snapshot.cases[${index}]`)));
+  const snapshot = {
+    schema: HISTORICAL_DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA,
+    requestRunId: id(item.requestRunId, 'historical snapshot.requestRunId'),
+    pinnedAt: timestamp(item.pinnedAt, 'historical snapshot.pinnedAt'),
+    cases,
+  } as const;
+  const snapshotId = hash(item.snapshotId, 'historical snapshot.snapshotId');
+  const digest = hash(item.digest, 'historical snapshot.digest');
+  if (digest !== sha256(canonicalJson(snapshot)) || snapshotId !== digest) {
+    throw new DeveloperEvaluationError('historical snapshot digest is invalid');
   }
   return Object.freeze({ ...snapshot, snapshotId, digest });
 }

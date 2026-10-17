@@ -131,6 +131,22 @@ test('completion limitation projection never turns absent research into referenc
   assert.deepEqual(snapshot(f.root), before);
 });
 
+test('stage next never defers a present invalid board after the evidence budget is exhausted', t => {
+  const f = fixture(t);
+  write(f.root, '.omd/scout.md', '# Scoped reference research\n');
+  write(f.root, '.omd/reference-board.json', '{}');
+  const before = snapshot(f.root);
+  for (let n = 0; n < MAX_EVIDENCE_REPLANS + 2; n++) {
+    const work = nextStageWork(f.root, pack, f.invocation);
+    assert.equal(work.stage, 'reference-board');
+    assert.equal(work.action, 'repair-output');
+    assert.ok(work.problems.length > 0);
+    assert.ok(!work.deferredStages.includes('reference-board'));
+    assert.ok(!work.confidenceDebt.some(item => item.stage === 'reference-board'));
+  }
+  assert.deepEqual(snapshot(f.root), before);
+});
+
 test('present invalid application evidence cannot become completion confidence debt', t => {
   for (const entry of ['invalid-file', 'dangling-application', 'orphaned-projection', 'dangling-projection']) {
     const f = fixture(t);

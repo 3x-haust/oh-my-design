@@ -28,6 +28,59 @@ const handback = (fields: object) => ({
   qualityAssessments: assessments(), findings: [], resolvedFindings: [], ...fields,
 });
 
+test('consulted originals cannot be retained without a capture-bound reference comparison', () => {
+  const withReferences = { ...bindings, consultedReferencesSha256: 'f'.repeat(64) };
+  assert.throws(() => parseFirstRenderReview(
+    handback({ fixedBindings: withReferences }), withReferences, [], captures,
+  ), /reference comparison/);
+});
+
+test('primary comparison binds both captures and unresolved fidelity prevents retain', () => {
+  const withReferences = { ...bindings, consultedReferencesSha256: 'f'.repeat(64) };
+  const references = [{ captureSha256: '3'.repeat(64), referenceRole: 'primary' as const },
+    { captureSha256: '4'.repeat(64), referenceRole: 'supplemental' as const }];
+  const comparisons = captures.map(capture => ({
+    ...capture, referenceSha256: references[0]?.captureSha256, verdict: 'pass',
+    sourceIdentity: 'Light sans-serif type and inset horizontal article groups.',
+    preservedTraits: ['Type character, inset grouping and relative scale'], departures: [], findingIds: [],
+  }));
+  const input = handback({ fixedBindings: withReferences, referenceComparisons: comparisons });
+  const parse = (value: unknown) => parseFirstRenderReview(value, withReferences, [], captures, references);
+  assert.equal(parse(input).decision, 'retain');
+  assert.throws(() => parse({ ...input, referenceComparisons: comparisons.slice(1) }), /reference comparison/);
+  assert.throws(() => parse({ ...input, referenceComparisons: [comparisons[0], comparisons[0]] }), /capture binding/);
+  assert.throws(() => parse({ ...input, referenceComparisons: comparisons.map(row => ({
+    ...row, referenceSha256: references[1]?.captureSha256,
+  })) }), /capture binding/);
+  assert.throws(() => parse({ ...input, referenceComparisons: comparisons.map(row => ({
+    ...row, captureSha256: '9'.repeat(64),
+  })) }), /capture binding/);
+  for (const verdict of ['fail', 'insufficient']) {
+    assert.throws(() => parse({ ...input, referenceComparisons: comparisons.map(row => ({
+      ...row, verdict,
+    })) }), /unresolved finding/);
+  }
+  const qualityAssessments = assessments().map(row => row.axis === 'hierarchyComposition'
+    ? { ...row, verdict: 'fail' } : row);
+  const mismatch = { ...finding, id: 'source-system-lost', viewport: 'both',
+    axis: 'hierarchyComposition', repairScope: 'composition' };
+  const failed = { ...input, decision: 'reframe', qualityAssessments, findings: [mismatch],
+    referenceComparisons: comparisons.map(row => ({
+      ...row, verdict: 'fail', findingIds: [mismatch.id], departures: ['Heavy serif type replaces the source system.'],
+    })) };
+  assert.equal(parse(failed).decision, 'reframe');
+  assert.throws(() => parse({ ...failed, decision: 'retain' }), /contradicts/);
+  assert.throws(() => parse({ ...failed, referenceComparisons: comparisons.map(row => ({
+    ...row, verdict: 'fail', findingIds: ['unrelated'],
+  })) }), /finding binding/);
+});
+
+test('historical v2 handback remains readable only through explicit legacy parsing', () => {
+  const input = handback({ schema: 'first-render-reviewer-handback-v2' });
+  assert.throws(() => parseFirstRenderReview(input, bindings, [], captures));
+  assert.equal(parseFirstRenderReview(input, bindings, [], captures, undefined, true).decision, 'retain');
+});
+
 test('an empty finding list cannot stand in for actual quality assessment', () => {
   assert.throws(() => parseFirstRenderReview({
     schema: FIRST_RENDER_REVIEW_HANDBACK, fixedBindings: bindings, decision: 'retain',

@@ -22,7 +22,15 @@ export function browseDiscoveryWork(root: string, route: Pick<RouteRecord, 'sour
   const pendingCandidates = candidates.filter(candidate => !admissions.some(row =>
     row.sourceId === refIdentity(candidate.reference.source, candidate.reference.component)
     && row.captureSha256 === sha256(candidate.capture) && row.imageSha256 === sha256(candidate.image)));
-  const promotedDirections = loadRefs(root).flatMap(reference => {
+  const retained = loadRefs(root);
+  const pendingBrowseReferences = retained.filter(reference => {
+    if (reference.researchLane !== 'design' || !reference.browse
+      || !sealed.some(item => item.session.sha256 === reference.browse!.session.sha256)) return false;
+    const capture = readContainedRegularFile(root, relative(root, refRecordPath(root, reference)), 'retained design capture');
+    return !admissions.some(row => row.sourceId === refIdentity(reference.source, reference.component)
+      && row.captureSha256 === sha256(capture) && row.imageSha256 === reference.acquisition?.imageSha256);
+  });
+  const promotedDirections = retained.flatMap(reference => {
     if (reference.researchLane !== 'design' || !reference.imagePath || !reference.acquisition?.imageSha256) return [];
     const imageSha256 = reference.acquisition.imageSha256;
     const capture = readContainedRegularFile(root, relative(root, refRecordPath(root, reference)), 'retained design capture');
@@ -67,7 +75,7 @@ export function browseDiscoveryWork(root: string, route: Pick<RouteRecord, 'sour
       args: stopping ? ['ref', 'browse', 'end', '--reason', nativeStop ?? 'budget', '--json'] : ['ref', 'browse', 'status', '--json'],
       reason: stopping ? 'Seal the bounded research attempt and carry unresolved gaps as confidence debt.'
         : 'Choose a recorded browse action from the visible observation. Inspect whole screens, keep concrete reasons, compare the tray, then author reference analysis.' };
-  } else if (pendingCandidates.length > 0) {
+  } else if (pendingCandidates.length > 0 || pendingBrowseReferences.length > 0) {
     action = { kind: 'review-candidates', lane: 'design', args: ['ref', 'direction-review', '--json'],
       reason: 'Independent Eye must inspect the staged original pixels before any design reference can be retained or counted as a visual direction.' };
   } else {
@@ -94,7 +102,9 @@ export function browseDiscoveryWork(root: string, route: Pick<RouteRecord, 'sour
   ].toSorted();
   return { schema: 'reference-discovery-work-v2', status, action, next: `omd ${action.args.join(' ')}`, instruction: action.reason,
     workSha256: sha256(canonicalJson({ contract: route.sourceContractSha256, status, action, discrete,
-      pendingCaptures: pendingCandidates.map(candidate => sha256(candidate.capture)).toSorted(),
+      pendingCaptures: [...pendingCandidates.map(candidate => sha256(candidate.capture)),
+        ...pendingBrowseReferences.map(reference => sha256(readContainedRegularFile(root,
+          relative(root, refRecordPath(root, reference)), 'pending browse design capture')))].toSorted(),
       materialProgressIdentities })), code: null, attempts: [], exclusions: [],
     materialProgressIdentities, circuits: [], progress,
     browse: { head: live?.head ?? null, budget: live?.binding.budget ?? sealed.at(-1)?.verified.seal.budget ?? null, observation, confidenceDebt: sealed.flatMap(item => item.verified.seal.confidenceDebt) } };

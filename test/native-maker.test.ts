@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, chmodSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
@@ -26,8 +26,119 @@ import { currentMakerSource } from '../core/runtime/native-maker-state.ts';
 import { installNativeFidelityReferences } from './helpers/native-reference-fidelity.ts';
 import { makerVisuals } from '../core/runtime/native-maker-visuals.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
+import { nativeMakerCommand } from '../bin/native-maker-command.ts';
+import { makerContext } from '../core/runtime/native-maker-context.ts';
+import { parseMakerInput } from '../adapters/pi-maker-contract.ts';
+import { INTERACTIVE_PROCESS_POLICY } from '../core/route/process-policy.ts';
+import { publishReferenceAnalysis } from '../core/ref/reference-analysis.ts';
 
 const handInput = { ...input, schema: 'native-maker-input-v1' as const, role: 'omd-hand' as const };
+
+test('current Hand consumes whole-screen analysis without requiring a legacy reference handoff', t => {
+  const context = fixture(t);
+  const routeInput = { ...context.routeInput, processPolicy: INTERACTIVE_PROCESS_POLICY };
+  routeInput.strategyDecision.stages.splice(routeInput.strategyDecision.stages.indexOf('production'), 0, 'art-direction');
+  routeInput.strategyDecision.roles.push('omd-art-director');
+  routeInput.strategyDecision.skips = routeInput.strategyDecision.skips.filter((skip: { id: string }) => skip.id !== 'art-direction');
+  routeInput.strategyDecision.executionWaves.splice(1, 0, { id: 'direction', mode: 'concurrent', roles: ['omd-art-director'] });
+  publishAdaptiveRoute(context.root, routeInput, context.writer, context.invocation);
+  const route = readPersistedRoute(context.root, context.invocation);
+  const analysis = {
+    schema: 'reference-analysis-v1', sourceContractSha256: route.sourceContractSha256,
+    domainBriefSha256: sha256(readFileSync(join(context.root, '.omd/domain-brief.json'))),
+    references: [], selectedReferenceIds: [], patterns: [],
+    screens: [{
+      surface: 'Confirmation', target: { route: '/', state: 'initial' },
+      domain: { referenceIds: [], coverage: 'brief-derived', gap: 'No external capability observed.',
+        application: 'Use the supplied confirmation.', doNotTransfer: 'No invented functionality.', reason: 'The request owns the task.' },
+      design: { referenceIds: [], coverage: 'brief-derived', gap: 'No usable reference acquired.',
+        application: 'Render the supplied content legibly.', doNotTransfer: 'No source appearance claims.', reason: 'Record missing evidence honestly.' },
+      checks: ['Verify readability in the rendered output.'],
+    }],
+  };
+  publishReferenceAnalysis(context.root, analysis, route, context.writer);
+  const projected = makerContext(context.root, route, {
+    input: parseMakerInput(context.input), invocation: context.invocation, packRoot: context.packRoot,
+  });
+  const delivered = JSON.parse(JSON.stringify(projected.context));
+  assert.equal(delivered.transfer.schema, 'whole-screen-reference-handoff-v1');
+  assert.deepEqual(delivered.transfer.images, []);
+  assert.equal(existsSync(join(context.root, '.omd/reference-handoffs/hand.json')), false);
+  writeFileSync(join(context.root, '.omd/reference-analysis.json'), JSON.stringify({ ...analysis,
+    sourceContractSha256: '0'.repeat(64) }));
+  assert.throws(() => makerContext(context.root, route, {
+    input: parseMakerInput(context.input), invocation: context.invocation, packRoot: context.packRoot,
+  }), /source contract changed/);
+});
+
+test('current product maker preserves required outcomes without a pre-existing external benchmark', t => {
+  const context = fixture(t);
+  publishAdaptiveRoute(context.root, {
+    ...context.routeInput, projectMode: 'greenfield', processPolicy: INTERACTIVE_PROCESS_POLICY,
+    referenceDiscovery: { ...context.routeInput.referenceDiscovery, taskNeed: 'new-product' },
+  }, context.writer, context.invocation);
+  const route = readPersistedRoute(context.root, context.invocation);
+  assert.ok(route.gates.includes('greenfield-task-flow-benchmark'));
+  const projected = makerContext(context.root, route, {
+    input: parseMakerInput(context.input), invocation: context.invocation, packRoot: context.packRoot,
+  });
+  const delivered = JSON.parse(JSON.stringify(projected.context));
+  assert.equal(delivered.evaluatorPlan, null);
+  assert.deepEqual(delivered.requiredOutcomes, route.requiredOutcomes);
+  assert.deepEqual(delivered.prohibitedOutcomes, route.prohibitedOutcomes);
+  assert.equal(existsSync(join(context.root, '.omd/task-flow-benchmark-projection.json')), false);
+});
+
+test('native maker restores exact previous files without overwriting later source edits', async t => {
+  const context = fixture(t);
+  const path = join(context.root, input.paths[0] ?? '');
+  const added = join(context.root, input.paths[1] ?? '');
+  const before = readFileSync(path);
+  chmodSync(path, 0o755);
+  const unrelated = join(context.root, 'src/copy/unrelated.ts');
+  writeFileSync(unrelated, 'export const untouched = true;');
+  await makeNativeSource(context);
+  const generated = readFileSync(path);
+  const checkpointPointerPath = '.omd/makers/checkpoints/current-hand.json';
+  const checkpointPointer = readFileSync(join(context.root, checkpointPointerPath));
+  const pointer = JSON.parse(checkpointPointer.toString('utf8'));
+  const forged = JSON.parse(readFileSync(join(context.root, pointer.path), 'utf8'));
+  forged.files[0].before = Buffer.from('forged baseline').toString('base64');
+  const forgedBytes = JSON.stringify(forged);
+  const forgedPath = `.omd/makers/checkpoints/sha256-${sha256(forgedBytes)}.json`;
+  context.writer.writeContentAddressed(forgedPath, forgedBytes);
+  context.writer.write(checkpointPointerPath, JSON.stringify({ path: forgedPath, sha256: sha256(forgedBytes) }));
+  await assert.rejects(nativeMakerCommand('restore', context), /restore-checkpoint-authority/);
+  assert.deepEqual(readFileSync(path), generated);
+  context.writer.write(checkpointPointerPath, checkpointPointer);
+  chmodSync(path, 0o644);
+  await assert.rejects(nativeMakerCommand('restore', context), /restore-source-mode-drift/);
+  chmodSync(path, 0o755);
+  writeFileSync(path, 'export const independentEdit = true;');
+  await assert.rejects(nativeMakerCommand('restore', context), /restore-source-drift/);
+  assert.equal(readFileSync(path, 'utf8'), 'export const independentEdit = true;');
+  assert.equal(existsSync(added), true);
+  writeFileSync(path, generated);
+  await nativeMakerCommand('restore', context);
+  assert.deepEqual(readFileSync(path), before);
+  assert.equal(statSync(path).mode & 0o777, 0o755);
+  assert.equal(existsSync(added), false);
+  assert.equal(readFileSync(unrelated, 'utf8'), 'export const untouched = true;');
+  assert.equal(currentMakerSource(context.root, context.invocation, 'hand'), null);
+  await nativeMakerCommand('restore', context);
+  assert.deepEqual(readFileSync(path), before);
+});
+
+test('restoring a later maker preserves the prior authenticated source owner', async t => {
+  const context = fixture(t);
+  const first = await makeNativeSource(context);
+  const before = input.paths.map(path => readFileSync(join(context.root, path)));
+  await makeNativeSource(context);
+  await nativeMakerCommand('restore', context);
+  assert.deepEqual(input.paths.map(path => readFileSync(join(context.root, path))), before);
+  assert.equal(currentMakerSource(context.root, context.invocation, 'hand')?.executionSha256,
+    sha256(readFileSync(join(context.root, first.receiptPath))));
+});
 
 test('fresh maker receives host-built first-party context and imports authorized multi-file source', async t => {
   // Given a source-aware parent with unrelated ambient records.
@@ -42,6 +153,14 @@ test('fresh maker receives host-built first-party context and imports authorized
   assert.deepEqual(result.paths, input.paths);
   for (const path of input.paths) assert.match(readFileSync(join(context.root, path), 'utf8'), /maker-fixture/);
   assert.equal(readFileSync(join(context.root, 'AGENTS.md'), 'utf8'), 'AMBIENT_PROJECT_SENTINEL');
+});
+
+test('maker configures medium effort after the isolated startup ready event', async t => {
+  const context = fixture(t, 'startup-ready');
+  const result = await makeNativeSource(context);
+  assert.equal(result.receipt.modelReasoningEffort, 'medium');
+  assert.notEqual(result.receipt.sessionId, result.receipt.parentSessionId);
+  for (const path of input.paths) assert.match(readFileSync(join(context.root, path), 'utf8'), /maker-fixture/);
 });
 
 test('delivered maker packet excludes ambient history, raw briefs and verdict records', async t => {
@@ -136,6 +255,26 @@ for (const mode of ['wrong-model', 'thinking-drift', 'prehistory', 'extra-tool',
     // When it tries to author production.
     await assert.rejects(makeNativeSource(context));
     // Then neither the existing file nor the new file changes.
+    assert.deepEqual(readFileSync(join(context.root, input.paths[0] ?? '')), before);
+    assert.equal(existsSync(join(context.root, input.paths[1] ?? '')), false);
+  });
+}
+
+for (const mode of ['maker-missing-evidence-event', 'maker-evidence-error']) {
+  test(`maker preserves bounded ${mode} diagnostics without source mutation`, async t => {
+    const context = fixture(t, mode);
+    const before = readFileSync(join(context.root, input.paths[0] ?? ''));
+    await assert.rejects(makeNativeSource(context), error => {
+      assert.ok(error instanceof Error);
+      const prefix = 'PI_REVIEWER_REJECTED:maker-evidence-tool-execution:';
+      assert.ok(error.message.startsWith(prefix));
+      const diagnostic = JSON.parse(error.message.slice(prefix.length));
+      const reason = JSON.parse(diagnostic.reason);
+      assert.equal(reason.count, mode === 'maker-evidence-error' ? 1 : 0);
+      assert.equal(diagnostic.error, mode === 'maker-evidence-error' ? 'fixture-evidence-failure' : undefined);
+      assert.doesNotMatch(error.message, /PRIVATE_ERROR_DATA_SENTINEL|AMBIENT_PROJECT_SENTINEL|fixedBindings/);
+      return true;
+    });
     assert.deepEqual(readFileSync(join(context.root, input.paths[0] ?? '')), before);
     assert.equal(existsSync(join(context.root, input.paths[1] ?? '')), false);
   });
@@ -369,6 +508,7 @@ test('reframe preserves evaluator lineage through a revised candidate and fresh 
   assert.equal(routed.stage, 'production');
   assert.ok('procedure' in routed);
   assert.ok(routed.procedure?.steps[0]?.startsWith('omd first-render check --page '));
+  assert.equal(routed.procedure?.steps[0]?.includes(' --input '), false);
   assert.equal(routed.procedure?.steps.some(step => step.startsWith('omd lifecycle')), false);
   await assert.rejects(runNativeEvaluation(context), /NATIVE_REFRAME_UNRESOLVED/);
   await assert.rejects(runNativeFinalReview(context), /NATIVE_REFRAME_UNRESOLVED/);

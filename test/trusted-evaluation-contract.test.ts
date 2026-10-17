@@ -7,6 +7,8 @@ import {
 } from '../core/runtime/trusted-evaluation-contract.ts';
 import { parseEvidenceClaimPublication } from '../core/brief/evidence-claims.ts';
 import { parseTaskOutcomeContract } from '../core/brief/task-outcome.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
+import { routeAdaptiveFlow } from '../core/route/index.ts';
 
 const sha = (value: string): string => value.repeat(64);
 
@@ -86,6 +88,26 @@ test('evaluation identity rejects an entry path outside route scope', () => {
   );
 });
 
+test('product route starter admits its compiled Vite entry without changing the route', () => {
+  const route = routeAdaptiveFlow(inputSkeleton('product-route-input').skeleton);
+  const identity = deriveTrustedEvaluationIdentity({
+    sourceContractSha256: route.sourceContractSha256,
+    taskOutcome: route.sourceContract.taskOutcome,
+    evidenceClaims: route.sourceContract.evidenceClaims,
+    allowedPaths: route.allowedPaths,
+    entryPath: 'dist/index.html',
+  });
+  assert.equal(identity.entryPath, 'dist/index.html');
+  assert.equal(identity.sourceContractSha256, route.sourceContractSha256);
+  assert.throws(() => deriveTrustedEvaluationIdentity({
+    sourceContractSha256: route.sourceContractSha256,
+    taskOutcome: route.sourceContract.taskOutcome,
+    evidenceClaims: route.sourceContract.evidenceClaims,
+    allowedPaths: route.allowedPaths,
+    entryPath: '.omd/private.json',
+  }), /TRUSTED_EVALUATION_ENTRY_OUTSIDE_ROUTE/);
+});
+
 test('lifecycle manifest forbids caller-authored authority and ignores ordinary extra fields', () => {
   assert.throws(
     () => parseTrustedLifecycleManifest({
@@ -141,6 +163,13 @@ test('lifecycle manifest accepts one closed benchmark-bound entry surface', () =
   } as const;
 
   assert.deepEqual(parseTrustedLifecycleManifest(manifest).entrySurface, manifest.entrySurface);
+  assert.throws(
+    () => parseTrustedLifecycleManifest({ ...manifest, entrySurface: {
+      ...manifest.entrySurface,
+      trigger: { kind: 'press', selector: '#inspect-temperature', key: 'Enter' },
+    } }),
+    /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/,
+  );
   const { nextAction: _nextAction, ...consequenceOnlyEntry } = manifest.entrySurface;
   assert.deepEqual(
     parseTrustedLifecycleManifest({ ...manifest, entrySurface: consequenceOnlyEntry }).entrySurface,

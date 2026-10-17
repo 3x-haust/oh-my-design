@@ -50,6 +50,7 @@ export const FINAL_RENDER_REVIEWER_TASK = [
   'Copy outputContract.responseIdentity into your response unchanged, then copy fixedBindings and add the required judgments. laneSchema describes a downstream record, not your response schema.',
   'Fill responseTemplate according to responseSchema: verdicts use GREEN or RED, criticalFloors use numeric scores, findings are strings, and designQuality is the schema-tagged six-axis object with evidence from both viewports. Null template values are unanswered, never approval.',
   'Blind narrative concerns visible task purpose, information hierarchy and recovery guidance. Behavioral execution belongs to the protocol lane and source comparison belongs to the fidelity lane; their intentionally excluded evidence is not a blind-lane defect. Content below the fold is not itself failure: judge access, grouping and task fit for the actual content.',
+  'For a task whose meaning spans a whole page, inspect the supplied content sequence and relationships, not just its entry screen or an attractive isolated region. Apply this only to that task scope. A still image can establish static appearance, not the meaning or operation of an entire video, loop or time-based demonstration; temporal outcome acceptance belongs to the protocol lane.',
   'Return exactly the embedded output contract.',
 ].join(' ');
 

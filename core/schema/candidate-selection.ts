@@ -51,7 +51,10 @@ function skeleton(name: string, value: object, command: string, constraints: str
 export const PROCESS_INPUTS: readonly InputSkeleton[] = [
   skeleton('minimal-tokens', seed, 'omd tokens check --input .omd/tokens.json --json', ['Art Director commits only the roles this representative content needs. V3 has no rung, display, accent, or elevation quota. Font stacks declare a generic fallback; actual loading/glyph coverage still needs rendering.']),
   skeleton('token-extensions', { schema: 'token-extensions-v1', primitives: {}, semantic: {}, textStyles: {}, neededBy: [] }, 'omd tokens extend --input .omd/.cache/token-extensions-input.json --json', ['After current selection only. All keys are disjoint from the selected base and prior additions. neededBy contains {tokenId:"primitives.errorInk",surfaceId,stateId,componentId} for every added token; the component/state must exist in Frame. A representative role remap stales direction.']),
-  skeleton('candidate-content', { schema: 'candidate-content-v1', surfaceId: 'main', stateId: 'initial', copy: receipt('.omd/copy-deck.md'), units: [{ id: 'body', text: '<exact visible copy/data unit>', roleId: 'body' }], facts: ['<supplied fact>'], truthBoundary: '<real/demo boundary>' }, 'omd candidate content --input .omd/.cache/candidate-content-input.json --json', ['Use the same complete unit/item set in every candidate, with units rendered as direct text. The command validates and returns the projection digest; it does not author or approve copy. Writer art metadata closure does not change the visible-copy projection.']),
+  skeleton('candidate-content', { schema: 'candidate-content-v1', surfaceId: 'main', stateId: 'initial', copy: receipt('.omd/copy-deck.md'), units: [{ id: 'body', text: '<exact visible copy/data unit>', roleId: 'body' }], facts: ['<supplied fact>'], truthBoundary: '<real/demo boundary>' }, 'omd candidate content --input .omd/.cache/candidate-content-input.json --json', [
+    'Use the same complete visible unit/item set for the named surface/state in every candidate. Closed-control option domains remain shared facts/data; only the painted current value belongs in initial units. An open control needs its own explicit representative state. Never expose every choice just to satisfy measurement or remove frozen difficult units. The command validates and returns the projection digest; it does not author or approve copy. Writer art metadata closure does not change the visible-copy projection.',
+    'Before freezing units, judge the represented task information: readable work-object identity, current state, ownership where relevant and action labels, using real or authorized demo values. Missing meaningful values return to the content/plan owner; do not invent facts, substitute unexplained glyphs or delete useful metadata to repair layout. Exact-content validation preserves declared units; it does not certify their semantic completeness.',
+  ]),
   skeleton('candidate-plan', plan, 'omd candidate plan --input .omd/.cache/candidate-plan-input.json --json', ['Publish before creating candidate source directories. Copy and minimal tokens precede candidates; full Typesetter/Composer proof follows choice. Views exactly match the representative Frame scope. Every nested object is closed. Overrides use the same typed primitive union and preserve key type/unit.']),
   skeleton('candidate-set', { schema: 'candidate-set-v2', plan: receipt('.omd/.cache/sketches/plans/sha256-<hash>.json'), candidates: ['A', 'B'].map(id => ({ id, source: receipt(`.omd/.cache/sketches/${id}/index.html`), assets: [], previews: [preview], effectiveTokensSha256: '<digest of seed + this candidate primitiveOverrides>', limitations: [] })) }, 'omd candidate check --input .omd/.cache/candidate-set-input.json --json', ['Include every plan view for each of 2-3 candidates. Render with omd measure --entry .omd/.cache/sketches/<id>/index.html --scope <scope.json>; native measurement receipts authenticate PNG/source/state/viewport. All visible copy and data units are equal. candidate packet --input commits the valid set and derives presentation plus blind packet. It is a guarded publisher; check is read-only.']),
   skeleton('candidate-selection-v2', { schema: 'candidate-selection-input-v2', candidateSet: receipt('.omd/.cache/sketches/sets/sha256-<hash>.json'), selectedId: '<actual chosen ID>', inputDigest: '<candidate packet pending.inputDigest>', decision: { decidedBy: 'user', userMessage: '<verbatim actual answer>', userInputReceipt: receipt('.omd/.cache/sketches/authority/sha256-<hash>.json'), displayedSet: receipt('.omd/.cache/sketches/presentations/sha256-<hash>.json') } }, 'omd candidate select --input .omd/.cache/candidate-selection-v2-input.json --json', ['Pi binds actual interactive/RPC bytes and signed userInputObservation automatically. Do not invent receipt bytes. Bare continue is not a choice. Other hosts must supply a verified host observation and disclose missing capability.', 'Explicitly autonomous routes instead use decision:{decidedBy:"agent",autonomyGrant:{path,sha256},eyeReview:{path,sha256},reviewIndependence:"isolated"}. A signed grant and actual isolated Eye output are mandatory; checkpoint:none is not authority.']),
@@ -71,6 +74,39 @@ export function currentProcessRouteInput(input: InputSkeleton): InputSkeleton {
       methods: concepts ? [...s.methods, 'concept-exploration'] : s.methods,
       skips: concepts ? s.skips : [...s.skips, { id: 'concept-exploration', reason: '<unchanged current direction, supplied authoritative target, bounded nonvisual change, or explicit user decline>' }] } } };
 }
+export function modelLedRouteInput(input: InputSkeleton): InputSkeleton {
+  const value = structuredClone(input.skeleton) as Record<string, unknown>;
+  delete value.processPolicy;
+  return {
+    ...input,
+    keys: input.keys.filter(key => key !== 'processPolicy'),
+    constraints: [
+      'The authenticated host supplies model-led execution policy. Preserve the complete original request, required outcomes, permission boundaries and real unknowns.',
+      'taskOutcome.mustHave, mustNotHave and completionEvidence describe browser-observable product/surface outcomes. Preserve execution-only requirements verbatim in taskOutcome.executionRequirements with requirement and enforcedBy; do not ask page text to prove authorship, independent review or future finalization. Partition before publication, never reclassify a failed product behavior to make a run pass.',
+      'The default is direct production, real browser verification and one independent final review. Choose research, references, candidate exploration and delegation when they help; they are not mandatory intermediate documents.',
+      'Hand names the production responsibility; the current model can author source directly through ordinary scoped tools. Use maker run only when delegation is useful.',
+      'Optional methods that are deliberately selected retain their real publisher and evidence contracts. Do not claim a method, source, approval or visual fidelity that was not actually established.',
+      'Allowed paths describe the real project scope, including build output. Browser checks must cover every requested outcome; no design-choice interview is required.',
+      'designAxes uses schema=design-axis-input-v1, taskSize=small|medium|large, failureRisk=low|moderate|high, uxNeed=baseline|focused|rigorous, expressiveDesignNeed=restrained|balanced|showpiece.',
+      'failureRisk=high requires uxNeed=rigorous. Preserve the assessed risk instead of lowering it to repair this contradiction; high risk also requires an enforced hard_safety_rail in uxPolicy.',
+    ],
+    skeleton: {
+      ...value,
+      strategyDecision: {
+        schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
+        roles: ['omd-hand', 'omd-eye'],
+        stages: ['production', 'browser-evidence', 'independent-review'],
+        executionWaves: [
+          { id: 'build', mode: 'concurrent', roles: ['omd-hand'] },
+          { id: 'verify', mode: 'concurrent', roles: ['omd-eye'] },
+        ],
+        methods: [], aiAssets: [], attributionCategories: [], skips: [],
+        rationale: '<the model chooses the methods needed for this requested result; explain only material decisions>',
+      },
+    },
+  };
+}
+
 export function currentFrameInput(input: InputSkeleton): InputSkeleton {
   return { ...input, keys: [...input.keys, 'surfacePlan', 'validationPlan', 'accessibilityPlan'], skeleton: { ...input.skeleton as object, schema: 'frame-input-v2',
     surfacePlan: { schema: 'surface-plan-v1', representativeSurfaceId: 'main', views: plan.views, surfaces: [{ id: 'main', purpose: '<requested surface purpose>', taskIds: ['T1'], componentIds: ['main-content'], states: [{ id: 'initial', required: true, reason: '<actual entry state>', primaryActionId: null, primaryRequired: false }], viewIds: plan.views.map(v => v.id), referenceCoverage: 'brief-derived', referenceIds: [], referenceGap: '<gap>', referenceDecision: '<brief-derived decision>', contentCases: [] }] },

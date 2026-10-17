@@ -1,8 +1,11 @@
 import { readPiRequest } from './omd-request-source.ts';
 import { ensureNativePiRun, stageNativePiCommand } from '../core/runtime/native-pi-run.ts';
+import { nativePiCalibrationPinIdentity, observedNativePiHost } from '../core/runtime/native-pi-run-record.ts';
 import { fileURLToPath } from 'node:url';
 import { captureDesignExecutionPolicy, type DesignExecutionPolicy } from '../core/config/design-execution.ts';
-import { openDeveloperEvaluationStore, readDeveloperEvaluationSnapshot, resolveDeveloperEvaluationHome,
+import {
+  openDeveloperEvaluationStore, pinEligibleDeveloperEvaluationSnapshot,
+  readDeveloperEvaluationSnapshotForPublication, resolveDeveloperEvaluationHome,
   type DeveloperEvaluationSnapshot } from '../core/coach/developer-evaluation-store.ts';
 
 export type PiHostContext = Readonly<{
@@ -26,6 +29,10 @@ export class PiNativeRuns {
 
   clear(): void { this.hosts.clear(); this.calibrations.clear(); }
 
+  modelLed(): boolean {
+    return this.designPolicy.criteriaVersion === 'model-led-design-v1';
+  }
+
   observe(context: PiHostContext): void {
     if (context.model === undefined) return;
     if (context.sessionManager === undefined || context.thinkingLevel === undefined) {
@@ -41,16 +48,28 @@ export class PiNativeRuns {
     }
     const host = this.hosts.get(cwd);
     if (host === undefined || readPiRequest(cwd) === undefined) return { args, dispose() {} };
+    const runInput = { root: cwd, runtimeRoot,
+      loadedSkillPath: fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url)),
+      designPolicy: this.designPolicy, ...host };
     let calibration = this.calibrations.get(cwd);
-    if (calibration === undefined && this.evaluationSnapshotId !== undefined) {
-      calibration = readDeveloperEvaluationSnapshot(openDeveloperEvaluationStore({
+    if (calibration === undefined) {
+      observedNativePiHost(runInput);
+      const store = openDeveloperEvaluationStore({
         directory: this.evaluationHome, projectRoot: cwd, namespace: 'real',
-      }), this.evaluationSnapshotId);
+      });
+      calibration = this.evaluationSnapshotId === undefined
+        ? pinEligibleDeveloperEvaluationSnapshot(store, {
+          pinIdentity: nativePiCalibrationPinIdentity(runInput),
+          pinnedAt: new Date().toISOString(),
+        })
+        : readDeveloperEvaluationSnapshotForPublication(
+          store,
+          this.evaluationSnapshotId,
+          this.designPolicy.mode,
+        );
       this.calibrations.set(cwd, calibration);
     }
-    const run = ensureNativePiRun({ root: cwd, runtimeRoot,
-      loadedSkillPath: fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url)),
-      designPolicy: this.designPolicy, ...(calibration === undefined ? {} : { calibration }), ...host });
+    const run = ensureNativePiRun({ ...runInput, calibration });
     const command = stageNativePiCommand({ run, runtimeRoot, argv: args });
     return { args: command.argv, dispose: command.dispose };
   }

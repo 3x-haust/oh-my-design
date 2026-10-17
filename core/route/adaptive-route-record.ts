@@ -187,7 +187,7 @@ function parse(
     selectedModel,
     sourceContract: expected.sourceContract,
     sourceContractSha256: normalizedSourceSha256,
-    strategy: parseAdaptiveStrategyDecision(item.get('strategy')),
+    strategy: parseAdaptiveStrategyDecision(item.get('strategy'), expected.sourceContract.processPolicy?.schema === 'model-led-design-process-v1'),
     behavior: validatePersistedAdaptiveBehavior(item.get('behavior'), expected.behavior),
     references: Object.freeze({ decision, intended: text(references.get('intended')), actual: actualReference(references.get('actual')) }),
     claims: Object.freeze({ userFacts: strings(claims.get('userFacts'), true), workingContext: strings(claims.get('workingContext'), true) }),

@@ -15,12 +15,63 @@ const run = (args: string[], cwd?: string) =>
   spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-cli-wiring-'));
 
+test('decision-entry starter exposes the exact existing append publisher input', async () => {
+  const { inputSkeleton } = await import('../core/schema/inputs.ts');
+  const entry = inputSkeleton('decision-entry');
+  assert.equal(entry.command, 'omd deliberate append --input .omd/.cache/decision-entry.json --json');
+  assert.equal(entry.path, '.omd/.cache/decision-entry.json');
+  const graph = inputSkeleton('decision-graph').skeleton as { decisions: unknown[] };
+  assert.deepEqual(entry.skeleton, graph.decisions[0]);
+  assert.equal('decisions' in (entry.skeleton as object), false);
+});
+
 function writeFile(dir: string, rel: string, content: string): string {
   const path = join(dir, rel);
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(path, content);
   return path;
 }
+
+test('reference-analysis public starter exposes parseable nested receipts and surface decisions', async () => {
+  const { parseReferenceAnalysis } = await import('../core/ref/reference-analysis.ts');
+  const printed = run(['schema', 'reference-analysis', '--json']);
+  assert.equal(printed.status, 0, printed.stderr);
+  const entry: { skeleton: unknown } = JSON.parse(printed.stdout);
+  const analysis = parseReferenceAnalysis(entry.skeleton);
+  assert.equal(analysis.references.length, 1);
+  assert.equal(analysis.screens.length, 1);
+  assert.deepEqual(Object.keys(analysis.references[0]!.capture).sort(), ['path', 'sha256']);
+  assert.deepEqual(Object.keys(analysis.references[0]!.image).sort(), ['path', 'sha256']);
+  assert.equal(typeof analysis.references[0]!.components, 'string');
+  assert.equal(typeof analysis.screens[0]!.design.doNotTransfer, 'string');
+  assert.equal(analysis.selectedReferenceIds.length, 0);
+  assert.throws(() => parseReferenceAnalysis({ ...analysis,
+    references: [{ ...analysis.references[0], id: 'invented', captureSha256: '0'.repeat(64) }],
+  }), /closed object/);
+  assert.throws(() => parseReferenceAnalysis({ ...analysis,
+    references: [{ ...analysis.references[0], components: ['invented'] }],
+  }), /observation/);
+  assert.throws(() => parseReferenceAnalysis({ ...analysis,
+    screens: [{ ...analysis.screens[0], design: { ...analysis.screens[0]!.design, doNotTransfer: [] } }],
+  }), /doNotTransfer/);
+});
+
+test('native-maker text and JSON expose the same current Sketch input', async () => {
+  const { parseMakerInput } = await import('../adapters/pi-maker-contract.ts');
+  const json = run(['schema', 'native-maker', '--json']);
+  const text = run(['schema', 'native-maker']);
+  assert.equal(json.status, 0, json.stderr);
+  assert.equal(text.status, 0, text.stderr);
+  const entry = JSON.parse(json.stdout);
+  const textSkeleton = JSON.parse(text.stdout.slice(text.stdout.lastIndexOf('\n{') + 1));
+  assert.deepEqual(textSkeleton, entry.currentSketchSkeleton);
+  const parsed = parseMakerInput(textSkeleton);
+  assert.equal(parsed.role, 'omd-sketch');
+  assert.equal(parsed.branch, 'current-sketch');
+  assert.deepEqual(parsed.paths, ['.omd/.cache/sketches/A/index.html']);
+  assert.throws(() => parseMakerInput({ ...textSkeleton, sketchBrief: textSkeleton.sketch }), /fields/);
+  assert.throws(() => parseMakerInput({ ...textSkeleton, paths: ['index.html'] }), /fields/);
+});
 
 // ── text-slop ──────────────────────────────────────────────────────────────
 
@@ -240,7 +291,8 @@ test('printed input skeletons carry exactly the keys their validators accept', a
     ['entryPath', 'entrySurface', 'schema', 'scripts'],
   );
   const lifecycleHelp = lifecycle.constraints?.join(' ') ?? '';
-  assert.match(lifecycleHelp, /lifecycle plan` is benchmark-only/);
+  assert.equal(lifecycle.command,
+    'omd lifecycle plan --project . --output .omd/.cache/trusted-lifecycle-manifest.json --activation <host-issued-invocation.json>');
   assert.match(lifecycleHelp, /omit entrySurface entirely/);
   assert.match(lifecycleHelp, /canonical short outcomeRef/);
   assert.match(lifecycleHelp, /mustHave, mustNotHave, completionEvidence order/);

@@ -90,7 +90,7 @@ function recordFixture(t: TestContext, root: string): () => readonly FixtureEven
   return read;
 }
 
-for (const mode of ['success', 'configuration-update'] as const) {
+for (const mode of ['success', 'configuration-update', 'startup-ready'] as const) {
   test(`Given an authenticated Pi host in ${mode} mode When omd-study runs Then one signed bounded HTML handback returns`,
     { timeout: 30_000 }, async t => {
       const input = setup(t, mode);
