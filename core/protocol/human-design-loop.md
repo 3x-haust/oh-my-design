@@ -27,7 +27,11 @@ records sufficient existing evidence. No route has a universal capture or candid
 
 For ordinary model-led work, consulted external originals can be preserved without selecting
 the structured board workflow. Before contextual review, publish exact whole PNGs and reported
-source URLs with `omd ref context --input <json> --json` (`consulted-references-input-v1`).
+source URLs with `omd ref context --input <json> --json` (`consulted-references-input-v2`).
+Every present record has exactly one primary. Each v2 image names a destination `component` and may
+name `state` as `default`, `hover`, `focus`, `pressed`, or `open`; omitted state defaults to
+`default`. Historical v1 inputs remain readable as `page/default`, but a current record still must
+contain exactly one primary.
 The owner checks request scope, contained original bytes, dimensions and digests before publishing
 a signed comparison-only record. This records reported consultation, not acquisition authentication,
 reference admission, selection, approval or human satisfaction. Missing context supplies no
@@ -52,6 +56,15 @@ remain preserved without publishing the current review pointer. Historical v3 re
 remain readable under their original handback/task contract but cannot satisfy the
 current packet or unchanged-review reuse path. This is fidelity evidence, not
 source admission, absolute beauty or human satisfaction.
+
+For model-led completion, every non-Figma task other than the typed `copy-only-edit` route must have
+one request-scoped consulted primary before first-render publication. Figma exemption is based only
+on a structurally valid `figma.com/file/...` or `figma.com/design/...` URL in the authenticated
+request; malformed, stale, foreign-request, or changed consulted records still refuse even when
+such a URL exists. Final fidelity pairs consulted and product pixels only when component, named
+state, and fixed viewport correspond. Missing desktop or mobile product state coverage refuses
+before review. The fidelity handback returns exact digest-bound `consultedReferenceComparisons`;
+non-pass rows bind top-level findings and cannot coexist with GREEN reference fidelity.
 
 When `parallel-reference-acquisition` is selected, its Scout/Writer wave contract applies.
 Otherwise, parallelize independent searches, captures and lookups where useful, while preserving

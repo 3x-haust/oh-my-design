@@ -15,6 +15,9 @@ import { PNG } from 'pngjs';
 import {
   consultedReferenceProjection,
   publishConsultedReferences,
+  requireConsultedPrimaryOriginal,
+  requestSuppliesFigmaTarget,
+  requiresConsultedPrimaryOriginal,
 } from '../core/design/consulted-references.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
@@ -26,7 +29,7 @@ const INDEXED_PNG = Buffer.from(
 );
 const REQUEST = sha256('compare these consulted references');
 const POINTER = '.omd/consulted-references.json';
-const RECORD_SCHEMA = 'consulted-references-v1';
+const RECORD_SCHEMA = 'consulted-references-v2';
 
 function project(t: test.TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'omd-consulted-references-'));
@@ -40,18 +43,22 @@ function project(t: test.TestContext) {
     second,
     writer: createTestProjectWriteAdapter(root),
     input: {
-      schema: 'consulted-references-input-v1',
+      schema: 'consulted-references-input-v2',
       requestSha256: REQUEST,
       images: [{
         path: 'inputs/indexed.png',
         sha256: sha256(INDEXED_PNG),
         sourceUrl: 'https://reference.example/products/inbox?view=compact',
         role: 'primary',
+        component: 'page',
+        state: 'default',
       }, {
         path: 'inputs/second.png',
         sha256: sha256(second),
         sourceUrl: 'http://patterns.example/archive/card',
         role: 'supplemental',
+        component: 'filters',
+        state: 'open',
       }] as const,
     },
   };
@@ -121,12 +128,16 @@ test('publishes exact consulted originals and projects only comparison-safe pixe
   assert.deepEqual(projection?.renders.map(({ pngBase64, ...render }) => render), [{
     role: 'consulted-external-original',
     referenceRole: 'primary',
+    component: 'page',
+    state: 'default',
     width: 2,
     height: 1,
     captureSha256: sha256(INDEXED_PNG),
   }, {
     role: 'consulted-external-original',
     referenceRole: 'supplemental',
+    component: 'filters',
+    state: 'open',
     width: 3,
     height: 2,
     captureSha256: sha256(value.second),
@@ -153,6 +164,7 @@ test('publisher rejects closed-schema, provenance, image, role, and path violati
   reject({ ...value.input, schema: 'consulted-references-input-v0' }, /schema/);
   reject({ ...value.input, requestSha256: 'bad' }, /request/);
   reject({ ...value.input, images: [] }, /images/);
+  reject({ ...value.input, images: [{ ...value.input.images[1], role: 'supplemental' }] }, /exactly one primary/);
   reject({ ...value.input, images: Array(9).fill(value.input.images[0]) }, /images/);
   reject({
     ...value.input,
@@ -166,6 +178,10 @@ test('publisher rejects closed-schema, provenance, image, role, and path violati
     ...value.input,
     images: [{ ...value.input.images[0], role: 'selected' }],
   }, /role/);
+  reject({
+    ...value.input,
+    images: [{ ...value.input.images[0], component: 'https://source.example/private' }],
+  }, /component/);
   reject({
     ...value.input,
     images: [{ ...value.input.images[0], sha256: '0'.repeat(64) }],
@@ -205,6 +221,50 @@ test('publisher rejects closed-schema, provenance, image, role, and path violati
       sha256: sha256(INDEXED_PNG.subarray(0, 50)),
     }],
   }, /PNG|image/);
+});
+
+test('legacy input defaults to page/default while Figma exemption uses structural URLs only', t => {
+  const value = project(t);
+  publishConsultedReferences(value.root, {
+    schema: 'consulted-references-input-v1',
+    requestSha256: REQUEST,
+    images: [{
+      path: value.input.images[0].path,
+      sha256: value.input.images[0].sha256,
+      sourceUrl: value.input.images[0].sourceUrl,
+      role: 'primary',
+    }],
+  }, value.writer);
+  assert.deepEqual(consultedReferenceProjection(value.root, REQUEST)?.renders.map(
+    ({ pngBase64: _png, width: _width, height: _height, ...render }) => render,
+  ), [{
+    role: 'consulted-external-original',
+    referenceRole: 'primary',
+    component: 'page',
+    state: 'default',
+    captureSha256: value.input.images[0].sha256,
+  }]);
+  assert.equal(requestSuppliesFigmaTarget('Build https://www.figma.com/design/ABC123/Product?node-id=1-2'), true);
+  assert.equal(requestSuppliesFigmaTarget('Mention figma.com/design without a URL'), false);
+  assert.equal(requestSuppliesFigmaTarget('https://example.com/design/ABC123/Product'), false);
+  const route = {
+    request: 'Update the existing product',
+    sourceContract: { referenceDiscovery: { taskNeed: 'existing-product-change' } },
+  } as Parameters<typeof requiresConsultedPrimaryOriginal>[0];
+  assert.equal(requiresConsultedPrimaryOriginal(route), true);
+  assert.equal(requiresConsultedPrimaryOriginal({
+    ...route,
+    request: 'Implement https://figma.com/file/ABC123/Product',
+  }), false);
+  assert.equal(requiresConsultedPrimaryOriginal({
+    ...route,
+    sourceContract: { ...route.sourceContract,
+      referenceDiscovery: { ...route.sourceContract.referenceDiscovery, taskNeed: 'copy-only-edit' } },
+  }), false);
+  assert.throws(() => requireConsultedPrimaryOriginal(value.root, {
+    request: 'Implement https://figma.com/design/ABC123/Product',
+    sourceContract: route.sourceContract,
+  } as Parameters<typeof requireConsultedPrimaryOriginal>[1]), /request scope/);
 });
 
 test('projection refuses malformed pointers, records, signatures, request scope, and image bytes', t => {

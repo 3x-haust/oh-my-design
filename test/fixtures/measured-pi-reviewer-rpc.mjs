@@ -19,6 +19,13 @@ function handback(packet) {
   return { schema: output.schema, lane: output.lane, ...output.fixedBindings,
     ...(packet.surfaceReviewContract ? { surfaceReview: { schema: 'surface-review-v1', rows: packet.surfaceReviewContract.rows.map(row => ({ ...row, criteria: Object.fromEntries(Object.keys(row.criteria).map(key => [key, 'pass'])) })) } } : {}),
     verdicts: Object.fromEntries(output.verdictKeys.map(key => [key, 'GREEN'])), criticalFloors: Object.fromEntries(output.criticalFloorKeys.map(key => [key, 4])), findings: [],
+    ...(output.reviewerFields.includes('consultedReferenceComparisons') ? {
+      consultedReferenceComparisons: packet.consultedReferenceComparisonExpectations.map(binding => ({
+        ...binding, verdict: 'pass',
+        sourceIdentity: 'Offline measured fixture consulted original.',
+        preservedTraits: ['Exact supplied state pixels remain bound.'], departures: [], findings: [],
+      })),
+    } : {}),
     designQuality: { schema: output.designQuality.schema, axes: output.designQuality.axes.map(axis => ({ axis, verdict: 'GREEN', score: 4, crossViewport: 'preserved', criticalFailure: null,
       evidence: packet.observationProjection.map(view => {
         const native = measurements.find(p => p.packetSha256 === view.packetSha256);

@@ -1111,7 +1111,8 @@ const TRUSTED_LIFECYCLE_MANIFEST: InputSkeleton = {
     'Current native Pi may author a request-bound evaluation proposal without an external benchmark: omit entrySurface entirely and run omd lifecycle evaluate --manifest .omd/.cache/trusted-lifecycle-manifest.json --json. It must cover every actual required outcome; the native evaluator and independent review remain authoritative.',
     '`omd lifecycle plan` is the genuine benchmark-derived path. Its entrySurface must bind the actual benchmark. Legacy benchmark-applicable plans retain that requirement; never fabricate a benchmark or label an authored proposal benchmark-derived.',
     'scripts uses canonical short outcomeRef values (mustHave:0, mustHave:1, mustNotHave:0, completionEvidence:0), not requirement prose or hashed outcome refs; cover every current task-outcome item exactly once in mustHave, mustNotHave, completionEvidence order.',
-    `Actions support click(selector), fill(selector,value), press(selector,key), and reload with no selector, URL or value. press keys are limited to ${TRUSTED_EVALUATION_KEYS.join(', ')}. Each may use the existing viewports restriction. reload actually reloads the current local document; use it when proving persistence instead of removing that requirement or adding a test-only app control.`,
+    `Actions support click(selector), fill(selector,value), press(selector,key), hover(selector), focus(selector), press-start(selector), and reload with no selector, URL or value. press keys are limited to ${TRUSTED_EVALUATION_KEYS.join(', ')}. Each may use the existing viewports restriction. press-start must be the final action and is released only after the settled state capture. reload actually reloads the current local document; use it when proving persistence instead of removing that requirement or adding a test-only app control.`,
+    'A script that supplies captureState binds the retained product pixels to one stable component identity and one state: default, hover, focus, pressed, or open. Use element-state assertions for hovered, focused, focus-visible, pressed, or expanded. This identity is comparison evidence, not a claim inferred from selector wording.',
     'Use preserved-text for a record that must be visibly present both before and after the script actions. visible-text after a click or press proves a newly visible result; preserved-text does not replace that transition assertion. Combine both when an action changes one state while retaining another. Keyboard claims require actual press actions and their outcome captures; click plus static keyboard-help text is not keyboard evidence. The trusted receipt retains observed focus before/after presses, without exposing raw DOM ids.',
     'Each script has nonempty assertions: absent-text for mustNotHave; visible-text for mustHave and completionEvidence. The current browser evaluator cannot verify source/build, filesystem scope, review completion, or future finalization. Execution-only requirements belong in the original route taskOutcome.executionRequirements and are checked by their named host gates, not browser scripts; do not substitute page text for these requirements or silently remove them from the task contract. Do not omit a product behavior or silently rewrite a published task contract.',
     '`benchmarkProjectionSha256` is the SHA-256 of the current projection file bytes.',
@@ -1128,7 +1129,15 @@ const TRUSTED_LIFECYCLE_MANIFEST: InputSkeleton = {
         kind: 'visible-text',
         selector: '<state target selector>',
         text: '<exact visible success state>',
+      }, {
+        kind: 'element-state',
+        selector: '<expanded control selector>',
+        state: 'expanded',
       }],
+      captureState: {
+        component: '<stable component identity>',
+        state: 'open',
+      },
     }],
     entrySurface: {
       benchmarkProjectionSha256: '<sha256 of .omd/task-flow-benchmark-projection.json bytes>',
@@ -1226,11 +1235,11 @@ const REFERENCE_CAPTURE_PREPARATION: InputSkeleton = {
   command: 'omd ref add <url> --as menu --selector "#menu" --blueprint --shot --no-energy --preparation .omd/.cache/reference-capture-preparation.json',
   keys: ['schema', 'actions', 'assertions'],
   constraints: [
-    'only caller-authored disclosure clicks: exactly one button[type=button] with aria-expanded and aria-controls pointing to an asserted element; no scripts, typing, submit, navigation, or inferred actions',
-    '0 to 8 actions and 1 to 8 assertions; empty actions observe initial state without probing; each assertion identifies exactly one existing element and observes visible or hidden',
+    'caller-authored actions are explicit disclosure clicks, hover, focus, or press-start. Every target must be exactly one visible element. State actions reject links, downloads, submit/reset controls, authentication, pricing, payment, destructive actions, and navigation. press-start must be final and mouseup runs in cleanup after capture.',
+    '0 to 8 actions and 1 to 8 assertions; empty actions observe initial state without probing. Assertions observe visible, hidden, hovered, focused, focus-visible, pressed, or expanded on exactly one existing element.',
     'ref add-batch entries embed this object as preparation and must explicitly set energy:false; ref add requires --no-energy',
     'IR, blueprint, and PNG use the prepared page; assertion failure publishes no new screenshot or reference record',
-    'capturePreparation records executed actions, visibility observations, and actual viewport; this is not complete semantic state proof',
+    'capturePreparation records executed actions, exact state observations, actual viewport, and the retained capture digest (or null when no screenshot was requested); this is not complete semantic state proof',
     'interaction-probe, motion-probe, and energy-curve are not measured; invariant compatibility defaults do not establish observed absence',
   ],
   skeleton: {

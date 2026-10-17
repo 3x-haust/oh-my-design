@@ -266,6 +266,20 @@ function handback(packet) {
           rationale: 'The fixture tests exact complete visual-assessment transport and authorization only.',
         })),
     }),
+    ...(!contract.reviewerFields?.includes('consultedReferenceComparisons') || mode === 'missing-consulted-comparisons' ? {} : {
+      consultedReferenceComparisons: packet.evidence.consultedReferenceComparisonExpectations
+        .filter((_, index) => mode !== 'incomplete-consulted-comparisons' || index !== 0)
+        .map((binding, index) => ({
+        ...binding,
+        ...(mode === 'wrong-consulted-target' && index === 0
+          ? { targetCaptureSha256: '0'.repeat(64) } : {}),
+        verdict: mode === 'failed-consulted-comparison' && index === 0 ? 'fail' : 'pass',
+        sourceIdentity: 'Offline fixture consulted original; this tests exact comparison transport.',
+        preservedTraits: ['The fixture binds the supplied original and corresponding product state pixels.'],
+        departures: [],
+        findings: [],
+      })),
+    }),
     ...(contract.lane !== 'protocolLane' || !packet.evidence?.outcomeExecution || mode === 'missing-outcome-assessments' ? {} : {
       outcomeAssessments: packet.evidence.outcomeExecution.outcomes.map((outcome, index) => ({
         outcomeRef: outcome.outcomeRef,

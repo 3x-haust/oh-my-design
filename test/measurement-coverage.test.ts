@@ -27,7 +27,8 @@ test('source-free transfer and its copy preserve unknown probes without receipt 
   captured.capturePreparation = {
     schema: 'reference-capture-preparation-receipt-v1', executedActions: [{ kind: 'click', selector: '#private-toggle' }],
     observations: [{ selector: '#private-selector', state: 'visible', passed: true }], observedAt: '2026-09-06T00:00:00.000Z',
-    viewport: { width: 390, height: 844 }, notMeasured: ['interaction-probe', 'motion-probe', 'energy-curve'],
+    viewport: { width: 390, height: 844 }, captureSha256: null,
+    notMeasured: ['interaction-probe', 'motion-probe', 'energy-curve'],
   };
   const transfer = componentCaptureTransfer(captured, 'prepared');
   const copied = copyComponentCaptureTransfer(transfer);

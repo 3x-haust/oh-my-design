@@ -226,9 +226,10 @@ test('native early review repairs and recaptures without final evidence and reus
   assert.notEqual(retained.sha256, rejected.sha256);
   assert.equal(readFirstRenderReview(root)?.bindings.previousReviewSha256, stillRejected.sha256);
   publishConsultedReferences(root, {
-    schema: 'consulted-references-input-v1', requestSha256: hash('reading task'),
+    schema: 'consulted-references-input-v2', requestSha256: hash('reading task'),
     images: [{ path: '.omd/.cache/reported.png', sha256: hash(reportedPng),
-      sourceUrl: 'https://example.com/portrait-original', role: 'supplemental' }],
+      sourceUrl: 'https://example.com/portrait-original', role: 'primary',
+      component: 'portrait-detail', state: 'open' }],
   }, writer);
   assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /current review evidence changed/);
   rmSync(join(root, CANDIDATE_SELECTION_POINTER_PATH));

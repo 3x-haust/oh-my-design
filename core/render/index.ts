@@ -838,12 +838,15 @@ export async function capturePageForRef(
       }));
       if (!eligible) throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify exactly one loaded, visible UI image element, not gallery chrome; ${candidateText}`);
     }
-    const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
+    const allowedStateSelectors = preparation?.assertions
+      .filter(assertion => assertion.state !== 'hidden')
+      .map(assertion => assertion.selector) ?? [];
     const selectedContentSelectors = [...(opts.selector ? [opts.selector] : []), ...allowedStateSelectors];
     const overlayJudgment = opts.overlayJudgment && ((selector: string, url: string) => opts.overlayJudgment!(page, selector, url));
     const contentJudgment = opts.contentJudgment && ((selector: string, url: string) => opts.contentJudgment!(page, selector, url));
     const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000, selectedContentSelectors, overlayJudgment, contentJudgment);
-    const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
+    const preparedCapture = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
+    try {
     let raw = await extractIrCore(page, httpStatus, resolvedUrl, selector, false);
     if (preparation) await observeCapturePreparation(page, preparation);
     await assertNotBlocked(page, httpStatus, resolvedUrl, selector);
@@ -912,8 +915,11 @@ export async function capturePageForRef(
       const actualViewport = page.viewportSize();
       if (!actualViewport) throw new Error('reference capture preparation requires an observed viewport');
       capturePreparation = {
-        schema: 'reference-capture-preparation-receipt-v1', executedActions: executedActions!, observations,
+        schema: 'reference-capture-preparation-receipt-v1',
+        executedActions: preparedCapture!.executedActions,
+        observations,
         observedAt: new Date().toISOString(), viewport: actualViewport,
+        captureSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
         notMeasured: ['interaction-probe', 'motion-probe', 'energy-curve'],
       };
     }
@@ -945,6 +951,9 @@ export async function capturePageForRef(
         imageDimensions: { width: originalImage.width, height: originalImage.height } } : {}),
       ...(noticeDismissals.length ? { noticeDismissals } : {}),
     }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
+    } finally {
+      await preparedCapture?.release();
+    }
   }, REFERENCE_CAPTURE_TIMEOUT_MS, true);
 }
 /** DOM-only measurement in the user's browser; no independent headless probes or tab borrowing. */
@@ -1053,6 +1062,7 @@ export async function captureUserBrowserPageForRef(target: string, viewport: Vie
       return { raw, visibleText: after.visibleText, ...(shotBytes ? { shotBytes } : {}),
         ...(observations ? { capturePreparation: { schema: 'reference-capture-preparation-receipt-v1' as const,
           executedActions: [], observations, observedAt: new Date().toISOString(), viewport,
+          captureSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
           notMeasured: ['interaction-probe', 'motion-probe', 'energy-curve'] satisfies CapturePreparationReceipt['notMeasured'] } } : {}),
         acquisition: { requestedUrl: target, finalUrl: after.url, ...USER_BROWSER_PROVENANCE,
           links: after.links, imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,

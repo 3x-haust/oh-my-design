@@ -10,6 +10,10 @@ import { authorizeNativePiPayload, createTestNativePiInvocation } from '../core/
 import { requireFinalReviewerLaneAuthorization } from '../core/runtime/invocation.ts';
 import { prepareFinalRenderReviewFixture } from './helpers/final-render-review.ts';
 import { installNativeFidelityReferences } from './helpers/native-reference-fidelity.ts';
+import { publishConsultedReferences } from '../core/design/consulted-references.ts';
+import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { browserFixturePng } from './helpers/browser-observation-decision-links.ts';
 
 const digest = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 const cliPath = fileURLToPath(new URL('./fixtures/pi-reviewer-rpc.mjs', import.meta.url));
@@ -26,6 +30,24 @@ function setup(t: TestContext, references = false) {
     authorizeNativePiPayload(invocation, root, 'product-probe-result', readFileSync(join(root, '.omd', path)));
   }
   return { root, invocation, host };
+}
+
+function installConsultedPrimary(root: string, invocation: ReturnType<typeof createTestNativePiInvocation>): string {
+  const route = readPersistedRoute(root, invocation);
+  const png = browserFixturePng(24, 24);
+  writeFileSync(join(root, 'consulted-primary.png'), png);
+  publishConsultedReferences(root, {
+    schema: 'consulted-references-input-v2',
+    requestSha256: digest(route.request),
+    images: [{
+      path: 'consulted-primary.png',
+      sha256: digest(png),
+      sourceUrl: 'https://reference.example/product',
+      role: 'primary',
+      component: 'page',
+    }],
+  }, createTestProjectWriteAdapter(root, invocation));
+  return digest(png);
 }
 
 test('native fidelity refuses authenticated GREEN claims without selected-original visual assessments', { timeout: 60_000 }, async t => {
@@ -60,6 +82,44 @@ test('independent native fidelity reviewers publish complete digest-bound assess
   }
   assert.equal(checkNativeFinalReview({ root: input.root, invocation: restarted }).ok, true);
 });
+
+test('native fidelity persists complete consulted-primary comparison rows', { timeout: 60_000 }, async t => {
+  const input = setup(t);
+  const consultedSha256 = installConsultedPrimary(input.root, input.invocation);
+  const result = await runNativeFinalReview({ ...input, signal: t.signal });
+  const fidelity = result.executions.map(artifact =>
+    JSON.parse(readFileSync(join(input.root, artifact.path), 'utf8')))
+    .filter(execution => execution.lane === 'fidelityLane');
+  assert.equal(fidelity.length, 2);
+  for (const execution of fidelity) {
+    assert.deepEqual(
+      execution.consultedReferenceComparisons.map(
+        (row: { component: string; state: string; viewport: string; verdict: string }) =>
+          [row.component, row.state, row.viewport, row.verdict],
+      ),
+      [['page', 'default', 'desktop', 'pass'], ['page', 'default', 'mobile', 'pass']],
+    );
+  }
+  assert.equal(checkNativeFinalReview(input).ok, true);
+  writeFileSync(join(input.root, `.omd/consulted-references/images/${consultedSha256}.png`), 'changed');
+  assert.throws(() => checkNativeFinalReview(input), /image digest|lane no longer matches/);
+});
+
+for (const mode of ['missing-consulted-comparisons', 'incomplete-consulted-comparisons',
+  'wrong-consulted-target', 'failed-consulted-comparison']) {
+  test(`native fidelity refuses ${mode} without final evidence`, { timeout: 60_000 }, async t => {
+    const input = setup(t);
+    installConsultedPrimary(input.root, input.invocation);
+    const previous = process.env.PI_REVIEWER_FIXTURE_MODE;
+    process.env.PI_REVIEWER_FIXTURE_MODE = mode;
+    t.after(() => {
+      if (previous === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
+      else process.env.PI_REVIEWER_FIXTURE_MODE = previous;
+    });
+    await assert.rejects(runNativeFinalReview({ ...input, signal: t.signal }), /CONSULTED_REFERENCE|handback|comparison/);
+    assert.equal(existsSync(join(input.root, '.omd/final-evidence-v2.json')), false);
+  });
+}
 
 for (const mode of ['insufficient-fidelity', 'unrecognizable-fidelity', 'wrong-fidelity-image', 'incomplete-fidelity']) {
   test(`native fidelity refuses ${mode} despite authenticated GREEN verdicts`, { timeout: 60_000 }, async t => {

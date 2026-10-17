@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -30,7 +30,7 @@ import { deriveTrustedEvaluationIdentity } from '../core/runtime/trusted-evaluat
 import { deriveTrustedEvaluationPlanFromProject } from '../core/runtime/trusted-evaluation-plan.ts';
 import { writeTrustedEvaluationObservation } from '../core/runtime/trusted-evaluation-observation.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
-import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
+import { browserFixturePng, writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 import { nativeCompletionWork } from '../core/stage/native-completion.ts';
 import { makerEvaluationLineage } from '../core/runtime/native-maker-evaluation.ts';
 import { publishDesignJudgment } from '../core/design/judgment-files.ts';
@@ -46,6 +46,7 @@ import { makerVisuals } from '../core/runtime/native-maker-visuals.ts';
 import { installNativeFidelityReferences } from './helpers/native-reference-fidelity.ts';
 import { nativeReframeWork, requireResolvedNativeReframe } from '../core/runtime/native-reframe.ts';
 import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
+import { publishConsultedReferences } from '../core/design/consulted-references.ts';
 
 const runtimeRoot = fileURLToPath(new URL('..', import.meta.url));
 const packRoot = join(runtimeRoot, 'core');
@@ -54,7 +55,7 @@ const request = 'Build a shipment evidence review workspace';
 
 function fixture(t: TestContext, options: Readonly<{
   broken?: boolean; mixedPhases?: boolean; unrelatedOutcome?: boolean; composition?: boolean;
-  calibration?: DeveloperEvaluationSnapshot; modelLed?: boolean; reviewer?: boolean;
+  calibration?: DeveloperEvaluationSnapshot; modelLed?: boolean; reviewer?: boolean; consulted?: boolean;
 }> = {}) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-native-evaluation-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -131,6 +132,21 @@ function fixture(t: TestContext, options: Readonly<{
       completionEvidence: ['Evidence reviewed'], strategyFreedom: ['Choose a readable layout'] },
   }, writer, invocation);
   const route = readPersistedRoute(root, invocation);
+  if (options.modelLed && options.consulted !== false) {
+    const original = browserFixturePng(32, 32);
+    writeFileSync(join(root, 'consulted-original.png'), original);
+    publishConsultedReferences(root, {
+      schema: 'consulted-references-input-v2',
+      requestSha256: hash(route.request),
+      images: [{
+        path: 'consulted-original.png',
+        sha256: hash(original),
+        sourceUrl: 'https://reference.example/product',
+        role: 'primary',
+        component: 'page',
+      }],
+    }, writer);
+  }
   writeFrame(root, {
     ...(options.calibration === undefined ? {} : { uxSurface: 'product', uxTask: request }),
     entrySurface: parseEntrySurfaceContract({
@@ -326,6 +342,22 @@ test('model-led finish returns early visual rejection before full behavior execu
   assert.equal(existsSync(join(value.root, '.omd/observation-v2.json')), false);
   assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
   assert.deepEqual(readFileSync(join(value.root, 'index.html')), source);
+});
+
+test('model-led completion refuses a missing consulted primary before review without source mutation', async t => {
+  const { runModelLedCompletion } = await import('../bin/model-led-completion-command.ts');
+  const value = fixture(t, { modelLed: true, reviewer: true, consulted: false });
+  rmSync(join(value.root, '.omd/frame.md'));
+  const source = readFileSync(join(value.root, 'index.html'));
+  const beforeEntries = new Set(readdirSync(join(value.root, '.omd')));
+  const result = await runModelLedCompletion({ ...value, manifest: shipmentOutcomeManifest() });
+  assert.equal(result.ok, false);
+  assert.equal(result.phase, 'authority');
+  assert.equal(result.diagnostic?.code, 'CONSULTED_PRIMARY_ORIGINAL_REQUIRED');
+  assert.deepEqual(readFileSync(join(value.root, 'index.html')), source);
+  assert.deepEqual(new Set(readdirSync(join(value.root, '.omd'))), beforeEntries);
+  assert.equal(existsSync(join(value.root, '.omd/final-review/native-current.json')), false);
+  assert.equal(existsSync(join(value.root, '.omd/final-evidence-v2.json')), false);
 });
 
 test('model-led host automatically finishes changed inputs but does not repeat an unchanged failure', async t => {

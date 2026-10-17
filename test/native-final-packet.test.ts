@@ -54,6 +54,14 @@ test('reported whole originals reach fidelity without leaking source locators or
     assert.equal(fidelity.evidence.consultedReferences.sha256, published.sha256);
     assert.equal(fidelity.evidence.referenceRenders[0].role, 'consulted-external-original');
     assert.equal(fidelity.evidence.referenceRenders[0].pngBase64, png.toString('base64'));
+    assert.deepEqual(
+      fidelity.evidence.consultedReferenceComparisonExpectations.map(
+        (row: { component: string; state: string; viewport: string }) =>
+          [row.component, row.state, row.viewport],
+      ),
+      [['page', 'default', 'desktop'], ['page', 'default', 'mobile']],
+    );
+    assert.ok(fidelity.outputContract.reviewerFields.includes('consultedReferenceComparisons'));
     assert.equal(JSON.stringify(fidelity).includes('example.com'), false);
     const protocol = JSON.parse(packets.nativeFinalLanePacket({ ...fixture, lane: 'protocolLane' }).toString());
     assert.equal(protocol.evidence.referenceRenders.length, 0);
@@ -65,6 +73,75 @@ test('reported whole originals reach fidelity without leaking source locators or
     assert.throws(() => packets.nativeFinalLanePacket({ ...fixture, lane: 'fidelityLane' }));
     assert.throws(() => modelLedCompletionFingerprint(fixture.root, manifest));
   } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('consulted interaction state without matching product state refuses final packet without observation mutation', () => {
+  const fixture = prepareFinalRenderReviewFixture();
+  try {
+    const route = readPersistedRoute(fixture.root, fixture.invocation);
+    const png = browserFixturePng(16, 16);
+    const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+    writeFileSync(join(fixture.root, 'hover-original.png'), png);
+    publishConsultedReferences(fixture.root, {
+      schema: 'consulted-references-input-v2',
+      requestSha256: hash(route.request),
+      images: [{
+        path: 'hover-original.png',
+        sha256: hash(png),
+        sourceUrl: 'https://example.com/hover',
+        role: 'primary',
+        component: 'primary-action',
+        state: 'hover',
+      }],
+    }, createTestProjectWriteAdapter(fixture.root, fixture.invocation));
+    const observationPath = join(fixture.root, '.omd/observation-v2.json');
+    const before = readFileSync(observationPath);
+    assert.throws(
+      () => packets.nativeFinalLanePacket({ ...fixture, lane: 'fidelityLane' }),
+      /missing product state coverage/,
+    );
+    assert.deepEqual(readFileSync(observationPath), before);
+  } finally { rmSync(fixture.root, { recursive: true, force: true }); }
+});
+
+test('consulted interaction state pairs only with corresponding product component state and viewport', () => {
+  const fixture = prepareFinalRenderReviewFixture('copy-only', {
+    stateCapture: { component: 'primary-action', state: 'hover' },
+  });
+  try {
+    const route = readPersistedRoute(fixture.root, fixture.invocation);
+    const png = browserFixturePng(16, 16);
+    const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+    writeFileSync(join(fixture.root, 'hover-original.png'), png);
+    publishConsultedReferences(fixture.root, {
+      schema: 'consulted-references-input-v2',
+      requestSha256: hash(route.request),
+      images: [{
+        path: 'hover-original.png',
+        sha256: hash(png),
+        sourceUrl: 'https://example.com/hover',
+        role: 'primary',
+        component: 'primary-action',
+        state: 'hover',
+      }],
+    }, createTestProjectWriteAdapter(fixture.root, fixture.invocation));
+    const packet = JSON.parse(packets.nativeFinalLanePacket({
+      ...fixture,
+      lane: 'fidelityLane',
+    }).toString());
+    assert.deepEqual(packet.evidence.consultedReferenceComparisonExpectations.map(
+      (row: { component: string; state: string; viewport: string }) =>
+        [row.component, row.state, row.viewport],
+    ), [
+      ['primary-action', 'hover', 'desktop'],
+      ['primary-action', 'hover', 'mobile'],
+    ]);
+    assert.equal(packet.evidence.consultedReferenceComparisonExpectations.some(
+      (row: { state: string }) => row.state === 'default',
+    ), false);
+  } finally {
+    rmSync(fixture.root, { recursive: true, force: true });
+  }
 });
 
 for (const lane of ['fidelityLane', 'protocolLane'] as const) {

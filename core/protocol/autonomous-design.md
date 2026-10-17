@@ -39,7 +39,11 @@ Before inventing a new visual direction, the model inspects aesthetically strong
 finished-product screens. This is design practice, not a new intermediate-document,
 candidate-count or approval gate. Present the actual consulted whole originals and
 source URLs beside generated desktop/mobile screens, with concrete transferred
-structure and limits; if none were inspected, report that absence. Research images
+structure and limits. Model-led completion requires one request-scoped primary except
+for typed copy-only work or a structurally supplied Figma file/design target. Named
+hover, focus, pressed, and open originals require corresponding real product state
+captures at desktop and mobile; missing correspondence refuses instead of becoming a
+generic static comparison. Research images
 remain comparison evidence, never shipped product assets or retrospective proof.
 
 Resolve a coherent primary visual system before styling. Additional originals may support

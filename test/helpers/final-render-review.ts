@@ -44,6 +44,11 @@ export function prepareFinalRenderReviewFixture(
     withGraphHistory?: boolean;
     fillValue?: string;
     executionScripts?: (scripts: TrustedLifecycleManifest['scripts']) => TrustedLifecycleManifest['scripts'];
+    stateCapture?: Readonly<{
+      component: string;
+      state: 'default' | 'hover' | 'focus' | 'pressed' | 'open';
+      outcomeIndex?: number;
+    }>;
   }> = {},
 ): Readonly<{
   root: string;
@@ -140,9 +145,32 @@ export function prepareFinalRenderReviewFixture(
         ? [{ kind: 'fill' as const, selector: 'input', value: options.fillValue }] : [],
       assertions: [{ kind: 'visible-text', selector: 'main', text: 'Approved copy' }],
     }));
+  const plannedScripts = options.executionScripts?.(scripts) ?? scripts;
+  const stateOutcomeIndex = options.stateCapture?.outcomeIndex ?? 0;
+  const stateOutcome = plannedScripts[stateOutcomeIndex];
+  const stateScripts = options.stateCapture === undefined ? plannedScripts : plannedScripts.map((script, index) => {
+    if (index !== stateOutcomeIndex) return script;
+    const state = options.stateCapture!.state;
+    const stateAction = state === 'hover' ? { kind: 'hover' as const, selector: '#state-target' }
+      : state === 'focus' ? { kind: 'focus' as const, selector: '#state-target' }
+      : state === 'pressed' ? { kind: 'press-start' as const, selector: '#state-target' }
+      : state === 'open' ? { kind: 'click' as const, selector: '#state-target' }
+      : undefined;
+    const stateAssertion = state === 'hover' ? { kind: 'element-state' as const, selector: '#state-target', state: 'hovered' as const }
+      : state === 'focus' ? { kind: 'element-state' as const, selector: '#state-target', state: 'focused' as const }
+      : state === 'pressed' ? { kind: 'element-state' as const, selector: '#state-target', state: 'pressed' as const }
+      : state === 'open' ? { kind: 'element-state' as const, selector: '#state-target', state: 'expanded' as const }
+      : undefined;
+    return {
+      ...script,
+      actions: [...script.actions, ...(stateAction === undefined ? [] : [stateAction])],
+      assertions: [...script.assertions, ...(stateAssertion === undefined ? [] : [stateAssertion])],
+      captureState: { component: options.stateCapture!.component, state },
+    };
+  });
   const executionPlan = trustedEvaluationPlanBytes({
     schema: 'trusted-lifecycle-manifest-v1', entryPath: productionPath,
-    scripts: options.executionScripts?.(scripts) ?? scripts,
+    scripts: stateScripts,
   });
   const executionPlanSha256 = sha256(executionPlan);
   mkdirSync(join(root, '.omd/evaluation-plans'), { recursive: true });
@@ -169,6 +197,12 @@ export function prepareFinalRenderReviewFixture(
     captures: [
       { path: desktopPath, sha256: sha256(desktop), width: 1280, height: 900 },
       { path: mobilePath, sha256: sha256(mobile), width: 390, height: 844 },
+      ...(options.stateCapture === undefined || stateOutcome === undefined ? [] : [
+        { path: desktopPath, sha256: sha256(desktop), width: 1280, height: 900,
+          outcomeRef: stateOutcome.outcomeRef },
+        { path: mobilePath, sha256: sha256(mobile), width: 390, height: 844,
+          outcomeRef: stateOutcome.outcomeRef },
+      ]),
     ],
     transcript: [`assertion-pass:${'a'.repeat(64)}`],
   };
@@ -185,6 +219,12 @@ export function prepareFinalRenderReviewFixture(
   const evidence = browser.evidence([
     { path: desktopPath, sha256: sha256(desktop), viewport: { width: 1280, height: 900 }, testedState: 'initial' },
     { path: mobilePath, sha256: sha256(mobile), viewport: { width: 390, height: 844 }, testedState: 'initial' },
+    ...(options.stateCapture === undefined || stateOutcome === undefined ? [] : [
+      { path: desktopPath, sha256: sha256(desktop), viewport: { width: 1280, height: 900 },
+        testedState: `outcome-${sha256(Buffer.from(stateOutcome.outcomeRef)).slice(0, 16)}` },
+      { path: mobilePath, sha256: sha256(mobile), viewport: { width: 390, height: 844 },
+        testedState: `outcome-${sha256(Buffer.from(stateOutcome.outcomeRef)).slice(0, 16)}` },
+    ]),
   ]);
   const writer = createTestProjectWriteAdapter(root, invocation);
   const observationSha256s: string[] = [];
