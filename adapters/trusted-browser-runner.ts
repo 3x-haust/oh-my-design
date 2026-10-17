@@ -61,7 +61,7 @@ export type TrustedBrowserArtifactSink = Readonly<{
   write(relativePath: string, bytes: Uint8Array): void;
 }>;
 
-export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v7-measured' as const;
+export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v8-state-actions' as const;
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
@@ -136,6 +136,22 @@ async function waitForRenderedResult(page: Page, selector: string, text: string)
     } while (performance.now() < deadline);
   } catch { /* A missing or replaced state is a measured failed signal. */ }
   return false;
+}
+
+async function elementStateObserved(
+  page: Page,
+  selector: string,
+  state: 'hovered' | 'focused' | 'focus-visible' | 'pressed' | 'expanded',
+): Promise<boolean> {
+  const locator = page.locator(selector);
+  if (await locator.count() !== 1) return false;
+  return locator.evaluate((element, expected) => {
+    if (expected === 'hovered') return element.matches(':hover');
+    if (expected === 'focused') return element === document.activeElement;
+    if (expected === 'focus-visible') return element.matches(':focus-visible');
+    if (expected === 'pressed') return element.matches(':active') || element.getAttribute('aria-pressed') === 'true';
+    return element.getAttribute('aria-expanded') === 'true';
+  }, state).catch(() => false);
 }
 
 async function collectInteractiveLabelFindings(
@@ -533,18 +549,21 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           }
           const actions = script.actions.filter((action) =>
             action.viewports === undefined || action.viewports.includes(viewport.id));
-          const transitionActions = actions.filter((action) => action.kind === 'click' || action.kind === 'press');
+          const transitionActions = actions.filter((action) =>
+            action.kind === 'click' || action.kind === 'press'
+            || action.kind === 'hover' || action.kind === 'focus' || action.kind === 'press-start');
           // Attach each visible-state waiter before triggering actions, but convert rejection to a
           // measured boolean immediately so a fast timeout can never become an unhandled rejection.
           const initiallyVisible = await Promise.all(script.assertions.map((assertion) =>
-            assertion.kind !== 'absent-text'
+            assertion.kind !== 'absent-text' && assertion.kind !== 'element-state'
               ? resultIsRendered(page, assertion.selector, assertion.text)
               : false));
           const visibleSignals = () => script.assertions.map((assertion) =>
-            assertion.kind !== 'absent-text'
+            assertion.kind !== 'absent-text' && assertion.kind !== 'element-state'
               ? waitForRenderedResult(page, assertion.selector, assertion.text)
               : undefined);
           let signals = actions.length === 0 ? visibleSignals() : [];
+          let releasePress: (() => Promise<void>) | undefined;
           for (const [actionIndex, action] of actions.entries()) {
             // Prerequisite actions may legitimately consume the whole assertion timeout. Subscribe
             // immediately before the final triggering/barrier action so the bounded waiter measures
@@ -560,6 +579,20 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
                   safetyFindings.add('browser-navigation-failed');
                 }
               } else if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
+              else if (action.kind === 'hover') await page.locator(action.selector).hover({ timeout: 2_000 });
+              else if (action.kind === 'focus') await page.locator(action.selector).focus({ timeout: 2_000 });
+              else if (action.kind === 'press-start') {
+                const target = page.locator(action.selector);
+                await target.waitFor({ state: 'visible', timeout: 2_000 });
+                const box = await target.boundingBox();
+                if (box === null) throw new Error('press target is not visible');
+                await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+                await page.mouse.down();
+                releasePress = async () => {
+                  await page.mouse.move(0, 0);
+                  await page.mouse.up();
+                };
+              }
               else if (action.kind === 'press') {
                 const focus = () => ({ tagName: document.activeElement?.tagName ?? null,
                   id: document.activeElement?.id ?? null });
@@ -585,39 +618,49 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
               findings.add('required-action-unavailable');
             }
           }
-          const observedSignals = await Promise.all(signals.map((signal) => signal ?? false));
-          if (!await settleTrustedRender(page)) findings.add('required-render-not-settled');
-          for (const [index, assertion] of script.assertions.entries()) {
-            const rendered = assertion.kind === 'absent-text'
-              || await resultIsRendered(page, assertion.selector, assertion.text);
-            if (assertion.kind !== 'absent-text' && !rendered) {
-              findings.add('required-result-not-rendered');
+          try {
+            const observedSignals = await Promise.all(signals.map((signal) => signal ?? false));
+            if (!await settleTrustedRender(page)) findings.add('required-render-not-settled');
+            for (const [index, assertion] of script.assertions.entries()) {
+              if (assertion.kind === 'element-state') {
+                const passed = await elementStateObserved(page, assertion.selector, assertion.state);
+                transcript.push(`assertion-${passed ? 'pass' : 'fail'}:${sha256(Buffer.from(`${assertion.selector}\0${assertion.state}`))}`);
+                if (!passed) findings.add('required-element-state-missing');
+                continue;
+              }
+              const rendered = assertion.kind === 'absent-text'
+                || await resultIsRendered(page, assertion.selector, assertion.text);
+              if (assertion.kind !== 'absent-text' && !rendered) {
+                findings.add('required-result-not-rendered');
+              }
+              const passed = assertion.kind === 'preserved-text'
+                ? initiallyVisible[index] && observedSignals[index] && rendered
+                : assertion.kind === 'visible-text'
+                ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
+                : !await page.locator(assertion.selector).filter({ hasText: assertion.text })
+                  .isVisible().catch(() => false);
+              if (passed) {
+                transcript.push(`assertion-pass:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
+              } else {
+                findings.add(assertion.kind === 'preserved-text'
+                  ? 'required-preserved-state-missing'
+                  : assertion.kind === 'visible-text' && initiallyVisible[index]
+                  && transitionActions.length > 0
+                  ? 'required-state-transition-missing'
+                  : 'required-visible-result-missing');
+                transcript.push(`assertion-fail:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
+              }
             }
-            const passed = assertion.kind === 'preserved-text'
-              ? initiallyVisible[index] && observedSignals[index] && rendered
-              : assertion.kind === 'visible-text'
-              ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
-              : !await page.locator(assertion.selector).filter({ hasText: assertion.text })
-                .isVisible().catch(() => false);
-            if (passed) {
-              transcript.push(`assertion-pass:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
-            } else {
-              findings.add(assertion.kind === 'preserved-text'
-                ? 'required-preserved-state-missing'
-                : assertion.kind === 'visible-text' && initiallyVisible[index]
-                && transitionActions.length > 0
-                ? 'required-state-transition-missing'
-                : 'required-visible-result-missing');
-              transcript.push(`assertion-fail:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
-            }
+            await collectInteractiveLabelFindings(page, viewport, accessFindings);
+            await recordRenderedCopyForReview(page, viewport, transcript);
+            const observedUrl = new URL(page.url());
+            if (observedUrl.origin !== new URL(initialUrl).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
+            const state = `outcome-${sha256(Buffer.from(script.outcomeRef)).slice(0, 16)}`;
+            await capture(page, { id: `${request.id}:${state}`, viewport: request.viewport, browserZoom: request.browserZoom,
+              route: pageRoute(page), state, stateRecipeSha256: digest({ focusProbe: 'Tab', scripts: input.manifest.scripts.slice(0, scriptIndex + 1).map(s => ({ ...s, actions: s.actions.filter(a => a.viewports === undefined || a.viewports.includes(viewport.id)) })) }) }, script.outcomeRef);
+          } finally {
+            if (releasePress !== undefined) await releasePress();
           }
-          await collectInteractiveLabelFindings(page, viewport, accessFindings);
-          await recordRenderedCopyForReview(page, viewport, transcript);
-          const observedUrl = new URL(page.url());
-          if (observedUrl.origin !== new URL(initialUrl).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
-          const state = `outcome-${sha256(Buffer.from(script.outcomeRef)).slice(0, 16)}`;
-          await capture(page, { id: `${request.id}:${state}`, viewport: request.viewport, browserZoom: request.browserZoom,
-            route: pageRoute(page), state, stateRecipeSha256: digest({ focusProbe: 'Tab', scripts: input.manifest.scripts.slice(0, scriptIndex + 1).map(s => ({ ...s, actions: s.actions.filter(a => a.viewports === undefined || a.viewports.includes(viewport.id)) })) }) }, script.outcomeRef);
         }
         const overflow = await page.evaluate(() =>
           document.documentElement.scrollWidth > document.documentElement.clientWidth);

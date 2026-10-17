@@ -6,21 +6,28 @@ import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
+import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
+import { parseFileKey } from '../figma/client.ts';
 
-const SCHEMA = 'consulted-references-v1';
-const INPUT_SCHEMA = 'consulted-references-input-v1';
+const SCHEMA = 'consulted-references-v2';
+const LEGACY_SCHEMA = 'consulted-references-v1';
+const INPUT_SCHEMA = 'consulted-references-input-v2';
+const LEGACY_INPUT_SCHEMA = 'consulted-references-input-v1';
 const POINTER = '.omd/consulted-references.json';
 const DIRECTORY = '.omd/consulted-references';
 const fail = (reason: string): never => { throw new Error(`CONSULTED_REFERENCES: ${reason}`); };
 const bytesAt = (root: string, path: string) => readContainedRegularFile(root, path, 'consulted references');
 
 type ReferenceRole = 'primary' | 'supplemental';
+export type ConsultedReferenceState = 'default' | 'hover' | 'focus' | 'pressed' | 'open';
 
 type ParsedImage = Readonly<{
   path: string;
   sha256: string;
   sourceUrl: string;
   role: ReferenceRole;
+  component: string;
+  state: ConsultedReferenceState;
 }>;
 
 function exact(row: Record<string, unknown>, keys: readonly string[]): void {
@@ -42,29 +49,49 @@ function role(value: unknown): ReferenceRole {
   return value;
 }
 
-function imageInput(value: unknown): ParsedImage {
+function component(value: unknown): string {
+  const name = piText(value, 'consulted-reference-component');
+  if (name.length > 160 || name.trim() !== name
+    || !/^[\p{L}\p{N}][\p{L}\p{N} _.()-]*$/u.test(name)) fail('component');
+  return name;
+}
+
+function state(value: unknown): ConsultedReferenceState {
+  if (value !== 'default' && value !== 'hover' && value !== 'focus'
+    && value !== 'pressed' && value !== 'open') return fail('state');
+  return value;
+}
+
+function imageInput(value: unknown, legacy: boolean): ParsedImage {
   const row = piRecord(value, 'consulted-reference-image');
-  exact(row, ['path', 'sha256', 'sourceUrl', 'role']);
+  const expected = legacy
+    ? ['path', 'sha256', 'sourceUrl', 'role']
+    : ['path', 'sha256', 'sourceUrl', 'role', 'component',
+      ...(Object.hasOwn(row, 'state') ? ['state'] : [])];
+  exact(row, expected);
   return {
     path: piText(row.path, 'consulted-reference-path'),
     sha256: piDigest(row.sha256, 'consulted-reference-sha'),
     sourceUrl: sourceUrl(row.sourceUrl),
     role: role(row.role),
+    component: legacy ? 'page' : component(row.component),
+    state: legacy || row.state === undefined ? 'default' : state(row.state),
   };
 }
 
 function validateImageSet(images: readonly ParsedImage[]): void {
   if (images.length === 0 || images.length > 8) fail('images');
-  if (images.filter(image => image.role === 'primary').length > 1) fail('duplicate primary');
+  if (images.filter(image => image.role === 'primary').length !== 1) fail('exactly one primary');
   if (new Set(images.map(image => image.sha256)).size !== images.length) fail('duplicate image');
 }
 
 function parseInput(value: unknown) {
   const row = piRecord(value, 'consulted-references');
   exact(row, ['schema', 'requestSha256', 'images']);
-  if (row.schema !== INPUT_SCHEMA) fail('schema');
+  const legacy = row.schema === LEGACY_INPUT_SCHEMA;
+  if (!legacy && row.schema !== INPUT_SCHEMA) fail('schema');
   if (!Array.isArray(row.images)) return fail('images');
-  const images = row.images.map(imageInput);
+  const images = row.images.map(image => imageInput(image, legacy));
   validateImageSet(images);
   return {
     schema: INPUT_SCHEMA,
@@ -100,6 +127,8 @@ export function publishConsultedReferences(
     sha256: image.sha256,
     sourceUrl: image.sourceUrl,
     role: image.role,
+    component: image.component,
+    state: image.state,
     width,
     height,
   }));
@@ -135,7 +164,8 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
   const pointer = piRecord(pointerValue, 'consulted-references-pointer');
   exact(pointer, ['schema', 'path', 'sha256']);
   const digest = piDigest(pointer.sha256, 'consulted-references-record-sha');
-  if (pointer.schema !== SCHEMA || pointer.path !== `${DIRECTORY}/records/${digest}.json`) fail('pointer');
+  if ((pointer.schema !== SCHEMA && pointer.schema !== LEGACY_SCHEMA)
+    || pointer.path !== `${DIRECTORY}/records/${digest}.json`) fail('pointer');
 
   const recordBytes = bytesAt(root, piText(pointer.path, 'consulted-references-record-path'));
   if (sha256(recordBytes) !== digest) fail('record digest');
@@ -156,7 +186,8 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
   ]);
   if (recordBytes.toString('utf8') !== canonicalJson(signed)) fail('record encoding');
   const { signature, ...record } = signed;
-  if (record.schema !== SCHEMA
+  const legacy = record.schema === LEGACY_SCHEMA;
+  if ((!legacy && record.schema !== SCHEMA)
     || record.origin !== 'reported'
     || record.authority !== 'none'
     || record.use !== 'comparison-only'
@@ -168,7 +199,7 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
   const recordRequest = piDigest(record.requestSha256, 'consulted-references-request');
   if (!verifyNativeObservation(
     root,
-    SCHEMA,
+    legacy ? LEGACY_SCHEMA : SCHEMA,
     sha256(canonicalJson(record)),
     piText(signature, 'consulted-references-signature'),
   )) {
@@ -179,12 +210,16 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
 
   const parsedImages = record.images.map(value => {
     const image = piRecord(value, 'consulted-reference-snapshot');
-    exact(image, ['path', 'sha256', 'sourceUrl', 'role', 'width', 'height']);
+    exact(image, legacy
+      ? ['path', 'sha256', 'sourceUrl', 'role', 'width', 'height']
+      : ['path', 'sha256', 'sourceUrl', 'role', 'component', 'state', 'width', 'height']);
     const parsed = {
       path: piText(image.path, 'consulted-reference-path'),
       sha256: piDigest(image.sha256, 'consulted-reference-image-sha'),
       sourceUrl: sourceUrl(image.sourceUrl),
       role: role(image.role),
+      component: legacy ? 'page' : component(image.component),
+      state: legacy ? 'default' as const : state(image.state),
     };
     if (typeof image.width !== 'number' || !Number.isSafeInteger(image.width) || image.width < 1
       || typeof image.height !== 'number' || !Number.isSafeInteger(image.height) || image.height < 1) {
@@ -207,6 +242,8 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
     return {
       role: 'consulted-external-original' as const,
       referenceRole: image.role,
+      component: image.component,
+      state: image.state,
       width: png.width,
       height: png.height,
       captureSha256: image.sha256,
@@ -223,4 +260,37 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
     },
     renders,
   };
+}
+
+/** Structural Figma URL detection only; this never classifies natural-language task prose. */
+export function requestSuppliesFigmaTarget(request: string): boolean {
+  const urls = request.match(/https?:\/\/[^\s<>"'`]+/gu) ?? [];
+  return urls.some(candidate => {
+    const value = candidate.replace(/[),.;!?]+$/u, '');
+    let url: URL;
+    try { url = new URL(value); } catch { return false; }
+    if ((url.hostname !== 'figma.com' && url.hostname !== 'www.figma.com')
+      || !/^\/(?:file|design)\//u.test(url.pathname)) return false;
+    try { parseFileKey(url.href); return true; } catch { return false; }
+  });
+}
+
+export function requiresConsultedPrimaryOriginal(
+  route: Pick<AdaptiveRouteRecord, 'request' | 'sourceContract'>,
+): boolean {
+  return !requestSuppliesFigmaTarget(route.request)
+    && route.sourceContract.referenceDiscovery.taskNeed !== 'copy-only-edit';
+}
+
+export function requireConsultedPrimaryOriginal(
+  root: string,
+  route: Pick<AdaptiveRouteRecord, 'projectMode' | 'request' | 'sourceContract'>,
+): void {
+  const projection = consultedReferenceProjection(root, sha256(route.request));
+  if (!requiresConsultedPrimaryOriginal(route)) return;
+  if (projection === null || projection.renders.filter(render => render.referenceRole === 'primary').length !== 1) {
+    const error = new Error('CONSULTED_PRIMARY_ORIGINAL_REQUIRED: publish one request-scoped primary whole original with omd ref context before model-led completion.');
+    Object.defineProperty(error, 'code', { value: 'CONSULTED_PRIMARY_ORIGINAL_REQUIRED', enumerable: true });
+    throw error;
+  }
 }

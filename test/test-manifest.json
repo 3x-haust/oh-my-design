@@ -60,6 +60,7 @@
       "test/motion-energy.test.ts",
       "test/motion-spec.test.ts",
       "test/native-command-signal.test.ts",
+      "test/native-consulted-reference-fidelity.test.ts",
       "test/optical-admission.test.ts",
       "test/phase1-type-copy.test.ts",
       "test/phase3-interaction-prompts.test.ts",

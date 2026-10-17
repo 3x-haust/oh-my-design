@@ -36,6 +36,15 @@ keeps its native dimensions and bytes; do not enlarge it merely to label it 2x. 
 records remain readable under their original bindings, not relabelled as current 2x evidence.
 The user's original CDP context/tab is not resized or re-emulated.
 
+Named interaction-state captures use the same reference capture owner, not an inferred probe.
+Preparation may apply a safe disclosure click, hover, direct focus, or pointer-down `press-start`,
+then capture one state while asserting the exact hovered, focused, focus-visible, pressed, expanded,
+visible, or hidden condition. Navigation links, form submission, authentication, pricing, payment,
+downloads, and destructive controls are refused. `press-start` always releases the pointer in
+cleanup after the pixels and assertions are retained. The receipt binds action selectors, state
+assertions, viewport, and capture digest. Each default/hover/focus/pressed/open state is a separate
+capture; aggregate interaction coverage never substitutes for those pixels.
+
 Await command completion and use its native receipts. Do not poll inventory until it repeats, force
 parallel actions in one session, suppress overlays or infer an unvisited screen. Headless is default;
 profile/CDP require matching authenticated opt-in. Authentication, pricing and unsafe transitions

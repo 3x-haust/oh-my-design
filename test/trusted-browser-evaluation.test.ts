@@ -18,6 +18,8 @@ import {
 } from '../adapters/trusted-browser-runner.ts';
 import { servedProjectTreeSha256, serveProjectEntry } from '../core/render/serve.ts';
 import { parseTrustedLifecycleManifest } from '../core/runtime/trusted-evaluation-contract.ts';
+import { decodePng } from '../core/motion/energy.ts';
+import { parseTrustedBrowserReceipt } from '../core/runtime/trusted-browser-receipt.ts';
 
 const sha = (value: string): string => value.repeat(64);
 const hash = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
@@ -109,6 +111,55 @@ test('real browser produces a trusted fail and pass receipt at fixed viewports',
   } finally {
     rmSync(broken, { recursive: true, force: true });
     rmSync(fixed, { recursive: true, force: true });
+  }
+});
+
+test('product hover focus and press-start actions retain settled state captures at both viewports', async () => {
+  const cases = [
+    { kind: 'hover' as const, state: 'hover' as const, assertion: 'hovered' as const },
+    { kind: 'focus' as const, state: 'focus' as const, assertion: 'focused' as const },
+    { kind: 'press-start' as const, state: 'pressed' as const, assertion: 'pressed' as const },
+  ];
+  for (const value of cases) {
+    const root = mkdtempSync(join(tmpdir(), `omd-browser-${value.kind}-`));
+    try {
+      writeFileSync(join(root, 'index.html'), [
+        '<!doctype html><style>',
+        '#target{width:180px;height:80px;background:red;color:white}',
+        '#target:hover,#target:focus,#target:active{background:blue}',
+        '</style><button type="button" id="target">State target</button>',
+      ].join(''));
+      const input = request(root);
+      const result = await runTrustedBrowserEvaluation({
+        ...input,
+        manifest: parseTrustedLifecycleManifest({
+          schema: 'trusted-lifecycle-manifest-v1',
+          entryPath: 'index.html',
+          scripts: [{
+            outcomeRef: 'outcome:a',
+            actions: [{ kind: value.kind, selector: '#target' }],
+            assertions: [{ kind: 'element-state', selector: '#target', state: value.assertion }],
+            captureState: { component: 'primary-action', state: value.state },
+          }],
+        }),
+      });
+      assert.equal(result.receipt.outcomeResults[0]?.status, 'pass');
+      assert.doesNotThrow(() => parseTrustedBrowserReceipt(
+        JSON.parse(JSON.stringify(result.receipt)),
+      ));
+      assert.equal(result.receipt.captures.length, 2);
+      assert.ok(result.actionLog.every(entry => entry.includes(value.kind)));
+      for (const capture of result.receipt.captures) {
+        const { pixels, channels } = decodePng(readFileSync(join(root, capture.path)));
+        let blue = 0;
+        for (let index = 0; index < pixels.length; index += channels) {
+          if (pixels[index] === 0 && pixels[index + 1] === 0 && pixels[index + 2] === 255) blue++;
+        }
+        assert.ok(blue > 100, `${value.kind} capture must retain its blue CSS state`);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
 });
 

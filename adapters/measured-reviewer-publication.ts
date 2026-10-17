@@ -14,6 +14,10 @@ import { measuredReviewerTask } from '../core/runtime/trusted-review-profile.ts'
 import { loadTerminalProcess } from '../core/evidence/final-v2-process.ts';
 import { parseSurfaceReview, joinSurfaceCoverage } from '../core/brief/surface-coverage.ts';
 import { loadMeasurement } from '../core/measure/files.ts';
+import {
+  parseConsultedReferenceComparisonExpectations,
+  parseConsultedReferenceComparisons,
+} from '../core/runtime/native-consulted-reference-fidelity.ts';
 
 export type MeasuredLane = 'blindLane' | 'fidelityLane' | 'protocolLane';
 export const policyLane = (lane: MeasuredLane) => ({ blindLane: 'blind', fidelityLane: 'fidelity', protocolLane: 'protocol' } as const)[lane];
@@ -24,7 +28,11 @@ export function measuredLanePacket(root: string, invocation: ProjectRunInvocatio
 type Output = { schema: string; lane: MeasuredLane; laneSchema: string; verdictKeys: string[]; criticalFloorKeys: string[]; reviewerFields: string[];
   fixedBindings: { observationSha256s: string[]; measurements: Receipt[]; reviewPolicySha256: string; [key: string]: unknown } };
 export function parseMeasuredHandback(root: string, invocation: ProjectRunInvocation, input: unknown, packetBytes: Buffer, lane: MeasuredLane) {
-  const packet = JSON.parse(packetBytes.toString('utf8')) as { evidenceSha256: string; outputContract: Output };
+  const packet = JSON.parse(packetBytes.toString('utf8')) as {
+    evidenceSha256: string;
+    evidence: { consultedReferenceComparisonExpectations?: unknown };
+    outputContract: Output;
+  };
   const output = packet.outputContract;
   if (!input || typeof input !== 'object' || Array.isArray(input)) return v.fail('measured reviewer handback required');
   const handback = input as Record<string, unknown>;
@@ -34,6 +42,17 @@ export function parseMeasuredHandback(root: string, invocation: ProjectRunInvoca
   v.object(Object.fromEntries(output.verdictKeys.map(key => [key, v.enumeration('GREEN')])))(handback.verdicts);
   v.object(Object.fromEntries(output.criticalFloorKeys.map(key => [key, v.enumeration(3, 4)])))(handback.criticalFloors);
   v.array(v.text)(handback.findings);
+  const findings = handback.findings as string[];
+  if (lane === 'fidelityLane') {
+    parseConsultedReferenceComparisons(
+      handback.consultedReferenceComparisons,
+      parseConsultedReferenceComparisonExpectations(
+        packet.evidence.consultedReferenceComparisonExpectations,
+      ),
+      findings,
+      (handback.verdicts as Record<string, unknown>).referenceFidelity,
+    );
+  }
   const context = loadMeasuredQualityContext(root, invocation, output.fixedBindings.measurements, output.fixedBindings.observationSha256s);
   const quality = lane === 'blindLane' ? assertMeasuredDesignQualityGreen(handback.designQuality, context) : undefined;
   const floors = handback.criticalFloors as Record<string, number>;

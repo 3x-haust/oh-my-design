@@ -17,6 +17,15 @@ inputs rather than repeating an unchanged attempt. Advisory craft findings are j
 review; behavior, access, safety and visual quality remain required. A model review never claims
 human ratings. No unsupported product fact or external-action permission is manufactured.
 
+Before production-readiness can record debt, model-led visual work must expose one current
+request-scoped primary consulted original through `omd ref context`. The typed `copy-only-edit`
+route is exempt. A structurally valid Figma `/file/` or `/design/` target URL is also exempt here
+because its snapshot/diff proof is enforced separately; an existing malformed or foreign consulted
+record still refuses. Browser proposals may use real hover, focus, or final `press-start` actions
+with exact state assertions and a `captureState` component/state identity. Final fidelity requires
+matching desktop/mobile reference and product component-state captures and complete digest-bound
+comparison rows.
+
 ## Structured workflow and selected methods
 
 Use `omd_cli` in the actual Pi session. The extension observes the selected provider/model, Pi

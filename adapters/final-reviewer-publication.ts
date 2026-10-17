@@ -33,6 +33,11 @@ import { validateCurrentReferenceFidelityAssessments } from '../core/runtime/nat
 import { buildMeasuredReviewerPublication } from './measured-reviewer-publication.ts';
 import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
 import { requiresMeasuredTerminal } from '../core/measure/review-policy.ts';
+import {
+  parseConsultedReferenceComparisonExpectations,
+  parseConsultedReferenceComparisons,
+  type ConsultedReferenceComparisonExpectation,
+} from '../core/runtime/native-consulted-reference-fidelity.ts';
 const SHA256 = /^[a-f0-9]{64}$/;
 const LANE_CONTRACTS = {
   'blind-review-v2': {
@@ -391,12 +396,16 @@ export function buildFinalReviewerPublication(
       evidenceSha256: handback.evidenceSha256,
       ...(artDirectionBinding === undefined ? {} : { artDirectionSha256: artDirectionBinding }),
     }, `handback[${index}].fixedBindings`);
+    let consultedExpectations: readonly ConsultedReferenceComparisonExpectation[] = [];
     if (role.receipt.schema === 'omd-pi-role-exec-result-v1' && !contract.requiresDesignQuality) {
       const currentPacket = nativeFinalLanePacket({ root: context.projectRoot, invocation: context.invocation,
         observationSha256s: boundObservationSha256s, lane: contract.lane });
       const proof = role.receipt.reviewerEvidence;
       const packet = record(JSON.parse(currentPacket.toString('utf8')), 'native lane packet');
       const output = record(packet.outputContract, 'native lane output');
+      consultedExpectations = parseConsultedReferenceComparisonExpectations(
+        record(packet.evidence, 'native lane evidence').consultedReferenceComparisonExpectations,
+      );
       fixed = record(output.fixedBindings, 'native lane bindings');
       reviewerFields = keyList(output.reviewerFields, 'native lane reviewer fields');
       if (proof.packetSha256 !== hash(currentPacket) || proof.evidenceSha256 !== packet.evidenceSha256
@@ -481,6 +490,18 @@ export function buildFinalReviewerPublication(
       || canonicalJson(boundObservationSha256s) !== canonicalJson(fixed.observationSha256s)) {
       return fail(`FINAL_REVIEW_PUBLICATION_INVALID:handback[${index}] binding`);
     }
+    const findings = handback.findings === undefined
+      ? Object.freeze([])
+      : Object.freeze(findingList(handback.findings, `handback[${index}].findings`));
+    const handbackVerdicts = record(handback.verdicts, `handback[${index}].verdicts`);
+    const consultedReferenceComparisons = contract.lane === 'fidelityLane'
+      ? parseConsultedReferenceComparisons(
+        handback.consultedReferenceComparisons,
+        consultedExpectations,
+        findings,
+        handbackVerdicts.referenceFidelity,
+      )
+      : undefined;
     const designQuality = contract.requiresDesignQuality
       ? assertDesignQualityGreen(handback.designQuality, {
         expectedObservationSha256s: boundObservationSha256s,
@@ -513,7 +534,9 @@ export function buildFinalReviewerPublication(
       ...(outcomeAssessments === undefined ? {} : { outcomeAssessments }),
       ...(referenceFidelityAssessments === undefined || referenceFidelityAssessments.length === 0
         ? {} : { referenceFidelityAssessments }),
-      findings: handback.findings === undefined ? Object.freeze([]) : Object.freeze(findingList(handback.findings, `handback[${index}].findings`)),
+      ...(consultedReferenceComparisons === undefined || consultedReferenceComparisons.length === 0
+        ? {} : { consultedReferenceComparisons }),
+      findings,
     });
   });
   const comparable = (value: typeof handbacks[number]): string => canonicalJson({
@@ -562,6 +585,9 @@ export function buildFinalReviewerPublication(
       ...(handback.outcomeAssessments === undefined ? {} : { outcomeAssessments: handback.outcomeAssessments }),
       ...(handback.referenceFidelityAssessments === undefined ? {} : {
         referenceFidelityAssessments: handback.referenceFidelityAssessments,
+      }),
+      ...(handback.consultedReferenceComparisons === undefined ? {} : {
+        consultedReferenceComparisons: handback.consultedReferenceComparisons,
       }),
       isolationReceiptSha256: isolationSha256,
       observationSha256s: handback.observationSha256s,

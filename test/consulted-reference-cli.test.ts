@@ -16,8 +16,9 @@ test('reference context CLI preserves scoped originals and refuses foreign reque
   publishTestAdaptiveRoute(root, route);
   const png = PNG.sync.write(new PNG({ width: 8, height: 8 }));
   writeFileSync(join(root, 'original.png'), png);
-  const input = { schema: 'consulted-references-input-v1', requestSha256: sha256(route.request),
-    images: [{ path: 'original.png', sha256: sha256(png), sourceUrl: 'https://example.com/portraits', role: 'primary' }] };
+  const input = { schema: 'consulted-references-input-v2', requestSha256: sha256(route.request),
+    images: [{ path: 'original.png', sha256: sha256(png), sourceUrl: 'https://example.com/portraits',
+      role: 'primary', component: 'profile-card', state: 'hover' }] };
   const cli = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
   const run = () => spawnSync(process.execPath, [cli, 'ref', 'context', '--input', 'references.json', '--json'],
     { cwd: root, encoding: 'utf8', timeout: 30_000 });

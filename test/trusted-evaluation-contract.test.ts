@@ -190,3 +190,50 @@ test('lifecycle manifest accepts one closed benchmark-bound entry surface', () =
       && error.code === 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST',
   );
 });
+
+test('lifecycle manifest binds explicit interaction actions, state assertions and capture identity', () => {
+  for (const [kind, state, assertion] of [
+    ['hover', 'hover', 'hovered'],
+    ['focus', 'focus', 'focus-visible'],
+    ['press-start', 'pressed', 'pressed'],
+  ] as const) {
+    const manifest = parseTrustedLifecycleManifest({
+      schema: 'trusted-lifecycle-manifest-v1',
+      entryPath: 'index.html',
+      scripts: [{
+        outcomeRef: 'mustHave:0',
+        actions: [{ kind, selector: '#primary', viewports: ['1280x900', '390x844'] }],
+        assertions: [{ kind: 'element-state', selector: '#primary', state: assertion }],
+        captureState: { component: 'primary-action', state },
+      }],
+    });
+    assert.deepEqual(manifest.scripts[0]?.captureState, {
+      component: 'primary-action',
+      state,
+    });
+    assert.equal(manifest.scripts[0]?.actions[0]?.kind, kind);
+  }
+  assert.throws(() => parseTrustedLifecycleManifest({
+    schema: 'trusted-lifecycle-manifest-v1',
+    entryPath: 'index.html',
+    scripts: [{
+      outcomeRef: 'mustHave:0',
+      actions: [
+        { kind: 'press-start', selector: '#primary' },
+        { kind: 'click', selector: '#other' },
+      ],
+      assertions: [{ kind: 'element-state', selector: '#primary', state: 'pressed' }],
+      captureState: { component: 'primary-action', state: 'pressed' },
+    }],
+  }), /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/);
+  assert.throws(() => parseTrustedLifecycleManifest({
+    schema: 'trusted-lifecycle-manifest-v1',
+    entryPath: 'index.html',
+    scripts: [{
+      outcomeRef: 'mustHave:0',
+      actions: [{ kind: 'hover', selector: '#primary' }],
+      assertions: [{ kind: 'element-state', selector: '#other', state: 'hovered' }],
+      captureState: { component: 'primary-action', state: 'hover' },
+    }],
+  }), /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/);
+});

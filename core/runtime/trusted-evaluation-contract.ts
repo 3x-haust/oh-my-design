@@ -49,14 +49,30 @@ export type TrustedEvaluationAction =
     selector: string;
     value: string;
     viewports?: readonly TrustedEvaluationViewport[];
+  }>
+  | Readonly<{
+    kind: 'hover' | 'focus' | 'press-start';
+    selector: string;
+    viewports?: readonly TrustedEvaluationViewport[];
   }>;
 
 export type TrustedEvaluationViewport = '1280x900' | '390x844';
 
-export type TrustedEvaluationAssertion = Readonly<{
-  kind: 'visible-text' | 'preserved-text' | 'absent-text';
-  selector: string;
-  text: string;
+export type TrustedEvaluationState = 'default' | 'hover' | 'focus' | 'pressed' | 'open';
+export type TrustedEvaluationAssertion =
+  | Readonly<{
+    kind: 'visible-text' | 'preserved-text' | 'absent-text';
+    selector: string;
+    text: string;
+  }>
+  | Readonly<{
+    kind: 'element-state';
+    selector: string;
+    state: 'hovered' | 'focused' | 'focus-visible' | 'pressed' | 'expanded';
+  }>;
+export type TrustedEvaluationCaptureState = Readonly<{
+  component: string;
+  state: TrustedEvaluationState;
 }>;
 
 export type TrustedEntrySurface = Readonly<{
@@ -66,8 +82,7 @@ export type TrustedEntrySurface = Readonly<{
   purpose: Readonly<{ selector: string; text: string }>;
   workObject: Readonly<{ selector: string; anchorSelector: string; anchorText: string }>;
   nextAction?: Readonly<{ selector: string; accessibleName: string }>;
-  trigger: Exclude<TrustedEvaluationAction,
-    Readonly<{ kind: 'reload' | 'press' }> | Readonly<{ viewports: readonly TrustedEvaluationViewport[] }>>;
+  trigger: Extract<TrustedEvaluationAction, Readonly<{ kind: 'click' | 'fill' }>>;
   consequence: Readonly<{ selector: string; beforeText: string; afterText: string }>;
 }>;
 
@@ -79,6 +94,7 @@ export type TrustedLifecycleManifest = Readonly<{
     outcomeRef: string;
     actions: readonly TrustedEvaluationAction[];
     assertions: readonly TrustedEvaluationAssertion[];
+    captureState?: TrustedEvaluationCaptureState;
   }>[];
   entrySurface?: TrustedEntrySurface;
 }>;
@@ -98,6 +114,7 @@ export type TrustedEvaluationRefSets = Readonly<{
 const MANIFEST_KEYS = new Set(['schema', 'entryPath', 'scripts']);
 const ENTRY_MANIFEST_KEYS = new Set([...MANIFEST_KEYS, 'entrySurface']);
 const SCRIPT_KEYS = new Set(['outcomeRef', 'actions', 'assertions']);
+const CAPTURED_SCRIPT_KEYS = new Set([...SCRIPT_KEYS, 'captureState']);
 const CLICK_ACTION_KEYS = new Set(['kind', 'selector']);
 const SCOPED_CLICK_ACTION_KEYS = new Set(['kind', 'selector', 'viewports']);
 const FILL_ACTION_KEYS = new Set(['kind', 'selector', 'value']);
@@ -106,8 +123,12 @@ const PRESS_ACTION_KEYS = new Set(['kind', 'selector', 'key']);
 const SCOPED_PRESS_ACTION_KEYS = new Set(['kind', 'selector', 'key', 'viewports']);
 const RELOAD_ACTION_KEYS = new Set(['kind']);
 const SCOPED_RELOAD_ACTION_KEYS = new Set(['kind', 'viewports']);
+const STATE_ACTION_KEYS = new Set(['kind', 'selector']);
+const SCOPED_STATE_ACTION_KEYS = new Set(['kind', 'selector', 'viewports']);
 const EVALUATION_VIEWPORTS = new Set<TrustedEvaluationViewport>(['1280x900', '390x844']);
 const ASSERTION_KEYS = new Set(['kind', 'selector', 'text']);
+const STATE_ASSERTION_KEYS = new Set(['kind', 'selector', 'state']);
+const CAPTURE_STATE_KEYS = new Set(['component', 'state']);
 const ENTRY_SURFACE_KEYS = new Set([
   'benchmarkProjectionSha256',
   'prerequisiteTaskId',
@@ -129,6 +150,10 @@ const SHA256 = /^[a-f0-9]{64}$/;
 
 function evaluationViewport(value: unknown): value is TrustedEvaluationViewport {
   return value === '1280x900' || value === '390x844';
+}
+function evaluationState(value: unknown): value is TrustedEvaluationState {
+  return value === 'default' || value === 'hover' || value === 'focus'
+    || value === 'pressed' || value === 'open';
 }
 
 function fail(code: TrustedEvaluationContractErrorCode): never {
@@ -257,7 +282,7 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
   }
   const scripts = array(value.scripts).map((candidate) => {
     const script = record(candidate);
-    exact(script, SCRIPT_KEYS);
+    exact(script, Object.hasOwn(script, 'captureState') ? CAPTURED_SCRIPT_KEYS : SCRIPT_KEYS);
     const actions = array(script.actions).map((candidateAction) => {
       const action = record(candidateAction);
       const scoped = Object.hasOwn(action, 'viewports');
@@ -268,6 +293,9 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
         const keys = scoped ? SCOPED_RELOAD_ACTION_KEYS : RELOAD_ACTION_KEYS;
         exact(action, keys);
         if (Object.keys(action).some(key => !keys.has(key))) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      }
+      else if (action.kind === 'hover' || action.kind === 'focus' || action.kind === 'press-start') {
+        exact(action, scoped ? SCOPED_STATE_ACTION_KEYS : STATE_ACTION_KEYS);
       }
       else return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
       const viewports = action.viewports === undefined
@@ -301,6 +329,13 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
           ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }),
         });
       }
+      if (action.kind === 'hover' || action.kind === 'focus' || action.kind === 'press-start') {
+        return Object.freeze({
+          kind: action.kind,
+          selector,
+          ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }),
+        });
+      }
       return Object.freeze({
         kind: 'fill' as const,
         selector,
@@ -308,8 +343,26 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
         ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }),
       });
     });
+    const pressStarts = actions.flatMap((action, index) =>
+      action.kind === 'press-start' ? [index] : []);
+    if (pressStarts.length > 1 || (pressStarts.length === 1 && pressStarts[0] !== actions.length - 1)) {
+      return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    }
     const assertions = array(script.assertions).map((candidateAssertion) => {
       const assertion = record(candidateAssertion);
+      if (assertion.kind === 'element-state') {
+        exact(assertion, STATE_ASSERTION_KEYS);
+        if (assertion.state !== 'hovered' && assertion.state !== 'focused'
+          && assertion.state !== 'focus-visible' && assertion.state !== 'pressed'
+          && assertion.state !== 'expanded') {
+          return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+        }
+        return Object.freeze({
+          kind: 'element-state' as const,
+          selector: text(assertion.selector),
+          state: assertion.state,
+        });
+      }
       exact(assertion, ASSERTION_KEYS);
       if (assertion.kind !== 'visible-text' && assertion.kind !== 'preserved-text' && assertion.kind !== 'absent-text') {
         return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
@@ -320,10 +373,40 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
         text: text(assertion.text),
       });
     });
+    const captureState = script.captureState === undefined ? undefined : (() => {
+      const capture = record(script.captureState);
+      exact(capture, CAPTURE_STATE_KEYS);
+      if (!evaluationState(capture.state)) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      return Object.freeze({ component: text(capture.component), state: capture.state });
+    })();
+    if (captureState !== undefined) {
+      const finalAction = actions.at(-1);
+      const matchingAction = captureState.state === 'hover' ? finalAction?.kind === 'hover'
+        : captureState.state === 'focus' ? finalAction?.kind === 'focus'
+        : captureState.state === 'pressed' ? finalAction?.kind === 'press-start'
+        : captureState.state === 'open' ? finalAction?.kind === 'click' || finalAction?.kind === 'press'
+        : actions.length === 0 || finalAction?.kind === 'reload';
+      const matchingAssertion = captureState.state === 'hover'
+        ? assertions.some(assertion => assertion.kind === 'element-state'
+          && assertion.state === 'hovered' && assertion.selector === finalAction?.selector)
+        : captureState.state === 'focus'
+          ? assertions.some(assertion => assertion.kind === 'element-state'
+            && (assertion.state === 'focused' || assertion.state === 'focus-visible')
+            && assertion.selector === finalAction?.selector)
+          : captureState.state === 'pressed'
+            ? assertions.some(assertion => assertion.kind === 'element-state'
+              && assertion.state === 'pressed' && assertion.selector === finalAction?.selector)
+            : captureState.state === 'open'
+              ? assertions.some(assertion => assertion.kind === 'element-state'
+                && assertion.state === 'expanded' && assertion.selector === finalAction?.selector)
+              : true;
+      if (!matchingAction || !matchingAssertion) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    }
     return Object.freeze({
       outcomeRef: text(script.outcomeRef),
       actions: Object.freeze(actions),
       assertions: Object.freeze(assertions),
+      ...(captureState === undefined ? {} : { captureState }),
     });
   });
   return Object.freeze({

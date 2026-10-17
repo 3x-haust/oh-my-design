@@ -55,6 +55,23 @@ export function nativeOutcomeExecutionEvidence(root: string, invocation: Project
     receiptSha256: projection.receiptSha256, executionPlanSha256: receipt.executionPlanSha256,
     productionRevisionSha256: receipt.productionRevisionSha256,
     transcript: receipt.transcript,
+    stateCaptures: receipt.captures.flatMap(capture => {
+      if (capture.outcomeRef === undefined) return [];
+      const script = plan.scripts.find(candidate => candidate.outcomeRef === capture.outcomeRef);
+      const viewport = capture.width === 1280 && capture.height === 900
+        ? 'desktop' as const
+        : capture.width === 390 && capture.height === 844
+          ? 'mobile' as const
+          : undefined;
+      return script?.captureState === undefined || viewport === undefined ? [] : [{
+        outcomeRef: capture.outcomeRef,
+        component: script.captureState.component,
+        state: script.captureState.state,
+        viewport,
+        captureSha256: capture.sha256,
+        testedState: `outcome-${hash(Buffer.from(capture.outcomeRef)).slice(0, 16)}`,
+      }];
+    }),
     outcomes: plan.scripts.map(script => {
       const requirement = requirements[refs.indexOf(script.outcomeRef)] ?? fail('requirement missing');
       const result = receipt.outcomeResults.find(row => row.outcomeRef === script.outcomeRef)
@@ -64,6 +81,9 @@ export function nativeOutcomeExecutionEvidence(root: string, invocation: Project
           case 'click': return action;
           case 'press': return action;
           case 'reload': return action;
+          case 'hover': return action;
+          case 'focus': return action;
+          case 'press-start': return action;
           case 'fill': return { ...action, value: reviewerText(action.value) };
           default: return action satisfies never;
         }

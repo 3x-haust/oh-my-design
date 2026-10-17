@@ -51,6 +51,25 @@ export function authorizeBrowseControl(control: BrowseControl, start: Start): vo
     && (control.role === 'tab' || (control.controls !== null && control.expanded !== null)))) return;
   browseFail('BROWSE_CONTROL', 'only public links, summaries, tabs and explicit disclosure controls are read-only');
 }
+export type ReferenceStateControl = Readonly<{
+  tag: string;
+  type: string | null;
+  label: string;
+  href: string | null;
+  download: boolean;
+  formAction: string | null;
+}>;
+export function authorizeReferenceStateControl(control: ReferenceStateControl): void {
+  const label = `${control.label} ${control.href ?? ''} ${control.formAction ?? ''}`;
+  if (TRANSACTION.test(label) || AUTH.test(label) || PRICE.test(label)) {
+    browseFail('BROWSE_SENSITIVE_ACTION', 'transactional, authentication, pricing or destructive state controls are never automated');
+  }
+  if (control.tag === 'A' || control.href !== null || control.download
+    || control.formAction !== null
+    || control.type === 'submit' || control.type === 'reset' || control.type === 'image') {
+    browseFail('BROWSE_CONTROL', 'reference state actions cannot target navigation, download or form-submission controls');
+  }
+}
 /** Authority is the authenticated route request, not a model-supplied flag. Exact opt-in command
  * clauses are deliberately required until hosts offer a typed browse-consent capability. */
 export function authorizeBrowseConsent(start: Start, request: string, sourceContractSha256: string, now: number): Consent | null {
