@@ -14,6 +14,8 @@ Read `omd pack protocol/reference-assembly.md` for capture rules when needed.
   whole capture and label it. Never click anything that submits, purchases, signs in, deletes,
   downloads or navigates away to reach a state.
 - Choose one coherent primary direction; supplemental references get limited named jobs.
+- Run `omd ref direction-review --json` when retained design captures need independent visual
+  admission before they can guide production.
 - Record what you actually consulted with `omd ref context` (see the ultradesign skill). Unknown
   or restricted rights mean the pixels are comparison material only; never ship reference pixels,
   copy or branding as product assets.

@@ -4,11 +4,11 @@ OMD's motto is **AI that designs like a human**. Its operational meaning is to m
 design judgments against people, tasks, material, and rendered outcomes. A long process, a polished
 rationale, or a large number of artifacts is not evidence of a good design.
 
-This method contract applies within the selected route and existing ownership boundaries.
-It adds no extra stage, research quota, approval checkpoint or artifact family beyond the current
-process's single representative-direction choice. The specialized
-protocols retain their schemas, publishers, isolation, and final gates. Record only bounded decisions
-and observations that another person can inspect, never hidden reasoning.
+This method contract applies inside the single model-led route and its write boundaries. It adds no
+extra stage, role relay, research quota, approval checkpoint, or artifact family. The implementing
+model chooses useful tests; selected evidence contracts retain their schemas, publishers, isolation,
+and final gates. Record only bounded decisions and observations that another person can inspect,
+never hidden reasoning.
 
 ## Choose the next useful test
 

@@ -112,11 +112,21 @@ discovery:  {kind:"recorded-browse", url, access:"public"|"user-session",
              qualityReason, session:{path,sha256}, entry:{seq,hash}}
 ```
 
-Native browse evidence does not pass a provider regex or endpoint whitelist. Independent families, distinct pixels, currentness, market claims, board use and strict completion remain required. Mixed legacy/browse lanes are supported. V5/v6/v7 keep their old parsing and artifact projections. Whole screenshots can enter the existing image-fragment board path without cropping; trace-backed fragments must preserve the entire parent image.
+Native browse evidence does not pass a provider regex or endpoint whitelist. Independent families,
+distinct pixels, currentness, market claims, direction admission, and strict completion remain
+required. Whole screenshots remain the comparison unit; trace-backed details preserve the entire
+parent image.
 
-Reference analysis is authored after inspecting the images. It binds native reference ids, exact image/capture receipts, observations of screen type/task/hierarchy/density/type/components, selected ids, and patterns `{pattern,referenceIds,decision:"apply"|"do-not-apply",reason}`. Its `screens` reuse the existing `ref apply-set` v2 type and parser. Every current domain surface must have direct/partial/brief-derived coverage; non-direct coverage requires a gap and decision. Unknown or wrong-lane ids refuse publication without replacing existing analysis.
+Reference analysis is authored after inspecting the images. It binds native reference ids, exact
+image/capture receipts, observations of screen type/task/hierarchy/density/type/components, selected
+ids, and patterns `{pattern,referenceIds,decision:"apply"|"do-not-apply",reason}`. Its `screens` use
+the retained v2 reference-analysis type and parser. Every current domain surface must have
+direct/partial/brief-derived coverage; non-direct coverage requires a gap and decision. Unknown or
+wrong-lane ids refuse publication without replacing existing analysis.
 
-`readWholeScreenReferenceHandoff` returns selected rights-allowed whole-screen image paths/digests plus analysis for Composer, Hand and the concept step. Unknown/restricted rights withhold pixels. Eye/Glance/fidelity or `--blind` get only source-free coverage metadata, without pixels, ids, URLs or maker rationale. Legacy selected-assembly APIs remain available; hosts should prefer this new surface when reference analysis exists.
+The public browse handoff is limited to `eye` and `fidelity`. It returns source-free coverage
+metadata without pixels, ids, URLs, or maker rationale. Unknown or restricted rights withhold
+pixels from every downstream transport.
 
 ## Debt and work integration
 
@@ -138,5 +148,10 @@ Visual saturation is conservative and advisory: two inspected directions, five n
 - Selector zoom details must match the kept viewport exactly. Image-coordinate zoom of original gallery media is not a separate command yet.
 - A driver loss before any authenticated checkpoint cannot be invented into browser continuity. Proven-prefix recovery is supported; ambiguous ownership requires diagnosis rather than killing/reusing a process.
 - The initial cycle is bounded and cannot be extended by restarting. A dedicated same-contract user budget-extension grant is not implemented.
-- Analysis/maker whole-screen admission requires independent Eye classification for design browse keeps and retained original images. A seal authenticates acquisition, not visual quality; follow `ref advance` to `ref direction-review` after design collection. Support cannot authorize selection as direction. Non-browse originals retain explicit image-use context, source-image digest and native dimensions; they never acquire invented browse/DOM evidence. Old component crops are not relabelled whole screens.
-- Host continuation, role allowlists, brief routing and prompt/protocol wording are outside this module's ownership. They must recognize the new work/debt outcomes and call the new maker/analysis surface; strict completion must not be weakened.
+- Whole-screen admission requires independent Eye classification for design browse keeps and retained
+  original images. A seal authenticates acquisition, not visual quality; follow `ref advance` to
+  `ref direction-review` after design collection. Support cannot authorize selection as direction.
+  Non-browse originals retain explicit image-use context, source-image digest and native dimensions;
+  they never acquire invented browse/DOM evidence. Old component crops are not relabelled whole screens.
+- Host continuation must recognize the retained work/debt outcomes and dispatch the public
+  `ref direction-review` admission command; strict completion must not be weakened.

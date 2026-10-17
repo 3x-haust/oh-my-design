@@ -1,10 +1,11 @@
 # Human design loop protocol
 
-This is the durable contract for an OMD run. The adaptive route consumes the current task outcome,
-UX policy, evidence claims, reference-discovery decision, design axes, selected-model capability
-profile, decision-linked browser context, and validated-learning context. The user-selected model
-owns role, stage, and optional-method order within their actual dependencies; this protocol does not
-supply a universal sequence.
+This is the design-method reference pack. Ordinary execution is the single model-led `/ultradesign`
+path: the user-selected model chooses useful methods and bounded delegation, implements within the
+classified route, checks the first render, then finishes through `omd lifecycle finish`. It does not
+require a role relay, candidate tournament, written skip, or intermediate artifact for an unselected
+method. Owner and stage names later in this document describe specialized or historical method
+contracts, not the default execution sequence.
 
 `protocol/design-language.md` defines coordinator-owned translation of casual requests into scoped measurable targets and reference-search mechanisms. A picture-backed question clarifies meaning only; it is not routine candidate approval. Current translation is a prerequisite to affected design commitment, and a current feedback translation requires measured movement before refinement closure.
 
@@ -13,13 +14,10 @@ like a human": uncertainty-led tests, evidence-aware framing, independent altern
 critique, and scoped learning. It is a source-free method contract, not an additional stage gate.
 
 Scope lock, required outcomes, hard safety rails, project-write authority, activation, source sealing,
-final-v2 evidence, independent review, and user-selected-model ownership are mandatory. Optional work
-such as domain analysis, framing, discovery, copy isolation, typography proof, composition,
-divergence, art direction, reflection-in-action, reference-distance work, and refinement is present
-only when selected by the typed route. Every
-optional omission has a written reason. When a method is selected, its owner, artifact boundary,
-validation, browser fallback, and stop conditions in this protocol and its specialized protocol apply
-without weakening.
+final-v2 evidence, independent review, and user-selected-model ownership are mandatory. Optional
+methods are used only when they answer the current uncertainty. An unselected method needs no
+paperwork; a selected evidence contract keeps its artifact boundary, validation, browser fallback,
+and stop conditions without weakening.
 
 Reference discovery is selected from task need, uncertainty, and existing evidence. Selected
 discovery researches the named unresolved decision and stops at coverage. A justified skip uses and
