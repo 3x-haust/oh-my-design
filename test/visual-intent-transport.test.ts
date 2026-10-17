@@ -11,16 +11,12 @@ const read = (path: string): string => readFileSync(
 test('a selected first-party concept keeps visual authority across the production handoff', () => {
   const imagegen = read('core/theory/imagegen.md');
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
 
   for (const source of [imagegen, loop]) {
     assert.match(source, /project-owned concept (?:image[\s\S]{0,80})?target/i);
     assert.match(source, /before (?:typography|type) or structure freezes/i);
     assert.match(source, /load-bearing (?:visible )?invariants/i);
   }
-  assert.match(skill, /Frame \+ Scout\/Writer -> minimal seed and 2-3 real concepts of one representative surface -> ONE interactive direction choice/i);
-  assert.match(skill, /Visual owners receive the chosen contract; Writer receives only its copy-safe projection/i);
-  assert.match(skill, /Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step/i);
   assert.match(imagegen, /concept-making and production owners may receive the exact target/i);
   assert.match(loop, /raw evidence is scout-only/i);
   assert.match(loop, /blind review remains source-isolated/i);
@@ -33,7 +29,6 @@ test('a selected first-party concept keeps visual authority across the productio
 test('ambition examples widen invention without becoming a style recipe', () => {
   const imagegen = read('core/theory/imagegen.md');
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
 
   for (const source of [imagegen, loop]) {
     assert.match(source, /ambition[\s\S]{0,180}(?:not|rather than)[\s\S]{0,80}(?:recipe|style)/i);
@@ -45,8 +40,6 @@ test('ambition examples widen invention without becoming a style recipe', () => 
     assert.match(source, /concrete visible deficiency|observable criteria grounded in the actual brief/i);
     assert.match(source, /familiarity|“familiar”/i);
   }
-  assert.match(skill, /minimal seed and 2-3 real concepts of one representative surface[\s\S]*coordinator presents all actual previews and preserves authentic choice bytes/i);
-  assert.match(skill, /Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step/i);
 });
 
 test('concept inquiry begins from subject behavior instead of a preset composition menu', () => {

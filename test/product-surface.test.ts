@@ -47,9 +47,6 @@ test('canonical product grammar rejects landing-page assumptions', () => {
 test('adaptive routing delegates selected requirements through checked role briefs', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
   assert.match(skill, /`omd stage next --json`/);
-  assert.match(skill, /`omd brief <stage> --check --json` separately/);
-  assert.match(skill, /`omd brief <stage> --role <role> \[--mode <mode>\] --json`/);
-  assert.match(skill, /Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step/);
 
   const brief = read('core/brief/index.ts');
   const project = mkdtempSync(join(tmpdir(), 'omd-product-surface-'));
@@ -142,9 +139,7 @@ test('canonical protocol owns product task evidence and conditional regressions'
 });
 
 test('Figma keeps represented structure authoritative while requiring routed implementation evidence', () => {
-  const figma = compact(read('src/skills/omd-figma/SKILL.md'));
-  assert.match(figma, /supplied frames already choose their represented visual properties/i);
-  assert.match(figma, /Frame the full requested surfaces, behavior\/accessibility and missing responsive\/state coverage/);
+  const figma = compact(read('core/guides/figma.md'));
   assert.match(figma, /omd figma pull <figma-url>/);
   assert.match(figma, /omd figma diff <frame-id> <rendered-page> --json/);
   assert.match(figma, /failed diff/i);

@@ -1,6 +1,6 @@
 ---
 name: omd-ultradesign
-description: Design and implement the requested scope through references, representative direction and measured review.
+description: The single OMD entry. Builds new products from scratch, extends or redesigns existing projects, or implements a Figma link, using inspected references and verified real renders.
 ---
 
 # Ultradesign
@@ -11,6 +11,28 @@ Pi uses omd_cli; /ultradesign aliases /skill:omd-ultradesign, not quoted/inline 
 
 Inspect stack/route. Use the applicable route-input, product-route-input or design-route-input schema;
 validate then classify. Run `omd stage next --json`.
+
+## One entry: read the situation first
+
+`/ultradesign` is the only OMD entry point. Inspect the actual project and the full request
+before choosing the work; never ask the user which mode to use.
+
+- **Empty project or no product source:** greenfield. Build the complete requested product from
+  scratch (route `projectMode: greenfield`). Inspect strong references before inventing a direction.
+- **Existing project:** read its stack, routes, components, tokens and current renders first, then do
+  what the request actually asks. A new feature or surface extends the existing system. A redesign
+  first captures the current desktop/mobile screens as the baseline, keeps every function, route
+  and data contract, and changes the visual and structural system. A fix stays local. Do not
+  restyle untouched areas, replace the stack or drop behavior unless the request says so.
+- **Figma link in the request:** the frames are the target. Follow `omd pack guides/figma.md`.
+- **Images or URLs supplied by the user:** they are user references. Use the best task fit as the
+  primary original; do not replace them with your own discovery unless they cannot serve the task.
+- **Interaction states matter as references:** hover, focus, pressed and open states of buttons,
+  rows, tabs, menus and inputs carry much of a reference's craft. Capture and compare them, not
+  only the resting screen.
+
+Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`,
+`guides/figma.md`, `guides/copy.md`, `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
 
 ## Default native Pi workflow
 
@@ -108,39 +130,3 @@ The host invokes it automatically when that proposal is ready and follows concre
 Repair actual failures without reducing the request. Execution records are harness facts, not
 invented design judgments; independent model review is not human aesthetic approval.
 Preserve source scope, external-action consent, unknown-fact boundaries and honest evidence.
-Design-only, benchmark/release review and explicitly host-selected `OMD_DESIGN_WORKFLOW=structured`
-use their structured contracts below.
-
-## Structured workflow and explicitly selected methods
-
-Deliver current contracts; check
-`omd brief <stage> --check --json` separately. Obtain `omd brief <stage> --role <role> [--mode <mode>] --json`;
-Sketch needs `--input <sketch-brief.json>`. Eye briefs are profiles, not authority. Let the
-exclusive owner publish, check outputs and recompute.
-Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step.
-Follow ref advance's design-first action. Budget both lanes before starting;
-secure visual originals before lengthy domain help.
-
-Explicit interactive concept routes: Frame + Scout/Writer -> minimal seed and 2-3 real concepts of one representative surface -> ONE interactive direction choice.
-The coordinator presents all actual previews and preserves authentic choice bytes.
-Then type/components -> full surface/state/view expansion -> actual audit/stress/repair.
-Samples never reduce scope. In the structured workflow Art Director plans; Sketch authors candidates; Hand alone writes production.
-Await-user pauses retries; bare continue chooses nothing. Autonomous selection
-needs authority and isolated Eye, never merely config, child execution or checkpoint:none.
-
-Pi design decisions are internal, not routine questions. Explicit host developer mode uses the same
-engine after renders, never as a prerequisite. Preserve account/payment/external-action authority.
-Withhold unknown facts; missing evidence is confidence debt, not approval.
-
-[metaphor-contract:typed-router] Visual owners receive the chosen contract; Writer receives only its copy-safe projection.
-Run guard production before source and guard completion before completion claims;
-exact native review/finalization follows the current host contract. Never forge receipts,
-alter user messages, lower risk or waive failures for budget. Design-only delivers its checked handoff.
-Report evidence, debt and limits.
-
-Selected provisional-source-study uses omd study create: an isolated evidence-only author receives
-whole originals; downstream gets source-free selection and first-party source/renders, not aesthetic approval.
-Structured Pi Hand/Sketch uses omd maker run, never same-session fallback. Its fixed packet supplies brief,
-first-party material and validated whole originals privately. Never ship/expose/re-encode reference
-pixels, copy, branding or locators. Capture, publication, selection and independent review retain
-separate owners.

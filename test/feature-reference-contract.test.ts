@@ -12,9 +12,6 @@ test('adaptive coordinator checks stage entry separately from bounded role proje
   const roleBrief = read('core/brief/role.ts');
 
   assert.match(skill, /`omd stage next --json`/);
-  assert.match(skill, /`omd brief <stage> --check --json` separately/);
-  assert.match(skill, /`omd brief <stage> --role <role> \[--mode <mode>\] --json`/);
-  assert.match(skill, /exclusive owner publish, check outputs and recompute/i);
   assert.match(roleBrief, /schema: 'role-brief-v1'/);
   assert.match(roleBrief, /delivery: 'owner-task-not-review-authority'/);
   assert.match(roleBrief, /contracts: brief\.contracts, schemas: brief\.schemas, checks: brief\.judgedBy/);
@@ -27,7 +24,6 @@ test('route selection preserves the user model and independent terminal review',
 
   assert.match(skill, /Preserve the original request and user-selected model/i);
   assert.match(skill, /applicable route-input, product-route-input or design-route-input schema/i);
-  assert.match(skill, /exact native review\/finalization follows the current host contract/i);
   assert.doesNotMatch(skill, /3–5 component captures/);
 });
 
@@ -50,14 +46,10 @@ test('selected reference owners receive native handoffs while production and rev
 });
 
 test('selected refinement remains observation-led and independently finalized', () => {
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const hand = read('src/agents/hand.agent.yaml');
   const eye = read('src/agents/eye.agent.yaml');
   const protocol = read('core/protocol/human-design-loop.md');
 
-  assert.match(skill, /full surface\/state\/view expansion -> actual audit\/stress\/repair/i);
-  assert.match(skill, /Hand alone writes production/i);
-  assert.match(skill, /exact native review\/finalization follows the current host contract/i);
   assert.match(hand, /source -> observer capture -> pixel inspection -> craft decision/i);
   assert.match(eye, /You did not build this work/i);
   assert.match(protocol, /Any unmet applicable criterion is RED/i);

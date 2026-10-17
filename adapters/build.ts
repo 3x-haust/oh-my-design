@@ -108,6 +108,14 @@ export function build(): void {
       }
     }
 
+    // Copy the internal stage guides that /ultradesign reads through `omd pack guides/<name>.md`.
+    const guidesDir = join(root, 'core', 'guides');
+    if (existsSync(guidesDir)) {
+      for (const f of readdirSync(guidesDir).filter((f) => f.endsWith('.md'))) {
+        write(host, `core/guides/${f}`, readFileSync(join(guidesDir, f), 'utf8'));
+      }
+    }
+
     // Copy the host-neutral loop contract alongside the theory/cookbook packs.
     const protocolDir = join(root, 'core', 'protocol');
     if (existsSync(protocolDir)) {

@@ -26,6 +26,9 @@ const promptPaths = [
   ...readdirSync(join(root, 'src', 'skills'), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(root, 'src', 'skills', entry.name, 'SKILL.md')),
+  ...readdirSync(join(root, 'core', 'guides'))
+    .filter((name) => name.endsWith('.md'))
+    .map((name) => join(root, 'core', 'guides', name)),
 ];
 
 function bracedBody(source: string, openBrace: number): string {
