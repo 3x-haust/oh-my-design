@@ -2,12 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { measurementFixture } from './helpers/visual-measurement.ts';
 import { measureProject } from '../core/measure/index.ts';
 import * as measured from '../core/slop/measured-review.ts';
-import { isMutatingOmdCommand } from '../extensions/omd-guard.ts';
 
 test('measured review input pages retain every signed finding without publishing judgments', async t => {
   const f = measurementFixture('test-016');
@@ -47,13 +44,6 @@ test('measured review input pages retain every signed finding without publishing
   for (const [offset, limit] of [[-1, 1], [0, 0], [0, 9], [0.5, 1]]) {
     assert.throws(() => measured.measuredSlopReviewInput(f.root, checkpoint.checkpoint.sha256, offset, limit), /page/);
   }
-  const args = ['slop', 'review-input', '--checkpoint', checkpoint.checkpoint.sha256,
-    '--offset', '0', '--limit', '1', '--json'];
-  assert.equal(isMutatingOmdCommand(args), false);
-  const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
-  const command = spawnSync(process.execPath, [cli, ...args], { cwd: f.root, encoding: 'utf8' });
-  assert.equal(command.status, 0, command.stderr);
-  assert.deepEqual(JSON.parse(command.stdout).findings, checkpoint.findings.slice(0, 1));
   assert.deepEqual(readFileSync(join(f.root, '.omd/slop/latest.json')), pointer);
   assert.throws(() => measured.checkMeasuredSlopReview(f.root), /has no review/);
   const checkpointPath = join(f.root, checkpoint.checkpoint.path);

@@ -73,8 +73,8 @@ test('Given empty, truncated, malformed, or linked generated payloads When insta
   const cases = [
     { name: 'empty agent', mutate: (path: string) => writeFileSync(join(path, 'dist', 'codex', 'agents', 'omd-eye.toml'), '') },
     { name: 'parseable truncated agent', mutate: (path: string) => writeFileSync(join(path, 'dist', 'codex', 'agents', 'omd-eye.toml'), 'name = "omd-eye"\n') },
-    { name: 'truncated skill directory', mutate: (path: string) => rmSync(join(path, 'dist', 'codex', 'skills', 'omd-coach'), { recursive: true }) },
-    { name: 'parseable truncated skill', mutate: (path: string) => writeFileSync(join(path, 'dist', 'codex', 'skills', 'omd-coach', 'SKILL.md'), '# cropped\n') },
+    { name: 'truncated skill directory', mutate: (path: string) => rmSync(join(path, 'dist', 'codex', 'skills', 'omd-ultradesign'), { recursive: true }) },
+    { name: 'parseable truncated skill', mutate: (path: string) => writeFileSync(join(path, 'dist', 'codex', 'skills', 'omd-ultradesign', 'SKILL.md'), '# cropped\n') },
     { name: 'malformed plugin manifest', mutate: (path: string) => writeFileSync(join(path, 'dist', 'codex', '.codex-plugin', 'plugin.json'), '{') },
     { name: 'truncated plugin manifest', mutate: (path: string) => writeFileSync(join(path, 'dist', 'codex', '.codex-plugin', 'plugin.json'), '{"name":"oh-my-design"}\n') },
     { name: 'foreign agent', mutate: (path: string) => writeFileSync(join(path, 'dist', 'codex', 'agents', 'foreign.toml'), 'name = "foreign"\n') },

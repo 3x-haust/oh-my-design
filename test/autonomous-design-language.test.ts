@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { publishTranslation, readTranslation } from '../core/design-language/index.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
-import { fixture } from './helpers/native-maker.ts';
+import { modelLedFixture } from './helpers/model-led.ts';
 
 test('native default selects a reading without recording a user answer', t => {
-  const context = fixture(t);
+  const context = modelLedFixture(t);
   const route = readPersistedRoute(context.root, context.invocation);
   const reading = {
     id: 'spacing', labelKo: '내용 그룹 간격', origin: { kind: 'model-proposed' },
@@ -32,7 +32,7 @@ test('native default selects a reading without recording a user answer', t => {
 });
 
 test('native default refuses a new design question before publishing a waiting state', t => {
-  const context = fixture(t);
+  const context = modelLedFixture(t);
   const route = readPersistedRoute(context.root, context.invocation);
   const reading = {
     id: 'spacing', labelKo: '내용 그룹 간격', origin: { kind: 'model-proposed' },

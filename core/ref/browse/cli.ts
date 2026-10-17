@@ -11,7 +11,7 @@ import { BrowseError, browseFail } from './contract.ts';
 
 export const BROWSE_PUBLICATION_HELP = `analysis-set --input <reference-analysis.json> [--activation <path>] [--json]
 analysis-check [--activation <path>] [--json]
-handoff --for composer|hand|concept|eye|glance|fidelity [--blind] [--activation <path>] [--json]
+handoff --for eye|fidelity [--blind] [--activation <path>] [--json]
 Whole screens are the reference unit. Use shot for a real app viewport, or shot --selector <img> for a full item image.
 Keep the whole screen before crop; crop is an attached zoom detail, never an independent reference.
 `;
@@ -29,12 +29,12 @@ export async function runBrowseCli(argv: readonly string[], root: string,
       }
       if (verb === 'analysis-set' && !opts.has('--input')) browseFail('BROWSE_USAGE', '--input required', 2);
       const role = opts.get('--for');
-      if (verb === 'handoff' && !['composer', 'hand', 'concept', 'eye', 'glance', 'fidelity'].includes(role ?? '')) browseFail('BROWSE_USAGE', 'valid --for role required', 2);
+      if (verb === 'handoff' && !['eye', 'fidelity'].includes(role ?? '')) browseFail('BROWSE_USAGE', 'valid --for role required', 2);
       const invocation = authorize(opts.get('--activation') ?? null, `omd ref browse ${verb}`), route = readPersistedRoute(root, invocation);
       const current = { sourceContractSha256: route.sourceContractSha256, request: route.request };
       const result = verb === 'analysis-set' ? publishReferenceAnalysis(root, JSON.parse(readFileSync(resolve(root, opts.get('--input')!), 'utf8')), current, createProjectWriteAdapter(root, invocation))
         : verb === 'analysis-check' ? readReferenceAnalysis(root, current).analysis
-          : readWholeScreenReferenceHandoff(root, role as 'composer' | 'hand' | 'concept' | 'eye' | 'glance' | 'fidelity', current, { blind: opts.has('--blind') });
+          : readWholeScreenReferenceHandoff(root, role as 'eye' | 'fidelity', current, { blind: opts.has('--blind') });
       return { result, exitCode: 0 };
     }
     const command = parseBrowseCommand(argv);

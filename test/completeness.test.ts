@@ -1,22 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { checkFunctionalCompleteness, validateFunctionalRequirements } from '../core/completeness/index.ts';
 import type { RawNode } from '../core/types.ts';
-import { buildBrief } from '../core/brief/index.ts';
 
 // The visual gates cannot tell a landing that links to the repository from one that only says it
 // does. This gate correlates the brief's stated requirements with the built page and adds no style
 // rule of its own: present, operable, reachable.
-
-const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
-const FIXTURE = fileURLToPath(new URL('./fixtures/completeness.html', import.meta.url));
-const run = (args: string[], cwd: string) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', cwd });
-const project = (): string => mkdtempSync(join(tmpdir(), 'omd-complete-'));
 
 const requirements = (...entries: Record<string, unknown>[]) => ({ schema: 'functional-requirements-v1', requirements: entries });
 
@@ -32,14 +21,12 @@ test('a requirement schema rejects duplicate, unlabelled, and unknown-kind entri
   assert.throws(() => validateFunctionalRequirements(requirements({ id: 'R-1', kind: 'action', statement: 'a', label: '  ' })), /needs a non-empty label/);
   assert.throws(() => validateFunctionalRequirements(requirements({ id: '1', kind: 'action', statement: 'a', label: 'A' })), /id must be R-<number>/);
 });
-
 test('functional requirements ignore ordinary extra fields but preserve required-field validation', () => {
   const item = { id: 'R-1', kind: 'action', statement: 'open', label: 'Open' };
   assert.deepEqual(validateFunctionalRequirements({ ...requirements({ ...item, note: 'optional' }), note: 'optional' }),
     validateFunctionalRequirements(requirements(item)));
   assert.throws(() => validateFunctionalRequirements(requirements({ id: 'R-1', kind: 'action', statement: 'open' })), /label/);
 });
-
 test('an action is satisfied only when its carrier is operable and keyboard-reachable', () => {
   const declared = validateFunctionalRequirements(requirements({ id: 'R-1', kind: 'action', statement: 'Visitor opens the repository', label: '저장소 열기' }));
 
@@ -100,71 +87,4 @@ test('a form label with no interactive field nearby is reported as inert', () =>
 
   const orphan = [node({ id: 'label', text: '이메일' })];
   assert.deepEqual(checkFunctionalCompleteness(declared, orphan).map((finding) => finding.id), ['FUNC-FORM-INERT']);
-});
-
-test('the gate runs against a real page and separates satisfied from unsatisfied requirements', () => {
-  const dir = project();
-  const write = (relative: string, content: string): string => {
-    const path = join(dir, relative);
-    mkdirSync(join(path, '..'), { recursive: true });
-    writeFileSync(path, content);
-    return path;
-  };
-
-  const satisfied = write('satisfied.json', JSON.stringify(requirements(
-    { id: 'R-1', kind: 'action', statement: 'Visitor opens the repository', label: '저장소 열기' },
-    { id: 'R-2', kind: 'preference', statement: 'Visitor switches language', label: 'English' },
-    { id: 'R-3', kind: 'form', statement: 'Visitor submits an email', label: '이메일' },
-  )));
-  const passing = run(['complete', 'check', FIXTURE, '--input', satisfied, '--json'], dir);
-  assert.equal(passing.status, 0, passing.stdout || passing.stderr);
-  assert.deepEqual(JSON.parse(passing.stdout).findings, []);
-
-  const unmet = write('unmet.json', JSON.stringify(requirements(
-    { id: 'R-1', kind: 'action', statement: 'Visitor starts a trial', label: '무료로 시작' },
-    { id: 'R-2', kind: 'action', statement: 'Visitor triggers the hidden action', label: '숨은 동작' },
-  )));
-  const blocked = run(['complete', 'check', FIXTURE, '--input', unmet, '--json'], dir);
-  assert.equal(blocked.status, 1, blocked.stdout);
-  assert.deepEqual(JSON.parse(blocked.stdout).findings.map((finding: { id: string }) => finding.id), ['FUNC-MISSING', 'FUNC-UNREACHABLE']);
-});
-
-// The frame stage owns the requirement list and persists it through the CLI. The stage brief carries
-// that contract; the thin coordinator does not duplicate an artifact-ownership table.
-test('the frame owner persists functional requirements through the canonical stage brief', () => {
-  const framer = readFileSync(fileURLToPath(new URL('../src/agents/framer.agent.yaml', import.meta.url)), 'utf8').replace(/\s+/g, ' ');
-  assert.match(framer, /Bash\(omd complete:\*\)/);
-  assert.match(framer, /omd complete set --input <input\.json>/);
-  assert.match(framer, /never hand-write command-owned records/i);
-
-  const stages = readFileSync(fileURLToPath(new URL('../core/stage/contract.ts', import.meta.url)), 'utf8');
-  assert.match(stages, /id: 'frame', owner: 'omd-framer', artifact: '\.omd\/frame\.md'/);
-  assert.match(stages, /requiredContracts: \['protocol\/human-design-loop\.md', 'theory\/ux\.md'\]/);
-
-  const brief = readFileSync(fileURLToPath(new URL('../core/brief/index.ts', import.meta.url)), 'utf8');
-  const frameBrief = buildBrief(project(), 'frame', fileURLToPath(new URL('../core/', import.meta.url)));
-  assert.deepEqual(frameBrief.schemas.map(schema => schema.name),
-    ['frame', 'functional-requirements', 'reality-ledger', 'decision-entry']);
-  assert.match(brief, /'\.omd\/functional-requirements\.json'/);
-  assert.match(brief, /omd complete check <page>/);
-
-  const role = readFileSync(fileURLToPath(new URL('../core/brief/role.ts', import.meta.url)), 'utf8');
-  assert.match(role, /options\.role === 'omd-writer' \? \['\.omd\/copy-deck\.md', '\.omd\/functional-requirements\.json'\]/);
-  assert.match(role, /maker \? \['\.omd\/copy-deck\.md', '\.omd\/functional-requirements\.json'/);
-});
-
-test('complete set validates before persisting and rejects an invalid list', () => {
-  const dir = project();
-  const path = join(dir, 'requirements.json');
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path, JSON.stringify(requirements({ id: 'R-1', kind: 'action', statement: 'Visitor opens the repository', label: '저장소 열기' })));
-  const stored = run(['complete', 'set', '--input', path, '--json'], dir);
-  assert.equal(stored.status, 0, stored.stderr);
-  assert.equal(JSON.parse(stored.stdout).requirements, 1);
-  assert.match(readFileSync(join(dir, '.omd/functional-requirements.json'), 'utf8'), /"id": "R-1"/);
-
-  writeFileSync(path, JSON.stringify(requirements({ id: 'R-1', kind: 'wish', statement: 'a', label: 'A' })));
-  const rejected = run(['complete', 'set', '--input', path], dir);
-  assert.equal(rejected.status, 1);
-  assert.match(rejected.stderr, /FUNCTIONAL_REQUIREMENTS_INVALID/);
 });

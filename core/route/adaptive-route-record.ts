@@ -7,6 +7,7 @@ import {
   ADAPTIVE_ROUTE_RECORD_SCHEMA,
   ADAPTIVE_SOURCE_CONTRACT_SCHEMA,
   FORBIDDEN_WITHOUT_REQUEST,
+  MODEL_LED_STRATEGY_DECISION,
   failAdaptiveRoute,
   type AdaptiveRouteRecord,
 } from './adaptive-flow-domain.ts';
@@ -187,7 +188,11 @@ function parse(
     selectedModel,
     sourceContract: expected.sourceContract,
     sourceContractSha256: normalizedSourceSha256,
-    strategy: parseAdaptiveStrategyDecision(item.get('strategy'), expected.sourceContract.processPolicy?.schema === 'model-led-design-process-v1'),
+    strategy: parseAdaptiveStrategyDecision(
+      item.get('strategy'),
+      expected.sourceContract.processPolicy?.schema === 'model-led-design-process-v1'
+        || canonicalRouteJson(expected.strategy) === canonicalRouteJson(MODEL_LED_STRATEGY_DECISION),
+    ),
     behavior: validatePersistedAdaptiveBehavior(item.get('behavior'), expected.behavior),
     references: Object.freeze({ decision, intended: text(references.get('intended')), actual: actualReference(references.get('actual')) }),
     claims: Object.freeze({ userFacts: strings(claims.get('userFacts'), true), workingContext: strings(claims.get('workingContext'), true) }),

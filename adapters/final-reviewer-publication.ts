@@ -2,9 +2,6 @@ import { createHash, createPublicKey, verify } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  validateArtDirectionPointer,
-} from '../core/art-direction/schema.ts';
-import {
   type SourceBoundProofPath,
   validateSourceBoundProofCurrentness,
 } from '../core/composition-contract/source-currentness.ts';
@@ -40,14 +37,6 @@ import {
 } from '../core/runtime/native-consulted-reference-fidelity.ts';
 const SHA256 = /^[a-f0-9]{64}$/;
 const LANE_CONTRACTS = {
-  'blind-review-v2': {
-    lane: 'blindLane',
-    verdicts: ['blindVisual', 'blindNarrative'],
-    floors: ['composition', 'copy'],
-    requiresDesignQuality: true,
-    handbackSchema: 'adaptive-final-render-reviewer-handback-v1',
-    executionSchema: 'final-reviewer-execution-v2',
-  },
   'adaptive-blind-review-v2': {
     lane: 'blindLane',
     verdicts: ['blindVisual', 'blindNarrative', 'interactionBenchmarkFit', 'domainSpecificity', 'realityFit'],
@@ -79,16 +68,6 @@ const LANE_CONTRACTS = {
     requiresDesignQuality: false,
     handbackSchema: 'adaptive-final-reviewer-handback-v1',
     executionSchema: 'adaptive-final-reviewer-execution-v1',
-  },
-  'fidelity-review-v1': {
-    lane: 'fidelityLane', verdicts: ['referenceFidelity', 'renderFidelity'],
-    floors: ['desktop', 'mobile'], requiresDesignQuality: false,
-    handbackSchema: 'adaptive-final-reviewer-handback-v1', executionSchema: 'final-reviewer-execution-v1',
-  },
-  'protocol-review-v1': {
-    lane: 'protocolLane', verdicts: ['evidenceIntegrity', 'publicationProtocol'],
-    floors: ['authority', 'currentness'], requiresDesignQuality: false,
-    handbackSchema: 'adaptive-final-reviewer-handback-v1', executionSchema: 'final-reviewer-execution-v1',
   },
 } as const;
 
@@ -170,18 +149,6 @@ function keyList(value: unknown, label: string): readonly string[] {
     return fail(`FINAL_REVIEW_PUBLICATION_INVALID:${label}`);
   }
   return Object.freeze([...value]) as readonly string[];
-}
-
-function currentArtDirectionSha256(projectRoot: string): string {
-  try {
-    const pointer = validateArtDirectionPointer(JSON.parse(
-      readFileSync(join(projectRoot, '.omd', 'art-direction.json'), 'utf8'),
-    ) as unknown);
-    readFileSync(join(projectRoot, '.omd', pointer.record));
-    return pointer.sha256;
-  } catch {
-    return fail('FINAL_REVIEW_PUBLICATION_INVALID:art direction binding');
-  }
 }
 
 export function verifySignedEyeRoleResult(value: unknown, projectRoot: string, publicKeyPath?: string): Readonly<{
@@ -294,9 +261,7 @@ export function buildFinalReviewerPublication(
   const laneSchema = text(publication.laneSchema, 'laneSchema');
   if (laneSchema.startsWith('measured-')) return buildMeasuredReviewerPublication({ laneSchema, roleResults: publication.roleResults as unknown[] }, context);
   if (existsSync(join(context.projectRoot, '.omd/route.json')) && requiresMeasuredTerminal(readPersistedRoute(context.projectRoot, context.invocation))) fail('FINAL_REVIEW_PUBLICATION_INVALID:current process requires measured v2 review');
-  const contract = laneSchema === 'blind-review-v2'
-    ? LANE_CONTRACTS[laneSchema]
-    : laneSchema === 'adaptive-blind-review-v3'
+  const contract = laneSchema === 'adaptive-blind-review-v3'
     ? LANE_CONTRACTS[laneSchema]
     : laneSchema === 'adaptive-blind-review-v2'
     ? LANE_CONTRACTS[laneSchema]
@@ -304,14 +269,8 @@ export function buildFinalReviewerPublication(
       ? LANE_CONTRACTS[laneSchema]
       : laneSchema === 'adaptive-protocol-review-v1'
         ? LANE_CONTRACTS[laneSchema]
-        : laneSchema === 'fidelity-review-v1' || laneSchema === 'protocol-review-v1'
-          ? LANE_CONTRACTS[laneSchema]
         : undefined;
   if (contract === undefined) return fail('FINAL_REVIEW_PUBLICATION_INVALID:laneSchema');
-  const artDirectionBinding = laneSchema === 'blind-review-v2'
-    || laneSchema === 'fidelity-review-v1' || laneSchema === 'protocol-review-v1'
-    ? currentArtDirectionSha256(context.projectRoot)
-    : undefined;
   if (!Array.isArray(publication.roleResults) || publication.roleResults.length !== 2) {
     return fail('FINAL_REVIEW_PUBLICATION_INVALID:roleResults');
   }
@@ -384,7 +343,6 @@ export function buildFinalReviewerPublication(
     let reviewerFields: readonly string[] = [
       'schema', 'lane', 'verdicts', 'criticalFloors', 'observationSha256s',
       'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256',
-      ...(artDirectionBinding === undefined ? [] : ['artDirectionSha256']),
       'evidenceSha256', ...(handback.findings === undefined ? [] : ['findings']),
     ];
     let fixed = record({
@@ -394,7 +352,6 @@ export function buildFinalReviewerPublication(
       briefSha256: handback.briefSha256,
       browserSha256: handback.browserSha256,
       evidenceSha256: handback.evidenceSha256,
-      ...(artDirectionBinding === undefined ? {} : { artDirectionSha256: artDirectionBinding }),
     }, `handback[${index}].fixedBindings`);
     let consultedExpectations: readonly ConsultedReferenceComparisonExpectation[] = [];
     if (role.receipt.schema === 'omd-pi-role-exec-result-v1' && !contract.requiresDesignQuality) {
@@ -439,7 +396,6 @@ export function buildFinalReviewerPublication(
       exact(fixed, [
         'observationSha256s', 'routeSha256', 'buildSha256', 'briefSha256',
         'browserSha256', 'evidenceSha256',
-        ...(laneSchema === 'blind-review-v2' ? ['artDirectionSha256'] : []),
       ], `packet[${index}].fixedBindings`);
       verdictKeys = keyList(output.verdictKeys, `packet[${index}].verdictKeys`);
       floorKeys = keyList(output.criticalFloorKeys, `packet[${index}].criticalFloorKeys`);
@@ -447,13 +403,9 @@ export function buildFinalReviewerPublication(
       const expectedReviewerFields = [
         'schema', 'lane', 'verdicts', 'criticalFloors', 'designQuality',
         'observationSha256s', 'routeSha256',
-        ...(laneSchema === 'blind-review-v2' ? ['artDirectionSha256'] : []),
         'buildSha256', 'briefSha256', 'browserSha256', 'evidenceSha256', 'findings',
       ];
-      const allowedVerdicts = laneSchema === 'blind-review-v2'
-        ? [...contract.verdicts, 'realityFit']
-        : contract.verdicts;
-      const orderedVerdicts = allowedVerdicts.filter((key) => verdictKeys.includes(key));
+      const orderedVerdicts = contract.verdicts.filter((key) => verdictKeys.includes(key));
       const orderedFloors = contract.floors.filter((key) => floorKeys.includes(key));
       if (packet.schema !== FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA
         || output.schema !== FINAL_RENDER_REVIEWER_HANDBACK_SCHEMA
@@ -468,9 +420,7 @@ export function buildFinalReviewerPublication(
         || canonicalJson(floorKeys) !== canonicalJson(orderedFloors)
         || canonicalJson(reviewerFields) !== canonicalJson(expectedReviewerFields)
         || packet.evidenceSha256 !== proof.evidenceSha256
-        || fixed.evidenceSha256 !== proof.evidenceSha256
-        || (laneSchema === 'blind-review-v2'
-          && fixed.artDirectionSha256 !== artDirectionBinding)) {
+        || fixed.evidenceSha256 !== proof.evidenceSha256) {
         return fail(`FINAL_REVIEW_PUBLICATION_INVALID:packet[${index}] contract`);
       }
     }
@@ -485,8 +435,6 @@ export function buildFinalReviewerPublication(
       || handback.briefSha256 !== fixed.briefSha256
       || handback.browserSha256 !== fixed.browserSha256
       || handback.evidenceSha256 !== fixed.evidenceSha256
-      || (artDirectionBinding !== undefined
-        && handback.artDirectionSha256 !== fixed.artDirectionSha256)
       || canonicalJson(boundObservationSha256s) !== canonicalJson(fixed.observationSha256s)) {
       return fail(`FINAL_REVIEW_PUBLICATION_INVALID:handback[${index}] binding`);
     }
@@ -591,9 +539,7 @@ export function buildFinalReviewerPublication(
       }),
       isolationReceiptSha256: isolationSha256,
       observationSha256s: handback.observationSha256s,
-      ...(artDirectionBinding === undefined
-        ? { routeSha256: handback.routeSha256 }
-        : { artDirectionSha256: artDirectionBinding }),
+      routeSha256: handback.routeSha256,
       buildSha256: handback.buildSha256,
       briefSha256: handback.briefSha256,
       browserSha256: handback.browserSha256,
@@ -616,9 +562,7 @@ export function buildFinalReviewerPublication(
   if (first === undefined) return fail('FINAL_REVIEW_PUBLICATION_INVALID:roleResults');
   const laneValue = {
     schema: laneSchema,
-    ...(artDirectionBinding === undefined
-      ? { routeSha256: first.routeSha256 }
-      : { artDirectionSha256: artDirectionBinding }),
+    routeSha256: first.routeSha256,
     buildSha256: first.buildSha256,
     isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: isolationSha256 },
     verdicts: first.verdicts,

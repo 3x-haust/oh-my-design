@@ -13,7 +13,7 @@ import {
 import { expectedPrebuiltFiles } from '../core/install/prebuilt-payload.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const skills = ['coach', 'critique', 'figma', 'humanize', 'scout', 'ultradesign'] as const;
+const skills = ['ultradesign'] as const;
 
 interface Metadata { interface: { display_name: string; short_description: string } }
 const parseMetadata = (source: string): Metadata => parse(source) as Metadata;

@@ -6,11 +6,11 @@ description: The single OMD entry. Builds new products from scratch, extends or 
 # Ultradesign
 
 Preserve the original request and user-selected model. Keep scope and allowed paths/dependencies.
-The model chooses stages/methods. Delegate bounded tasks; sequential passes are not independent review.
+The model chooses useful methods and delegation. Sequential passes are not independent review.
 Pi uses omd_cli; /ultradesign aliases /skill:omd-ultradesign, not quoted/inline mentions.
 
-Inspect stack/route. Use the applicable route-input, product-route-input or design-route-input schema;
-validate then classify. Run `omd stage next --json`.
+Inspect the stack and request. Use `route-input` for existing/bounded work or `product-route-input`
+for a new product; validate, classify, then run `omd stage next --json` for the current model-led action.
 
 ## One entry: read the situation first
 

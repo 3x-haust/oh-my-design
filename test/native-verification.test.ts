@@ -3,10 +3,10 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { runNativeVerification } from '../bin/native-verification-command.ts';
-import { fixture } from './helpers/native-maker.ts';
+import { modelLedFixture } from './helpers/model-led.ts';
 
 test('native verification runs the existing build script without a generic execution tool', async t => {
-  const f = fixture(t);
+  const f = modelLedFixture(t);
   writeFileSync(join(f.root, 'package.json'), JSON.stringify({
     private: true, scripts: { build: 'node --version' },
   }));
@@ -20,7 +20,7 @@ test('native verification runs the existing build script without a generic execu
 });
 
 test('native verification preserves failing command output and exit code', async t => {
-  const f = fixture(t);
+  const f = modelLedFixture(t);
   writeFileSync(join(f.root, 'package.json'), JSON.stringify({
     private: true, scripts: { test: 'node -e "console.error(12345);process.exit(7)"' },
   }));
@@ -31,7 +31,7 @@ test('native verification preserves failing command output and exit code', async
 });
 
 test('native verification preserves other projects browser installations without changing the host environment', async t => {
-  const f = fixture(t);
+  const f = modelLedFixture(t);
   writeFileSync(join(f.root, 'package.json'), JSON.stringify({
     private: true, scripts: { build: 'node -p "JSON.stringify({skip:process.env.PLAYWRIGHT_SKIP_BROWSER_GC,path:!!process.env.PATH})"' },
   }));
@@ -49,7 +49,7 @@ test('native verification preserves other projects browser installations without
 });
 
 test('verification refuses arbitrary commands and missing readiness before executing scripts', async t => {
-  const f = fixture(t);
+  const f = modelLedFixture(t);
   const marker = join(f.root, 'unexpected-write');
   writeFileSync(join(f.root, 'package.json'), JSON.stringify({
     private: true, scripts: { build: 'node -e "require(\'node:fs\').writeFileSync(\'unexpected-write\',\'bad\')"' },
@@ -58,14 +58,14 @@ test('verification refuses arbitrary commands and missing readiness before execu
   for (const command of ['build && touch unexpected-write', 'dev', 'exec', 'install --force', 'build\nnode x']) {
     await assert.rejects(runNativeVerification({ ...f, command }), /NATIVE_VERIFICATION_COMMAND_INVALID/);
   }
-  rmSync(join(f.root, '.omd/copy-deck.md'));
+  rmSync(join(f.root, '.omd/route.json'));
   await assert.rejects(runNativeVerification({ ...f, command: 'build' }), /NATIVE_VERIFICATION_NOT_READY/);
   assert.equal(existsSync(marker), false);
   assert.deepEqual(readFileSync(join(f.root, 'src/copy/confirmation.ts')), source);
 });
 
 test('verification respects cancellation before any package script starts', async t => {
-  const f = fixture(t);
+  const f = modelLedFixture(t);
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(runNativeVerification({ ...f, command: 'build', signal: controller.signal }),

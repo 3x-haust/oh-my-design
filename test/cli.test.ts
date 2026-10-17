@@ -1,34 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Frame, Violation } from '../core/types.ts';
-import { must } from './helpers.ts';
+import type { Violation } from '../core/types.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('./fixtures/ir.raw.json', import.meta.url));
 const PROBE_FIXTURE = fileURLToPath(new URL('./fixtures/probe.html', import.meta.url));
-
 const run = (args: string[], cwd?: string) =>
   spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
-
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-cli-'));
 
-const EVIDENCE = 'App store reviews, n=240: 31% say "too many choices"';
-
-test('omd check exits 1 when violations exist — usable as a CI design linter', () => {
-  const r = run(['check', '--ir', FIXTURE], project());
-  assert.equal(r.status, 1);
-  assert.match(r.stdout, /CONTRAST-001/);
-});
-
-test('omd check --json emits a parseable violation array', () => {
+test('omd check exits 1 when violations exist and emits JSON on request', () => {
+  const text = run(['check', '--ir', FIXTURE], project());
+  assert.equal(text.status, 1);
+  assert.match(text.stdout, /CONTRAST-001/);
   const parsed = JSON.parse(run(['check', '--ir', FIXTURE, '--json'], project()).stdout) as Violation[];
   assert.ok(parsed.length > 0);
-  assert.ok(parsed.every((v) => v.id && v.nodeId && v.path && v.severity && v.category));
+  assert.ok(parsed.every(value => value.id && value.nodeId && value.path && value.severity && value.category));
 });
 
 test('omd check exits 0 on a clean IR', () => {
@@ -38,248 +30,50 @@ test('omd check exits 0 on a clean IR', () => {
   assert.equal(run(['check', '--ir', clean], dir).status, 0);
 });
 
-// ── The frame is a record the loop keeps, not a gate a human signs. ──
-
-test('there is no approval command any more', () => {
-  assert.notEqual(run(['frame', 'approve'], project()).status, 0);
-});
-
-test('nothing blocks a write: there is no hook subcommand', () => {
-  assert.notEqual(run(['hook', 'pre-tool']).status, 0);
-});
-
-test('omd frame set refuses a reframing with no cited evidence', () => {
-  const r = run(['frame', 'set', '--problem', 'a blog', '--reframe', 'a reading problem'], project());
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /without a cited observation is a guess/);
-});
-
-test('omd frame set writes a record that needs no signature', () => {
-  const dir = project();
-  assert.equal(run(['frame', 'set', '--problem', 'a blog', '--reframe', 'a reading problem', '--why', EVIDENCE], dir).status, 0);
-
-  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
-  assert.equal(frame.why, EVIDENCE);
-  assert.ok(frame.writtenAt);
-  assert.equal(frame['approved'], undefined, 'approval is not a concept any more');
-  assert.match(frame.body, /## The reframing/);
-});
-
-test('omd frame reframe appends a revision rather than overwriting the old framing', () => {
-  const dir = project();
-  run(['frame', 'set', '--problem', 'a blog', '--reframe', 'a reading problem', '--why', EVIDENCE], dir);
-  run(['frame', 'reframe', '--to', 'two modes: new and returning', '--because', 'c3 cannot be skimmed'], dir);
-
-  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
-  assert.equal(frame.revision, 1);
-  assert.match(frame.body, /a reading problem/, 'the original framing survives');
-  assert.match(frame.body, /## Reframing 1/);
-  assert.match(frame.body, /c3 cannot be skimmed/);
-
-  run(['frame', 'reframe', '--to', 'three modes', '--because', 'the render showed a third'], dir);
-  const twice = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
-  assert.equal(twice.revision, 2);
-  assert.match(twice.body, /## Reframing 1/);
-  assert.match(twice.body, /## Reframing 2/);
-});
-
-test('omd frame generator records the point of view', () => {
-  const dir = project();
-  run(['frame', 'set', '--problem', 'p', '--reframe', 'r', '--why', EVIDENCE], dir);
-  run(['frame', 'generator', '--set', 'a trustworthy accountant'], dir);
-  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
-  assert.equal(frame.generator, 'a trustworthy accountant');
-});
-
-// ── choose records; it does not halt and wait for a human. ──
-
-test('omd choose records the pick and its reason without stopping the loop', () => {
-  const dir = project();
-  const r = run(['choose', 'c1', 'c2', 'c3', '--chose', 'c3', '--why', 'conversational fits the metaphor'], dir);
-  assert.equal(r.status, 0);
-
-  const line = readFileSync(join(dir, '.omd', 'taste', 'preferences.jsonl'), 'utf8').trim();
-  const rec = JSON.parse(line) as { chose: string; among: string[]; why: string };
-  assert.equal(rec.chose, 'c3');
-  assert.deepEqual(rec.among, ['c1', 'c2', 'c3']);
-  assert.equal(rec.why, 'conversational fits the metaphor');
-});
-
-test('omd choose refuses a pick with no reason — a choice without one teaches nothing', () => {
-  const r = run(['choose', 'c1', 'c2', '--chose', 'c1'], project());
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /reason/);
-});
-
-test('omd decision requires a why', () => {
-  const dir = project();
-  assert.equal(run(['decision', 'rejected the green CTA'], dir).status, 1);
-  assert.equal(run(['decision', 'rejected the green CTA', '--why', 'fintech cliche'], dir).status, 0);
-  assert.match(readFileSync(join(dir, '.omd', 'decisions.md'), 'utf8'), /fintech cliche/);
-});
-
-test('omd choose is agent taste and the default profile excludes it', () => {
-  const dir = project();
-  run(['choose', 'c1', 'c2', '--chose', 'c2', '--why', 'denser'], dir);
-  const out = run(['taste', 'profile'], dir).stdout;
-  assert.match(out, /No explicit user taste/);
-  const all = run(['taste', 'profile', '--all'], dir).stdout;
-  assert.match(all, /\[agent\] c2 over c1/);
-});
-
-test('omd taste record requires explicit verbatim user evidence', () => {
-  const dir = project();
-  assert.equal(run(['taste', 'record', 'serif hero', '--kind', 'praise', '--evidence', '이 타이포가 좋다'], dir).status, 1);
-  assert.equal(run(['taste', 'record', 'serif hero', '--kind', 'praise', '--evidence', '이 타이포가 좋다', '--from-user'], dir).status, 0);
-  const out = run(['taste', 'profile'], dir).stdout;
-  assert.match(out, /\[user\] praise: serif hero/);
-  assert.match(out, /이 타이포가 좋다/);
-});
-
-test('legacy choices normalize to unknown and are not injected as user taste', () => {
-  const dir = project();
-  mkdirSync(join(dir, '.omd', 'taste'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'taste', 'preferences.jsonl'), `${JSON.stringify({ ts: 'old', among: ['a', 'b'], chose: 'b', why: 'old' })}\n`);
-  assert.match(run(['taste', 'profile'], dir).stdout, /No explicit user taste/);
-  assert.match(run(['taste', 'profile', '--all'], dir).stdout, /\[unknown\] b over a/);
-});
-
-test('omd config preserves legacy checkpoints without treating them as autonomous direction authority', () => {
-  const dir = project();
-  // Phase 6 adds one interactive direction policy; legacy checkpoint:none is not consent.
-  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'none', directionPolicy: 'interactive' });
-  assert.equal(run(['config', 'set', 'checkpoint', 'both'], dir).status, 0);
-  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'both', directionPolicy: 'interactive' });
-  assert.notEqual(run(['config', 'set', 'checkpoint', 'always'], dir).status, 0);
-});
-
-test('omd craft requires a nonempty change record and reports structured status', () => {
-  const dir = project();
-  assert.notEqual(run(['craft', 'checkpoint', 'semantic', '--render', 'a.png', '--observed', 'hero wraps', '--changed', ''], dir).status, 0);
-  assert.equal(run(['craft', 'checkpoint', 'semantic', '--render', 'a.png', '--observed', 'hero wraps at mobile', '--changed', 'reduced heading max width'], dir).status, 0);
-  const records = JSON.parse(run(['craft', 'status', '--json'], dir).stdout) as Array<{ phase: string; changed: string }>;
-  assert.equal(records[0]?.phase, 'semantic');
-  assert.equal(records[0]?.changed, 'reduced heading max width');
-});
-
 test('omd probe uses the durable default plan and writes a disposable result', () => {
   const dir = project();
   mkdirSync(join(dir, '.omd', 'probes'), { recursive: true });
   writeFileSync(join(dir, '.omd', 'probes', 'primary.json'), JSON.stringify({
-    name: 'primary', destructive: false,
+    name: 'primary',
+    destructive: false,
     steps: [{ action: 'click', selector: '#toggle', expect: [{ type: 'visible', selector: '#panel' }] }],
   }));
-  const r = run(['probe', PROBE_FIXTURE, '--json'], dir);
-  assert.equal(r.status, 0, r.stderr);
-  assert.deepEqual((JSON.parse(r.stdout) as { warnings: unknown[] }).warnings, []);
+  const result = run(['probe', PROBE_FIXTURE, '--json'], dir);
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual((JSON.parse(result.stdout) as { warnings: unknown[] }).warnings, []);
   assert.ok(existsSync(join(dir, '.omd', '.cache', 'probes', 'primary.json')));
 });
 
-test('frame.md survives a hand-written file with no frontmatter', () => {
-  const dir = project();
-  mkdirSync(join(dir, '.omd'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'frame.md'), 'just prose, no frontmatter\n');
-  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
-  assert.match(must(frame.body), /just prose/);
-});
-
-test('omd --version and unknown commands behave', () => {
+test('version, help, unknown commands, and typo suggestions use the retained surface', () => {
   assert.equal(run(['--version']).status, 0);
+  const help = run(['--help']);
+  assert.equal(help.status, 0, help.stderr);
+  assert.match(help.stdout, /lifecycle help\|verify\|finish/);
+  assert.match(help.stdout, /learn predict\|judge\|observe/);
+  assert.match(help.stdout, /ai-judgment publish/);
+  assert.equal(help.stderr, '');
   assert.notEqual(run(['nonsense-command']).status, 0);
+  const typo = run(['lern']);
+  assert.equal(typo.status, 1);
+  assert.match(typo.stderr, /did you mean: omd learn\?/);
 });
 
-test('omd --help succeeds and discovers implemented learning and judgment commands', () => {
-  const result = run(['--help']);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /learn predict\|judge\|observe/);
-  assert.match(result.stdout, /ai-judgment publish/);
-  assert.equal(result.stderr, '');
-});
+test('omd pack exposes the installed pack and refuses missing input', () => {
+  const directory = run(['pack', 'dir']);
+  assert.equal(directory.status, 0);
+  const printed = directory.stdout.trim();
+  assert.ok(existsSync(printed));
+  assert.ok(printed.endsWith('core'));
 
-test('top-level typo suggestions include implemented learning commands', () => {
-  const result = run(['lern']);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /did you mean: omd learn\?/);
-  assert.doesNotMatch(result.stderr, /did you mean: omd clean\?/);
-});
+  const list = run(['pack', 'list']);
+  assert.equal(list.status, 0);
+  const lines = list.stdout.trim().split('\n').filter(Boolean);
+  assert.ok(lines.length > 0);
+  assert.ok(lines.every(line => line.endsWith('.md')));
 
-// ── omd pack: host-neutral pack-path resolution ──
-//
-// pack dir / list / <relpath> let any host locate knowledge-pack files without
-// knowing the installation path, and without relying on env vars like CLAUDE_PLUGIN_ROOT.
-
-test('omd pack dir prints an absolute path that exists and ends with core', () => {
-  const r = run(['pack', 'dir']);
-  assert.equal(r.status, 0);
-  const printed = r.stdout.trim();
-  assert.ok(existsSync(printed), `pack dir path does not exist: ${printed}`);
-  assert.ok(printed.endsWith('core'), `expected path ending in 'core', got: ${printed}`);
-});
-
-test('omd pack list enumerates .md files, each with a relative path', () => {
-  const r = run(['pack', 'list']);
-  assert.equal(r.status, 0);
-  const lines = r.stdout.trim().split('\n').filter(Boolean);
-  assert.ok(lines.length > 0, 'omd pack list returned no files');
-  assert.ok(lines.every((l) => l.endsWith('.md')), `non-.md line in pack list: ${lines.find((l) => !l.endsWith('.md'))}`);
-  assert.ok(lines.some((l) => l.startsWith('theory/')), 'expected at least one theory/ file in pack list');
-});
-
-test('omd pack <relpath> prints a real pack file to stdout', () => {
-  const r = run(['pack', 'theory/color.md']);
-  assert.equal(r.status, 0);
-  assert.ok(r.stdout.length > 0, 'omd pack theory/color.md returned empty output');
-});
-
-test('omd pack with no subcommand exits non-zero', () => {
+  const file = run(['pack', 'theory/color.md']);
+  assert.equal(file.status, 0);
+  assert.ok(file.stdout.length > 0);
   assert.notEqual(run(['pack']).status, 0);
-});
-
-test('omd pack <missing-file> exits non-zero with an error message', () => {
-  const r = run(['pack', 'theory/does-not-exist.md']);
-  assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /not found/);
-});
-test('omd flow-probe walks the declared screen sequence and reports a clean flow', () => {
-  const dir = project();
-  writeFileSync(join(dir, 'login.html'), `<!doctype html><html><body>
-    <form id="login-form"><input id="email" /></form>
-    <button id="continue" type="button">Continue</button>
-    <script>document.getElementById('continue').addEventListener('click', function(){
-      location.href = 'dashboard.html?email=' + encodeURIComponent(document.getElementById('email').value);
-    });</script></body></html>`);
-  writeFileSync(join(dir, 'dashboard.html'), `<!doctype html><html><body>
-    <div data-region="dashboard">Dashboard</div>
-    <a id="open-settings" href="settings.html">Settings</a>
-    <script>document.getElementById('open-settings').addEventListener('click', function(e){ e.preventDefault(); location.href = 'settings.html' + location.search; });</script></body></html>`);
-  writeFileSync(join(dir, 'settings.html'), `<!doctype html><html><body>
-    <div id="settings"><input id="account-email" /></div>
-    <script>document.getElementById('account-email').value = new URLSearchParams(location.search).get('email') || '';</script></body></html>`);
-  mkdirSync(join(dir, '.omd', 'probes'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'probes', 'flow.json'), JSON.stringify({
-    schema: 'probe-flow-v1', name: 'onboarding', destructive: false,
-    screens: [
-      { screenId: 'login', route: '/login', arrival: [{ type: 'visible', selector: '#login-form' }],
-        steps: [
-          { action: 'fill', selector: '#email', value: 'user@example.com', expect: [{ type: 'attribute', selector: '#email', name: 'value', value: 'user@example.com' }] },
-          { action: 'click', selector: '#continue', expect: [{ type: 'url', value: 'dashboard' }] },
-        ], advancesTo: 'dashboard' },
-      { screenId: 'dashboard', route: '/dashboard', arrival: [{ type: 'visible', selector: '[data-region="dashboard"]' }],
-        steps: [{ action: 'click', selector: '#open-settings', expect: [{ type: 'url', value: 'settings' }] }], advancesTo: 'settings' },
-      { screenId: 'settings', route: '/settings', arrival: [{ type: 'visible', selector: '#settings' }], steps: [] },
-    ],
-    carries: [{ fromScreen: 'login', fromLocator: '#email', toScreen: 'settings', toLocator: '#account-email' }],
-  }));
-  const r = run(['flow-probe', dir, '--json'], dir);
-  assert.equal(r.status, 0, r.stderr);
-  const result = JSON.parse(r.stdout) as { screens: unknown[]; warnings: unknown[] };
-  assert.equal(result.screens.length, 3);
-  assert.deepEqual(result.warnings, []);
-});
-
-test('omd flow-probe fails closed when no flow plan exists', () => {
-  const dir = project();
-  const r = run(['flow-probe', dir], dir);
-  assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /flow plan not found/);
+  assert.notEqual(run(['pack', 'theory/does-not-exist.md']).status, 0);
 });

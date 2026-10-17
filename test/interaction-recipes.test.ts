@@ -45,23 +45,6 @@ test('signature-lighting.md mentions prefers-reduced-motion', () => {
   );
 });
 
-test('signature-lighting.md describes a CSS default lane and a gated WebGL escalation', () => {
-  const content = readFileSync(signatureLightingFile, 'utf8');
-
-  // CSS is named as the default lane.
-  assert.match(content, /CSS is the default lane/i);
-  assert.match(content, /radial-gradient/);
-
-  // WebGL escalation section names its gates explicitly.
-  const escalationMatch = /## WebGL escalation([\s\S]*?)(?=\n## |$)/.exec(content);
-  assert.ok(escalationMatch, 'signature-lighting.md missing WebGL escalation section body');
-  const escalation = escalationMatch![1]!;
-  assert.match(escalation, /explicit user request/i);
-  assert.match(escalation, /performance budget/i);
-  assert.match(escalation, /non-canvas semantic fallback/i);
-  assert.match(escalation, /Three\.js/);
-});
-
 test('signature-lighting.md cites kaolti as a reference with a restraint self-critique basis', () => {
   const content = readFileSync(signatureLightingFile, 'utf8');
   assert.match(content, /kaolti/i);

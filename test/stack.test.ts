@@ -52,9 +52,9 @@ test('a build config without package.json is an existing toolchain, not a greenf
   assert.equal(d.greenfield, false);
 });
 
-test('omd stack CLI reports plain-html-css-js for a blank directory', () => {
+test('the retired stack CLI is absent while stack detection remains available as an API', () => {
   const cwd = dir();
   const result = spawnSync(process.execPath, [CLI, 'stack', '--json'], { cwd, encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal((JSON.parse(result.stdout) as { stack: string }).stack, 'plain-html-css-js');
+  assert.equal(result.status, 1);
+  assert.match(`${result.stdout}\n${result.stderr}`, /unknown command stack/i);
 });

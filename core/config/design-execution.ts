@@ -8,18 +8,17 @@ export type DesignExecutionPolicy = Readonly<{
 
 export class DesignExecutionPolicyError extends Error {
   override readonly name = 'DesignExecutionPolicyError';
-  constructor() { super('OMD_DESIGN_MODE_INVALID: use autonomous or developer-evaluation; OMD_DESIGN_WORKFLOW accepts model-led or structured'); }
+  constructor() { super('OMD_DESIGN_MODE_INVALID: use autonomous or developer-evaluation; OMD_DESIGN_WORKFLOW is no longer supported'); }
 }
 
 /** Capture at host startup, never from a project file, model argument or external page. */
 export function captureDesignExecutionPolicy(environment: Readonly<Record<string, string | undefined>>): DesignExecutionPolicy {
   const mode = environment.OMD_DESIGN_MODE ?? 'autonomous';
   if (mode !== 'autonomous' && mode !== 'developer-evaluation') throw new DesignExecutionPolicyError();
-  const workflow = environment.OMD_DESIGN_WORKFLOW ?? 'model-led';
-  if (workflow !== 'model-led' && workflow !== 'structured') throw new DesignExecutionPolicyError();
+  if (environment.OMD_DESIGN_WORKFLOW !== undefined) throw new DesignExecutionPolicyError();
   return Object.freeze({
     mode, selectionActor: 'harness', designQuestions: mode === 'developer-evaluation',
-    criteriaVersion: workflow === 'structured' ? 'autonomous-design-v1' : 'model-led-design-v1',
+    criteriaVersion: 'model-led-design-v1',
   });
 }
 
@@ -32,20 +31,22 @@ export function parseDesignExecutionPolicy(value: unknown): DesignExecutionPolic
   if (mode !== 'autonomous' && mode !== 'developer-evaluation') throw new DesignExecutionPolicyError();
   const criteriaVersion = Reflect.get(value, 'criteriaVersion');
   if (criteriaVersion !== 'autonomous-design-v1' && criteriaVersion !== 'model-led-design-v1') throw new DesignExecutionPolicyError();
-  const expected = captureDesignExecutionPolicy({ OMD_DESIGN_MODE: mode,
-    OMD_DESIGN_WORKFLOW: criteriaVersion === 'autonomous-design-v1' ? 'structured' : 'model-led' });
+  const expected = Object.freeze({
+    mode, selectionActor: 'harness' as const, designQuestions: mode === 'developer-evaluation',
+    criteriaVersion,
+  });
   if (Reflect.get(value, 'selectionActor') !== expected.selectionActor
-    || Reflect.get(value, 'designQuestions') !== expected.designQuestions
-    || Reflect.get(value, 'criteriaVersion') !== expected.criteriaVersion) throw new DesignExecutionPolicyError();
+    || Reflect.get(value, 'designQuestions') !== expected.designQuestions) throw new DesignExecutionPolicyError();
   return expected;
 }
 
 export function designExecutionGuidance(policy: DesignExecutionPolicy): string {
+  if (policy.criteriaVersion !== 'model-led-design-v1') {
+    throw new DesignExecutionPolicyError();
+  }
   return [
     `OMD design execution: ${policy.mode}; criteria ${policy.criteriaVersion}; selection actor: harness.`,
-    policy.criteriaVersion === 'model-led-design-v1'
-      ? 'Understand the requested outcome, inspect strong finished-product visual references before inventing a new visual direction, build directly, inspect the real result and repair concrete problems. Choose methods and delegation yourself; candidate competitions, role handoffs and intermediate design documents are not default prerequisites.'
-      : 'Complete one selected result through the shared research, maker, render, review and bounded repair engine.',
+    'Understand the requested outcome, inspect strong finished-product visual references before inventing a new visual direction, build directly, inspect the real result and repair concrete problems. Choose methods and delegation yourself; candidate competitions, role handoffs and intermediate design documents are not prerequisites.',
     'Choose design assumptions, references, interpretations and candidates internally. Do not call a question tool for taste, direction, candidate selection, missing references or aesthetic approval.',
     'An agent decision is not user approval. Keep missing product facts unknown; omit unsupported claims and distinguish demo content. Never invent features, prices, testimonials, authority or consent.',
     'Use accessible public or already-authorized sources when a provider is unavailable. Do not ask the user to gather references or set up accounts as a prerequisite.',
@@ -54,9 +55,7 @@ export function designExecutionGuidance(policy: DesignExecutionPolicy): string {
     'When the user rejects a rendered result, preserve the exact feedback and rejected pixels as the comparison baseline. Do not reduce a broad aesthetic rejection to one border, color or control fix, infer an unstated preferred style, or call a new result improved before comparing it.',
     'Resolve a coherent primary visual direction from inspected populated whole-product screens before styling. Supplemental references have named limited jobs; do not average incompatible palettes, density, shapes and control systems into a generic composite. Functional similarity is not evidence of aesthetic fit. Prefer complementary states from the same visual system when available.',
     'Compare the actual first render directly with the chosen primary original for macro proportions, hierarchy, density, typography and small-control anatomy, not merely list/detail semantics. Treat input borders, padding, focus/disabled states, resizing, overflow and adjacent actions as one finished control system. A native affordance is a deliberate usability decision, not an unexamined default. Preserve accessible operation and user content when refining it.',
-    policy.criteriaVersion === 'model-led-design-v1'
-      ? 'After the first usable build, use omd first-render check --page <actual-build-entry> --json for independent desktop/mobile quality feedback before full behavioral scenarios. This route uses authenticated task facts, not an invented design hypothesis. Repair the whole visible system, including icon optical scale, weight and silhouette in context. Early model retention is not human satisfaction or external-reference fidelity.'
-      : 'Use the selected structured early-review contract before final acceptance.',
+    'After the first usable build, use omd first-render check --page <actual-build-entry> --json for independent desktop/mobile quality feedback before full behavioral scenarios. This route uses authenticated task facts, not an invented design hypothesis. Repair the whole visible system, including icon optical scale, weight and silhouette in context. Early model retention is not human satisfaction or external-reference fidelity.',
     'Present actual consulted reference originals and source URLs alongside the generated desktop/mobile screens, identifying the visible structure transferred and what was not transferred. If no visual reference was inspected, say so; never attach a source retrospectively as evidence of earlier use. Reference images are comparison evidence, not assets to ship in the product.',
     policy.mode === 'developer-evaluation'
       ? 'Developer evaluation is an explicit host command after rendered output. It never changes the shared production engine or pauses production awaiting an interview.'

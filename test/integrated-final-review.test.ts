@@ -1,7 +1,4 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import test from 'node:test';
 
 import { MeasurementIndex } from '../core/measure/citations.ts';
@@ -12,9 +9,6 @@ import {
   type MeasuredDesignQuality,
   type MeasuredQualityContext,
 } from '../core/evidence/final-v2-measured-quality.ts';
-import { hasMeasuredSlopReview } from '../core/slop/measured-review.ts';
-import { checkCompletionPublicationPrerequisites } from '../core/completion/publication.ts';
-import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { measuredAdvisoryDispositionContract } from '../core/runtime/trusted-measured-review.ts';
 
 const hash = (digit: string) => digit.repeat(64);
@@ -94,24 +88,4 @@ test('integrated final review judges advisory findings without a separate form w
     assert.throws(() => assertMeasuredDesignQualityGreen(quality(), context('integrated-final-review')), /deterministic RED/);
   } finally { Reflect.set(packet.summary, 'deterministicVerdict', oldVerdict); }
   assert.equal(assertMeasuredDesignQualityGreen(quality(), context('separate-slop-review', [findingId])).axes.length, 11);
-});
-
-test('present malformed and dangling optional records never count as absent', t => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-integrated-review-'));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  mkdirSync(join(root, '.omd', 'slop'), { recursive: true });
-  const pointer = join(root, '.omd', 'slop', 'latest.json');
-  writeFileSync(pointer, '{}\n');
-  assert.throws(() => hasMeasuredSlopReview(root), /pointer schema is invalid/);
-  rmSync(pointer);
-  symlinkSync('missing-pointer.json', pointer);
-  assert.throws(() => hasMeasuredSlopReview(root), /pointer is unreadable/);
-  rmSync(pointer);
-  rmSync(join(root, '.omd', 'slop'), { recursive: true });
-  symlinkSync('missing-slop-directory', join(root, '.omd', 'slop'));
-  assert.throws(() => hasMeasuredSlopReview(root), /pointer is unreadable/);
-
-  symlinkSync('missing-type-proof.md', join(root, '.omd', 'type-proof.md'));
-  const graph = { schema: 'fixture-graph', productionSchema: null, observations: [], buildIdentity: null, sourceSeal: null, workflow: null, referenceDistance: null };
-  assert.throws(() => checkCompletionPublicationPrerequisites(root, { graph }, {} as ProjectRunInvocation), /type-proof|stable regular file/);
 });

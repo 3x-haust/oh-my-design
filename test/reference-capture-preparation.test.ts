@@ -71,7 +71,12 @@ function runCli(root: string, args: string[]): Promise<{ code: number | null; st
 }
 
 test('capture preparation schema permits only explicit safe state actions and closed assertions', () => {
-  assert.deepEqual(parseCapturePreparation(inputSkeleton('reference-capture-preparation').skeleton), preparation());
+  assert.deepEqual(parseCapturePreparation(inputSkeleton('reference-capture-preparation').skeleton), {
+    schema: 'reference-capture-preparation-v1',
+    actions: [{ kind: 'hover', selector: '<one safe visible component selector>' }],
+    assertions: [{ selector: '<same component selector>', state: 'hovered' }],
+  });
+  assert.deepEqual(parseCapturePreparation(preparation()), preparation());
   for (const value of [
     { ...preparation(), script: 'menu.open()' },
     { ...preparation(), assertions: [] }, { ...preparation(), actions: Array(9).fill(preparation().actions[0]) },

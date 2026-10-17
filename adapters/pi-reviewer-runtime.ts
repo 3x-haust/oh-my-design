@@ -4,16 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
-import { parseCandidateCaptureStates } from '../core/brief/candidate-selection.ts';
-import { destinationRoute } from '../core/render/stateful.ts';
 import { FINAL_RENDER_REVIEWER_TASK } from '../core/runtime/final-render-review.ts';
 import { FIRST_RENDER_REVIEW_TASK, FIRST_RENDER_REVIEW_TRANSPORT,
   FIRST_RENDER_REVIEW_HANDBACK } from '../core/design/first-render-review-contract.ts';
 import { validateFirstRenderBaselineImages } from '../core/design/first-render-baseline.ts';
 import { consultedReferenceProjection } from '../core/design/consulted-references.ts';
-import { CANDIDATE_REFERENCE_REVIEW_TASK, CANDIDATE_REFERENCE_REVIEW_TRANSPORT,
-  CANDIDATE_REFERENCE_REVIEW_HANDBACK } from '../core/brief/candidate-reference-contract.ts';
-import { CANDIDATE_CHOICE_TASK, CANDIDATE_CHOICE_TRANSPORT, CANDIDATE_CHOICE_HANDBACK } from '../core/brief/candidate-choice-contract.ts';
 import { nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
 import { REFERENCE_DIRECTION_REVIEWER_TASK } from '../core/ref/reference-direction-admission.ts';
 import { REFERENCE_ZONE_REVIEWER_TASK, REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA,
@@ -53,15 +48,11 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
     : undefined;
   const zone = input.lane === 'referenceAdmission' && packet.schema === REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA;
   const expectedTask = profileLane !== undefined ? measuredReviewerTask(profileLane)
-    : input.lane === 'candidateChoice' ? CANDIDATE_CHOICE_TASK
-    : input.lane === 'candidateFidelity' ? CANDIDATE_REFERENCE_REVIEW_TASK
     : input.lane === 'firstRender' ? FIRST_RENDER_REVIEW_TASK : input.lane === 'blindLane' ? FINAL_RENDER_REVIEWER_TASK
     : input.lane === 'referenceAdmission' ? zone ? REFERENCE_ZONE_REVIEWER_TASK : REFERENCE_DIRECTION_REVIEWER_TASK : nativeFinalLaneTask(input.lane);
   if (input.task !== expectedTask) throw new PiReviewerError('task-not-source-owned');
   const referenceV4 = input.lane === 'referenceAdmission' && packet.schema === 'reference-direction-reviewer-transport-v4';
-  const expectedSchema = input.lane === 'candidateChoice' ? CANDIDATE_CHOICE_TRANSPORT
-    : input.lane === 'candidateFidelity' ? CANDIDATE_REFERENCE_REVIEW_TRANSPORT
-    : input.lane === 'firstRender' ? FIRST_RENDER_REVIEW_TRANSPORT : input.lane === 'blindLane' ? 'adaptive-final-render-reviewer-transport-v1'
+  const expectedSchema = input.lane === 'firstRender' ? FIRST_RENDER_REVIEW_TRANSPORT : input.lane === 'blindLane' ? 'adaptive-final-render-reviewer-transport-v1'
     : input.lane === 'referenceAdmission'
       ? zone ? REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA : 'reference-direction-reviewer-transport-v4'
       : 'native-pi-final-lane-transport-v1';
@@ -122,49 +113,19 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
   const images = [evidence.renders, evidence.referenceRenders, evidence.priorRenders, feedbackImages, consultedImages].flatMap(rows => rows === undefined ? []
     : Array.isArray(rows) ? rows : (() => { throw new PiReviewerError('packet-renders'); })());
   for (const image of images) piText(piRecord(image, 'packet-render').pngBase64, 'packet-png');
-  if (input.lane === 'candidateChoice') {
-    if (contract.schema !== CANDIDATE_CHOICE_HANDBACK || images.length < 2
-      || !Array.isArray(evidence.candidates) || evidence.candidates.length === 0) throw new PiReviewerError('candidate-choice-images');
-    piDigest(fixed.candidatePacketSha256, 'candidate-choice-packet');
-    piDigest(fixed.sourceContractSha256, 'candidate-choice-source');
-    piDigest(fixed.inputDigest, 'candidate-choice-input');
-    for (const value of evidence.candidates) {
-      const candidate = piRecord(value, 'candidate-choice-option');
-      const alias = piText(candidate.alias, 'candidate-choice-alias');
-      if (!Array.isArray(candidate.viewIds) || candidate.viewIds.length === 0
-        || candidate.viewIds.some(viewId => images.filter(image => {
-          const row = piRecord(image, 'candidate-choice-image');
-          return row.alias === alias && row.viewId === viewId;
-        }).length !== 1)) throw new PiReviewerError('candidate-choice-view-coverage');
-    }
-  }
   if (input.lane === 'blindLane' && images.length < 2 || input.lane === 'referenceAdmission' && images.length < 1) throw new PiReviewerError('packet-images');
   if (input.lane === 'firstRender') {
     const baselineImages = validateFirstRenderBaselineImages(evidence);
-    const pairs = [evidence.renders, ...(fixed.candidateTargetSha256 === undefined ? [] : [evidence.referenceRenders])];
-    if (fixed.candidateTargetSha256 !== undefined) piDigest(fixed.candidateTargetSha256, 'candidate-target');
+    if (fixed.candidateTargetSha256 !== undefined || evidence.referenceRenders !== undefined) {
+      throw new PiReviewerError('legacy-candidate-target-unsupported');
+    }
+    const pairs = [evidence.renders];
     if (images.length !== pairs.length * 2 + baselineImages + feedbackImages.length + consultedImages.length || pairs.some(pair => !Array.isArray(pair) || pair.length !== 2
       || pair.some((image, index) => {
         const row = piRecord(image, 'first-render-image');
         return row.viewport !== (index === 0 ? 'desktop' : 'mobile')
           || row.width !== (index === 0 ? 1280 : 390) || row.height !== (index === 0 ? 900 : 844);
       }))) throw new PiReviewerError('first-render-viewports');
-  }
-  if (input.lane === 'candidateFidelity') {
-    const states = evidence.captureStates === undefined ? [] : parseCandidateCaptureStates(evidence.captureStates);
-    if (contract.schema !== CANDIDATE_REFERENCE_REVIEW_HANDBACK
-      || !Array.isArray(evidence.referenceRenders) || evidence.referenceRenders.length === 0
-      || !Array.isArray(evidence.renders) || evidence.renders.length !== 2 * (1 + states.length)
-      || evidence.renders.some((image, index) => {
-        const row = piRecord(image, 'candidate-image');
-        const state = states[Math.floor(index / 2) - 1];
-        return row.viewport !== (index % 2 === 0 ? 'desktop' : 'mobile')
-          || row.width !== (index % 2 === 0 ? 1280 : 390) || row.height !== (index % 2 === 0 ? 900 : 844)
-          || row.state !== (state?.name ?? 'initial')
-          || (state === undefined ? row.route !== null && destinationRoute(row.route) !== row.route : row.route !== state.route);
-      })) throw new PiReviewerError('candidate-reference-images');
-    piDigest(fixed.candidateSha256, 'candidate-sha');
-    piDigest(fixed.referenceSha256, 'reference-sha');
   }
   return { packetSha256: piHash(input.packet), evidenceSha256: piDigest(packet.evidenceSha256, 'packet-evidence-sha'),
     browserSha256: input.lane === 'referenceAdmission' ? piDigest(fixed.captureSetSha256, 'packet-capture-set-sha')
@@ -328,18 +289,6 @@ export async function runPiReferenceAdmissionReviewer(input: Omit<PiReviewerLane
 
 export async function runPiFirstRenderReviewer(input: Omit<PiReviewerLaneInput, 'lane' | 'task'>): Promise<PiRoleResult> {
   const bounded = { ...input, lane: 'firstRender' as const, task: FIRST_RENDER_REVIEW_TASK };
-  validateReviewerExecutable(bounded);
-  return runChild(bounded);
-}
-
-export async function runPiCandidateReferenceReviewer(input: Omit<PiReviewerLaneInput, 'lane' | 'task'>): Promise<PiRoleResult> {
-  const bounded = { ...input, lane: 'candidateFidelity' as const, task: CANDIDATE_REFERENCE_REVIEW_TASK };
-  validateReviewerExecutable(bounded);
-  return runChild(bounded);
-}
-
-export async function runPiCandidateChoiceReviewer(input: Omit<PiReviewerLaneInput, 'lane' | 'task'>): Promise<PiRoleResult> {
-  const bounded = { ...input, lane: 'candidateChoice' as const, task: CANDIDATE_CHOICE_TASK };
   validateReviewerExecutable(bounded);
   return runChild(bounded);
 }

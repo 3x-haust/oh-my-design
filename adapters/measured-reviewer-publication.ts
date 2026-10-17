@@ -12,8 +12,6 @@ import * as v from '../core/measure/validation.ts';
 import { getNativePiRun } from '../core/runtime/native-pi-run.ts';
 import { measuredReviewerTask } from '../core/runtime/trusted-review-profile.ts';
 import { loadTerminalProcess } from '../core/evidence/final-v2-process.ts';
-import { parseSurfaceReview, joinSurfaceCoverage } from '../core/brief/surface-coverage.ts';
-import { loadMeasurement } from '../core/measure/files.ts';
 import {
   parseConsultedReferenceComparisonExpectations,
   parseConsultedReferenceComparisons,
@@ -57,15 +55,9 @@ export function parseMeasuredHandback(root: string, invocation: ProjectRunInvoca
   const quality = lane === 'blindLane' ? assertMeasuredDesignQualityGreen(handback.designQuality, context) : undefined;
   const floors = handback.criticalFloors as Record<string, number>;
   const process = loadTerminalProcess(root, invocation, output.fixedBindings.observationSha256s);
-  if (process && handback.processBindingSha256 !== digest(process.binding)) v.fail('reviewer process binding is stale');
-  const surfaceReview = process?.plan && lane === 'blindLane' ? parseSurfaceReview(handback.surfaceReview) : undefined;
-  if (surfaceReview && process?.plan) {
-    if (digest(surfaceReview.rows.map(({ criteria: _, measurementIds: __, ...row }) => row)) !== digest(process.surfaceRows.map(({ criteria: _, measurementIds: __, ...row }) => row))) v.fail('surface reviewer changed the supplied capture inventory');
-    const packets = new Map(surfaceReview.rows.map(row => [row.packet.sha256, loadMeasurement(root, row.packet)]));
-    joinSurfaceCoverage(process.plan, process.mappings, surfaceReview, packets);
-  }
+  if (handback.processBindingSha256 !== digest(process.binding)) v.fail('reviewer process binding is stale');
   if (quality && (floors.composition !== quality.axes.find(a => a.axis === 'composition')!.score || floors.composition < 4)) v.fail('composition compatibility floor must equal independent composition score and clear 4');
-  return { handback, quality, floors, context, output, surfaceReview };
+  return { handback, quality, floors, context, output };
 }
 export function buildMeasuredReviewerPublication(input: { laneSchema: string; roleResults: unknown[] }, context: {
   projectRoot: string; invocation: ProjectRunInvocation; buildSha256: string; briefSha256: string; publicKeyPath?: string;
@@ -107,11 +99,10 @@ export function buildMeasuredReviewerPublication(input: { laneSchema: string; ro
     evidenceConsumption: { processPid: p.role.receipt.reviewerEvidence!.childPid, sessionId: p.role.receipt.reviewerEvidence!.sessionId, nonce: p.role.receipt.reviewerEvidence!.nonce },
     configurationSha256: p.role.receipt.configurationSha256, packetSha256: p.packetSha256, reviewPolicySha256: digest(policy), measurements: first.output.fixedBindings.measurements }));
   const quality = lane === 'blindLane' ? aggregateMeasuredDesignQuality(parsed.map(p => p.quality!), first.context) : undefined;
-  const surface = first.surfaceReview ? artifact('surfaces', first.surfaceReview) : undefined;
   const value = { schema: input.laneSchema, lane, reviewPolicySha256: digest(policy), measurements: first.output.fixedBindings.measurements,
     fixedBindings: first.output.fixedBindings, packetSha256: first.packetSha256, verdicts: first.handback.verdicts,
     criticalFloors: Object.fromEntries(Object.keys(first.floors).map(key => [key, Math.min(...parsed.map(p => p.floors[key]!))])),
-    ...(quality ? { designQuality: quality } : {}), ...(surface ? { surfaceReview: { path: surface.path, sha256: surface.sha256 } } : {}),
+    ...(quality ? { designQuality: quality } : {}),
     quorum: { required: count, passed: count }, executionReceipts: executions.map(({ path, sha256 }) => ({ path, sha256 })) };
-  return { lane: artifact('lanes', value), executions, ...(surface ? { artifacts: [surface] } : {}) };
+  return { lane: artifact('lanes', value), executions };
 }

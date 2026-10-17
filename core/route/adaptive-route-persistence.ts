@@ -233,6 +233,9 @@ export function readPersistedRoute(root: string, invocation: ProjectRunInvocatio
     return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
   } catch (error) {
     if (error instanceof Error && error.name === 'AdaptiveRouteError') throw error;
-    return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+    return failAdaptiveRoute(
+      'MALFORMED_ADAPTIVE_ROUTE',
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }

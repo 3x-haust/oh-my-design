@@ -126,39 +126,6 @@ test('distances skips unmeasured references rather than scoring them zero', () =
   assert.equal(must(out[0]).reference, 'https://linear.app');
 });
 
-test('omd ref distance says how many references it could not compare', () => {
-  const dir = project();
-  saveRef(dir, measured('https://linear.app', INV), createTestProjectWriteAdapter(dir));
-  run(['ref', 'add', './pin.png', '--as', 'mood', '--image'], dir);
-
-  const out = run(['ref', 'distance', SLOP], dir);
-  assert.match(out.stdout, /1 image reference/i, `must disclose what it skipped:\n${out.stdout}`);
-});
-
-test('omd ref distance with only image references compares nothing and says so', () => {
-  const dir = project();
-  run(['ref', 'add', './pin.png', '--as', 'mood', '--image'], dir);
-  const out = run(['ref', 'distance', SLOP], dir);
-  assert.equal(out.status, 0);
-  assert.match(out.stdout, /nothing to compare|no measured/i);
-});
-
-test('omd ref distance rejects gate without selected mode', () => {
-  const dir = project();
-  const out = run(['ref', 'distance', SLOP, '--gate'], dir);
-  assert.equal(out.status, 1);
-  assert.match(out.stderr, /--gate requires --selected/);
-});
-
-test('omd ref distance selected gate never falls back to legacy advisory output', () => {
-  const dir = project();
-  const out = run(['ref', 'distance', SLOP, '--selected', '--gate', '--json'], dir);
-  assert.equal(out.status, 1);
-  assert.equal(out.stdout, '');
-  assert.match(out.stderr, /reference usage|selected reference/i);
-  assert.doesNotMatch(out.stdout, /No references to compare/);
-});
-
 test('omd ref list shows the granularity of each reference', () => {
   const dir = project();
   run(['ref', 'add', SLOP, '--as', 'card-deck', '--selector', '.cards'], dir);

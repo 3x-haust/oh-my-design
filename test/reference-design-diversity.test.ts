@@ -9,7 +9,6 @@ import {
 } from '../core/ref/reference-research.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
-import { inputSkeleton } from '../core/schema/inputs.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false } as const;
 
@@ -83,24 +82,6 @@ function currentResearch(t: TestContext, secondChannel = 7) {
   const research = { ...fixture.research, schema: 'reference-research-v7', marketCoverage: null };
   return { ...fixture, research, secondSource: source, secondGallery: gallery };
 }
-
-test('v8 visual direction requires a coordinator-ready finished-product selection, not a pattern or one mobile state', t => {
-  const research = structuredClone(inputSkeleton('reference-research').skeleton) as ReturnType<typeof designAdmissionFixture>['research'];
-  assert.equal(research.designReference.sources[0]?.discovery.kind, 'direct-product');
-  const missing = structuredClone(research);
-  delete (missing.designReference.sources[0]!.visualAssessment as { selection?: unknown }).selection;
-  assert.throws(() => parseReferenceResearch(missing), /REFERENCE_RESEARCH_VISUAL_ASSESSMENT_KEYS|REFERENCE_VISUAL_SELECTION_REQUIRED/);
-  const documentation = structuredClone(research);
-  Object.assign(documentation.designReference.sources[0]!.visualAssessment.selection, { presentation: 'pattern-documentation' });
-  assert.throws(() => parseReferenceResearch(documentation), /REFERENCE_VISUAL_SELECTION_REQUIRED/);
-  const lonelyMobile = structuredClone(research);
-  Object.assign(lonelyMobile.designReference.sources[0]!.visualAssessment.selection, { presentation: 'finished-app-flow' });
-  lonelyMobile.designReference.sources[0]!.visualAssessment.selection.flowCaptures = [];
-  assert.throws(() => parseReferenceResearch(lonelyMobile), /REFERENCE_VISUAL_SELECTION_REQUIRED/);
-  const rejected = structuredClone(research);
-  Object.assign(rejected.designReference.sources[0]!.visualAssessment.selection, { verdict: 'reject' });
-  assert.throws(() => parseReferenceResearch(rejected), /REFERENCE_VISUAL_SELECTION_REQUIRED/);
-});
 
 test('current research requires two independent visual-direction source families', t => {
   const fixture = currentResearch(t);

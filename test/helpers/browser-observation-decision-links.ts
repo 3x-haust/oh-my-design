@@ -5,18 +5,23 @@ import { deflateSync } from 'node:zlib';
 import type { DesignDecision } from '../../core/deliberation/contracts.ts';
 import {
   BROWSER_OBSERVATION_SCHEMA,
+  MEASURED_BROWSER_OBSERVATION_SCHEMA,
   BROWSER_OBSERVATION_SET_SCHEMA,
   browserObservationSha256,
   designDecisionSha256,
   type BrowserObservationCore,
 } from '../../core/runtime/browser-observation.ts';
+import type { TrustedCaptureMeasurement } from '../../core/runtime/trusted-browser-receipt.ts';
 
 export type BrowserFixtureCapture = Readonly<{
   path: string;
   sha256: string;
   viewport: Readonly<{ width: number; height: number }>;
 }>;
-export type BrowserFixtureEntry = BrowserFixtureCapture & Readonly<{ testedState: string }>;
+export type BrowserFixtureEntry = BrowserFixtureCapture & Readonly<{
+  testedState: string;
+  measurement?: TrustedCaptureMeasurement;
+}>;
 type BrowserEvidence = Readonly<{ browserObservations: Readonly<{
   schema: typeof BROWSER_OBSERVATION_SET_SCHEMA;
   decisionGraphSha256: string;
@@ -59,24 +64,34 @@ const decision = (): DesignDecision => ({
   rejected: [{ id: 'copy-first', reason: 'The measured capture leaves less room for the primary action.' }],
   affects: ['zone:hero'], dependsOn: [], reversible: true, tradeoffs: [],
 });
-function observation(entry: BrowserFixtureEntry, reference: Readonly<{ decisionId: string; decisionSha256: string }>): BrowserObservationCore {
+function observation(
+  entry: BrowserFixtureEntry,
+  reference: Readonly<{ decisionId: string; decisionSha256: string }>,
+  testedUrl: string,
+): BrowserObservationCore {
   return {
-    schema: BROWSER_OBSERVATION_SCHEMA,
-    testedUrl: 'file://fixture/',
+    schema: entry.measurement === undefined
+      ? BROWSER_OBSERVATION_SCHEMA
+      : MEASURED_BROWSER_OBSERVATION_SCHEMA,
+    ...(entry.measurement === undefined ? {} : { measurement: entry.measurement }),
+    testedUrl,
     testedState: entry.testedState,
     viewport: entry.viewport,
     observableResult: { kind: 'screenshot', capture: { path: entry.path, sha256: entry.sha256 }, result: { measurement: 'viewport-pixels', width: entry.viewport.width, height: entry.viewport.height } },
     decisionRefs: [reference],
   };
 }
-export function writeBrowserDecisionFixture(directory: string): BrowserDecisionFixture {
+export function writeBrowserDecisionFixture(
+  directory: string,
+  testedUrl = 'file://fixture/',
+): BrowserDecisionFixture {
   const selected = decision();
   const bytes = `${canonical({ schema: 'decision-graph-v1', decisions: [selected] })}\n`;
   writeFileSync(join(directory, '.omd', 'decision-graph.json'), bytes);
   return Object.freeze({
     evidence(entries: readonly BrowserFixtureEntry[]): BrowserEvidence {
       const observations = entries.map((entry) => {
-        const core = observation(entry, { decisionId: selected.id, decisionSha256: designDecisionSha256(selected) });
+        const core = observation(entry, { decisionId: selected.id, decisionSha256: designDecisionSha256(selected) }, testedUrl);
         return Object.freeze({ ...core, observationSha256: browserObservationSha256(core) });
       });
       return Object.freeze({ browserObservations: Object.freeze({ schema: BROWSER_OBSERVATION_SET_SCHEMA, decisionGraphSha256: sha256(bytes), observations: Object.freeze(observations) }) });
@@ -85,6 +100,10 @@ export function writeBrowserDecisionFixture(directory: string): BrowserDecisionF
 }
 export function unknownBrowserDecisionEvidence(directory: string, capture: BrowserFixtureCapture): BrowserEvidence {
   const graphBytes = readFileSync(join(directory, '.omd', 'decision-graph.json'));
-  const core = observation({ ...capture, testedState: 'unknown-decision-test' }, { decisionId: 'unknown-decision', decisionSha256: sha256('unknown-decision') });
+  const core = observation(
+    { ...capture, testedState: 'unknown-decision-test' },
+    { decisionId: 'unknown-decision', decisionSha256: sha256('unknown-decision') },
+    'file://fixture/',
+  );
   return { browserObservations: { schema: BROWSER_OBSERVATION_SET_SCHEMA, decisionGraphSha256: sha256(graphBytes), observations: [{ ...core, observationSha256: browserObservationSha256(core) }] } };
 }

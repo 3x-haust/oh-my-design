@@ -10,7 +10,6 @@ import { routeLocaleDesignContext } from '../core/locale/design-context.ts';
 import { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } from '../core/ref/discovery-plan.ts';
 import { expandedDiscoveryInputs } from '../core/ref/discovery-recovery.ts';
 import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
-import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
 
@@ -38,7 +37,6 @@ test('Korean product brief starts both research lanes in Korea without asserting
   assert.equal(isMarketQualifiedQuery('미니멀 앱 UI', ['대한민국', '한국', 'South Korea']), false);
   assert.equal(isMarketQualifiedQuery('정부24 혜택알리미', ['대한민국', '한국', 'South Korea']), false);
 });
-
 test('request language does not force named local searches', t => {
   const input = fixture('medical-new-product');
   input.request = '한국어로 혜택 탐색과 신청을 돕는 서비스를 만들어줘.';
@@ -46,7 +44,6 @@ test('request language does not force named local searches', t => {
   const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(input));
   assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs, []);
 });
-
 test('ordinary product discovery searches finished products before optional galleries', t => {
   const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(fixture('medical-new-product')));
   assert.ok(plan.designSourcePolicy.nativeSearchInputs.length > 0);
@@ -75,20 +72,20 @@ test('Korean-language service admission measures all visible scripts, not a smal
     + '한국어 도움말과 접근성 안내를 확인하세요'), false);
 });
 
-test('URL-free showpiece requests receive automatic craft and motion lanes on a route that always carries domain', t => {
+test('URL-free showpiece requests receive automatic domain and design lanes without structured stage locks', t => {
   const root = project(t);
   const input = fixture();
   input.request = '한국어 신시사이저 랜딩페이지를 만들어줘. 국내 멋진 수상작처럼 스크롤 애니메이션도 잘 되게 해줘.';
   const route = routeAdaptiveFlow(input);
-  assert.equal(route.strategy.stages.includes('domain'), true, 'domain analysis is mandatory on every route');
+  assert.deepEqual(route.strategy.stages, ['production', 'browser-evidence', 'independent-review']);
   const plan = buildReferenceDiscoveryPlan(root, route);
   assert.equal(plan.userUrlsRequired, false);
   assert.equal(plan.request, input.request);
-  assert.deepEqual(plan.lanes.map(lane => lane.id), ['domain-reference', 'design-reference', 'motion']);
+  assert.deepEqual(plan.lanes.map(lane => lane.id), ['domain-reference', 'design-reference']);
   assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Pinterest']);
   assert.equal(plan.designSourcePolicy.access, 'free-only-verify-at-inspection');
   assert.ok(plan.designSourcePolicy.searchQueries.some(query => query.startsWith('site:pinterest.com/pin/')));
-  assert.equal(plan.motionEvidenceRequired, true);
+  assert.equal(plan.motionEvidenceRequired, false);
   assert.deepEqual(plan.decisions, [], 'no section template is invented before Framer');
   assert.deepEqual(plan.locale, { surfaceLocale: null, explicitMarket: null, culturalDecision: null });
   assert.equal(plan.queryPolicy, 'derive-from-explicit-request-and-decisions-not-locale-stereotypes');
@@ -180,10 +177,11 @@ test('visual acquisition questions remain decisions and never become domain sear
   assert.equal(decision.viewports.length, 2);
 });
 
-test('selected motion cannot be satisfied by static captures or waived by omitting domain analysis', t => {
+test('legacy selected-motion fixtures cannot manufacture a model-led motion obligation', t => {
   const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(fixture()));
-  assert.equal(missingDiscoveryMotionEvidence(plan, []), true);
-  assert.equal(missingDiscoveryMotionEvidence(plan, [still]), true);
+  assert.equal(plan.motionEvidenceRequired, false);
+  assert.equal(missingDiscoveryMotionEvidence(plan, []), false);
+  assert.equal(missingDiscoveryMotionEvidence(plan, [still]), false);
   for (const change of [{ scrollFired: true }, { animatedShare: 0.1 }, { peakEnergy: 0.2 }]) {
     assert.equal(missingDiscoveryMotionEvidence(plan, [{ ...still, ...change }]), false);
   }
@@ -278,17 +276,4 @@ test('stale domain queries cannot steer the current request', t => {
     'a current request remains current even when its original bytes contain surrounding whitespace');
   writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify({ ...domain, request: 'An earlier unrelated project.' }));
   assert.throws(() => buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(input)), /earlier request/);
-});
-
-test('current Scout briefs expose the automatic plan without leaking discovery sources downstream', t => {
-  const root = project(t);
-  const invocation = publishTestAdaptiveRoute(root, fixture());
-  const scout = buildBrief(root, 'scout', undefined, invocation);
-  assert.equal(scout.discovery?.command, 'omd ref discover-plan --json');
-  assert.equal(scout.discovery?.userUrlsRequired, false);
-  assert.equal(scout.discovery?.motionEvidenceRequired, true);
-  assert.match(formatBrief(scout), /user reference URLs are optional/);
-  for (const stage of ['composition', 'production', 'independent-review'] as const) {
-    assert.equal(buildBrief(root, stage, undefined, invocation).discovery, null);
-  }
 });

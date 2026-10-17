@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
-import { createTestProjectRunInvocation, createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { publishModelLedRoute } from './helpers/model-led.ts';
 import { sha256 } from '../core/ref/board-artifacts.ts';
 import { publishQualitativeFeedback, qualitativeFeedbackProjection } from '../core/design/qualitative-feedback.ts';
 import omdExtension, { type PortablePiHook } from '../extensions/omd.ts';
@@ -60,11 +61,11 @@ test('reported qualitative rejection preserves exact pixels without creating hum
   assert.throws(() => qualitativeFeedbackProjection(root, input.requestSha256), /image digest/);
 });
 
-test('the real feedback report CLI publishes scoped comparison evidence and refuses another request', t => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-feedback-cli-'));
+test('feedback report CLI refuses model-led publication without matching native authority', t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-feedback-cli-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const route = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/copy-only.json', import.meta.url), 'utf8'));
-  publishTestAdaptiveRoute(root, route);
+  publishModelLedRoute(root, route, route.request);
   const png = PNG.sync.write(new PNG({ width: 8, height: 8 }));
   writeFileSync(join(root, 'shown.png'), png);
   const input = { schema: 'qualitative-feedback-input-v1', requestSha256: sha256(route.request),
@@ -74,13 +75,8 @@ test('the real feedback report CLI publishes scoped comparison evidence and refu
   const run = () => spawnSync(process.execPath, [cli, 'feedback', 'report', '--input', 'feedback.json', '--json'],
     { cwd: root, encoding: 'utf8', timeout: 30_000 });
   writeFileSync(join(root, 'feedback.json'), JSON.stringify(input));
-  const accepted = run();
-  assert.equal(accepted.status, 0, accepted.stderr);
-  assert.equal(JSON.parse(accepted.stdout).authority, 'none');
-  const pointer = readFileSync(join(root, '.omd/qualitative-feedback.json'));
-  writeFileSync(join(root, 'feedback.json'), JSON.stringify({ ...input, requestSha256: '0'.repeat(64) }));
   const refused = run();
   assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /request scope/);
-  assert.deepEqual(readFileSync(join(root, '.omd/qualitative-feedback.json')), pointer);
+  assert.match(`${refused.stdout}\n${refused.stderr}`, /ROUTE_AUTHORITY_REQUIRED|NATIVE_PI_AUTHORITY/);
+  assert.equal(existsSync(join(root, '.omd/qualitative-feedback.json')), false);
 });

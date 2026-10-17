@@ -44,13 +44,13 @@ test('v1 finalization is disabled before opening a stale manifest or writing pub
   }
 });
 
-test('the CLI disables v1 finalization before opening a stale manifest or writing publication state', () => {
+test('the CLI no longer exposes v1 finalization and writes no publication state', () => {
   const item = fixture();
   try {
     const cli = join(process.cwd(), 'bin', 'omd.ts');
     const result = spawnSync(process.execPath, [cli, 'evidence', 'finalize', '--input', item.manifest, '--json'], { cwd: item.root, encoding: 'utf8', shell: false });
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /LEGACY_PUBLICATION_DISABLED/);
+    assert.match(`${result.stdout}\n${result.stderr}`, /unknown command evidence/i);
     assertNoV1Publication(item.root);
   } finally {
     cleanup(item.root);

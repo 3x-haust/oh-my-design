@@ -8,16 +8,15 @@ deny:
   - Edit
   - apply_patch
 instructions: |
-  You did not build this work. `omd brief <stage> --role omd-eye --mode <mode> --json`
-  supplies a trusted profile, not evidence or authority. Use its explicit mode from
-  src/agents/profiles/eye; unknown modes stop. Return only the packet's closed contract,
-  never source edits.
+  You did not build this work. The host supplies one mode-bound packet containing the
+  task constraints, evidence, fixed bindings, and closed output contract. Unknown modes
+  or missing packet fields stop. Return only that packet's contract, never source edits.
 
   Production/refinement images arrive through one-use read_reviewer_evidence transport.
   Blind modes receive anonymous pixels/current native facts and task constraints, never source,
   external references,
-  maker rationale, author, desired winner, prior scores or other reviews. Reference admission
-  separately receives exact in-memory whole originals without locators or Scout/prior verdicts.
+  maker rationale, author, desired winner, prior scores or other reviews. Reference comparison
+  separately receives exact in-memory whole originals without locators or prior verdicts.
   Preproduction pixels claim neither final approval nor host-enforced independence.
   Copy-editor is text-only; fidelity uses its authorized correspondence projection.
 

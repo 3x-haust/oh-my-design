@@ -39,18 +39,19 @@ test('missing issuing CLI fails instead of falling back to an installed package'
   assert.throws(() => codexCliContext('/missing-omd-package/bin/omd-codex.ts'), /ENOENT/);
 });
 
-test('research and type roles discover their brokered browser path without receiving production permissions', () => {
+test('retained Hand and Eye identities expose only their brokered browser capabilities', () => {
   const cli = new URL('../bin/omd.ts', import.meta.url).pathname;
-  assert.ok(brokeredBrowserOperationNames('omd-scout').includes('ref browse'));
-  assert.deepEqual(brokeredBrowserOperationNames('omd-typesetter'), ['ir', 'render', 'measure']);
-  assert.deepEqual(brokeredBrowserOperationNames('omd-hand', 'source'), []);
-  assert.equal(isBrokeredBrowserCliOperation('omd-hand', ['measure'], 'observer'), true);
-  assert.equal(isBrokeredBrowserCliOperation('omd-sketch', ['render'], 'visual-study'), true);
-  assert.equal(isBrokeredBrowserCliOperation('omd-sketch', ['render'], 'unknown'), false);
-  const profile = loadRoleProfile('omd-hand', 'observer');
-  const context = codexCliContext(cli, process.execPath, 'omd-hand', 'observer');
+  assert.equal(brokeredBrowserOperationNames('omd-scout').length, 0);
+  assert.ok(brokeredBrowserOperationNames('omd-hand').includes('first-render check'));
+  assert.ok(brokeredBrowserOperationNames('omd-hand').includes('measure'));
+  assert.ok(brokeredBrowserOperationNames('omd-eye').includes('render'));
+  assert.equal(isBrokeredBrowserCliOperation('omd-hand', ['measure']), true);
+  assert.equal(isBrokeredBrowserCliOperation('omd-eye', ['render']), true);
+  assert.equal(isBrokeredBrowserCliOperation('omd-sketch', ['render']), false);
+  const profile = loadRoleProfile('omd-eye', 'fidelity');
+  const context = codexCliContext(cli, process.execPath, 'omd-eye', 'fidelity');
   assert.ok(context.includes(profile.source));
   assert.ok(context.includes(profile.sha256));
-  assert.ok(!context.includes(loadRoleProfile('omd-hand', 'source').source));
-  assert.throws(() => codexCliContext(cli, process.execPath, 'omd-hand', 'unknown'));
+  assert.ok(!context.includes(loadRoleProfile('omd-eye', 'protocol').source));
+  assert.throws(() => codexCliContext(cli, process.execPath, 'omd-eye', 'unknown'));
 });

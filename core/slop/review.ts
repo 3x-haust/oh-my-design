@@ -284,7 +284,7 @@ export function checkSlopReview(root: string, expectedViews: readonly ExpectedVi
 export function checkSlopFinalGraph(root: string, graph: unknown, invocation?: ProjectRunInvocation) {
   if (graph && typeof graph === 'object' && Reflect.get(graph, 'measuredTerminal') !== undefined) {
     const terminal = Reflect.get(graph, 'measuredTerminal') as import('../evidence/final-v2-measured-contract.ts').MeasuredTerminal;
-    const measurements = [...new Map([...terminal.measurements, ...terminal.process?.surface?.measurements ?? []].map(r => [r.sha256, r])).values()];
+    const measurements = terminal.measurements;
     if (terminal.slopPolicy !== undefined) {
       if (invocation === undefined) return fail('integrated final review requires the authenticated invocation');
       return checkRouteMeasuredSlopReview(root, invocation, { measurements, slopPolicy: terminal.slopPolicy })

@@ -505,41 +505,6 @@ test('DESIGN-FORM-NO-ERROR fires when form has inputs but only role=button (not 
     'role=button should not suppress DESIGN-FORM-NO-ERROR');
 });
 
-// ── CLI integration ───────────────────────────────────────────────────────────
-
-test('CLI: omd design creates .omd/design.md in a bare project', () => {
-  const dir = project();
-  const r = run(['design'], dir);
-  assert.equal(r.status, 0, `stderr: ${r.stderr}`);
-  assert.match(r.stdout, /Created:/);
-  assert.ok(existsSync(join(dir, '.omd', 'design.md')));
-});
-
-test('CLI: omd design --check passes on a complete design.md', () => {
-  const dir = project();
-  mkdirSync(join(dir, '.omd'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'design.md'), generateDesignMd(discoverEvidence(dir)));
-  const r = run(['design', '--check'], dir);
-  assert.equal(r.status, 0, `stdout: ${r.stdout}\nstderr: ${r.stderr}`);
-  assert.match(r.stdout, /ok/);
-});
-
-test('CLI: omd design --check exits 1 when sections are missing', () => {
-  const dir = project();
-  mkdirSync(join(dir, '.omd'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'design.md'), '## Brand\n\nSome content.\n');
-  const r = run(['design', '--check'], dir);
-  assert.equal(r.status, 1);
-  assert.match(r.stdout, /DESIGN-INCOMPLETE/);
-});
-
-test('CLI: omd design --check exits 0 when no design.md exists', () => {
-  const dir = project();
-  const r = run(['design', '--check'], dir);
-  assert.equal(r.status, 0);
-  assert.match(r.stdout, /No .omd\/design.md found/);
-});
-
 test('CLI: omd check picks up DESIGN-FORM-NO-ERROR when form inputs lack error state', () => {
   const dir = project();
   const irPath = join(dir, 'page.json');

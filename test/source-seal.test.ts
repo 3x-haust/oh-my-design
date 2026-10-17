@@ -269,32 +269,3 @@ test('source check fails missing seal and stale approved input or production sou
   writeFileSync(join(root, '.omd', 'copy-deck.md'), 'copy-v2');
   assert.ok(validateSourceSeal(root).some((item) => item.id === 'SOURCE-SEAL-STALE' && item.path === '.omd/copy-deck.md'));
 });
-
-test('source sealing requires both current decision-bound downstream handoffs', () => {
-  const root = setup();
-  persistCurrentArtDirectionWithHandoffs(root);
-  rmSync(join(root, '.omd', 'reference-handoffs', 'composer.json'));
-  const sealed = spawnSync(process.execPath, [cli, 'source', '--seal', root], { encoding: 'utf8' });
-  assert.notEqual(sealed.status, 0);
-  assert.match(
-    sealed.stderr,
-    /DECISION_BOUND_REFERENCE_HANDOFFS_REQUIRED: resolve art direction before composition, build, or finalization/,
-  );
-});
-test('CLI seals, checks, and reports stale bytes without claiming semantic fidelity', () => {
-  const root = setup();
-  const missingDecision = spawnSync(process.execPath, [cli, 'source', '--seal', root], { encoding: 'utf8' });
-  assert.notEqual(missingDecision.status, 0);
-  assert.match(missingDecision.stderr, /ART_DIRECTION_DECISION_REQUIRED/);
-  persistCurrentArtDirectionWithHandoffs(root);
-  const sealed = spawnSync(process.execPath, [cli, 'source', '--seal', root], { encoding: 'utf8' });
-  assert.equal(sealed.status, 0, sealed.stderr);
-  const clean = spawnSync(process.execPath, [cli, 'source', '--check', root, '--json'], { encoding: 'utf8' });
-  assert.equal(clean.status, 0, clean.stderr);
-  assert.deepEqual(JSON.parse(clean.stdout), []);
-  writeFileSync(join(root, 'public', 'mark.svg'), '<svg><path/></svg>');
-  const stale = spawnSync(process.execPath, [cli, 'source', '--check', root, '--json'], { encoding: 'utf8' });
-  assert.equal(stale.status, 1);
-  assert.ok((JSON.parse(stale.stdout) as Array<{ id: string }>).some((item) => item.id === 'SOURCE-SEAL-STALE'));
-  assert.doesNotMatch(stale.stdout, /semantic|fidelity|meaning/i);
-});

@@ -18,9 +18,6 @@ import {
 import { runPiFirstRenderReviewer, runPiReviewerLane } from '../adapters/pi-reviewer-runtime.ts';
 import { FIRST_RENDER_REVIEW_TASK } from '../core/design/first-render-review-contract.ts';
 import { FINAL_RENDER_REVIEWER_TASK } from '../core/runtime/final-render-review.ts';
-import { captureCandidateSelection } from '../core/brief/candidate-visual.ts';
-import { CANDIDATE_EVIDENCE_FILES, CANDIDATE_SELECTION_POINTER_PATH } from '../core/brief/candidate-selection.ts';
-import { candidateCaptureStates, candidateStateHtml } from './helpers/candidate-states.ts';
 import { publishQualitativeFeedback } from '../core/design/qualitative-feedback.ts';
 import { publishConsultedReferences } from '../core/design/consulted-references.ts';
 
@@ -47,16 +44,6 @@ test('native early review repairs and recaptures without final evidence and reus
   mkdirSync(join(root, 'dist'));
   const html = '<!doctype html><html><style>@media(max-width:600px){button{width:38px;word-break:break-all}}</style><body><main><h1>Reading now</h1><button>Update progress</button></main></body></html>';
   writeFileSync(join(root, 'dist/index.html'), html);
-  const candidateDirectory = join(root, '.omd/.cache/sketches/reading');
-  mkdirSync(candidateDirectory, { recursive: true });
-  for (const name of CANDIDATE_EVIDENCE_FILES) {
-    writeFileSync(join(candidateDirectory, name), name === 'index.html' ? candidateStateHtml : '{}');
-  }
-  const selected = await captureCandidateSelection(root, {
-    schema: 'candidate-selection-pointer-v1', directory: 'reading',
-    indexSha256: hash(candidateStateHtml), selectionSha256: hash('{}'), captureStates: candidateCaptureStates,
-  }, writer);
-  writer.write(CANDIDATE_SELECTION_POINTER_PATH, JSON.stringify(selected));
   publishDesignJudgment(root, {
     schema: 'design-judgment-v1', referenceBoardSha256: 'a'.repeat(64),
     hypothesis: { schema: 'design-judgment-v1', feelsLike: 'A focused personal reading log',
@@ -69,15 +56,9 @@ test('native early review repairs and recaptures without final evidence and reus
   await publishFirstRenderCheck(root, 'dist/index.html', undefined, writer, invocation);
   assert.throws(() => checkFirstRenderEvidence(root), /critical findings/);
   const initialPacket = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
-  assert.deepEqual(initialPacket.evidence.referenceRenders?.map((row: { captureSha256: string }) => row.captureSha256),
-    selected.visual.renders.slice(0, 2).map(row => row.sha256));
-  assert.equal(selected.visual.renders.length, 6);
-  const complementaryPath = join(root, selected.visual.renders[4]!.path);
-  const complementaryBytes = readFileSync(complementaryPath);
-  writeFileSync(complementaryPath, 'changed complementary pixels');
-  assert.throws(() => firstRenderReviewPacket(root, invocation), /CANDIDATE_VISUAL/);
-  writeFileSync(complementaryPath, complementaryBytes);
+  assert.equal(initialPacket.evidence.referenceRenders, undefined);
   const reportedPng = Buffer.from(initialPacket.evidence.renders[0].pngBase64, 'base64');
+  mkdirSync(join(root, '.omd/.cache'), { recursive: true });
   writeFileSync(join(root, '.omd/.cache/reported.png'), reportedPng);
   const reported = publishQualitativeFeedback(root, {
     schema: 'qualitative-feedback-input-v1', requestSha256: hash('reading task'),
@@ -102,7 +83,7 @@ test('native early review repairs and recaptures without final evidence and reus
     withOriginal.evidence.renders.map((row: { viewport: string; captureSha256: string }) => ({
       viewport: row.viewport, captureSha256: row.captureSha256, referenceSha256: hash(reportedPng),
     })));
-  assert.deepEqual(withOriginal.evidence.referenceRenders, initialPacket.evidence.referenceRenders);
+  assert.equal(withOriginal.evidence.referenceRenders, undefined);
   assert.deepEqual(withOriginal.evidence.feedbackRenders, withFeedback.evidence.feedbackRenders);
   assert.equal(JSON.stringify(withOriginal).includes('example.com'), false);
   assert.equal(JSON.stringify(withOriginal).includes('reported.png'), false);
@@ -127,22 +108,12 @@ test('native early review repairs and recaptures without final evidence and reus
     .filter(row => row.pid === pid && row.event === `evidence-image:${hash(reportedPng)}`).length >= 3),
     'current render, reported rejection and external original must each reach the actual evidence tool');
   assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /retain/);
-  assert.equal(rejected.next, 'repair-rebuild-recapture');
-  assert.deepEqual(rejected.repairOwners, ['omd-hand']);
+  assert.equal(rejected.next, 'repair-model-led-source-and-recapture');
+  assert.deepEqual(rejected.repairOwners, ['coordinator']);
   assert.equal(readFirstRenderReview(root)?.findings.length, 1);
   assert.equal(existsSync(join(root, '.omd/final-v2.json')), false);
   process.env.PI_REVIEWER_FIXTURE_MODE = 'success';
   assert.equal((await runFirstRenderReview(root, invocation, t.signal)).sha256, rejected.sha256);
-  writeFileSync(join(candidateDirectory, 'index.html'), `${candidateStateHtml} `);
-  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /CANDIDATE_SELECTION_STALE/);
-  writeFileSync(join(candidateDirectory, 'index.html'), candidateStateHtml);
-  const reframedHtml = `${candidateStateHtml}<style>body{padding:12px}</style>`;
-  writeFileSync(join(candidateDirectory, 'index.html'), reframedHtml);
-  const reframed = await captureCandidateSelection(root, {
-    schema: 'candidate-selection-pointer-v1', directory: 'reading',
-    indexSha256: hash(reframedHtml), selectionSha256: hash('{}'), captureStates: candidateCaptureStates,
-  }, writer);
-  writer.write(CANDIDATE_SELECTION_POINTER_PATH, JSON.stringify(reframed));
   writeFileSync(join(root, 'dist/index.html'), html.replace('width:38px', 'width:48px'));
   await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /VISUAL_MEASUREMENT: production build changed/);
   await publishFirstRenderCheck(root, 'dist/index.html', undefined, writer, invocation);
@@ -150,7 +121,7 @@ test('native early review repairs and recaptures without final evidence and reus
   const packet = JSON.parse(prepared.packet.toString('utf8'));
   const originalMobile = initialPacket.evidence.renders[1];
   assert.notEqual(packet.evidence.renders[1].captureSha256, originalMobile.captureSha256);
-  assert.notEqual(packet.evidence.referenceRenders[0].captureSha256, initialPacket.evidence.referenceRenders[0].captureSha256);
+  assert.equal(packet.evidence.referenceRenders, undefined);
   assert.deepEqual(packet.evidence.priorBaselines, [{
     id: rejected.findings[0]?.id,
     reviewSha256: rejected.sha256,
@@ -214,11 +185,6 @@ test('native early review repairs and recaptures without final evidence and reus
   writeFileSync(currentCapturePath, 'stale capture bytes');
   assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /capture bytes changed/);
   writeFileSync(currentCapturePath, currentCapture);
-  writeFileSync(join(candidateDirectory, 'index.html'), candidateStateHtml);
-  writer.write(CANDIDATE_SELECTION_POINTER_PATH, JSON.stringify(selected));
-  assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /current review evidence changed/);
-  writeFileSync(join(candidateDirectory, 'index.html'), reframedHtml);
-  writer.write(CANDIDATE_SELECTION_POINTER_PATH, JSON.stringify(reframed));
   assert.throws(() => requireRetainedFirstRenderReview(root, {
     ...invocation, current: { ...invocation.current, buildSha256: '0'.repeat(64) },
   }), /current review evidence changed/);
@@ -232,7 +198,6 @@ test('native early review repairs and recaptures without final evidence and reus
       component: 'portrait-detail', state: 'open' }],
   }, writer);
   assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /current review evidence changed/);
-  rmSync(join(root, CANDIDATE_SELECTION_POINTER_PATH));
   const withoutCandidate = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
   assert.equal(withoutCandidate.evidence.referenceRenders, undefined);
   assert.equal(withoutCandidate.evidence.consultedReferenceRenders.length, 1);

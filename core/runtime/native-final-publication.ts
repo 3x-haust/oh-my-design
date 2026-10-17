@@ -133,10 +133,11 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
       return { path: item.path, sha256: item.sha256 };
     };
     const lanes = Object.fromEntries(work.map(({ lane }) => [lane, descriptor(lane)]));
-    const measuredTerminal = draft?.graph.measuredTerminal && protocol ? { ...draft.graph.measuredTerminal, deterministicProtocol: protocol, lanes } : undefined;
-    if (draft && measuredTerminal) validateMeasuredTerminal(root, { ...draft.graph, measuredTerminal }, input.invocation);
-    const bytes = Buffer.from(canonicalJson({ schema: measuredTerminal ? 'native-pi-final-review-v2' : 'native-pi-final-review-v1', runId: run.runId,
-      buildSha256: run.buildSha256, briefSha256: run.briefSha256, ...(measuredTerminal ? { measuredTerminal } : { lanes }),
+    if (!draft?.graph.measuredTerminal || !protocol) return reject('measured terminal review state is required');
+    const measuredTerminal = { ...draft.graph.measuredTerminal, deterministicProtocol: protocol, lanes };
+    validateMeasuredTerminal(root, { ...draft.graph, measuredTerminal }, input.invocation);
+    const bytes = Buffer.from(canonicalJson({ schema: 'native-pi-final-review-v2', runId: run.runId,
+      buildSha256: run.buildSha256, briefSha256: run.briefSha256, measuredTerminal,
       attempt: { path: attemptPath, sha256: hash(attempt) } }));
     authorizeNativePiPayload(input.invocation, root, 'final-reviewer-lane', bytes);
     replaceProjectFileAtomically({ projectRoot: root, invocation: input.invocation, relativePath: pointer, content: bytes });

@@ -13,7 +13,6 @@ import { collectSelectedReferenceOriginals, referenceFidelityExpectations, refer
 import { MEASURED_REVIEW_HANDBACK, MEASURED_REVIEW_TRANSPORT } from './trusted-measured-review.ts';
 import { loadContracts } from '../measure/inputs.ts';
 import { reviewProfileBinding } from './trusted-review-profile.ts';
-import { readSelectedArtDirection, selectedArtCopyProjection } from '../art-direction/selected.ts';
 import { consultedReferenceProjection } from '../design/consulted-references.ts';
 import {
   consultedReferenceComparisonExpectations,
@@ -83,7 +82,6 @@ export function nativeFinalLanePacket(input: Readonly<{
   const blindEvidence = object(blind.evidence);
   const blindOutput = object(blind.outputContract);
   const fixed = object(blindOutput.fixedBindings);
-  const artSelected = fixed.artDirectionSha256 !== undefined;
   const measured = fixed.measurements !== undefined;
   const historicalReferenceSelected = referenceFidelityRequired(route.strategy);
   const historicalReferenceRenders = !measured && historicalReferenceSelected && input.lane === 'fidelityLane'
@@ -159,10 +157,6 @@ export function nativeFinalLanePacket(input: Readonly<{
     ...(measured ? { candidateAlias: blindEvidence.candidateAlias, measurementProjection: blindEvidence.measurementProjection, observationProjection: blindEvidence.observationProjection } : {}),
     context: { ...object(blindEvidence.context), selectedStages: route.strategy.stages, skips: route.strategy.skips },
     renders: blindEvidence.renders,
-    ...(measured && artSelected && route.sourceContract.processPolicy ? { selectedDirection: (() => {
-      const selected = readSelectedArtDirection(input.root, route.sourceContractSha256);
-      return { ...selectedArtCopyProjection(selected), relationship: selected.decision.relationship, staticContract: selected.decision.staticContract };
-    })() } : {}),
     documents: measured ? documents.map(({ path: _path, text: _text, sha256 }) => ({ sha256 })) : documents,
     ...(measured && input.lane === 'fidelityLane' ? { approvedContracts: (() => {
       const { contracts } = loadContracts(input.root);
@@ -186,8 +180,8 @@ export function nativeFinalLanePacket(input: Readonly<{
   };
   const evidenceSha256 = hash(canonicalJson(evidence));
   const contract = input.lane === 'fidelityLane'
-    ? { laneSchema: artSelected ? 'fidelity-review-v1' : 'adaptive-fidelity-review-v1', verdictKeys: ['referenceFidelity', 'renderFidelity'], criticalFloorKeys: ['desktop', 'mobile'] }
-    : { laneSchema: artSelected ? 'protocol-review-v1' : 'adaptive-protocol-review-v1', verdictKeys: ['evidenceIntegrity', 'publicationProtocol'], criticalFloorKeys: ['authority', 'currentness'] };
+    ? { laneSchema: 'adaptive-fidelity-review-v1', verdictKeys: ['referenceFidelity', 'renderFidelity'], criticalFloorKeys: ['desktop', 'mobile'] }
+    : { laneSchema: 'adaptive-protocol-review-v1', verdictKeys: ['evidenceIntegrity', 'publicationProtocol'], criticalFloorKeys: ['authority', 'currentness'] };
   const fixedBindings = { ...fixed, evidenceSha256, ...(measured ? { reviewProfile: reviewProfileBinding(input.lane) } : {}) };
   return Buffer.from(canonicalJson({
     schema: measured ? MEASURED_REVIEW_TRANSPORT : NATIVE_FINAL_LANE_TRANSPORT_SCHEMA, evidenceSha256, evidence,
@@ -196,7 +190,7 @@ export function nativeFinalLanePacket(input: Readonly<{
       laneSchema: input.lane === 'fidelityLane' ? 'measured-fidelity-review-v1' : 'measured-protocol-review-v1',
       reviewerFields: ['schema', 'lane', 'verdicts', 'criticalFloors', 'observationSha256s', 'routeSha256',
         'buildSha256', 'briefSha256', 'browserSha256', 'evidenceSha256', 'findings',
-        ...(artSelected ? ['artDirectionSha256'] : []), 'measurements', 'reviewPolicySha256', 'reviewProfile',
+        'measurements', 'reviewPolicySha256', 'reviewProfile',
         ...(consultedExpectations.length > 0 ? ['consultedReferenceComparisons'] : []),
         ...(fixed.processBindingSha256 === undefined ? [] : ['processBindingSha256'])],
       fixedBindings,
@@ -207,8 +201,7 @@ export function nativeFinalLanePacket(input: Readonly<{
         'buildSha256', 'briefSha256', 'browserSha256', 'evidenceSha256', 'findings',
         ...(input.lane === 'protocolLane' ? ['outcomeAssessments'] : []),
         ...(fidelityExpectations.length > 0 ? ['referenceFidelityAssessments'] : []),
-        ...(consultedExpectations.length > 0 ? ['consultedReferenceComparisons'] : []),
-        ...(artSelected ? ['artDirectionSha256'] : [])],
+        ...(consultedExpectations.length > 0 ? ['consultedReferenceComparisons'] : [])],
       fixedBindings,
       ...finalReviewResponseContract({
         identity: { schema: 'adaptive-final-reviewer-handback-v1', lane: input.lane },

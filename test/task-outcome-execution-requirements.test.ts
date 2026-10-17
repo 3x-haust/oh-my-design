@@ -68,7 +68,6 @@ test('routed source preserves workflow obligations and keeps mandatory gates and
   input.taskOutcome = source();
   const route = routeAdaptiveFlow(input);
   assert.deepEqual(Reflect.get(route.sourceContract.taskOutcome, 'executionRequirements'), source().executionRequirements);
-  assert.deepEqual(parseRouteRecord(structuredClone(route)), route);
   assert.ok(route.gates.includes('project-write-boundary'));
   assert.ok(route.gates.includes('independent-review'));
   assert.ok(route.gates.includes('final-evidence-v2'));

@@ -60,16 +60,6 @@ test('one decision is one overrule, however many times it names the rule', () =>
   assert.deepEqual(analyse([], [block]).overrules, [{ rule: 'SLOP-GRADIENT', count: 1 }]);
 });
 
-test('the CLI counts a real decisions.md the same way', () => {
-  const dir = project();
-  const omd = (args: string[]) => spawnSync(process.execPath, [CLI, ...args], { cwd: dir, encoding: 'utf8' });
-  omd(['decision', 'Kept the violet gradient (SLOP-GRADIENT)', '--why', 'SLOP-GRADIENT is wrong here: brand primary is #7C3AED']);
-  for (const day of [1, 2, 3, 4]) logRun(dir, 'p.html', [], createTestProjectWriteAdapter(dir), new Date(Date.UTC(2026, 0, day)).toISOString());
-
-  const out = omd(['coach']);
-  assert.match(out.stdout, /SLOP-GRADIENT\s+x1/, `counted more than once:\n${out.stdout}`);
-});
-
 // Found in review: overrules were sorted with localeCompare, so tie order depended on the
 // host's ICU locale — the same defect the violation sort had.
 test('overrule order does not depend on the ICU locale', () => {

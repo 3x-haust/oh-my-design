@@ -260,11 +260,13 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
     const settings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
     assert.equal(settings.enabledPlugins?.['oh-my-design@omd'], true);
     assert.ok(settings.extraKnownMarketplaces?.['omd']);
-    assert.ok(settings.permissions?.allow?.includes('Bash(omd copy:*)'));
-    assert.ok(settings.permissions?.allow?.includes('Bash(omd composition:*)'));
-    assert.ok(settings.permissions?.allow?.includes('Bash(shasum:*)'));
-    assert.ok(settings.permissions?.allow?.includes('Bash(omd source:*)'));
-    assert.ok(settings.permissions?.allow?.includes('Bash(omd workflow:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd lifecycle:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd guard:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd first-render:*)'));
+    for (const removed of [
+      'Bash(omd copy:*)', 'Bash(omd composition:*)', 'Bash(omd workflow:*)',
+      'Bash(omd source:*)', 'Bash(omd candidate:*)',
+    ]) assert.equal(settings.permissions?.allow?.includes(removed), false);
     assert.equal(
       settings.hooks?.PreToolUse?.some((entry) => entry.hooks.some((hook) => hook.command.includes('omd.ts'))) ?? false,
       false,
@@ -274,21 +276,6 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
     const result = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(result.ok, true, result.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
     assert.ok(result.checks.every((check) => check.ok));
-
-    // Missing each required permission fails the matching doctor check.
-    for (const [perm, checkName] of [
-      ['Bash(omd composition:*)', 'composition check permission present'],
-      ['Bash(shasum:*)', 'composition hash permission present'],
-      ['Bash(omd source:*)', 'source seal permission present'],
-    ] as const) {
-      await install([detected], UNSUPPORTED_BROWSER);
-      const s = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
-      s.permissions = { ...s.permissions, allow: (s.permissions?.allow ?? []).filter((entry) => entry !== perm) };
-      writeFileSync(join(home, 'settings.json'), JSON.stringify(s));
-      const missing = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
-      assert.equal(missing.ok, false);
-      assert.equal(missing.checks.find((check) => check.name === checkName)?.ok, false);
-    }
 
     // A stray direct agent appearing beside the plugin is flagged as a duplicate.
     await install([detected], UNSUPPORTED_BROWSER);
@@ -331,15 +318,12 @@ test('Claude doctor rejects a duplicate direct install and a legacy OMD hook', a
     assert.equal(result.checks.find((check) => check.name === 'omd marketplace registered')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'no duplicate direct agents')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'no duplicate direct skills')?.ok, false);
-    assert.equal(result.checks.find((check) => check.name === 'composition check permission present')?.ok, false);
-    assert.equal(result.checks.find((check) => check.name === 'composition hash permission present')?.ok, false);
-    assert.equal(result.checks.find((check) => check.name === 'source seal permission present')?.ok, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('Codex doctor requires the typesetter and composer files and config registrations', async () => {
+test('Codex doctor requires the retained Eye agent file and registration', async () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-codex-install-'));
   const detected = { host: 'codex' as const, home };
   try {
@@ -347,16 +331,10 @@ test('Codex doctor requires the typesetter and composer files and config registr
     const installed = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(installed.ok, true, installed.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
 
-    rmSync(join(home, 'agents', 'omd-typesetter.toml'));
+    rmSync(join(home, 'agents', 'omd-eye.toml'));
     const missing = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(missing.ok, false);
-    assert.equal(missing.checks.find((check) => check.name === 'typesetter agent registered')?.ok, false);
-
-    await install([detected], UNSUPPORTED_BROWSER);
-    rmSync(join(home, 'agents', 'omd-composer.toml'));
-    const missingComposer = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
-    assert.equal(missingComposer.ok, false);
-    assert.equal(missingComposer.checks.find((check) => check.name === 'composer agent registered')?.ok, false);
+    assert.equal(missing.checks.find((check) => check.name === 'eye agent registered')?.ok, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

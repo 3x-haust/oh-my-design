@@ -1,75 +1,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   FORBIDDEN_WITHOUT_REQUEST,
   AdaptiveRouteError,
-  parseRouteRecord,
   pathsOutsideScope,
   routeAdaptiveFlow,
 } from '../core/route/index.ts';
-import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
-import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
-import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 import { classifyArtifact } from '../core/layout/index.ts';
 import { orphanRecords, scanProject } from '../core/layout/scan.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
 
-const adaptiveFixture = (): unknown => JSON.parse(readFileSync(fileURLToPath(
-  new URL('fixtures/adaptive-flow/copy-only.json', import.meta.url),
-), 'utf8'));
+const adaptiveFixture = (): Record<string, unknown> =>
+  structuredClone(inputSkeleton('product-route-input').skeleton) as Record<string, unknown>;
 
 test('the canonical route is a typed adaptive decision rather than a fixed depth table', () => {
   const result = routeAdaptiveFlow(adaptiveFixture());
   assert.equal(result.route, 'adaptive');
   assert.equal(result.strategy.owner, 'user-selected-model');
-  assert.deepEqual(result.strategy.roles, ['omd-writer', 'omd-hand', 'omd-eye']);
-  assert.equal(result.references.decision, 'skip');
+  assert.deepEqual(result.strategy.roles, ['omd-hand', 'omd-eye']);
+  assert.deepEqual(result.strategy.methods, []);
+  assert.equal(result.references.decision, 'discover');
   assert.equal(Object.hasOwn(result.references, 'min'), false);
   assert.equal(result.behavior.schema, 'adaptive-behavior-contract-v1');
-  assert.equal(result.behavior.policy.references.handoff, 'sanitized-summary-only');
+  assert.equal(result.behavior.policy.process.production, 'ordinary-host-tools');
+  assert.equal(result.behavior.policy.process.independentReviewer, 'omd-eye');
 });
 
-test('review purpose versions recorded browsing while benchmark and release require native origin authority', () => {
+test('ordinary review purpose selects recorded browsing without restoring workflow roles', () => {
   const ordinary = adaptiveFixture() as Record<string, unknown>;
   ordinary.reviewPurpose = 'ordinary';
   ordinary.reviewPurposeAuthority = null;
   const ordinaryRoute = routeAdaptiveFlow(ordinary);
   assert.equal(ordinaryRoute.sourceContract.reviewPurpose, 'ordinary');
   assert.equal(ordinaryRoute.behavior.schema, 'adaptive-behavior-contract-v2');
-  assert.equal(ordinaryRoute.behavior.policy.references.handoff, 'selected-whole-screens-and-analysis');
-  assert.deepEqual(parseRouteRecord(JSON.parse(JSON.stringify(ordinaryRoute))), ordinaryRoute);
-
-  const benchmark = adaptiveFixture() as Record<string, unknown>;
-  benchmark.reviewPurpose = 'benchmark';
-  benchmark.reviewPurposeAuthority = null;
-  assert.throws(() => routeAdaptiveFlow(benchmark), /actual host\/user purpose origin receipt/);
-
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-review-purpose-')));
-  const request = Reflect.get(benchmark, 'request') as string;
-  const payload = {
-    schema: 'review-purpose-origin-v1' as const,
-    projectRoot: root,
-    purpose: 'benchmark' as const,
-    requestSha256: createHash('sha256').update(request).digest('hex'),
-    source: 'host-user-input' as const,
-    observedAt: '2026-09-27T00:00:00.000Z',
-  };
-  const signature = signNativeObservation(root, payload.schema,
-    createHash('sha256').update(canonicalRouteJson(payload)).digest('hex'));
-  const bytes = Buffer.from(`${canonicalRouteJson({ ...payload, signature })}\n`);
-  const receiptSha256 = createHash('sha256').update(bytes).digest('hex');
-  const receipt = { path: `.omd/review-purpose-authorities/sha256-${receiptSha256}.json`, sha256: receiptSha256 };
-  mkdirSync(join(root, '.omd/review-purpose-authorities'), { recursive: true });
-  writeFileSync(join(root, receipt.path), bytes);
-  benchmark.reviewPurposeAuthority = receipt;
-  const authority = { root, invocation: createTestProjectRunInvocation(root) };
-  assert.equal(routeAdaptiveFlow(benchmark, authority).sourceContract.reviewPurpose, 'benchmark');
-  writeFileSync(join(root, receipt.path), Buffer.concat([bytes, Buffer.from('\n')]));
-  assert.throws(() => routeAdaptiveFlow(benchmark, authority), /origin bytes changed/);
+  assert.equal(Reflect.get(ordinaryRoute.behavior.policy.references, 'acquisition'), 'recorded-whole-screen-v1');
+  assert.deepEqual(ordinaryRoute.strategy.roles, ['omd-hand', 'omd-eye']);
 });
 
 test('adaptive route input rejects missing context and ignores unknown ordinary fields', () => {

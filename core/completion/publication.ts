@@ -13,8 +13,6 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import { validateAdaptiveFinalEvidenceV2Graph } from '../evidence/final-v2-adaptive-contract.ts';
-import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
-import { checkAdaptiveWorkflow } from '../design-development/workflow-persistence.ts';
 import { requiresMeasuredTerminal, loadReviewPolicy } from '../measure/review-policy.ts';
 import { validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
 import { validateFinalEvidenceV2Graph } from '../evidence/final-v2-graph.ts';
@@ -80,10 +78,10 @@ function dataArray(value: unknown, label: string): readonly unknown[] {
   }
 }
 
-function graphReceipts(value: unknown): Readonly<{ raw: Readonly<Record<string, unknown>>; schema: unknown; productionSchema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown; workflow: unknown; referenceDistance: unknown }> {
+function graphReceipts(value: unknown): Readonly<{ raw: Readonly<Record<string, unknown>>; schema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown }> {
   const manifest = dataObject(value, 'final manifest graph');
   const graph = dataObject(manifest.graph, 'final manifest graph');
-  return { raw: graph, schema: graph.schema, productionSchema: graph.productionSchema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal, workflow: graph.workflow, referenceDistance: graph.referenceDistance };
+  return { raw: graph, schema: graph.schema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal };
 }
 function receiptIdentity(value: unknown): string {
   const item = dataObject(value, 'final graph receipt');
@@ -134,27 +132,7 @@ export function checkCompletionPublicationPrerequisites(
   const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
     ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route
     : undefined;
-  const hasWorkflow = projectPathEntryExists(root, '.omd/workflow-plan.json');
-  if (hasWorkflow) {
-    if (graph.schema !== 'final-evidence-v2-workflow-graph-v1' && graph.schema !== 'final-evidence-v2-selected-direction-graph-v1') fail('current workflow requires the additive workflow final graph');
-    const workflow = checkAdaptiveWorkflow(root, invocation).binding;
-    if (canonicalJson(graph.workflow) !== canonicalJson(workflow)) fail('final graph does not bind the exact current workflow plan, artifacts, and reviews');
-  } else if (graph.schema === 'final-evidence-v2-workflow-graph-v1') {
-    fail('workflow final graph has no current workflow plan');
-  }
-  if (graph.schema === 'final-evidence-v2-graph' || (graph.schema === 'final-evidence-v2-workflow-graph-v1'
-    && graph.productionSchema === 'final-evidence-v2-graph')) {
-    const distance = dataObject(graph.referenceDistance, 'selected reference distance receipt');
-    receiptIdentity(distance);
-    if (distance.path !== '.omd/selected-reference-distance.json'
-      || distance.schema !== 'selected-reference-distance-v1') {
-      fail('selected reference distance receipt is not the current typed gate');
-    }
-    const compositionFindings = validateCurrentCompositionContract(root, invocation);
-    if (compositionFindings.length > 0) {
-      fail(`current composition contract is invalid: ${compositionFindings.map((finding) => `${finding.id} ${finding.path}`).join(', ')}`);
-    }
-  }
+  if (continuationRoute === undefined) fail('model-led completion requires the adaptive omission graph');
   if (!projectPathEntryExists(root, '.omd/functional-requirements.json')) {
     if (continuationRoute?.executionStyle === 'model-led'
       && !continuationRoute.stages.some(stage => stage.id === 'type-proof' && stage.status === 'selected')

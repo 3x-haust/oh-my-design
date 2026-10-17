@@ -13,6 +13,7 @@ import {
 } from '../../core/route/index.ts';
 import { canonicalRouteJson } from '../../core/route/adaptive-source-contract.ts';
 import { signNativeObservation } from '../../core/runtime/self-signed-activation.ts';
+import type { ReviewPurpose } from '../../core/route/review-purpose-authority.ts';
 
 const CLI_PATH = fileURLToPath(new URL('../../bin/omd.ts', import.meta.url));
 const sha256 = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
@@ -20,8 +21,12 @@ const sha256 = (value: string | Uint8Array): string => createHash('sha256').upda
 export function withTestReviewPurposeAuthority(root: string, input: unknown): Record<string, unknown> {
   const route = structuredClone(input) as Record<string, unknown>;
   const projectRoot = realpathSync(root);
+  const purpose = route.reviewPurpose === 'benchmark' || route.reviewPurpose === 'release'
+    ? route.reviewPurpose
+    : 'ordinary';
+  route.reviewPurpose = purpose;
   const payload = {
-    schema: 'review-purpose-origin-v1' as const, projectRoot, purpose: 'ordinary' as const,
+    schema: 'review-purpose-origin-v1' as const, projectRoot, purpose: purpose as ReviewPurpose,
     requestSha256: sha256(route.request as string), source: 'host-user-input' as const,
     observedAt: '2026-09-27T00:00:00.000Z',
   };

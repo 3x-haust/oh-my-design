@@ -86,7 +86,7 @@ test('legacy measured references remain readable without viewport evidence', () 
   }
 });
 
-test('historical final-v2 graph remains parseable without reference distance', () => {
+test('historical structured final-v2 graphs are explicitly unsupported', () => {
   const descriptor = (path: string, schema: string) => ({
     path: `.omd/${path}.json`,
     schema,
@@ -111,7 +111,5 @@ test('historical final-v2 graph remains parseable without reference distance', (
     protocolLane: descriptor('protocol', 'protocol-review-v1'),
     observations: [descriptor('observation', 'observation-v2')],
   };
-  const parsed = validateFinalEvidenceV2Graph(graph);
-  assert.equal(parsed.schema, 'final-evidence-v2-graph');
-  assert.equal('referenceDistance' in parsed, false);
+  assert.throws(() => validateFinalEvidenceV2Graph(graph), /route is required|unsupported|invalid|schema/i);
 });

@@ -5,6 +5,7 @@ import { getNativePiRun, isNativePiInvocation } from '../runtime/native-pi-run.t
 import { nativePiDigest, readNativePiFile } from '../runtime/native-pi-run-record.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { failAdaptiveRoute } from './adaptive-flow-domain.ts';
+import { MODEL_LED_STRATEGY_DECISION } from './adaptive-flow-domain.ts';
 
 /** The native host owns this policy; authored route JSON cannot grant or revoke it. */
 export function bindNativeDesignRouteInput(root: string, invocation: ProjectRunInvocation, value: unknown): unknown {
@@ -29,8 +30,14 @@ export function bindNativeDesignRouteInput(root: string, invocation: ProjectRunI
   if (authoredPurpose !== undefined && authoredPurpose !== 'ordinary' && authoredPurpose !== purpose.reviewPurpose) {
     return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', 'review purpose differs from the genuine host input');
   }
-  return { ...value, ...purpose,
-    processPolicy: { schema: run.designPolicy.criteriaVersion === 'model-led-design-v1' && purpose.reviewPurpose === 'ordinary'
-      && Reflect.get(value, 'deliveryMode') !== 'design-only'
-      ? 'model-led-design-process-v1' : 'human-design-process-v1', interactionMode: 'autonomous', autonomyGrant } };
+  if (run.designPolicy.criteriaVersion !== 'model-led-design-v1') {
+    return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', 'legacy structured native runs cannot publish a production route');
+  }
+  if (purpose.reviewPurpose !== 'ordinary' || Reflect.get(value, 'deliveryMode') !== undefined) {
+    return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED', 'only ordinary model-led implementation routes are supported');
+  }
+  const input = Object.fromEntries(Object.entries(value).filter(([key]) =>
+    !['processPolicy', 'reviewPurpose', 'reviewPurposeAuthority', 'deliveryMode', 'strategyDecision'].includes(key)));
+  return { ...input, ...purpose, strategyDecision: MODEL_LED_STRATEGY_DECISION,
+    processPolicy: { schema: 'model-led-design-process-v1', interactionMode: 'autonomous', autonomyGrant } };
 }

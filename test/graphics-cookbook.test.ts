@@ -89,33 +89,6 @@ test('gradient-mesh.md documents SLOP-GRADIENT hue combinations', () => {
   );
 });
 
-// ── placeholder-policy.md must contain the core defect sentence ──────────────
-
-test('placeholder-policy.md states grey box is a design defect', () => {
-  const path = join(recipesDir, 'placeholder-policy.md');
-  if (!existsSync(path)) {
-    assert.fail('placeholder-policy.md not found');
-  }
-  const content = readFileSync(path, 'utf8');
-  assert.ok(
-    content.includes('defect'),
-    'placeholder-policy.md: must state that a grey box is a design defect'
-  );
-  // The policy must name all three alternative strategies.
-  assert.ok(
-    content.includes('typographic'),
-    'placeholder-policy.md: must document typographic block alternative'
-  );
-  assert.ok(
-    content.includes('pattern'),
-    'placeholder-policy.md: must document pattern fill alternative'
-  );
-  assert.ok(
-    content.includes('gradient'),
-    'placeholder-policy.md: must document generated gradient alternative'
-  );
-});
-
 // ── noise-grain-texture.md must document the data-URI approach ───────────────
 
 test('noise-grain-texture.md uses SVG feTurbulence data-URI technique', () => {

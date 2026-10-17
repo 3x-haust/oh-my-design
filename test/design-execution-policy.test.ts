@@ -10,16 +10,14 @@ test('normal execution is autonomous without developer configuration', () => {
   assert.equal(policy.criteriaVersion, 'model-led-design-v1');
 });
 
-test('structured workflow is an explicit host choice, shared by both design modes', () => {
+test('model-led workflow is the only host-selected production path', () => {
   for (const mode of ['autonomous', 'developer-evaluation']) {
     const direct = captureDesignExecutionPolicy({ OMD_DESIGN_MODE: mode });
-    const structured = captureDesignExecutionPolicy({ OMD_DESIGN_MODE: mode, OMD_DESIGN_WORKFLOW: 'structured' });
     assert.equal(direct.criteriaVersion, 'model-led-design-v1');
-    assert.equal(structured.criteriaVersion, 'autonomous-design-v1');
-    assert.equal(structured.mode, direct.mode);
-    assert.equal(structured.designQuestions, direct.designQuestions);
-    assert.deepEqual(parseDesignExecutionPolicy(structured), structured);
+    assert.deepEqual(parseDesignExecutionPolicy(direct), direct);
   }
+  assert.throws(() => captureDesignExecutionPolicy({ OMD_DESIGN_WORKFLOW: 'structured' }));
+  assert.throws(() => captureDesignExecutionPolicy({ OMD_DESIGN_WORKFLOW: 'model-led' }));
   assert.throws(() => captureDesignExecutionPolicy({ OMD_DESIGN_WORKFLOW: 'ignore-results' }));
 });
 

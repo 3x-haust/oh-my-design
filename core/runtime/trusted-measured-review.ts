@@ -26,7 +26,7 @@ export function measuredAdvisoryDispositionContract(context: MeasuredQualityCont
       .sort((left, right) => `${left.packetSha256}:${left.findingId}`.localeCompare(`${right.packetSha256}:${right.findingId}`)),
   };
 }
-export function measuredFinalRenderPacket(root: string, invocation: ProjectRunInvocation, observationSha256s: readonly string[], artDirectionSha256?: string): Buffer {
+export function measuredFinalRenderPacket(root: string, invocation: ProjectRunInvocation, observationSha256s: readonly string[]): Buffer {
   const policy = loadReviewPolicy(root, invocation), route = readPersistedRoute(root, invocation);
   const process = loadTerminalProcess(root, invocation, observationSha256s);
   const bindings = loadMeasuredObservationBindings(root, invocation, observationSha256s);
@@ -45,21 +45,19 @@ export function measuredFinalRenderPacket(root: string, invocation: ProjectRunIn
     context: { projectMode: route.projectMode, taskOutcome: browserTaskOutcomeContract(route.sourceContract.taskOutcome), designAxes: route.sourceContract.designAxes,
       requiredOutcomes: route.requiredOutcomes, prohibitedOutcomes: route.prohibitedOutcomes,
       developerCalibration: currentDeveloperCalibration(root, invocation) },
-    measurementProjection: [...new Map([...measurements.map(r => measurementProjection(context.index.packet(r.sha256), r.sha256)), ...process?.projections ?? []].map(p => [p.packetSha256, p])).values()],
-    ...(process?.plan ? { surfaceContext: process.plan.surfaces.map(({ id, purpose, states, taskIds }) => ({ id, purpose, taskIds, states: states.map(({ id, required, primaryActionId }) => ({ id, required, primaryActionId })) })),
-      surfaceReviewContract: { schema: 'surface-review-v1', rows: process.surfaceRows } } : {}),
-    observationProjection: renders.map(({ pngBase64: _, ...row }) => row), renders: [...renders, ...process?.supplementalRenders ?? []] };
+    measurementProjection: measurements.map(r => measurementProjection(context.index.packet(r.sha256), r.sha256)),
+    observationProjection: renders.map(({ pngBase64: _, ...row }) => row), renders };
   const evidenceSha256 = sha256(canonicalBytes(evidence));
-  const fixedBindings = { observationSha256s, routeSha256: policy.routeSha256, ...(artDirectionSha256 ? { artDirectionSha256 } : {}),
+  const fixedBindings = { observationSha256s, routeSha256: policy.routeSha256,
     buildSha256: invocation.current.buildSha256, briefSha256: invocation.current.briefSha256,
     browserSha256: sha256(readArtifact(root, '.omd/decision-graph.json')), evidenceSha256, measurements, reviewPolicySha256: digest(policy), reviewProfile: reviewProfileBinding('blindLane'),
-    ...(process ? { processBindingSha256: digest(process.binding) } : {}) };
+    processBindingSha256: digest(process.binding) };
   return canonicalBytes({ schema: MEASURED_REVIEW_TRANSPORT, evidenceSha256, evidence, outputContract: {
     schema: MEASURED_REVIEW_HANDBACK, lane: 'blindLane', laneSchema: 'measured-blind-review-v1',
     verdictKeys: ['blindVisual', 'blindNarrative', ...(benchmark ? ['interactionBenchmarkFit', 'domainSpecificity'] : []), ...(route.projectMode === 'greenfield' ? ['realityFit'] : [])],
     criticalFloorKeys: ['composition', 'copy', ...(benchmark ? ['interactionQuality'] : [])],
     designQuality: { schema: 'design-quality-contract-v2', axes: MEASURED_DESIGN_QUALITY_AXES, floors: MEASURED_DESIGN_QUALITY_FLOORS, requiredMetricKinds: AXIS_METRICS,
       advisoryDispositionContract: measuredAdvisoryDispositionContract(context, measurements) },
-    reviewerFields: ['schema', 'lane', 'verdicts', 'criticalFloors', 'designQuality', ...(process?.plan ? ['surfaceReview'] : []), ...Object.keys(fixedBindings), 'findings'], fixedBindings,
+    reviewerFields: ['schema', 'lane', 'verdicts', 'criticalFloors', 'designQuality', ...Object.keys(fixedBindings), 'findings'], fixedBindings,
   } });
 }
