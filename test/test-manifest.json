@@ -36,6 +36,7 @@
       "test/domain-brief.test.ts",
       "test/eval-harness.test.ts",
       "test/expression-review.test.ts",
+      "test/figma-completion.test.ts",
       "test/figma-diff.test.ts",
       "test/figma-responsive.test.ts",
       "test/first-render-baseline.test.ts",
