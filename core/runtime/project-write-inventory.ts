@@ -94,6 +94,7 @@ const GUARD_ENTRYPOINTS = [
   'writeProjectFile',
   'writeImmutableProjectFile',
   'replaceProjectFileAtomically',
+  'preflightProjectFileMutation',
   'createProjectDirectory',
   'createProjectWriteAdapter',
 ] as const;

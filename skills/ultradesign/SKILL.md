@@ -59,6 +59,17 @@ Internal guides, read only when they apply (`omd pack <path>`): `guides/referenc
 
 ## Default native Pi workflow
 
+Before styling, state the task contract: audience/expertise, task frequency, input modes,
+density need, locale, and representative content. When structure is uncertain, explore
+alternatives that differ in information structure or interaction model, not recolors.
+Build with realistic fixtures first: long names and strings, empty/error/loading states,
+and localized text. Give motion a purpose and frequency budget; keep it interruptible and
+respect reduced motion. Judge craft that screenshots miss, including focus return, repeated
+toggles, and interrupted transitions. After a regressed review, run
+`omd first-render restore --json` instead of patching forward. If the loop reports
+`FIRST_RENDER_LOOP_STALLED`, restore the best iteration, stop repairing, and report the
+remaining findings with both captures. Details: `omd pack protocol/first-render-repair-loop.md`.
+
 The host defaults to model-led design. Understand the whole request, inspect the existing project,
 inspect strong finished-product visual references before inventing a new visual direction,
 use domain research where it helps, then build with ordinary scoped tools.

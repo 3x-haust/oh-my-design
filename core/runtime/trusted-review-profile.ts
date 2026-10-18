@@ -1,5 +1,8 @@
 import { loadRoleProfile } from '../brief/profiles.ts';
-import { WORDS_TYPE_FLOW_REVIEW_CHECKLIST } from './reviewer-task-checklist.ts';
+import {
+  REVIEWER_ITERATION_DISCIPLINE_CHECKLIST,
+  WORDS_TYPE_FLOW_REVIEW_CHECKLIST,
+} from './reviewer-task-checklist.ts';
 export type ProfileReviewLane = 'blindLane' | 'fidelityLane' | 'protocolLane';
 export function trustedReviewProfile(lane: ProfileReviewLane) {
   return loadRoleProfile('omd-eye', { blindLane: 'production-visual', fidelityLane: 'fidelity', protocolLane: 'protocol' }[lane]);
@@ -14,6 +17,7 @@ export function measuredReviewerTask(lane: ProfileReviewLane): string {
     : 'Audit the native evidence, current source bindings, and publication protocol; do not replace deterministic checks with a judgment.';
   // Exactly one trusted profile body reaches the isolated task. Its digest also binds the system
   // identity, packet fixed fields and configuration; untrusted document prose cannot replace it.
-  const checklist = lane === 'blindLane' ? ` ${WORDS_TYPE_FLOW_REVIEW_CHECKLIST}` : '';
+  const checklist = lane === 'blindLane'
+    ? ` ${WORDS_TYPE_FLOW_REVIEW_CHECKLIST} ${REVIEWER_ITERATION_DISCIPLINE_CHECKLIST}` : '';
   return `${task}${checklist} Assess every supplied required view/state. Return exactly the embedded output contract.\n\n${profile.source}`;
 }

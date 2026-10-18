@@ -344,6 +344,32 @@ function cmdLighthouse(opts: Opts): never {
 
 async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<never> {
   const nativePiInvocation = currentNativePiInvocation();
+  if (mode === 'restore') {
+    if (opts._.length > 0 || opts.iteration !== undefined && typeof opts.iteration !== 'string'
+      || Object.keys(opts).some(key => !['_', 'iteration', 'json', 'activation'].includes(key))) {
+      throw new Error('usage: omd first-render restore [--iteration <id>] [--json]');
+    }
+    const invocation = invocationFromActivation(opts, 'omd first-render restore');
+    const { readPersistedRoute } = await import('../../core/route/index.ts');
+    const { isModelLedProcess } = await import('../../core/route/process-policy.ts');
+    const { restoreFirstRenderIteration } = await import('../../core/design/first-render-checkpoint.ts');
+    const route = readPersistedRoute(process.cwd(), invocation);
+    if (!isModelLedProcess(route.sourceContract)) throw new Error('MODEL_LED_WORKFLOW_REQUIRED');
+    const restored = restoreFirstRenderIteration({
+      root: process.cwd(),
+      route,
+      ...(opts.iteration === undefined ? {} : { iterationId: opts.iteration }),
+      writer: projectWriter(invocation),
+      invocation,
+    });
+    if (opts.json) process.stdout.write(JSON.stringify(restored));
+    else {
+      console.log(`first render restored: iteration ${restored.iterationId}; ${restored.changed} changed`);
+      for (const path of restored.written) console.log(`  write ${path}`);
+      for (const path of restored.removed) console.log(`  remove ${path}`);
+    }
+    process.exit(0);
+  }
   if (mode === 'review') {
     const { runFirstRenderReview } = await import('../../core/design/first-render-review.ts');
     const reviewed = await runFirstRenderReview(process.cwd(), invocationFromActivation(opts, 'omd first-render review'));
@@ -412,7 +438,13 @@ export async function runInspection(args: string[]): Promise<never> {
   }
   if (command === 'lighthouse') return cmdLighthouse(parseArgs(args.slice(1)));
   if (command === 'first-render') {
-    if (sub !== 'check' && sub !== 'review') return unknown(command, sub);
+    if (sub !== 'check' && sub !== 'review' && sub !== 'restore') return unknown(command, sub);
+    if (args.includes('--help')) {
+      console.log(sub === 'restore'
+        ? 'omd first-render restore [--iteration <id>] [--json]'
+        : `omd first-render ${sub} ${sub === 'check' ? '--page <local-build.html> ' : ''}[--json]`);
+      process.exit(0);
+    }
     return cmdFirstRender(sub, parseArgs(args.slice(2)));
   }
   if (command === 'measure') {

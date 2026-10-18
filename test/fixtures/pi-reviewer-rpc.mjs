@@ -120,8 +120,25 @@ function handback(packet) {
     };
   }
   if (contract.lane === 'firstRender') {
-    const revise = mode === 'early-revise' || mode === 'early-reframe';
+    const findingId = process.env.PI_REVIEWER_FIXTURE_FINDING_ID || 'primary-action';
+    const progressVerdict = mode === 'early-progress-improved' ? 'improved'
+      : mode === 'early-progress-same' ? 'same'
+      : mode === 'early-progress-regressed' ? 'regressed'
+      : mode === 'early-progress-different' ? 'different-not-better'
+      : 'improved';
+    const revise = mode === 'early-revise' || mode === 'early-reframe'
+      || mode.startsWith('early-progress-');
     const reframe = mode === 'early-reframe';
+    const findings = reframe ? ['beautyDesirability', 'hierarchyComposition'].map(axis => ({
+      id: axis, viewport: 'both', axis, repairScope: 'composition',
+      observation: 'The current grouping loses the intended work-object hierarchy.',
+      consequence: 'The surface does not convey the approved relationship.',
+      repairCriterion: 'Make the work-object hierarchy legible in the intended visual direction.',
+    })) : revise ? [{
+      id: findingId, viewport: 'mobile', axis: 'usability', repairScope: mode === 'early-reframe' ? 'composition' : 'surface',
+      observation: 'Primary action label wraps.',
+      consequence: 'The action is hard to read.', repairCriterion: 'Keep the complete action label readable.',
+    }] : [];
     return {
       schema: contract.schema, fixedBindings: contract.fixedBindings,
       decision: mode === 'early-reframe' ? 'reframe' : revise ? 'revise' : 'retain',
@@ -138,22 +155,28 @@ function handback(packet) {
         observation: 'Offline fixture tests the capture-bound contract, not aesthetic quality.',
         consequence: 'The fixture checks complete axis coverage.',
       }))),
-      findings: reframe ? ['beautyDesirability', 'hierarchyComposition'].map(axis => ({
-        id: axis, viewport: 'both', axis, repairScope: 'composition',
-        observation: 'The current grouping loses the intended work-object hierarchy.',
-        consequence: 'The surface does not convey the approved relationship.',
-        repairCriterion: 'Make the work-object hierarchy legible in the intended visual direction.',
-      })) : revise ? [{
-        id: 'primary-action', viewport: 'mobile', axis: 'usability', repairScope: mode === 'early-reframe' ? 'composition' : 'surface',
-        observation: 'Primary action label wraps.',
-        consequence: 'The action is hard to read.', repairCriterion: 'Keep the complete action label readable.',
-      }] : [],
-      resolvedFindings: revise ? [] : packet.evidence.priorCriteria.map(finding => ({
+      findings,
+      resolvedFindings: packet.evidence.priorCriteria
+        .filter(finding => !revise || !findings.some(current => current.id === finding.id))
+        .map(finding => ({
         id: finding.id, evidence: packet.evidence.renders
           .filter(render => finding.viewport === 'both' || finding.viewport === render.viewport)
           .map(render => ({ viewport: render.viewport, captureSha256: render.captureSha256,
             observation: 'The current action label is readable without wrapping.' })),
       })),
+      ...(packet.evidence.previousIterationRenders === undefined ? {} : {
+        progress: {
+          verdict: progressVerdict,
+          comparisons: packet.evidence.renders.map(render => ({
+            viewport: render.viewport,
+            previousCaptureSha256: packet.evidence.previousIterationRenders
+              .find(previous => previous.viewport === render.viewport).captureSha256,
+            currentCaptureSha256: render.captureSha256,
+            observation: 'The current and immediately previous captures were compared at the same viewport.',
+          })),
+          findingIds: progressVerdict === 'regressed' ? findings.map(finding => finding.id) : [],
+        },
+      }),
     };
   }
   if (contract.schema === 'reference-zone-reviewer-handback-v1') {

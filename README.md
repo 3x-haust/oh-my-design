@@ -138,7 +138,7 @@ omd route starter|validate|classify|show|check
 omd schema list | omd schema <allowlisted-name>
 omd stage next
 omd guard production|completion
-omd first-render check|review
+omd first-render check|review|restore
 ```
 
 Reference subcommands:

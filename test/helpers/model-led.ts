@@ -84,11 +84,12 @@ export function createModelLedRouteContext(
   options: Readonly<{
     calibration?: DeveloperEvaluationSnapshot;
     current?: ProjectRunInvocation['current'];
+    host?: NativePiHost;
   }> = {},
 ) {
   const invocation = createTestNativePiInvocation({
     root,
-    host,
+    host: options.host ?? host,
     current: options.current ?? {
       buildSha256: hash('build'),
       loadedSkillSha256: hash('skill'),

@@ -720,6 +720,16 @@ function withProjectMutationLock<T>(projectRoot: string, invocation: ProjectRunI
   try { return operation(); } finally { release(); }
 }
 
+/** Validate a guarded file target and all real ancestors without mutating the project. */
+export function preflightProjectFileMutation(request: ProjectLockRequest): string {
+  assertRoleModeWrite(request.projectRoot, request.invocation, request.relativePath);
+  requireGuardedProjectWrite(request.projectRoot, request.invocation);
+  const target = resolveProjectPath(request.projectRoot, request.relativePath);
+  requireRealProjectAncestors(request.projectRoot, target);
+  requireRegularProjectLeafOrMissing(target, 'project mutation target');
+  return target;
+}
+
 /** Atomically replace a mutable pointer after its immutable target is durable. */
 export function replaceProjectFileAtomically(request: ProjectWriteRequest): string {
   assertRoleModeWrite(request.projectRoot, request.invocation, request.relativePath);

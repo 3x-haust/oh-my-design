@@ -26,6 +26,7 @@ export interface Opts {
   output?: string;
   agent?: string;
   candidate?: string;
+  iteration?: string;
   stack?: string;
   viewport?: string;
   checkpoint?: string;

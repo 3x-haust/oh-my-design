@@ -2,10 +2,14 @@ import { canonicalJson } from '../ref/board-artifacts.ts';
 import { piDigest, piRecord, piText } from '../../adapters/pi-reviewer-contract.ts';
 import { DESIGN_QUALITY_AXES, type DesignQualityAxis } from '../evidence/final-v2-design-quality.ts';
 import { parseReferenceComparisons, type FirstRenderReferenceCapture, type FirstRenderReferenceComparison } from './first-render-reference-comparison.ts';
-import { WORDS_TYPE_FLOW_REVIEW_CHECKLIST } from '../runtime/reviewer-task-checklist.ts';
+import {
+  REVIEWER_ITERATION_DISCIPLINE_CHECKLIST,
+  WORDS_TYPE_FLOW_REVIEW_CHECKLIST,
+} from '../runtime/reviewer-task-checklist.ts';
 
-export const FIRST_RENDER_REVIEW_TRANSPORT = 'first-render-reviewer-transport-v2';
-export const FIRST_RENDER_REVIEW_HANDBACK = 'first-render-reviewer-handback-v3';
+export const FIRST_RENDER_REVIEW_TRANSPORT = 'first-render-reviewer-transport-v3';
+export const FIRST_RENDER_REVIEW_HANDBACK = 'first-render-reviewer-handback-v4';
+export const LEGACY_FIRST_RENDER_REVIEW_HANDBACK = 'first-render-reviewer-handback-v3';
 export const FIRST_RENDER_REPAIR_SCOPES = ['direction', 'composition', 'type', 'copy', 'surface'] as const;
 export const LEGACY_FIRST_RENDER_REVIEW_TASK = [
   'Inspect both anonymous fixed desktop and mobile images as an early design checkpoint, not a completed product.',
@@ -30,12 +34,16 @@ export const LEGACY_FIRST_RENDER_REVIEW_TASK = [
 export const LEGACY_FIRST_RENDER_REVIEW_TASK_V4 = LEGACY_FIRST_RENDER_REVIEW_TASK + ' '
   + 'For each primary consulted original, complete every supplied referenceComparisons binding. Describe its whole sourceIdentity before evaluating the current production viewport. Assess actual typography (family character, weight, scale and line rhythm), macro proportions, grouping, density and control anatomy, not merely list/detail structure. Report preservedTraits and every material departure; distinguish destination-required departures from invented restyling. A desktop source can inform visual character on mobile but does not prove its responsive behavior. Pass only when the visible source system is recognizably reproduced within explicit destination constraints; fail or insufficient requires current localized findingIds and cannot retain. Comparison-only means no source admission or human approval, not permission to ignore fidelity. Supplemental references have limited jobs and do not override the primary. Keep this comparison separate from absolute beauty and repair progress.'
   + 'Make repair criteria describe the visible content relationship that must change and the task facts or working relationships that must survive, rather than prescribe a cosmetic recipe. For example, require a price, its billing unit and the corresponding plan action to remain clearly associated and comparable, not a particular font size, card count or accent. Distinguish the observed failure from a suspected cause; do not require a wholesale rewrite for a local defect or accept token polish when the composition is the failure. Judge the integrated current pixels after repair, not effort, novelty or an isolated attractive component; do not infer business impact from a visual preference.';
-export const FIRST_RENDER_REVIEW_TASK = `${LEGACY_FIRST_RENDER_REVIEW_TASK_V4} ${WORDS_TYPE_FLOW_REVIEW_CHECKLIST}`;
+export const LEGACY_FIRST_RENDER_REVIEW_TASK_V5 =
+  `${LEGACY_FIRST_RENDER_REVIEW_TASK_V4} ${WORDS_TYPE_FLOW_REVIEW_CHECKLIST}`;
+export const FIRST_RENDER_REVIEW_TASK =
+  `${LEGACY_FIRST_RENDER_REVIEW_TASK_V5} ${REVIEWER_ITERATION_DISCIPLINE_CHECKLIST}`;
 
 export function firstRenderReviewTaskForSchema(schema: string): string | null {
   if (schema === 'first-render-review-v3') return LEGACY_FIRST_RENDER_REVIEW_TASK;
   if (schema === 'first-render-review-v4') return LEGACY_FIRST_RENDER_REVIEW_TASK_V4;
-  if (schema === 'first-render-review-v5') return FIRST_RENDER_REVIEW_TASK;
+  if (schema === 'first-render-review-v5') return LEGACY_FIRST_RENDER_REVIEW_TASK_V5;
+  if (schema === 'first-render-review-v6') return FIRST_RENDER_REVIEW_TASK;
   return null;
 }
 
@@ -59,11 +67,22 @@ export type FirstRenderResolution = Readonly<{
   id: string;
   evidence: readonly (FirstRenderCaptureBinding & Readonly<{ observation: string }>)[];
 }>;
+export type FirstRenderProgress = Readonly<{
+  verdict: 'improved' | 'same' | 'regressed' | 'different-not-better';
+  comparisons: readonly Readonly<{
+    viewport: 'desktop' | 'mobile';
+    previousCaptureSha256: string;
+    currentCaptureSha256: string;
+    observation: string;
+  }>[];
+  findingIds: readonly string[];
+}>;
 export type FirstRenderReview = Readonly<{
   decision: 'retain' | 'revise' | 'reframe';
   qualityAssessments: readonly FirstRenderQualityAssessment[];
   findings: readonly FirstRenderFinding[];
   resolvedFindings: readonly FirstRenderResolution[];
+  progress: FirstRenderProgress | null;
   referenceComparisons?: readonly FirstRenderReferenceComparison[];
 }>;
 export type FirstRenderReviewBindings = Readonly<{
@@ -124,13 +143,17 @@ export function parseFirstRenderReview(
   captures: readonly FirstRenderCaptureBinding[],
   references?: readonly FirstRenderReferenceCapture[],
   legacy = false,
+  previousCaptures?: readonly FirstRenderCaptureBinding[],
+  expectedSchema = legacy ? 'first-render-reviewer-handback-v2' : FIRST_RENDER_REVIEW_HANDBACK,
 ): FirstRenderReview {
   const input = piRecord(value, 'first-render-review');
   const comparisonRequired = !legacy && bindings.consultedReferencesSha256 !== undefined;
+  const progressRequired = previousCaptures !== undefined;
   if (comparisonRequired && input.referenceComparisons === undefined) return fail('reference comparison coverage');
   exact(input, ['schema', 'fixedBindings', 'decision', 'qualityAssessments', 'findings', 'resolvedFindings',
+    ...(progressRequired ? ['progress'] : []),
     ...(comparisonRequired ? ['referenceComparisons'] : [])]);
-  if (input.schema !== (legacy ? 'first-render-reviewer-handback-v2' : FIRST_RENDER_REVIEW_HANDBACK)
+  if (input.schema !== expectedSchema
     || canonicalJson(input.fixedBindings) !== canonicalJson(bindings)) return fail('evidence bindings changed');
   if (input.decision !== 'retain' && input.decision !== 'revise' && input.decision !== 'reframe') return fail('decision');
   const findings = parseFirstRenderFindings(input.findings);
@@ -185,9 +208,42 @@ export function parseFirstRenderReview(
   }
   const reframe = findings.some(finding => finding.repairScope === 'direction' || finding.repairScope === 'composition');
   if ((input.decision === 'reframe') !== reframe) return fail('direction or composition repair requires reframe');
+  const progress = progressRequired ? (() => {
+    const row = piRecord(input.progress, 'first-render-progress');
+    exact(row, ['verdict', 'comparisons', 'findingIds']);
+    if (row.verdict !== 'improved' && row.verdict !== 'same' && row.verdict !== 'regressed'
+      && row.verdict !== 'different-not-better') return fail('progress verdict');
+    if (!Array.isArray(row.comparisons) || row.comparisons.length !== 2) return fail('progress capture coverage');
+    const comparisons = row.comparisons.map(value => {
+      const comparison = piRecord(value, 'first-render-progress-comparison');
+      exact(comparison, ['viewport', 'previousCaptureSha256', 'currentCaptureSha256', 'observation']);
+      const current = captures.find(capture => capture.viewport === comparison.viewport
+        && capture.captureSha256 === comparison.currentCaptureSha256);
+      const previous = previousCaptures.find(capture => capture.viewport === comparison.viewport
+        && capture.captureSha256 === comparison.previousCaptureSha256);
+      if (current === undefined || previous === undefined) return fail('progress capture binding');
+      return {
+        viewport: current.viewport,
+        previousCaptureSha256: previous.captureSha256,
+        currentCaptureSha256: current.captureSha256,
+        observation: piText(comparison.observation, 'progress-observation'),
+      };
+    });
+    if (new Set(comparisons.map(comparison => comparison.viewport)).size !== 2) return fail('progress capture coverage');
+    if (!Array.isArray(row.findingIds)
+      || row.findingIds.some(id => typeof id !== 'string' || !id.trim())
+      || new Set(row.findingIds).size !== row.findingIds.length
+      || row.findingIds.some(id => !findings.some(finding => finding.id === id))) return fail('progress finding binding');
+    if (row.verdict === 'regressed' && row.findingIds.length === 0) return fail('regressed progress requires a localized finding');
+    return {
+      verdict: row.verdict,
+      comparisons,
+      findingIds: [...row.findingIds] as string[],
+    } satisfies FirstRenderProgress;
+  })() : null;
   for (const [key, value] of Object.entries(bindings)) {
     if (key !== 'previousReviewSha256' || value !== null) piDigest(value, `binding-${key}`);
   }
-  return { decision: input.decision, qualityAssessments, findings, resolvedFindings,
+  return { decision: input.decision, qualityAssessments, findings, resolvedFindings, progress,
     ...(referenceComparisons === undefined ? {} : { referenceComparisons }) };
 }
