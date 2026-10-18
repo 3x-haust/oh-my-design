@@ -10,12 +10,14 @@ import { FIRST_RENDER_REVIEW_TASK, FIRST_RENDER_REVIEW_TRANSPORT,
 import { FIGMA_FIDELITY_REVIEW_HANDBACK, FIGMA_FIDELITY_REVIEW_TASK,
   FIGMA_FIDELITY_REVIEW_TRANSPORT } from '../core/figma/review-contract.ts';
 import { validateFirstRenderBaselineImages } from '../core/design/first-render-baseline.ts';
+import { checkFirstRenderEvidence } from '../core/design/first-render-evidence.ts';
 import { consultedReferenceProjection } from '../core/design/consulted-references.ts';
 import { nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
 import { REFERENCE_DIRECTION_REVIEWER_TASK } from '../core/ref/reference-direction-admission.ts';
 import { REFERENCE_ZONE_REVIEWER_TASK, REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA,
   REFERENCE_ZONE_REVIEWER_HANDBACK_SCHEMA } from '../core/ref/reference-zone-admission.ts';
 import { loadReviewPolicy } from '../core/measure/review-policy.ts';
+import { loadMeasurement } from '../core/measure/files.ts';
 import { policyLane } from './measured-reviewer-publication.ts';
 import { MEASURED_REVIEW_TRANSPORT } from '../core/runtime/trusted-measured-review.ts';
 import { measuredReviewerTask, reviewProfileBinding } from '../core/runtime/trusted-review-profile.ts';
@@ -96,7 +98,17 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
     || piDigest(fixed.compareSha256, 'figma-compare-sha') !== fixed.compareSha256)) {
     throw new PiReviewerError('figma-fidelity-binding');
   }
+  if (input.lane === 'firstRender') {
+    const current = checkFirstRenderEvidence(input.root, 'review', input.invocation);
+    const diagnostics = current === null ? null : loadMeasurement(input.root, current.measurements[0]!).findings;
+    if (diagnostics === null || canonicalJson(evidence.measurementDiagnostics) !== canonicalJson(diagnostics)) {
+      throw new PiReviewerError('first-render-diagnostics-drift');
+    }
+  }
   if (input.lane !== 'firstRender' && evidence.priorRenders !== undefined) throw new PiReviewerError('packet-prior-renders');
+  if (input.lane !== 'firstRender' && evidence.previousIterationRenders !== undefined) {
+    throw new PiReviewerError('packet-previous-iteration-renders');
+  }
   if (evidence.feedbackRenders !== undefined && input.lane !== 'firstRender') throw new PiReviewerError('packet-feedback-renders');
   if (evidence.consultedReferenceRenders !== undefined && input.lane !== 'firstRender')
     throw new PiReviewerError('packet-consulted-reference-renders');
@@ -121,7 +133,20 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
         throw new PiReviewerError('packet-feedback-image-drift');
     }
   }
-  const images = [evidence.renders, evidence.referenceRenders, evidence.priorRenders, feedbackImages, consultedImages].flatMap(rows => rows === undefined ? []
+  const previousIterationImages = evidence.previousIterationRenders === undefined ? [] : evidence.previousIterationRenders;
+  if (!Array.isArray(previousIterationImages)) throw new PiReviewerError('packet-previous-iteration-images');
+  if (previousIterationImages.length !== 0 && previousIterationImages.length !== 2) {
+    throw new PiReviewerError('packet-previous-iteration-images');
+  }
+  for (const image of previousIterationImages) {
+    const row = piRecord(image, 'previous-iteration-image');
+    const bytes = Buffer.from(piText(row.pngBase64, 'previous-iteration-png'), 'base64');
+    if (row.role !== 'previous-iteration' || piHash(bytes) !== piDigest(row.captureSha256, 'previous-iteration-image-sha')) {
+      throw new PiReviewerError('packet-previous-iteration-image-drift');
+    }
+  }
+  const images = [evidence.renders, evidence.referenceRenders, evidence.priorRenders,
+    previousIterationImages, feedbackImages, consultedImages].flatMap(rows => rows === undefined ? []
     : Array.isArray(rows) ? rows : (() => { throw new PiReviewerError('packet-renders'); })());
   for (const image of images) piText(piRecord(image, 'packet-render').pngBase64, 'packet-png');
   if (input.lane === 'blindLane' && images.length < 2
@@ -133,12 +158,17 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
       throw new PiReviewerError('legacy-candidate-target-unsupported');
     }
     const pairs = [evidence.renders];
-    if (images.length !== pairs.length * 2 + baselineImages + feedbackImages.length + consultedImages.length || pairs.some(pair => !Array.isArray(pair) || pair.length !== 2
+    if (images.length !== pairs.length * 2 + baselineImages + previousIterationImages.length
+      + feedbackImages.length + consultedImages.length || pairs.some(pair => !Array.isArray(pair) || pair.length !== 2
       || pair.some((image, index) => {
         const row = piRecord(image, 'first-render-image');
         return row.viewport !== (index === 0 ? 'desktop' : 'mobile')
           || row.width !== (index === 0 ? 1280 : 390) || row.height !== (index === 0 ? 900 : 844);
-      }))) throw new PiReviewerError('first-render-viewports');
+      })) || previousIterationImages.some((image, index) => {
+        const row = piRecord(image, 'first-render-previous-image');
+        return row.viewport !== (index === 0 ? 'desktop' : 'mobile')
+          || row.width !== (index === 0 ? 1280 : 390) || row.height !== (index === 0 ? 900 : 844);
+      })) throw new PiReviewerError('first-render-viewports');
   }
   return { packetSha256: piHash(input.packet), evidenceSha256: piDigest(packet.evidenceSha256, 'packet-evidence-sha'),
     browserSha256: input.lane === 'referenceAdmission' ? piDigest(fixed.captureSetSha256, 'packet-capture-set-sha')

@@ -11,7 +11,7 @@ export const AXIS_METRICS = Object.freeze({
   beautyDesirability: ['type-ladder', 'spacing-rhythm', 'canvas-color', 'salience-regions'],
   domainSpecificity: ['first-viewport-density', 'contract-conformance'],
   humanAuthorship: ['salience-regions', 'type-ladder'],
-  usability: ['clipping-overflow', 'control-word-wrap', 'line-lengths'],
+  usability: ['clipping-overflow', 'control-word-wrap', 'control-accessibility', 'line-lengths'],
   responsiveCraft: ['cross-viewport-order', 'clipping-overflow', 'control-word-wrap'],
 } satisfies Record<string, readonly MetricKind[]>);
 export type MeasuredAxis = keyof typeof AXIS_METRICS;

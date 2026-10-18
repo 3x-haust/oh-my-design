@@ -38,7 +38,41 @@ before choosing the work; never ask the user which mode to use.
 Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`,
 `guides/figma.md`, `guides/copy.md`, `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
 
+## Words, type, and flow ship with the pixels
+
+- Labels state the immediate next step and true commitment; never call a preview a booking,
+  or soften a real payment, send, publish, or delete.
+- Errors say what happened and how to recover beside the affected field; preserve entered data.
+- Design applicable loading, empty, error, success, and disabled states as distinct conditions.
+- Use one term per concept and one intentional speech level per product speaker; do not copy
+  another service's branded vocabulary or use 해요체 to pretend the service is human.
+- Remove filler and automatic title-plus-subtitle pairs; supporting copy must add a constraint,
+  consequence, evidence, or recovery cue.
+- Build semantic type roles from body text first with a compact scale and role-specific leading.
+- For Korean labels/headings prefer word-preserving wraps; judge prose measure in rendered pixels,
+  do not apply Latin caps tracking to Hangul, and use tabular numerals where numbers compare.
+- Give a step one dominant action when the task has one; equal choices and independent regions
+  may legitimately have peers.
+- Keep keyboard focus visible, pointer targets at least 24px or within a WCAG exception, and
+  every form control persistently labelled rather than relying on a placeholder.
+- Open the exact pack when needed: forms/errors → `omd pack theory/forms.md`; flow/states →
+  `omd pack theory/ux.md`; copy/voice → `omd pack theory/microcopy.md` and
+  `omd pack theory/voice.md`; type → `omd pack theory/typography.md`; Korean UI →
+  `omd pack theory/typography-korean.md`; accessibility → `omd pack theory/accessibility.md`;
+  marketing copy → `omd pack theory/web-copy.md`.
+
 ## Default native Pi workflow
+
+Before styling, state the task contract: audience/expertise, task frequency, input modes,
+density need, locale, and representative content. When structure is uncertain, explore
+alternatives that differ in information structure or interaction model, not recolors.
+Build with realistic fixtures first: long names and strings, empty/error/loading states,
+and localized text. Give motion a purpose and frequency budget; keep it interruptible and
+respect reduced motion. Judge craft that screenshots miss, including focus return, repeated
+toggles, and interrupted transitions. After a regressed review, run
+`omd first-render restore --json` instead of patching forward. If the loop reports
+`FIRST_RENDER_LOOP_STALLED`, restore the best iteration, stop repairing, and report the
+remaining findings with both captures. Details: `omd pack protocol/first-render-repair-loop.md`.
 
 The host defaults to model-led design. Understand the whole request, inspect the existing project,
 inspect strong finished-product visual references before inventing a new visual direction,

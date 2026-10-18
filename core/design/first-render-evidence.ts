@@ -10,6 +10,12 @@ import { canonicalBytes, digest, sha256 } from '../measure/identity.ts';
 import { readArtifact } from '../measure/inputs.ts';
 import type { VisualMeasurement } from '../measure/types.ts';
 import { critiqueMeasuredFirstRender } from './first-render-measurement.ts';
+import { readPersistedRoute } from '../route/index.ts';
+import {
+  assertFirstRenderSourceSnapshotCurrent,
+  collectFirstRenderSourceSnapshot,
+  persistFirstRenderCheckpoint,
+} from './first-render-checkpoint.ts';
 
 const PATH = '.omd/first-render-critic.json';
 const fail = (message: string): never => { throw new Error(`FIRST_RENDER_REQUIRED: ${message}; rerun first-render check --page <local-build.html>`); };
@@ -47,6 +53,8 @@ export async function publishFirstRenderCheck(root: string, page: string, input:
   requireProjectWriteAdapterForInvocation(root, writer, invocation);
   const context = firstRenderContext(root, invocation);
   const modelLed = context.schema === 'model-led-first-render-context-v1';
+  const route = modelLed ? readPersistedRoute(root, invocation) : null;
+  const sourceSnapshot = route === null ? null : collectFirstRenderSourceSnapshot(root, route);
   const hypothesis = context.schema === 'hypothesis-first-render-context-v1' ? context.hypothesis : null;
   const result = await measureProject({ root, entry: page, writer, invocation });
   const packet = loadMeasurement(root, result.packet);
@@ -63,13 +71,29 @@ export async function publishFirstRenderCheck(root: string, page: string, input:
   try {
     loadMeasurement(root, result.packet);
     if (digest(firstRenderContext(root, invocation)) !== digest(context)) return fail('design context changed during capture');
+    if (route !== null && sourceSnapshot !== null) {
+      assertFirstRenderSourceSnapshotCurrent(root, route, sourceSnapshot);
+    }
     for (const capture of reviewCaptures) {
       writer.writeContentAddressed(capture.record.path, readArtifact(root, capture.sourcePath));
     }
     writer.writeContentAddressed(`.omd/first-render/reports/${reportSha256}.json`, body);
+    const iteration = route === null || sourceSnapshot === null ? null : persistFirstRenderCheckpoint({
+      root,
+      route,
+      routeSha256: context.schema === 'model-led-first-render-context-v1' ? context.routeSha256 : fail('model-led route context is missing'),
+      source: sourceSnapshot,
+      reportSha256,
+      captures: reviewCaptures.map(({ record }, index) => ({
+        viewport: index === 0 ? 'desktop' as const : 'mobile' as const,
+        captureSha256: record.sha256,
+      })),
+      writer,
+      invocation,
+    });
     replaceProjectFileAtomically({ projectRoot: root, relativePath: PATH, content: body, invocation });
+    return { ...record, reportSha256, ...(iteration === null ? {} : { iteration }) };
   } finally { unlock(); }
-  return { ...record, reportSha256 };
 }
 /** Historical v2 is inspectable as JSON, but cannot authorize a new measured completion. */
 export function checkFirstRenderEvidence(root: string, purpose: 'review' | 'acceptance' = 'acceptance', invocation?: ProjectRunInvocation) {

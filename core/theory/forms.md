@@ -3,6 +3,32 @@
 A form is a sequence of user input, system interpretation, and recovery states. Validation timing follows what the user has had a fair
 chance to finish, not a blanket event rule.
 
+## Labels, questions, and layout
+
+Every field keeps a persistent visible label and a programmatic name. A placeholder is an
+example or format hint, never the sole label: it disappears during entry, does not reliably
+carry the field's identity through correction, and can be mistaken for a value. The
+accessible name must come from a real naming relationship such as a native label,
+`aria-labelledby`, or an appropriate explicit name; inspect the accessibility tree rather
+than checking one attribute in isolation.
+([GOV.UK UI writing](https://www.gov.uk/service-manual/design/writing-for-user-interfaces),
+[Apple HIG](https://developer.apple.com/design/human-interface-guidelines/writing),
+[WCAG 4.1.2](https://www.w3.org/WAI/WCAG21/Understanding/name-role-value))
+
+Ask only for information the task needs. Labels name the information; help text explains a
+constraint, reason, or example only when it changes successful entry. Mark the smaller set
+of required or optional fields consistently. GOV.UK recommends starting with less and adding
+help only where research shows need; Baymard's required/optional and multi-column findings
+are checkout evidence, not universal form laws.
+([GOV.UK questions](https://www.gov.uk/service-manual/design/designing-good-questions),
+[Baymard required/optional](https://baymard.com/research-articles/required-optional-form-fields),
+[Baymard multi-column](https://baymard.com/research-articles/avoid-multi-column-forms))
+
+Use one scanning direction for long or unfamiliar forms. Side-by-side fields are appropriate
+when their relationship is obvious, their labels remain readable, and narrow reflow preserves
+that relationship. Do not turn “single column” into a ban on compact date parts, paired ranges,
+or short fields that are understood together.
+
 ## Field state table
 
 | State | Entry condition | What the UI shows | Validation and announcement |
@@ -114,6 +140,14 @@ After an invalid submit:
    `aria-invalid="true"` while the error applies.
 6. On resubmit, rebuild the summary from current errors. Don't retain links to corrected fields.
 
+This error-summary pattern is strongest when several errors can occur. A single local error can
+stay beside its field if focus, announcement, and recovery remain clear. In all cases, state what
+happened and how to recover, preserve nonsecret input, and avoid exposing a diagnostic cause that
+would create a security or privacy risk.
+([GOV.UK error summary](https://design-system.service.gov.uk/components/error-summary/),
+[GOV.UK error message](https://design-system.service.gov.uk/components/error-message/),
+[NN/G form errors](https://www.nngroup.com/articles/errors-forms-design-guidelines/))
+
 ## Field count and step count are heuristics
 
 The checkout dataset cited in `ux.md` reports an average checkout with 23.48 form elements and
@@ -143,3 +177,5 @@ claim with its own evidence.
 - Baymard Institute, checkout field-count research and "Avoid Extensive Multi-column Layouts",
   with the scope limitation stated above
 - Nielsen Norman Group, form design and error-message guidance
+- Apple Human Interface Guidelines, Writing
+- GOV.UK Service Manual and Design System, question pages and error patterns

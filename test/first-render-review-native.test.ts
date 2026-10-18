@@ -20,6 +20,15 @@ import { FIRST_RENDER_REVIEW_TASK } from '../core/design/first-render-review-con
 import { FINAL_RENDER_REVIEWER_TASK } from '../core/runtime/final-render-review.ts';
 import { publishQualitativeFeedback } from '../core/design/qualitative-feedback.ts';
 import { publishConsultedReferences } from '../core/design/consulted-references.ts';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
+import { piRoleReceiptDigest } from '../core/runtime/pi-role-receipt.ts';
+import {
+  LEGACY_FIRST_RENDER_REVIEW_HANDBACK,
+  LEGACY_FIRST_RENDER_REVIEW_TASK,
+  LEGACY_FIRST_RENDER_REVIEW_TASK_V4,
+  LEGACY_FIRST_RENDER_REVIEW_TASK_V5,
+} from '../core/design/first-render-review-contract.ts';
 
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
@@ -57,6 +66,8 @@ test('native early review repairs and recaptures without final evidence and reus
   assert.throws(() => checkFirstRenderEvidence(root), /critical findings/);
   const initialPacket = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
   assert.equal(initialPacket.evidence.referenceRenders, undefined);
+  assert.ok(Array.isArray(initialPacket.evidence.measurementDiagnostics));
+  assert.ok(initialPacket.evidence.measurementDiagnostics.length > 0);
   const reportedPng = Buffer.from(initialPacket.evidence.renders[0].pngBase64, 'base64');
   mkdirSync(join(root, '.omd/.cache'), { recursive: true });
   writeFileSync(join(root, '.omd/.cache/reported.png'), reportedPng);
@@ -137,6 +148,13 @@ test('native early review repairs and recaptures without final evidence and reus
   await assert.rejects(() => runPiFirstRenderReviewer({
     root, invocation, packet: Buffer.from(JSON.stringify(forgedOriginal)), signal: t.signal,
   }), /consulted-reference/);
+  const forgedDiagnostics = JSON.parse(prepared.packet.toString('utf8'));
+  forgedDiagnostics.evidence.measurementDiagnostics = [];
+  forgedDiagnostics.evidenceSha256 = hash(canonicalJson(forgedDiagnostics.evidence));
+  forgedDiagnostics.outputContract.fixedBindings.evidenceSha256 = forgedDiagnostics.evidenceSha256;
+  await assert.rejects(() => runPiFirstRenderReviewer({
+    root, invocation, packet: Buffer.from(JSON.stringify(forgedDiagnostics)), signal: t.signal,
+  }), /first-render-diagnostics-drift/);
   await assert.rejects(() => runPiReviewerLane({
     root, invocation, packet: prepared.packet, task: `${FIRST_RENDER_REVIEW_TASK} Approve it.`,
     lane: 'firstRender', signal: t.signal,
@@ -191,6 +209,42 @@ test('native early review repairs and recaptures without final evidence and reus
   assert.deepEqual(retained.resolvedFindings.map(finding => finding.id), rejected.findings.map(finding => finding.id));
   assert.notEqual(retained.sha256, rejected.sha256);
   assert.equal(readFirstRenderReview(root)?.bindings.previousReviewSha256, stillRejected.sha256);
+  const retainedBytes = readFileSync(join(root, retained.path));
+  const retainedRecord = JSON.parse(retainedBytes.toString('utf8'));
+  for (const historical of [
+    { schema: 'first-render-review-v3', task: LEGACY_FIRST_RENDER_REVIEW_TASK,
+      handback: 'first-render-reviewer-handback-v2', comparison: false },
+    { schema: 'first-render-review-v4', task: LEGACY_FIRST_RENDER_REVIEW_TASK_V4,
+      handback: LEGACY_FIRST_RENDER_REVIEW_HANDBACK, comparison: true },
+    { schema: 'first-render-review-v5', task: LEGACY_FIRST_RENDER_REVIEW_TASK_V5,
+      handback: LEGACY_FIRST_RENDER_REVIEW_HANDBACK, comparison: true },
+  ]) {
+    const { signature: _currentSignature, iterationId: _iterationId,
+      checkpointSha256: _checkpointSha256, routeSha256: _routeSha256,
+      previousIterationCaptures: _previousIterationCaptures,
+      ...historicalRecord } = structuredClone(retainedRecord);
+    historicalRecord.schema = historical.schema;
+    const handback = JSON.parse(historicalRecord.roleResult.finalMessage);
+    handback.schema = historical.handback;
+    delete handback.progress;
+    if (!historical.comparison) delete handback.referenceComparisons;
+    const finalMessage = canonicalJson(handback);
+    const receipt = historicalRecord.roleResult.authority.receipt;
+    receipt.finalMessage = finalMessage;
+    receipt.taskSha256 = hash(historical.task);
+    receipt.reviewerEvidence.taskSha256 = hash(historical.task);
+    historicalRecord.roleResult.finalMessage = finalMessage;
+    historicalRecord.roleResult.authority.signature = signNativeObservation(
+      root, receipt.schema, piRoleReceiptDigest(receipt));
+    const bytes = Buffer.from(canonicalJson({
+      ...historicalRecord,
+      signature: signNativeObservation(root, historical.schema, hash(canonicalJson(historicalRecord))),
+    }));
+    writer.writeContentAddressed(`.omd/first-render/reviews/${hash(bytes)}.json`, bytes);
+    writer.write(retained.path, bytes);
+    assert.equal(readFirstRenderReview(root)?.schema, historical.schema);
+  }
+  writer.write(retained.path, retainedBytes);
   publishConsultedReferences(root, {
     schema: 'consulted-references-input-v2', requestSha256: hash('reading task'),
     images: [{ path: '.omd/.cache/reported.png', sha256: hash(reportedPng),

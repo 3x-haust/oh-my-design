@@ -18,6 +18,10 @@ const captures = [
   { viewport: 'desktop' as const, captureSha256: '1'.repeat(64) },
   { viewport: 'mobile' as const, captureSha256: '2'.repeat(64) },
 ];
+const previousCaptures = [
+  { viewport: 'desktop' as const, captureSha256: '3'.repeat(64) },
+  { viewport: 'mobile' as const, captureSha256: '4'.repeat(64) },
+];
 const assessments = () => DESIGN_QUALITY_AXES.flatMap(axis => captures.map(capture => ({
   axis, ...capture, verdict: 'pass',
   observation: 'The work object has clear grouping and readable controls.',
@@ -131,4 +135,52 @@ test('aesthetic failure cannot be compensated by passing functional dimensions',
   assert.throws(() => parseFirstRenderReview(handback({ qualityAssessments }), bindings, [], captures));
   assert.throws(() => parseFirstRenderReview(handback({ qualityAssessments, findings: [beauty], decision: 'revise' }), bindings, [], captures), /reframe/);
   assert.equal(parseFirstRenderReview(handback({ qualityAssessments, findings: [beauty], decision: 'reframe' }), bindings, [], captures).decision, 'reframe');
+});
+
+test('progress is required only with a previous iteration and binds both capture pairs', () => {
+  const progress = {
+    verdict: 'improved',
+    comparisons: captures.map(capture => ({
+      viewport: capture.viewport,
+      previousCaptureSha256: previousCaptures.find(previous => previous.viewport === capture.viewport)?.captureSha256,
+      currentCaptureSha256: capture.captureSha256,
+      observation: 'The current hierarchy is clearer at the same fixed viewport.',
+    })),
+    findingIds: [],
+  };
+  assert.throws(() => parseFirstRenderReview(handback({}), bindings, [], captures, undefined, false,
+    previousCaptures), /missing fields/);
+  assert.equal(parseFirstRenderReview(handback({ progress }), bindings, [], captures, undefined, false,
+    previousCaptures).progress?.verdict, 'improved');
+  assert.throws(() => parseFirstRenderReview(handback({
+    progress: { ...progress, verdict: 'better' },
+  }), bindings, [], captures, undefined, false, previousCaptures), /progress verdict/);
+  assert.throws(() => parseFirstRenderReview(handback({
+    progress: { ...progress, comparisons: progress.comparisons.slice(1) },
+  }), bindings, [], captures, undefined, false, previousCaptures), /progress capture coverage/);
+  assert.throws(() => parseFirstRenderReview(handback({ progress }), bindings, [], captures),
+    /unexpected or missing fields/);
+});
+
+test('regressed progress requires a localized current finding', () => {
+  const progress = {
+    verdict: 'regressed',
+    comparisons: captures.map(capture => ({
+      viewport: capture.viewport,
+      previousCaptureSha256: previousCaptures.find(previous => previous.viewport === capture.viewport)?.captureSha256,
+      currentCaptureSha256: capture.captureSha256,
+      observation: 'The current action is less legible at the same fixed viewport.',
+    })),
+    findingIds: [],
+  };
+  assert.throws(() => parseFirstRenderReview(handback({ progress }), bindings, [], captures,
+    undefined, false, previousCaptures), /localized finding/);
+  const qualityAssessments = assessments().map(row => row.axis === 'usability' && row.viewport === 'mobile'
+    ? { ...row, verdict: 'fail' } : row);
+  assert.equal(parseFirstRenderReview(handback({
+    decision: 'revise',
+    qualityAssessments,
+    findings: [finding],
+    progress: { ...progress, findingIds: [finding.id] },
+  }), bindings, [], captures, undefined, false, previousCaptures).progress?.verdict, 'regressed');
 });

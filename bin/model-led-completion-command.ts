@@ -15,7 +15,15 @@ import { modelLedCompletionFingerprint } from '../core/runtime/model-led-executi
 import { browserFailureDiagnostic, completionErrorDiagnostic, type CompletionDiagnostic, type CompletionPhase } from '../core/runtime/model-led-diagnostics.ts';
 import { parseTrustedLifecycleManifest } from '../core/runtime/trusted-evaluation-contract.ts';
 import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
-import { runFirstRenderReview } from '../core/design/first-render-review.ts';
+import {
+  FIRST_RENDER_REVIEW_PATH,
+  readFirstRenderReview,
+  runFirstRenderReview,
+} from '../core/design/first-render-review.ts';
+import {
+  firstRenderLoopState,
+  firstRenderReviewMatchesCurrentRoute,
+} from '../core/design/first-render-checkpoint.ts';
 import { requireConsultedPrimaryOriginal } from '../core/design/consulted-references.ts';
 import { figmaCompletionIssues, figmaTargetsInRequest } from '../core/figma/completion.ts';
 import { createProjectWriteAdapter } from '../core/runtime/project-write.ts';
@@ -25,7 +33,7 @@ type Verification = Awaited<ReturnType<typeof runNativeVerification>>;
 type Evaluation = Awaited<ReturnType<typeof runNativeEvaluation>>;
 type EvaluationSummary = Pick<Evaluation, 'executionStatus' | 'acceptanceStatus' | 'observationPath' | 'receiptPath'>;
 type FirstRenderSummary = Pick<Awaited<ReturnType<typeof runFirstRenderReview>>,
-  'decision' | 'findings' | 'qualityAssessments' | 'path' | 'sha256'>;
+  'decision' | 'findings' | 'qualityAssessments' | 'path' | 'sha256' | 'progress' | 'captures'>;
 export type ModelLedCompletionResult = Readonly<{
   schema: 'model-led-completion-result-v1';
   meaning: 'native-completion';
@@ -110,18 +118,59 @@ export async function runModelLedCompletion(input: Readonly<{
     cancelled();
     inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
     phase = 'review';
+    const existingFirstRender = readFirstRenderReview(input.root);
+    const existingReviewIsCurrent = existingFirstRender !== null
+      && firstRenderReviewMatchesCurrentRoute(input.root, route, existingFirstRender);
+    if (existingFirstRender !== null && existingReviewIsCurrent) {
+      const loop = firstRenderLoopState(input.root, route);
+      const regressed = existingFirstRender.progress?.verdict === 'regressed';
+      if (loop.stalled || regressed && (!loop.bestRestoreApplied || loop.bestRestored)) {
+        firstRender = {
+          decision: existingFirstRender.decision,
+          findings: existingFirstRender.findings,
+          qualityAssessments: existingFirstRender.qualityAssessments,
+          path: FIRST_RENDER_REVIEW_PATH,
+          sha256: existingFirstRender.sha256,
+          progress: existingFirstRender.progress,
+          captures: existingFirstRender.captures,
+        };
+        const code = loop.stalled ? 'FIRST_RENDER_LOOP_STALLED' : 'FIRST_RENDER_REGRESSED';
+        const message = loop.stalled
+          ? 'The first-render repair loop is stalled. Restore the best iteration and report the remaining findings with both captures to the user instead of continuing.'
+          : loop.bestRestoreApplied
+            ? 'The best first-render iteration is restored. Try a materially different approach before recapturing.'
+            : 'The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach.';
+        return { ...result(false, phase), diagnostic: {
+          ...completionErrorDiagnostic(phase, new CompletionStepError(code, message)),
+          next: loop.bestRestoreApplied ? null : 'omd first-render restore --json',
+          evidencePaths: [FIRST_RENDER_REVIEW_PATH, ...existingFirstRender.captures.map(capture =>
+            `.omd/first-render/captures/${capture.captureSha256}.png`)],
+        } };
+      }
+    }
     await publishFirstRenderCheck(input.root, manifest.entryPath, undefined,
       createProjectWriteAdapter(input.root, input.invocation), input.invocation);
     cancelled();
     const early = await runFirstRenderReview(input.root, input.invocation, input.signal);
     firstRender = { decision: early.decision, findings: early.findings,
-      qualityAssessments: early.qualityAssessments, path: early.path, sha256: early.sha256 };
+      qualityAssessments: early.qualityAssessments, path: early.path, sha256: early.sha256,
+      progress: early.progress, captures: early.captures };
     if (early.decision !== 'retain') {
+      const stalled = early.diagnostic?.code === 'FIRST_RENDER_LOOP_STALLED';
+      const regressed = early.diagnostic?.code === 'FIRST_RENDER_REGRESSED';
+      const code = stalled ? 'FIRST_RENDER_LOOP_STALLED'
+        : regressed ? 'FIRST_RENDER_REGRESSED' : 'FIRST_RENDER_VISUAL_REPAIR';
+      const message = stalled
+        ? 'The first-render repair loop stalled. Restore the best iteration and report the remaining findings with both captures to the user instead of continuing.'
+        : regressed
+          ? 'The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach.'
+          : 'The isolated first-render reviewer requested visual repair. Inspect its current capture-bound findings before full behavior execution; do not replace a whole-system finding with an icon-library swap.';
       return { ...result(false, phase), diagnostic: {
-        ...completionErrorDiagnostic(phase, new CompletionStepError('FIRST_RENDER_VISUAL_REPAIR',
-          'The isolated first-render reviewer requested visual repair. Inspect its current capture-bound findings before full behavior execution; do not replace a whole-system finding with an icon-library swap.')),
-        next: `omd first-render check --page ${manifest.entryPath} --json`,
-        evidencePaths: [early.path],
+        ...completionErrorDiagnostic(phase, new CompletionStepError(code, message)),
+        next: stalled || regressed ? 'omd first-render restore --json'
+          : `omd first-render check --page ${manifest.entryPath} --json`,
+        evidencePaths: [early.path, ...early.captures.map(capture =>
+          `.omd/first-render/captures/${capture.captureSha256}.png`)],
       } };
     }
     cancelled();

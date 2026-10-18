@@ -30,6 +30,7 @@ export type MeasurementDom = {
   viewport: { innerWidth: number; innerHeight: number; clientWidth: number; clientHeight: number; devicePixelRatio: number; visualViewportScale: number; scrollX: number; scrollY: number };
   rootCanvas: RGBA; overflowX: number; eligibleNodes: number; excluded: { subjectId: string; reason: string }[];
   fonts: { ready: boolean; failedFamilies: string[] };
+  accessibility: { subjectId: string; role: string; name: string; placeholder: string | null; persistentName: boolean }[];
   paintSamples: { x: number; y: number; subjectId: string | null }[]; gridStep: number;
 };
 export type MeasuredIr = RawIr & { measurement: MeasurementDom };
@@ -40,9 +41,10 @@ export type CaptureBinding = {
 };
 export type Subject = { id: string; viewId: string; irNodeId: string; locator: string; role: string; box: Box; visibleBox: Box | null; textExcerpt: string | null };
 export type MetricValues = {
-  'type-ladder': { clusters: { minSize: number; maxSize: number; weight: number; families: string[]; leading: (number | 'normal')[]; nodeCount: number; graphemes: number; textArea: number; viewportShare: number; roles: string[]; subjectIds: string[] }[] };
+  'type-ladder': { clusters: { minSize: number; maxSize: number; weight: number; families: string[]; leading: (number | 'normal')[]; tracking: number[]; nodeCount: number; graphemes: number; textArea: number; viewportShare: number; roles: string[]; subjectIds: string[] }[] };
   'text-minimum': { minimumByRole: { role: string; size: number }[]; total: number; under12: number; from12To14: number; under12Area: number; small: { subjectId: string; size: number; role: string; control: string | null; excerpt: string; box: Box }[] };
   'line-lengths': { subjects: { subjectId: string; role: string; script: 'hangul' | 'latin' | 'mixed'; lineCount: number; graphemes: number[]; widths: number[]; em: number[]; p50: number; p95: number; max: number; lastLineShare: number | null }[] };
+  'control-accessibility': { controls: { subjectId: string; role: string; name: string; placeholder: string | null; persistentName: boolean; issue: 'none' | 'missing-name' | 'placeholder-only' }[] };
   'spacing-clusters': { clusters: { value: number; count: number }[]; zeros: number; samples: { subjectId: string; property: string; value: number }[] };
   'spacing-rhythm': { groups: { parentId: string; subjectIds: string[]; gaps: number[]; overlaps: number[]; status: 'measured' | 'insufficient-samples'; median: number | null; mad: number | null; coefficientOfVariation: number | null; offClusterCount: number | null; separationRatio: number | null }[] };
   'contrast-pair': { pairs: { subjectId: string; foreground: RGBA; backdrop: RGBA | null; chain: RGBA[]; size: number; weight: number; ratio: number | null; threshold: number; result: 'pass' | 'fail' | 'unmeasured' | 'not-applicable'; reason: string | null; kind?: 'non-text'; colorRole?: string }[] };
@@ -58,7 +60,7 @@ export type MetricValues = {
 };
 export type MetricKind = keyof MetricValues;
 export type Measurement = { [K in MetricKind]: { id: string; kind: K; viewIds: string[]; subjectIds: string[]; coverage: Coverage; value: MetricValues[K] } }[MetricKind];
-export const FINDING_CODES = ['TYPE_ROLE_SIZE_MISMATCH', 'TYPE_ROLE_WEIGHT_MISMATCH', 'TYPE_ROLE_FAMILY_MISMATCH', 'TYPE_ROLE_UNASSIGNED', 'COLOR_ROLE_MISMATCH', 'CONTRACT_INPUT_CONFLICT', 'CONTRACT_UNMEASURABLE', 'REQUIRED_VIEW_MISSING', 'REQUIRED_CONTROL_CLIPPED', 'REQUIRED_CONTROL_WORD_SPLIT', 'REQUIRED_TARGET_TOO_SMALL', 'TEXT_CONTRAST_FAIL', 'NON_TEXT_CONTRAST_FAIL', 'MEASUREMENT_INCOMPLETE', 'TEXT_UNDER_12', 'SPACING_ROLE_MISMATCH', 'TYPE_ROLE_LEADING_MISMATCH', 'TYPE_ROLE_TRACKING_MISMATCH', 'REQUIRED_OBJECT_MISSING', 'REQUIRED_ORDER_MISMATCH', 'ZOOM_UNSUPPORTED'] as const;
+export const FINDING_CODES = ['TYPE_ROLE_SIZE_MISMATCH', 'TYPE_ROLE_WEIGHT_MISMATCH', 'TYPE_ROLE_FAMILY_MISMATCH', 'TYPE_ROLE_UNASSIGNED', 'COLOR_ROLE_MISMATCH', 'CONTRACT_INPUT_CONFLICT', 'CONTRACT_UNMEASURABLE', 'REQUIRED_VIEW_MISSING', 'REQUIRED_CONTROL_CLIPPED', 'REQUIRED_CONTROL_WORD_SPLIT', 'REQUIRED_TARGET_TOO_SMALL', 'TEXT_CONTRAST_FAIL', 'NON_TEXT_CONTRAST_FAIL', 'MEASUREMENT_INCOMPLETE', 'TEXT_UNDER_12', 'FORM_ACCESSIBLE_NAME_MISSING', 'FORM_PLACEHOLDER_ONLY_LABEL', 'KOREAN_BODY_TRACKING', 'SPACING_ROLE_MISMATCH', 'TYPE_ROLE_LEADING_MISMATCH', 'TYPE_ROLE_TRACKING_MISMATCH', 'REQUIRED_OBJECT_MISSING', 'REQUIRED_ORDER_MISMATCH', 'ZOOM_UNSUPPORTED'] as const;
 export type FindingCode = typeof FINDING_CODES[number];
 export type Finding = { id: string; issueKey: string; code: FindingCode; axes: string[]; severity: 'blocking' | 'advisory'; basis: 'contract' | 'accessibility' | 'heuristic' | 'coverage'; viewIds: string[]; subjectIds: string[]; measurementIds: string[]; expected: { field: string; value: string } | null; observed: { value: string } | null };
 export type VisualMeasurement = {

@@ -27,7 +27,7 @@ export function printUsage(exitCode = 1): never {
     '  language translate|check',
     '  ai-judgment publish|check',
     '  locale plan|profile|profile-check|source-capture|source-stability|check',
-    '  first-render check|review',
+    '  first-render check|review|restore',
     '  render <page> [options]',
     '  check [<page>|--ir <file>] [options]',
     '  probe <page> [options]',

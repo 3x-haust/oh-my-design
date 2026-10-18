@@ -8,6 +8,7 @@ import { contrast } from './color.ts';
 import { paint } from './paint.ts';
 import { layout } from './layout.ts';
 import { responsive } from './responsive.ts';
+import { controlAccessibility } from './accessibility.ts';
 import { digest, findingId, measurementId } from './identity.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 export type RetainedCapture = { view: ViewSpec; binding: CaptureBinding; raw: MeasuredIr; png: Buffer };
@@ -26,6 +27,7 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     const dom = structuredClone(c.raw.measurement);
     const id = (id: string) => `${c.view.id}:${id}`;
     for (const n of dom.nodes) { n.id = id(n.id); n.parent = n.parent ? id(n.parent) : null; n.control = n.control ? id(n.control) : null; }
+    dom.accessibility = dom.accessibility.map(control => ({ ...control, subjectId: id(control.subjectId) }));
     dom.paintSamples = dom.paintSamples.map(p => ({ ...p, subjectId: p.subjectId ? id(p.subjectId) : null }));
     assignRoles(dom, contracts);
     subjects.push(...dom.nodes.map(n => ({ id: n.id, viewId: c.view.id, irNodeId: n.id.slice(c.view.id.length + 1), locator: n.locator, role: n.role, box: n.box, visibleBox: n.visibleBox, textExcerpt: n.text ? n.text.slice(0, 200) : null })));
@@ -43,7 +45,7 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     const ids = dom.nodes.map(n => n.id), area = dom.viewport.innerWidth * dom.viewport.innerHeight;
     const p = paint(dom, c.png), conforms = conformance(dom, contracts, c.view.id);
     for (const n of dom.nodes.filter(n => n.visibleBox && n.media && !p.mediaContrast.has(n.id) && !svgPixels.has(n.id))) excluded.push({ subjectId: n.id, reason: 'media-salience-unsampled' });
-    const values: Omit<MetricValues, 'cross-viewport-order'> = { ...typography(dom.nodes, area), ...spacing(dom.nodes), 'contrast-pair': contrast(dom.nodes, colorsForView(contracts.composition, c.view.id)), ...layout(dom, contracts, p.canvasPaintShare, p.mediaContrast), 'canvas-color': p['canvas-color'], 'accent-distribution': p['accent-distribution'], 'contract-conformance': conforms.value };
+    const values: Omit<MetricValues, 'cross-viewport-order'> = { ...typography(dom.nodes, area), 'control-accessibility': controlAccessibility(dom), ...spacing(dom.nodes), 'contrast-pair': contrast(dom.nodes, colorsForView(contracts.composition, c.view.id)), ...layout(dom, contracts, p.canvasPaintShare, p.mediaContrast), 'canvas-color': p['canvas-color'], 'accent-distribution': p['accent-distribution'], 'contract-conformance': conforms.value };
     const metrics = new Map<MetricKind, Measurement>();
     for (const kind of Object.keys(values) as (keyof typeof values)[]) metrics.set(kind, add(kind, [c.view.id], ids, values[kind], excluded));
     const quality = metrics.get('contract-conformance')!;
@@ -65,6 +67,20 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     if (unknownPaint.length) finding('MEASUREMENT_INCOMPLETE', metrics.get('contrast-pair')!, unknownPaint.map(p => p.subjectId), null, 'Declared non-text paint could not be measured', 'coverage', ['contrastColorRoles']);
     const wraps = values['control-word-wrap'].controls.filter(c => c.tokens.some(t => t.split));
     if (wraps.length) finding('REQUIRED_CONTROL_WORD_SPLIT', metrics.get('control-word-wrap')!, wraps.map(w => w.subjectId), null, 'Hangul control token crosses rendered lines', 'accessibility', ['typography', 'usability', 'responsiveCraft']);
+    const unnamed = values['control-accessibility'].controls.filter(control => control.issue === 'missing-name');
+    if (unnamed.length) finding('FORM_ACCESSIBLE_NAME_MISSING', metrics.get('control-accessibility')!, unnamed.map(control => control.subjectId), null,
+      canonicalJson(unnamed.map(({ subjectId, role }) => ({ subjectId, role }))), 'accessibility', ['usability'], 'advisory');
+    const placeholderOnly = values['control-accessibility'].controls.filter(control => control.issue === 'placeholder-only');
+    if (placeholderOnly.length) finding('FORM_PLACEHOLDER_ONLY_LABEL', metrics.get('control-accessibility')!, placeholderOnly.map(control => control.subjectId), null,
+      canonicalJson(placeholderOnly.map(({ subjectId, placeholder }) => ({ subjectId, placeholder }))), 'accessibility', ['usability'], 'advisory');
+    // Review convention, not a Korean standard: 0.05em is a common Latin all-caps tracking
+    // starting point (https://practicaltypography.com/letterspacing.html), so applying at
+    // least that much positive tracking to lang=ko body text deserves rendered review.
+    const trackedKorean = dom.nodes.filter(n => n.visibleBox && n.role === 'body' && n.language.toLowerCase().startsWith('ko')
+      && /[가-힣]/.test(n.text) && n.size > 0 && n.tracking / n.size >= 0.05);
+    if (trackedKorean.length) finding('KOREAN_BODY_TRACKING', metrics.get('type-ladder')!, trackedKorean.map(n => n.id), null,
+      canonicalJson(trackedKorean.map(n => ({ subjectId: n.id, em: n.tracking / n.size, pixels: n.tracking }))),
+      'heuristic', ['typography', 'usability'], 'advisory');
     const clipped = values['clipping-overflow'].subjects.filter(n => n.control && n.clipped.some(c => !c.scrollEscape));
     if (clipped.length) finding('REQUIRED_CONTROL_CLIPPED', metrics.get('clipping-overflow')!, clipped.map(c => c.subjectId), null, canonicalJson(clipped), 'accessibility', ['usability', 'responsiveCraft']);
     if (values['clipping-overflow'].documentOverflowX > 1) finding('MEASUREMENT_INCOMPLETE', metrics.get('clipping-overflow')!, [], null, 'Document has horizontal overflow; reflow needs repair or a scoped access contract', 'coverage', ['responsiveCraft']);

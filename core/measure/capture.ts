@@ -2,6 +2,7 @@ import type { Page } from 'playwright';
 import { browserEvaluationExpression } from '../render/index.ts';
 import { extractInPage } from '../ir/dom.ts';
 import { extractMeasurementInPage } from './dom.ts';
+import { attachFormAccessibility } from './accessibility.ts';
 import { colorsForView, selectors, type Contracts } from './contracts.ts';
 import { canonicalBytes, digest, sha256 } from './identity.ts';
 import { decodePng } from '../motion/energy.ts';
@@ -29,13 +30,15 @@ export async function captureMeasuredView(page: Page, view: ViewSpec, contracts:
   const detail = { measurementDetails: true, ...(contracts.composition?.frequentAction && context.compositionReceipt ? { frequentAction: { selector: contracts.composition.frequentAction, contract: { ...context.compositionReceipt, field: 'Measurement contract.frequentAction' } } } : {}) };
   const rawExpression = browserEvaluationExpression(extractInPage.toString(), [4000, null, detail]);
   const argument = { selectors: selectors(contracts), tokens: [...new Set(contracts.composition?.colors.flatMap(c => c.token ? [c.token] : []) ?? [])], paintSelectors: colorsForView(contracts.composition, view.id).filter(c => c.property === 'border' || c.property === 'outline').map(c => c.selector), targetSelectors: contracts.composition?.regions.filter(r => r.minimumTargetPx !== undefined).map(r => r.selector) ?? [], maxNodes: 4000, maxGraphemes: 100000 };
-  const before = await page.evaluate(browserEvaluationExpression(extractMeasurementInPage.toString(), [argument])) as MeasurementDom;
+  const measuredDom = async () => attachFormAccessibility(page,
+    await page.evaluate(browserEvaluationExpression(extractMeasurementInPage.toString(), [argument])) as MeasurementDom);
+  const before = await measuredDom();
   const raw = await page.evaluate(rawExpression) as MeasuredIr;
   const png = await page.screenshot({ fullPage: false, animations: 'allow', caret: 'initial', timeout: 5000 });
   const afterPng = await page.screenshot({ fullPage: false, animations: 'allow', caret: 'initial', timeout: 5000 });
   const afterRaw = await page.evaluate(rawExpression) as MeasuredIr;
   const rawStable = digest(raw) === digest(afterRaw);
-  const after = await page.evaluate(browserEvaluationExpression(extractMeasurementInPage.toString(), [argument])) as MeasurementDom;
+  const after = await measuredDom();
   const url = new URL(page.url());
   if (`${url.pathname}${url.search}${url.hash}` !== view.route) throw new Error('VISUAL_MEASUREMENT: state route changed during capture');
   if (before.viewport.visualViewportScale !== 1 || view.browserZoom === 1 && (before.viewport.innerWidth !== view.viewport.width || before.viewport.innerHeight !== view.viewport.height)) throw new Error('VISUAL_MEASUREMENT: viewport does not match requested layout geometry');

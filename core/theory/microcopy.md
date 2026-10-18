@@ -2,6 +2,49 @@
 
 Microcopy names the current object, state, consequence, and next move. It isn't decoration around a component. Write from the product's truth boundary and chosen voice, then test the string in its real width, state, and reading order.
 
+## Accuracy before tone
+
+Treat accuracy, concision, and consistency as the base layer; voice and tone shape how that
+truth is expressed. A polished line still fails when it points to the wrong destination,
+names a stronger commitment than the next step, or changes the product's term for the same
+concept. Apple, Atlassian, Shopify, GOV.UK, legacy Material writing guidance, and NN/G all
+converge on truthful action labels, familiar language, consistent terms, and useful recovery;
+their capitalization, humor, use of “we,” and brand personality remain product-specific.
+([Apple HIG](https://developer.apple.com/design/human-interface-guidelines/writing),
+[Atlassian](https://atlassian.design/foundations/content/voice-tone/),
+[Shopify](https://shopify.dev/docs/apps/design/content),
+[GOV.UK](https://www.gov.uk/service-manual/design/writing-for-user-interfaces),
+[Material 1](https://m1.material.io/style/writing.html),
+[NN/G](https://www.nngroup.com/articles/ui-copy/))
+
+User-supplied guidance describes UI labels as road signs. They tell people:
+
+1. where they are in the service structure — navigation names and screen titles;
+2. what a feature, object, or action is — use an established domain term when it is already
+   understood, and name a genuinely new product concept from this service's own behavior;
+3. what situation holds now or immediately next — status, alternatives, consequences, and
+   recovery.
+
+That guidance also requires the product's own character: do not copy another service's
+terms or speech style merely because it is familiar. Familiar conventions are useful when
+the concept is shared; borrowed branded language is not a substitute for naming this
+product's actual object and action.
+
+### Name the next step and the true commitment
+
+A control names what pressing it does now, not the eventual business outcome. Google
+presenter Maggie Stanphill reported one Google Hotels experiment in which changing
+`Book a room` to `Check availability` increased engagement by 17%, because the next screen
+was still an option search rather than a booking commitment. Treat this as one reported
+2017 experiment, supported by a third-party transcript of the Google I/O talk, not a
+general effect size or permission to soften real commitments.
+([talk listing](https://sched.eventyay.com/GoogleIO2017/tracks.html),
+[transcript](https://filmot.com/sidebyside/rIdYNzH6nDI/auto.en/en/English%2B%28auto-generated%29/English/Google%2BIO%2717%3A%2BChannel%2B4/Google%2Bfor%2BDevelopers))
+
+Use `Check availability`, `Review order`, or `Preview` only when that is the next state.
+Use `Book`, `Pay`, `Send`, `Publish`, or `Delete` when pressing the control really commits
+that action. A label must not invite a click by understating its consequence.
+
 ## The compact-string rule
 
 Replace "one breath per sentence" with this rule:
@@ -285,3 +328,20 @@ Before shipping, check each reachable component and state:
 | Accessibility | Visible copy and accessible names communicate the same action and state. |
 | Locale | Dates, prices, units, counters, and plurals use the target locale. |
 | Persistence | `saved`, `sent`, `received`, and `completed` match actual system state. |
+
+## Source scope
+
+- Toss's principles are directional product guidance, not a universal checklist or a voice
+  to imitate. Its predictable-hint, empty-sentence, spoken-clarity, and error-recovery
+  guidance is useful for review; its 해요체 is a Toss-specific voice decision.
+  ([writing principles](https://toss.tech/article/8-writing-principles-of-toss),
+  [error messages](https://toss.tech/article/21021),
+  [first UX writer](https://toss.tech/article/1st_uxwriter))
+- NN/G's action-label, link-label, and error guidance supports specificity and recovery;
+  exact word-count preferences are contextual rather than universal limits.
+  ([commands](https://www.nngroup.com/articles/ui-copy/),
+  [links](https://www.nngroup.com/articles/better-link-labels/),
+  [errors](https://www.nngroup.com/articles/error-message-guidelines/))
+- Empty, loading, error, and success are different operational states. Do not infer one
+  from a blank panel or reuse one string for all four.
+  ([NN/G empty states](https://www.nngroup.com/articles/empty-state-interface-design/))

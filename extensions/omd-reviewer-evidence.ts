@@ -154,13 +154,17 @@ export async function consumePiReviewerEvidence(configInput: unknown, signal?: A
       if (evidence.priorRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT) {
         throw new PiReviewerError('opaque-prior-renders');
       }
+      if (evidence.previousIterationRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT) {
+        throw new PiReviewerError('opaque-previous-iteration-renders');
+      }
       content = [];
       const projected: Record<string, unknown> = { ...evidence };
       if (evidence.feedbackRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
         throw new PiReviewerError('opaque-feedback-renders');
       if (evidence.consultedReferenceRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
         throw new PiReviewerError('opaque-consulted-reference-renders');
-      for (const field of ['renders', 'referenceRenders', 'priorRenders', 'feedbackRenders', 'consultedReferenceRenders']) {
+      for (const field of ['renders', 'referenceRenders', 'priorRenders', 'previousIterationRenders',
+        'feedbackRenders', 'consultedReferenceRenders']) {
         const rows = evidence[field];
         if (rows === undefined) continue;
         if (!Array.isArray(rows)) throw new PiReviewerError('opaque-renders');

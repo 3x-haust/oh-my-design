@@ -14,3 +14,5 @@ inconsistency or usability consequences rather than banning a browser default un
 Clean execution or familiar list/detail structure does not by itself establish strong
 composition or a coherent visual system. Blind review cannot claim external-reference
 fidelity when those originals are absent from its authorized packet.
+
+Judge rendered words, type, and flow without imposing a house voice.
