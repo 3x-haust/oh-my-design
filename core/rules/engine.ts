@@ -43,25 +43,15 @@ function compile(ruleId: string, expr: string): Compiled {
   return script;
 }
 
+const READS_IR = /\bir\b/u;
+
 function evalExpr(ruleId: string, expr: string, node: Node, ir: Ir, value: RuleValue): unknown {
   try {
-    let irSnapshot: unknown;
-    let hasIrSnapshot = false;
+    // Each expression gets its own mutable snapshot. Clone before entering the VM so the
+    // evaluation timeout bounds rule computation, not the cost of copying a large IR.
     const context = {
       node: structuredClone(node),
-      // Most per-node expressions never read ir. Clone only on first access, still
-      // giving each expression its own mutable snapshot rather than sharing data.
-      get ir(): unknown {
-        if (!hasIrSnapshot) {
-          irSnapshot = structuredClone(ir);
-          hasIrSnapshot = true;
-        }
-        return irSnapshot;
-      },
-      set ir(next: unknown) {
-        irSnapshot = next;
-        hasIrSnapshot = true;
-      },
+      ir: READS_IR.test(expr) ? structuredClone(ir) : undefined,
       value: structuredClone(value),
     };
     return compile(ruleId, expr).runInNewContext(context, { timeout: RULE_EVALUATION_TIMEOUT_MS, contextCodeGeneration: { strings: false, wasm: false } });
