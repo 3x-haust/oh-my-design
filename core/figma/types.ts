@@ -40,6 +40,7 @@ export interface FigmaTypeStyle {
   fontWeight?: number;
   lineHeightPx?: number;
   lineHeightUnit?: string;
+  letterSpacing?: number;
 }
 
 export interface FigmaNode {
@@ -49,9 +50,12 @@ export interface FigmaNode {
   children?: FigmaNode[];
   absoluteBoundingBox?: { x: number; y: number; width: number; height: number };
   fills?: FigmaPaint[];
+  strokes?: FigmaPaint[];
+  strokeWeight?: number;
   effects?: FigmaEffect[];
   cornerRadius?: number;
   style?: FigmaTypeStyle;
+  characters?: string;
   layoutMode?: string; // 'NONE' | 'HORIZONTAL' | 'VERTICAL'
   itemSpacing?: number;
   paddingLeft?: number;
@@ -110,6 +114,8 @@ export interface SnapshotTypography {
   fontWeight: number;
   /** Line height as ratio to font-size, e.g. 1.5 */
   lineHeight: number;
+  lineHeightPx?: number;
+  letterSpacing?: number;
 }
 
 export interface SnapshotNode {
@@ -118,8 +124,11 @@ export interface SnapshotNode {
   type: string;
   absoluteBoundingBox?: { x: number; y: number; width: number; height: number };
   fills: SnapshotFill[];
+  strokes?: SnapshotFill[];
+  strokeWeight?: number;
   effects: SnapshotEffect[];
   typography?: SnapshotTypography;
+  characters?: string;
   cornerRadius?: number;
   layoutMode?: 'HORIZONTAL' | 'VERTICAL';
   itemSpacing?: number;

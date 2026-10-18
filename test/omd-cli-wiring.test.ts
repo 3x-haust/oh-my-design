@@ -38,10 +38,27 @@ test('help lists the bounded CLI and omits structured publishers', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /lifecycle help\|verify\|finish/);
   assert.match(result.stdout, /first-render check/);
+  assert.match(result.stdout, /figma pull\|system\|diff\|review/);
   assert.match(result.stdout, /ref discover-plan\|discover-batch/);
   for (const removed of ['maker run', 'study create', 'candidate select', 'workflow plan', 'lifecycle evaluate', 'composition --check']) {
     assert.doesNotMatch(result.stdout, new RegExp(removed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+});
+
+test('figma review reaches the retained command surface', () => {
+  const result = run(['figma', 'review']);
+  assert.equal(result.status, 1);
+  assert.match(`${result.stdout}\n${result.stderr}`, /usage: omd figma review <frame-id>/);
+  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /unknown command/i);
+});
+
+test('figma review with a frame refuses outside native Pi authority', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-figma-review-cli-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const result = run(['figma', 'review', '1:2', '--json'], root);
+  assert.equal(result.status, 1);
+  assert.match(`${result.stdout}\n${result.stderr}`, /NATIVE_PI_AUTHORITY/);
+  assert.equal(result.stdout, '');
 });
 
 test('lifecycle help advertises only retained lifecycle commands', () => {

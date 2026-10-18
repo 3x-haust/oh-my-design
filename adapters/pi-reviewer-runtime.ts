@@ -7,6 +7,8 @@ import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { FINAL_RENDER_REVIEWER_TASK } from '../core/runtime/final-render-review.ts';
 import { FIRST_RENDER_REVIEW_TASK, FIRST_RENDER_REVIEW_TRANSPORT,
   FIRST_RENDER_REVIEW_HANDBACK } from '../core/design/first-render-review-contract.ts';
+import { FIGMA_FIDELITY_REVIEW_HANDBACK, FIGMA_FIDELITY_REVIEW_TASK,
+  FIGMA_FIDELITY_REVIEW_TRANSPORT } from '../core/figma/review-contract.ts';
 import { validateFirstRenderBaselineImages } from '../core/design/first-render-baseline.ts';
 import { consultedReferenceProjection } from '../core/design/consulted-references.ts';
 import { nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
@@ -48,11 +50,15 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
     : undefined;
   const zone = input.lane === 'referenceAdmission' && packet.schema === REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA;
   const expectedTask = profileLane !== undefined ? measuredReviewerTask(profileLane)
-    : input.lane === 'firstRender' ? FIRST_RENDER_REVIEW_TASK : input.lane === 'blindLane' ? FINAL_RENDER_REVIEWER_TASK
+    : input.lane === 'firstRender' ? FIRST_RENDER_REVIEW_TASK
+    : input.lane === 'figmaFidelity' ? FIGMA_FIDELITY_REVIEW_TASK
+    : input.lane === 'blindLane' ? FINAL_RENDER_REVIEWER_TASK
     : input.lane === 'referenceAdmission' ? zone ? REFERENCE_ZONE_REVIEWER_TASK : REFERENCE_DIRECTION_REVIEWER_TASK : nativeFinalLaneTask(input.lane);
   if (input.task !== expectedTask) throw new PiReviewerError('task-not-source-owned');
   const referenceV4 = input.lane === 'referenceAdmission' && packet.schema === 'reference-direction-reviewer-transport-v4';
-  const expectedSchema = input.lane === 'firstRender' ? FIRST_RENDER_REVIEW_TRANSPORT : input.lane === 'blindLane' ? 'adaptive-final-render-reviewer-transport-v1'
+  const expectedSchema = input.lane === 'firstRender' ? FIRST_RENDER_REVIEW_TRANSPORT
+    : input.lane === 'figmaFidelity' ? FIGMA_FIDELITY_REVIEW_TRANSPORT
+    : input.lane === 'blindLane' ? 'adaptive-final-render-reviewer-transport-v1'
     : input.lane === 'referenceAdmission'
       ? zone ? REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA : 'reference-direction-reviewer-transport-v4'
       : 'native-pi-final-lane-transport-v1';
@@ -85,6 +91,11 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
       && piDigest(fixed.previousReviewSha256, 'first-render-previous-review') !== fixed.previousReviewSha256))) {
     throw new PiReviewerError('first-render-binding');
   }
+  if (input.lane === 'figmaFidelity' && (contract.schema !== FIGMA_FIDELITY_REVIEW_HANDBACK
+    || piDigest(fixed.diffSha256, 'figma-diff-sha') !== fixed.diffSha256
+    || piDigest(fixed.compareSha256, 'figma-compare-sha') !== fixed.compareSha256)) {
+    throw new PiReviewerError('figma-fidelity-binding');
+  }
   if (input.lane !== 'firstRender' && evidence.priorRenders !== undefined) throw new PiReviewerError('packet-prior-renders');
   if (evidence.feedbackRenders !== undefined && input.lane !== 'firstRender') throw new PiReviewerError('packet-feedback-renders');
   if (evidence.consultedReferenceRenders !== undefined && input.lane !== 'firstRender')
@@ -113,7 +124,9 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
   const images = [evidence.renders, evidence.referenceRenders, evidence.priorRenders, feedbackImages, consultedImages].flatMap(rows => rows === undefined ? []
     : Array.isArray(rows) ? rows : (() => { throw new PiReviewerError('packet-renders'); })());
   for (const image of images) piText(piRecord(image, 'packet-render').pngBase64, 'packet-png');
-  if (input.lane === 'blindLane' && images.length < 2 || input.lane === 'referenceAdmission' && images.length < 1) throw new PiReviewerError('packet-images');
+  if (input.lane === 'blindLane' && images.length < 2
+    || input.lane === 'referenceAdmission' && images.length < 1
+    || input.lane === 'figmaFidelity' && images.length < 1) throw new PiReviewerError('packet-images');
   if (input.lane === 'firstRender') {
     const baselineImages = validateFirstRenderBaselineImages(evidence);
     if (fixed.candidateTargetSha256 !== undefined || evidence.referenceRenders !== undefined) {
@@ -289,6 +302,12 @@ export async function runPiReferenceAdmissionReviewer(input: Omit<PiReviewerLane
 
 export async function runPiFirstRenderReviewer(input: Omit<PiReviewerLaneInput, 'lane' | 'task'>): Promise<PiRoleResult> {
   const bounded = { ...input, lane: 'firstRender' as const, task: FIRST_RENDER_REVIEW_TASK };
+  validateReviewerExecutable(bounded);
+  return runChild(bounded);
+}
+
+export async function runPiFigmaFidelityReviewer(input: Omit<PiReviewerLaneInput, 'lane' | 'task'>): Promise<PiRoleResult> {
+  const bounded = { ...input, lane: 'figmaFidelity' as const, task: FIGMA_FIDELITY_REVIEW_TASK };
   validateReviewerExecutable(bounded);
   return runChild(bounded);
 }

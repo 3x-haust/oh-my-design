@@ -156,6 +156,35 @@ function handback(packet) {
       })),
     };
   }
+  if (contract.lane === 'figmaFidelity') {
+    const mismatch = mode === 'figma-mismatch' || mode === 'figma-unknown-element';
+    const region = packet.evidence.regions[0];
+    const figmaNode = region?.figmaNodes[0];
+    const rendered = region?.renderedElements[0];
+    const priorFixes = packet.evidence.previousReview?.fixes ?? [];
+    return {
+      schema: contract.schema,
+      fixedBindings: contract.fixedBindings,
+      verdict: mismatch ? 'mismatch' : 'match',
+      fixes: mismatch ? [{
+        id: priorFixes[0]?.id ?? 'card-background',
+        regionIndex: region.index,
+        element: {
+          figmaNodeId: figmaNode?.id ?? null,
+          figmaNodeName: figmaNode?.name ?? null,
+          renderedSelector: mode === 'figma-unknown-element' ? '#invented' : rendered?.selector ?? null,
+        },
+        property: 'background-color',
+        figmaValue: '#ffffff',
+        renderValue: 'rgb(0, 0, 0)',
+        instruction: 'Set the rendered card background to the exact Figma fill value.',
+      }] : [],
+      priorFixes: priorFixes.map(fix => ({
+        id: fix.id,
+        status: mismatch ? 'unresolved' : 'resolved',
+      })),
+    };
+  }
   if (contract.schema === 'reference-zone-reviewer-handback-v1') {
     return {
       ...contract.responseTemplate,

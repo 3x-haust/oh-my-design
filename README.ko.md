@@ -57,10 +57,13 @@ prepared capture를 사용하고 제품 쪽의 같은 상태를 `captureState`�
 omd figma pull <file-url>
 omd figma system
 omd figma diff <frame-id> <page-or-url> --json
+omd figma review <frame-id> --json
 ```
 
-완료에는 현재 snapshot과 현재 통과한 frame diff 기록이 필요합니다. Figma 타깃 작업에는 별도의
-consulted-primary 기록을 요구하지 않습니다.
+완료에는 현재 snapshot, 크기가 일치하고 90% 안전 하한 이상인 frame diff, 그리고 `match` 판정의
+현재 격리 fidelity review가 필요합니다. 유사도 수치만 맹목적으로 올리지 말고 reviewer가 제시한
+구체적인 region 수정 사항을 적용합니다. Figma 타깃 작업에는 별도의 consulted-primary 기록을
+요구하지 않습니다.
 
 ## 설치
 

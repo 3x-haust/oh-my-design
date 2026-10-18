@@ -117,12 +117,16 @@ export function normalizeNode(
   const effects: SnapshotEffect[] = (node.effects ?? [])
     .map(normalizeEffect)
     .filter((e): e is SnapshotEffect => e !== null);
+  const strokes: SnapshotFill[] = (node.strokes ?? [])
+    .map(normalizeFill)
+    .filter((stroke): stroke is SnapshotFill => stroke !== null);
 
   const result: SnapshotNode = {
     id: node.id,
     name: node.name,
     type: node.type,
     fills,
+    ...(strokes.length === 0 ? {} : { strokes }),
     effects,
   };
 
@@ -130,6 +134,8 @@ export function normalizeNode(
     result.absoluteBoundingBox = node.absoluteBoundingBox;
   }
   if (node.cornerRadius !== undefined) result.cornerRadius = node.cornerRadius;
+  if (node.strokeWeight !== undefined) result.strokeWeight = node.strokeWeight;
+  if (node.characters !== undefined) result.characters = node.characters;
 
   // Typography (TEXT nodes carry a `style` object)
   if (node.style?.fontFamily) {
@@ -143,6 +149,8 @@ export function normalizeNode(
       fontSize: s.fontSize ?? 16,
       fontWeight: s.fontWeight ?? 400,
       lineHeight,
+      ...(s.lineHeightPx === undefined ? {} : { lineHeightPx: s.lineHeightPx }),
+      ...(s.letterSpacing === undefined ? {} : { letterSpacing: s.letterSpacing }),
     };
   }
 

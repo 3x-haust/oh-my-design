@@ -34,7 +34,7 @@ export function printUsage(exitCode = 1): never {
     '  slop scan|score',
     '  lighthouse <report.json> [options]',
     '  measure --entry <local.html|URL> [--scope <scope.json>] [--json]',
-    '  figma pull|system|diff',
+    '  figma pull|system|diff|review',
     '  target set|list|diff',
     '  pack dir|list|<relpath> [--section <heading>]',
     '  doctor',

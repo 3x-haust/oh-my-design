@@ -25,6 +25,10 @@ before choosing the work; never ask the user which mode to use.
   and data contract, and changes the visual and structural system. A fix stays local. Do not
   restyle untouched areas, replace the stack or drop behavior unless the request says so.
 - **Figma link in the request:** the frames are the target. Follow `omd pack guides/figma.md`.
+  After implementation, repeat `omd figma diff <frame-id> <page> --json` then
+  `omd figma review <frame-id> --json`, apply the isolated reviewer's concrete region fixes exactly,
+  and stop only at `match`. Do not optimize the similarity percentage blindly; report any fix id
+  that remains unresolved for three consecutive reviews.
 - **Images or URLs supplied by the user:** they are user references. Use the best task fit as the
   primary original; do not replace them with your own discovery unless they cannot serve the task.
 - **Interaction states matter as references:** hover, focus, pressed and open states of buttons,

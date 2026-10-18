@@ -14,10 +14,13 @@ behavior, accessibility, missing responsive views and missing states still need 
    variants, implement those exact states. When a needed state has no variant, record it as a
    Figma state gap and design it from the represented system rather than claiming fidelity.
 4. Implement with ordinary scoped tools inside the current route. Reuse only needed components.
-5. For each supplied frame/view run `omd figma diff <frame-id> <rendered-page> --json`, repair the
-   observed mismatch and re-diff. A missing paired viewport needs truthful interpolation plus real
-   render checks, not a claimed match. A failed diff never becomes PASS by attempt count; after three
-   failed repairs of the same defect, report it.
+5. For each supplied frame/view use the directed repair loop:
+   `omd figma diff <frame-id> <rendered-page> --json` → `omd figma review <frame-id> --json` →
+   apply the listed fixes exactly → repeat. The isolated reviewer sees whole and mismatched-region
+   composites plus exact Figma and rendered CSS facts. Do not chase the similarity percentage
+   blindly; it is only a safety floor. Stop when the reviewer returns `match`. A missing paired
+   viewport needs truthful interpolation plus real render checks, not a claimed match. If a fix id
+   remains unresolved for three consecutive reviews, report the stuck fix instead of looping.
 6. Keep the Figma target separate from external references. Other references may inform only what
    Figma does not represent.
 

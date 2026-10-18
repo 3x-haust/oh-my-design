@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import { parseArgs, projectWriterFromActivation, type Opts } from '../cli/runtime.ts';
+import { invocationFromActivation, parseArgs, projectWriterFromActivation, type Opts } from '../cli/runtime.ts';
 
 async function cmdFigmaPull(url: string | undefined, opts: Opts): Promise<never> {
   if (!url) {
@@ -232,16 +232,12 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
     console.log(`Rendering ${pageOrUrl} at ${Math.round(frameW)}×${Math.round(frameH)} …`);
   }
 
-  const { renderPage } = await import('../../core/render/index.ts');
+  const { renderFigmaPage } = await import('../../core/figma/compare.ts');
   const rendersDir = join(process.cwd(), '.omd', 'figma', 'renders');
   adapter.mkdir(relative(process.cwd(), rendersDir));
   const renderPath = join(rendersDir, `${safeId}.png`);
-  if (existsSync(renderPath)) {
-    console.error(`Refusing to replace an existing Figma deliverable without current-task write authority: ${renderPath}`);
-    process.exit(1);
-  }
 
-  await renderPage(pageOrUrl, {
+  const rendered = await renderFigmaPage(pageOrUrl, {
     viewport: { width: Math.round(frameW), height: Math.round(frameH) },
     out: renderPath,
     adapter,
@@ -259,13 +255,31 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
 
   const result = compareImages(refBuf, buildBuf, threshold);
   const { figmaDiffRecord, figmaDiffRecordPath } = await import('../../core/figma/completion.ts');
-  adapter.write(figmaDiffRecordPath(frameId), figmaDiffRecord(process.cwd(), {
+  const diffBytes = Buffer.from(figmaDiffRecord(process.cwd(), {
     frameId,
     snapshotBytes,
     exportBytes: refBuf,
     renderBytes: buildBuf,
     result,
   }));
+  adapter.write(figmaDiffRecordPath(frameId), diffBytes);
+  const {
+    createFigmaCompareRecord,
+    figmaCompareRecordPath,
+    serializeFigmaCompareRecord,
+  } = await import('../../core/figma/compare.ts');
+  const compare = createFigmaCompareRecord(process.cwd(), {
+    frame: foundFrame,
+    snapshot,
+    snapshotBytes,
+    exportBytes: refBuf,
+    renderBytes: buildBuf,
+    diffBytes,
+    result,
+    renderedElements: rendered.elements,
+    adapter,
+  });
+  adapter.write(figmaCompareRecordPath(frameId), serializeFigmaCompareRecord(compare));
 
   if (jsonOut) {
     console.log(JSON.stringify(result, null, 2));
@@ -274,6 +288,32 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
   }
 
   process.exit(result.pass ? 0 : 1);
+}
+
+async function cmdFigmaReview(opts: Opts): Promise<never> {
+  const frameId = opts._[0];
+  if (!frameId) {
+    console.error('usage: omd figma review <frame-id> [--json]');
+    process.exit(1);
+  }
+  const { runFigmaFidelityReview } = await import('../../core/figma/review.ts');
+  const reviewed = await runFigmaFidelityReview(
+    process.cwd(),
+    frameId,
+    invocationFromActivation(opts, 'omd figma review'),
+  );
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(reviewed));
+  } else {
+    console.log(`figma fidelity: ${reviewed.verdict}`);
+    for (const fix of reviewed.fixes) {
+      console.log(`  ${fix.id} [region ${fix.regionIndex}] ${fix.property}: ${fix.instruction}`);
+    }
+    for (const stuck of reviewed.stuckFixes) {
+      console.log(`  stuck ${stuck.id}: unresolved for ${stuck.count} consecutive reviews`);
+    }
+  }
+  process.exit(reviewed.verdict === 'match' ? 0 : 1);
 }
 
 async function cmdTargetSet(opts: Opts): Promise<never> {
@@ -404,6 +444,7 @@ export async function runFigma(args: string[]): Promise<never> {
     if (sub === 'pull') return cmdFigmaPull(args[2], parseArgs(args.slice(3)));
     if (sub === 'system') return cmdFigmaSystem(opts);
     if (sub === 'diff') return cmdFigmaDiff(opts);
+    if (sub === 'review') return cmdFigmaReview(opts);
     return unknown(command, sub);
   }
   if (command === 'target') {

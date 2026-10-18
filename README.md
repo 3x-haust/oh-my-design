@@ -59,10 +59,13 @@ A Figma `/file/` or `/design/` URL in the request is the implementation target. 
 omd figma pull <file-url>
 omd figma system
 omd figma diff <frame-id> <page-or-url> --json
+omd figma review <frame-id> --json
 ```
 
-Completion requires a current snapshot plus current passing frame diff records. Figma-targeted work
-does not also require a consulted-primary record.
+Completion requires a current snapshot, a dimension-matched frame diff at or above the 90% safety
+floor, and a current isolated fidelity review with verdict `match`. Apply the reviewer's concrete
+region fixes instead of optimizing the similarity percentage blindly. Figma-targeted work does not
+also require a consulted-primary record.
 
 ## Install
 
