@@ -183,5 +183,5 @@ export function extractMeasurementInPage(input: { selectors: string[]; tokens: s
     const hit = document.elementFromPoint(x, y); paintSamples.push({ x, y, subjectId: hit ? ids.get(hit) ?? null : null });
   }
   return { nodes, viewport: { innerWidth, innerHeight, clientWidth: document.documentElement.clientWidth, clientHeight: document.documentElement.clientHeight, devicePixelRatio, visualViewportScale: visualViewport?.scale ?? 1, scrollX, scrollY }, rootCanvas, overflowX: Math.max(0, document.documentElement.scrollWidth - innerWidth), eligibleNodes: eligible.length, excluded,
-    fonts: { ready: document.fonts.status === 'loaded', failedFamilies: Array.from(document.fonts).filter(f => f.status === 'error').map(f => f.family) }, paintSamples, gridStep };
+    fonts: { ready: document.fonts.status === 'loaded', failedFamilies: Array.from(document.fonts).filter(f => f.status === 'error').map(f => f.family) }, accessibility: [], paintSamples, gridStep };
 }
