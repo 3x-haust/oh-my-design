@@ -2,6 +2,7 @@ import { canonicalJson } from '../ref/board-artifacts.ts';
 import { piDigest, piRecord, piText } from '../../adapters/pi-reviewer-contract.ts';
 import { DESIGN_QUALITY_AXES, type DesignQualityAxis } from '../evidence/final-v2-design-quality.ts';
 import { parseReferenceComparisons, type FirstRenderReferenceCapture, type FirstRenderReferenceComparison } from './first-render-reference-comparison.ts';
+import { WORDS_TYPE_FLOW_REVIEW_CHECKLIST } from '../runtime/reviewer-task-checklist.ts';
 
 export const FIRST_RENDER_REVIEW_TRANSPORT = 'first-render-reviewer-transport-v2';
 export const FIRST_RENDER_REVIEW_HANDBACK = 'first-render-reviewer-handback-v3';
@@ -26,9 +27,17 @@ export const LEGACY_FIRST_RENDER_REVIEW_TASK = [
   'When reported-feedback-baseline images are supplied, compare their whole visual system with current pixels for the matching viewport/state. They are reported comparison material, not references, verified human ratings or approved targets. In quality observations cite both digests and distinguish materially changed, substantially same, or uncertain movement. Fewer panels, lower density or removed decoration alone do not establish improvement. A substantially unchanged or uncertain rejected visual system requires a localized finding and reframe; material change still must pass absolute current quality independently. Do not infer why a person rejected an image from these pixels.',
   'Do not infer source identity, authorship, implementation, or final approval. Return exactly the output contract.',
 ].join(' ');
-export const FIRST_RENDER_REVIEW_TASK = LEGACY_FIRST_RENDER_REVIEW_TASK + ' '
+export const LEGACY_FIRST_RENDER_REVIEW_TASK_V4 = LEGACY_FIRST_RENDER_REVIEW_TASK + ' '
   + 'For each primary consulted original, complete every supplied referenceComparisons binding. Describe its whole sourceIdentity before evaluating the current production viewport. Assess actual typography (family character, weight, scale and line rhythm), macro proportions, grouping, density and control anatomy, not merely list/detail structure. Report preservedTraits and every material departure; distinguish destination-required departures from invented restyling. A desktop source can inform visual character on mobile but does not prove its responsive behavior. Pass only when the visible source system is recognizably reproduced within explicit destination constraints; fail or insufficient requires current localized findingIds and cannot retain. Comparison-only means no source admission or human approval, not permission to ignore fidelity. Supplemental references have limited jobs and do not override the primary. Keep this comparison separate from absolute beauty and repair progress.'
   + 'Make repair criteria describe the visible content relationship that must change and the task facts or working relationships that must survive, rather than prescribe a cosmetic recipe. For example, require a price, its billing unit and the corresponding plan action to remain clearly associated and comparable, not a particular font size, card count or accent. Distinguish the observed failure from a suspected cause; do not require a wholesale rewrite for a local defect or accept token polish when the composition is the failure. Judge the integrated current pixels after repair, not effort, novelty or an isolated attractive component; do not infer business impact from a visual preference.';
+export const FIRST_RENDER_REVIEW_TASK = `${LEGACY_FIRST_RENDER_REVIEW_TASK_V4} ${WORDS_TYPE_FLOW_REVIEW_CHECKLIST}`;
+
+export function firstRenderReviewTaskForSchema(schema: string): string | null {
+  if (schema === 'first-render-review-v3') return LEGACY_FIRST_RENDER_REVIEW_TASK;
+  if (schema === 'first-render-review-v4') return LEGACY_FIRST_RENDER_REVIEW_TASK_V4;
+  if (schema === 'first-render-review-v5') return FIRST_RENDER_REVIEW_TASK;
+  return null;
+}
 
 export type FirstRenderFinding = Readonly<{
   id: string;

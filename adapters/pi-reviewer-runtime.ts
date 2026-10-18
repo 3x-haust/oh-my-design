@@ -8,12 +8,14 @@ import { FINAL_RENDER_REVIEWER_TASK } from '../core/runtime/final-render-review.
 import { FIRST_RENDER_REVIEW_TASK, FIRST_RENDER_REVIEW_TRANSPORT,
   FIRST_RENDER_REVIEW_HANDBACK } from '../core/design/first-render-review-contract.ts';
 import { validateFirstRenderBaselineImages } from '../core/design/first-render-baseline.ts';
+import { checkFirstRenderEvidence } from '../core/design/first-render-evidence.ts';
 import { consultedReferenceProjection } from '../core/design/consulted-references.ts';
 import { nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
 import { REFERENCE_DIRECTION_REVIEWER_TASK } from '../core/ref/reference-direction-admission.ts';
 import { REFERENCE_ZONE_REVIEWER_TASK, REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA,
   REFERENCE_ZONE_REVIEWER_HANDBACK_SCHEMA } from '../core/ref/reference-zone-admission.ts';
 import { loadReviewPolicy } from '../core/measure/review-policy.ts';
+import { loadMeasurement } from '../core/measure/files.ts';
 import { policyLane } from './measured-reviewer-publication.ts';
 import { MEASURED_REVIEW_TRANSPORT } from '../core/runtime/trusted-measured-review.ts';
 import { measuredReviewerTask, reviewProfileBinding } from '../core/runtime/trusted-review-profile.ts';
@@ -84,6 +86,13 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{ packetSha256: st
     || (fixed.previousReviewSha256 !== null
       && piDigest(fixed.previousReviewSha256, 'first-render-previous-review') !== fixed.previousReviewSha256))) {
     throw new PiReviewerError('first-render-binding');
+  }
+  if (input.lane === 'firstRender') {
+    const current = checkFirstRenderEvidence(input.root, 'review', input.invocation);
+    const diagnostics = current === null ? null : loadMeasurement(input.root, current.measurements[0]!).findings;
+    if (diagnostics === null || canonicalJson(evidence.measurementDiagnostics) !== canonicalJson(diagnostics)) {
+      throw new PiReviewerError('first-render-diagnostics-drift');
+    }
   }
   if (input.lane !== 'firstRender' && evidence.priorRenders !== undefined) throw new PiReviewerError('packet-prior-renders');
   if (evidence.feedbackRenders !== undefined && input.lane !== 'firstRender') throw new PiReviewerError('packet-feedback-renders');

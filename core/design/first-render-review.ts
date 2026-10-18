@@ -16,17 +16,18 @@ import { acquireProjectMutationLock, createProjectWriteAdapter } from '../runtim
 import { verifySignedPiEyeRoleResult } from '../runtime/pi-role-receipt.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 import { DESIGN_QUALITY_AXES } from '../evidence/final-v2-design-quality.ts';
+import { loadMeasurement } from '../measure/files.ts';
 import { firstRenderActiveBaselines, parseFirstRenderBaselines, FIRST_RENDER_VIEWPORTS,
   type FirstRenderBaseline } from './first-render-baseline.ts';
 import {
-  FIRST_RENDER_REVIEW_HANDBACK, FIRST_RENDER_REVIEW_TASK, LEGACY_FIRST_RENDER_REVIEW_TASK, FIRST_RENDER_REVIEW_TRANSPORT,
+  FIRST_RENDER_REVIEW_HANDBACK, FIRST_RENDER_REVIEW_TASK, FIRST_RENDER_REVIEW_TRANSPORT,
   FIRST_RENDER_REPAIR_SCOPES, FirstRenderReviewError, parseFirstRenderReview, parseFirstRenderCaptures,
   parseFirstRenderFindings, type FirstRenderFinding, type FirstRenderReview,
-  type FirstRenderReviewBindings,
+  type FirstRenderReviewBindings, firstRenderReviewTaskForSchema,
 } from './first-render-review-contract.ts';
 
 export const FIRST_RENDER_REVIEW_PATH = '.omd/first-render/review.json';
-const SCHEMA = 'first-render-review-v4';
+const SCHEMA = 'first-render-review-v5';
 const fail = (reason: string): never => { throw new FirstRenderReviewError(reason); };
 const bytesAt = (root: string, path: string) => readContainedRegularFile(root, path, 'first render review');
 const fields = (value: unknown): FirstRenderReviewBindings => {
@@ -47,11 +48,11 @@ function readReviewRecord(root: string, path: string) {
   const { signature, ...record } = piRecord(piParse(bytes.toString('utf8'), 'first-render-review-json'), 'first-render-review-record');
   const digest = sha256(bytes);
   const schema = record.schema;
-  if ((schema !== SCHEMA && schema !== 'first-render-review-v3' && schema !== 'first-render-review-v2' && schema !== 'first-render-review-v1') || !bytes.equals(bytesAt(root, `.omd/first-render/reviews/${digest}.json`))
+  if ((schema !== SCHEMA && schema !== 'first-render-review-v4' && schema !== 'first-render-review-v3' && schema !== 'first-render-review-v2' && schema !== 'first-render-review-v1') || !bytes.equals(bytesAt(root, `.omd/first-render/reviews/${digest}.json`))
     || !verifyNativeObservation(root, schema, sha256(canonicalJson(record)), piText(signature, 'review-signature'))) {
     return fail('review record changed');
   }
-  if (schema !== SCHEMA && schema !== 'first-render-review-v3') return null;
+  if (schema !== SCHEMA && schema !== 'first-render-review-v4' && schema !== 'first-render-review-v3') return null;
   const bindings = fields(record.bindings);
   const captures = parseFirstRenderCaptures(record.captures);
   const prior = parseFirstRenderFindings(record.priorCriteria);
@@ -60,7 +61,8 @@ function readReviewRecord(root: string, path: string) {
   const legacy = schema === 'first-render-review-v3';
   const references = legacy ? undefined : parseReferenceCaptures(record.referenceCaptures);
   const result = parseFirstRenderReview(piParse(role.finalMessage, 'review-handback'), bindings, prior, captures, references, legacy);
-  if (role.receipt.taskSha256 !== sha256(legacy ? LEGACY_FIRST_RENDER_REVIEW_TASK : FIRST_RENDER_REVIEW_TASK)
+  const expectedTask = firstRenderReviewTaskForSchema(schema);
+  if (expectedTask === null || role.receipt.taskSha256 !== sha256(expectedTask)
     || role.receipt.buildSha256 !== bindings.buildSha256 || role.receipt.briefSha256 !== bindings.briefSha256
     || role.receipt.reviewerEvidence.evidenceSha256 !== bindings.evidenceSha256
     || role.receipt.reviewerEvidence.packetSha256 !== record.packetSha256) return fail('review authority');
@@ -127,8 +129,10 @@ function prepareFirstRenderReviewPacket(
   const priorRenders = baselineRenders(root, priorBaselines, priorCriteria);
   const referenceCaptures = (consulted?.renders ?? []).map(({ captureSha256, referenceRole }) => ({ captureSha256, referenceRole }));
   const comparisons = referenceComparisonBindings(referenceCaptures, renders);
+  const measurement = loadMeasurement(root, current.measurements[0]!);
   const evidence = { ...(context.schema === 'model-led-first-render-context-v1'
     ? { taskContext: context } : { hypothesis: context.hypothesis }), renders, priorCriteria, priorBaselines, priorRenders,
+    measurementDiagnostics: measurement.findings,
     ...(feedback === null ? {} : { reportedFeedback: feedback.context, feedbackRenders: feedback.renders }),
     ...(consulted === null ? {} : { consultedReferences: consulted.context, consultedReferenceRenders: consulted.renders }),
     scope: 'early-representative-viewports-not-final' };

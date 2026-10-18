@@ -26,6 +26,7 @@ import {
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
 import { measuredFinalRenderPacket } from './trusted-measured-review.ts';
 import { requiresMeasuredTerminal } from '../measure/review-policy.ts';
+import { WORDS_TYPE_FLOW_REVIEW_CHECKLIST } from './reviewer-task-checklist.ts';
 
 export const FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA =
   'adaptive-final-render-reviewer-packet-input-v1' as const;
@@ -45,7 +46,7 @@ export const FINAL_RENDER_REVIEWER_TASK = [
   'Blind narrative concerns visible task purpose, information hierarchy and recovery guidance. Behavioral execution belongs to the protocol lane and source comparison belongs to the fidelity lane; their intentionally excluded evidence is not a blind-lane defect. Content below the fold is not itself failure: judge access, grouping and task fit for the actual content.',
   'For a task whose meaning spans a whole page, inspect the supplied content sequence and relationships, not just its entry screen or an attractive isolated region. Apply this only to that task scope. A still image can establish static appearance, not the meaning or operation of an entire video, loop or time-based demonstration; temporal outcome acceptance belongs to the protocol lane.',
   'Return exactly the embedded output contract.',
-].join(' ');
+].join(' ') + ` ${WORDS_TYPE_FLOW_REVIEW_CHECKLIST}`;
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const INPUT_KEYS = ['schema', 'observationSha256s'] as const;
