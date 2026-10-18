@@ -20,8 +20,8 @@ come here to do, and does everything on the screen serve that task or obstruct i
 Nielsen's first heuristic — Visibility of System Status — is often read as a rule about
 loading spinners. It is actually a broader claim about the relationship between user
 intent and interface response: the system must help the user understand where they are,
-what has happened, and what can happen next. A user who cannot identify the primary action
-within three seconds of arriving has been failed by the design before they began.
+what has happened, and what can happen next. The design should make the current task and
+available next move legible without relying on an invented universal time limit.
 
 Condition → choice → reason: before choosing any visual direction, name the primary task
 in one sentence. If the task cannot be named, the frame is not done. Action hierarchy follows
@@ -91,7 +91,7 @@ marketing defaults:
    orientation, never a display-scale headline.
 2. **The spine is a task loop, not a message ladder**: orient (where am I, what changed)
    → locate (find the object: navigation, search, filters) → act (the frequent action,
-   reachable within the first viewport) → feedback (visible state change within 400ms,
+   reachable within the first viewport) → feedback (prompt visible acknowledgment,
    see §Feedback) → next/recover (the loop restarts, or the costliest error is undone).
    Sections are screen regions with jobs in this loop; their order follows task order,
    not persuasion order.
@@ -155,13 +155,14 @@ Architecture for the Web and Beyond," fourth edition) argues that structure shou
 mental model, not content volume. The right depth is the depth that matches how users
 think about the domain, not how the team organized the database.
 
-**Mobile navigation.** On narrow viewports, the primary action must remain reachable with
-a thumb in the natural grip position — roughly the bottom third of the screen. Navigation
-systems that push primary actions above the fold at 1280px viewport but behind a top menu
-at 375px have not been designed for mobile; they have been designed for desktop and scaled
-down. WCAG 2.1 added touch-target and orientation requirements; WCAG 2.2 added an explicit
-minimum target size of 24×24 CSS pixels. These are floors, not aspirations — a 44×44px
-touch target (Apple HIG, Material Design) is the established usable minimum.
+**Mobile navigation.** On narrow viewports, the primary task and its next action must remain
+reachable without depending on hover or a desktop-only navigation pattern. WCAG 2.2
+SC 2.5.8 sets a 24×24 CSS-pixel minimum target-area or spacing requirement with explicit
+exceptions; a target below 24px is not automatically a failure when an exception applies.
+Apple and Material recommend larger touch targets in their platform systems, but those
+recommendations are not the WCAG threshold.
+([WCAG 2.5.8](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum),
+[Apple HIG](https://developer.apple.com/design/human-interface-guidelines/accessibility))
 
 ---
 
@@ -171,14 +172,13 @@ A flow is a sequence of states with a defined entry and a defined end. The desig
 flow fails in three characteristic ways: it has too many steps, it has states with no exit,
 or it defaults to the wrong choice.
 
-**The step count problem.** Baymard Institute's large-scale checkout usability research
-(baymard.com) documents that the average e-commerce checkout contains 23.48 form elements
-and 14.88 form fields, while an optimized checkout can function with 7–8 form fields. The
-result is that 18% of US online shoppers have abandoned an order specifically because the
-checkout process was too long or complicated. The design constraint is not "as few steps
-as possible" — it is "only the steps the user's task requires." A step that exists because
-an engineer needed the data, not because the user needs to make a decision, is an obstacle
-dressed as a form field.
+**The step count problem.** Baymard's public checkout research supports reducing unnecessary
+fields, avoiding extensive multi-column checkout forms, and making required/optional status
+clear. These are ecommerce findings, not a universal maximum field or step count. The design
+constraint is not "as few steps as possible" — it is "only the decisions the user's task
+requires." A step that exists only to expose the system's data model deserves challenge.
+([Baymard checkout UX](https://baymard.com/research-articles/current-state-of-checkout-ux),
+[multi-column forms](https://baymard.com/research-articles/avoid-multi-column-forms))
 
 **Defaults must be chosen for the frequent case.** Every input with a default value is an
 argument about what most users will want. A country selector that defaults to the United
@@ -196,11 +196,12 @@ unwanted states without going through a lengthy process. Undo and Redo support a
 system level; a Cancel or Back button at the screen level; a clearly labeled dismiss action
 at the modal level — these are not polish, they are load-bearing elements of any flow.
 
-**Every state needs a designed state.** A view that the user can reach must be designed —
-not just the happy path, but every branch. Loading, empty, error, success, disabled,
-and offline are each required in the design contract (`design.md`), not because a
-checklist demands it, but because a user who hits an undesigned state experiences
-something the designer never saw and therefore never fixed.
+**Reachable states need distinct treatment.** Where a task can load, complete with no
+content, fail, or succeed, those states must not share one unexplained blank panel or one
+generic message. Capture only states that apply to the product: an offline state is not
+owed when no offline behavior exists, and a disabled state needs a reason only when the
+user can encounter it.
+([NN/G empty states](https://www.nngroup.com/articles/empty-state-interface-design/))
 
 ---
 
@@ -239,27 +240,21 @@ user what to do next. Both are required.
 
 ## Feedback and system status
 
-The Doherty Threshold (Doherty and Thadani, IBM Systems Journal, 1982) established that
-computer and user productivity increases when response time falls below 400 milliseconds.
-Below 400ms, the user remains in the flow of the task; above 400ms, attention drifts and
-the cost of re-engaging accumulates. The threshold is not a performance target in the
-infrastructure sense — it is a design target in the perception sense: any action the user
-initiates must produce visible acknowledgment within 400 milliseconds.
+The Doherty Threshold is a historical response-time heuristic, not a WCAG requirement or a
+universal cutoff. Its useful design lesson is prompt acknowledgment: after a user initiates
+work, show that the action was received before uncertainty invites duplicate action.
 
 The acknowledgment does not need to be the result. It needs to be evidence that the system
-received the action and is working on it. A button that submits a form and produces no
-visual change for 800 milliseconds has failed the Doherty Threshold; the user does not
-know if the click registered, and the uncertainty produces re-clicks, double submissions,
-and frustration. The fix is an intermediate feedback state — a loading indicator, a button
-state change, an inline spinner — that fires within the first 200–300ms and persists until
-the result arrives.
+received the action and is working on it. A submission that leaves the interface unchanged
+long enough to create uncertainty invites repeat activation. Use an immediate pressed or
+pending state, then keep truthful progress visible until the result arrives.
 
-Condition → choice → reason: every interactive element must change state within 400ms of
-activation. Button pressed states must be instantaneous (<100ms, perceived as instant per
-Nielsen's 1993 response-time research). Loading states that persist beyond 400ms require
-a visible progress indicator. Loading states beyond one second require either a skeleton
-screen (when the structure is known) or an explicit progress mechanism. The `motion.md`
-theory file covers skeleton versus spinner evidence.
+Condition → choice → reason: acknowledge input promptly, then choose feedback that matches
+the actual operation. Use meaningful progress for longer known work and an activity
+indicator for indeterminate work; do not invent duration or percent. NN/G's response-time
+suggestions are heuristics, not conformance thresholds. The `motion.md` theory file covers
+skeleton versus spinner evidence.
+([NN/G progress indicators](https://www.nngroup.com/articles/progress-indicators/))
 
 **Optimistic UI.** When an action has a high likelihood of success and a low cost of
 reversal, update the UI immediately and reverse it if the server response fails. A "liked"
@@ -336,9 +331,9 @@ first…"). Negative framing communicates absence; positive framing communicates
 
 **First-run onboarding.** The research distinction between forced tutorial and contextual
 guidance applies at the flow level. Forced tutorials — full-screen walkthroughs that must
-be completed before the user can use the product — consistently produce lower retention
-than contextual guidance because they demand attention before the user has experienced the
-product's value. The user is being taught before they have a reason to learn.
+be completed before the user can use the product — demand attention before the instruction
+is necessarily relevant. Prefer contextual guidance when the product can expose the real
+task safely; do not claim a retention effect without product-specific evidence.
 
 Condition → choice → reason: onboarding should be pull-based, not push-based. When the
 product cannot be used without initial configuration, a first-run experience is justified;
@@ -393,9 +388,9 @@ messages, predictable page behavior, and consistent navigation: these overlap ex
 Nielsen heuristics 4, 8, and 9.
 
 Treating accessibility requirements as distinct from UX requirements produces work that
-satisfies both poorly. The touch target minimum (44×44px Apple HIG, 24×24px WCAG 2.2
-AA Level) is not an accessibility accommodation — it is a usability requirement for anyone
-using a touch screen at any level of dexterity. Focus ring visibility is not an
+satisfies both poorly. WCAG 2.2's 24×24px target-size or spacing criterion includes
+exceptions; larger platform recommendations remain useful design targets, not the WCAG
+minimum. Focus ring visibility is not an
 accessibility accommodation — it is required for anyone navigating by keyboard, which
 includes power users in every domain.
 
@@ -407,21 +402,13 @@ decisions, not as a separate compliance checklist applied after the design is co
 
 ---
 
-## Korean market specifics
+## Korean mechanics, not market assumptions
 
-The Korean mobile market is among the most mobile-first in the world; smartphone
-penetration and usage time per day consistently exceed global averages. This has direct
-UX implications: assumptions about hover interactions, large-viewport layouts, and
-desktop-primary navigation patterns are wrong for the majority of Korean users.
-
-Toss (Viva Republica) provides the most documented Korean fintech UX case study. The
-product's founding insight was that the existing Korean banking UX required fourteen steps
-to transfer money — certificate download, USB authentication, mandatory desktop browser.
-Toss's 2015 MVP reduced this to a single swipe by treating the existing complexity not as
-an unavoidable technical constraint (Tesler's Law: every system has irreducible complexity)
-but as complexity that had been pushed to the user by systems that could carry it
-themselves. Toss carried the complexity in the system and left the user with one decision:
-amount and recipient.
+Korean language in the brief can select Korean mechanics testing: real Hangul copy, Korean
+wrapping, mixed-script numerals and punctuation, and the product's chosen speech level.
+It does not establish a market, audience, cultural preference, device mix, or a "Korean app"
+visual style. Those require explicit authority or research. Do not turn one company's
+workflow or voice into a national default.
 
 Tesler's Law (Larry Tesler, Xerox PARC, ~1984) — also called the Law of Conservation of
 Complexity — states that every application has an irreducible complexity, and the only
@@ -445,8 +432,8 @@ and Molich, 1990, refined Nielsen, 1994) and rendered as checkable conditions. E
 question, not a test — a design that fails one is not necessarily wrong, but the
 failure must be a deliberate choice with a recorded reason.
 
-1. **System status**: Does the user always know what state the system is in? Can they see,
-   within 400ms of any action, that the action was received?
+1. **System status**: Does the user always know what state the system is in? Does an action
+   receive prompt, truthful acknowledgment before uncertainty invites a repeat?
 
 2. **Real-world match**: Does the interface speak the user's language, using words and
    concepts from their domain rather than the system's implementation? Does the order of
@@ -526,9 +513,8 @@ checks that `omd check` runs on every build. Principles not listed here remain a
 - §Flows: defaults chosen for the frequent case. Requires knowing the user population's
   preferences, not the rendered page's current value.
 
-- §Feedback and system status (Doherty Threshold, 400ms): whether every interactive
-  element changes state within 400ms. Requires timing measurements under interaction,
-  not a static IR snapshot.
+- §Feedback and system status: whether every interactive element gives prompt and truthful
+  acknowledgment. Requires timing measurements under interaction, not a static IR snapshot.
 
 - §Cognitive load and progressive disclosure: whether secondary actions are visually
   subordinate to the primary action. Requires semantic understanding of the hierarchy
@@ -540,18 +526,17 @@ checks that `omd check` runs on every build. Principles not listed here remain a
 - §The peak-end rule: whether the end of each flow is deliberately designed. Requires
   task simulation and emotional salience evaluation, not structural measurement.
 
-- §Korean market specifics: whether hover-first patterns are avoided on mobile. Partially
-  covered by WCAG touch-target rules (hit-area.yaml) but interaction-pattern analysis
-  requires the eye agent's task walk.
+- §Korean mechanics: whether target-language wrapping and mixed-script rendering remain
+  usable in the actual flow. Interaction-pattern analysis still requires the eye agent's
+  task walk.
 
 - Nielsen heuristics 2, 4, 7, 8, 10 (real-world match, consistency, efficiency, minimalism,
   help): all require semantic content understanding that the IR does not provide.
 
-- §Accessibility as a UX floor: whether every interactive control has a discernible accessible
-  name. The static IR captures `text`, `role`, and `ariaInvalid` but not the computed accessible
-  name (aria-label, aria-labelledby, title, or visually-hidden descendant text), so an icon-only
-  control cannot be judged deterministically without false positives. The eye agent flags a
-  control whose only content is an icon glyph with no text alternative. WCAG 2.1 §4.1.2.
+- §Accessibility as a UX floor: native form fields without a persistent semantic name are
+  surfaced by default rendered measurement as advisory evidence. Full accessible-name
+  computation for every custom control and assistive-technology behavior still requires
+  the accessibility tree and interaction evidence; screenshots cannot prove it. WCAG 4.1.2.
 
 ---
 

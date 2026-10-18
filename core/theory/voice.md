@@ -160,11 +160,11 @@ and 합니다체 (하다 → 합니다, 됩니다 → 됩니다). They can imply
 warmth. Neither is a universal product default; choose from the voice contract, audience,
 situation, and required authority. Defaulting to a soft, conversational 해요체 because it is the familiar consumer-app register — on a landing whose subject is technical, authoritative, or precision-first — is a register-fit miss, not a safe default. The speech level is chosen from this subject's audience and the authority its value claim needs, and recorded in the Voice contract with that reason; a landing that persuades on rigor and precision usually earns a firmer register than one that persuades on friendliness.
 
-Toss committed to 해요체 across every string in its product and published the rule
-explicitly: all copy uses 해요체, without exception, regardless of context or screen.
-Their stated reason is consistency of experience — 합니다체 anywhere breaks the register
-the rest of the product has established. The rule also extends to avoiding over-polite forms
-(~시겠어요?, ~께) that amplify formality past what the relationship calls for.
+Toss documents 해요체 as a product-wide voice choice and describes consistency as part of
+that experience. This is evidence about Toss's own service, not a universal Korean rule or
+proof that every legal, safety, institutional, or B2B surface should use the same register.
+([Toss, first UX writer](https://toss.tech/article/1st_uxwriter),
+[Toss writing principles](https://toss.tech/article/8-writing-principles-of-toss))
 
 Cite Toss (and 당근, Kakao) as documented examples of register discipline, never as a voice to copy. The
 register rules are already stated above — do not web-search a product's copy strings to imitate "토스식
@@ -214,19 +214,26 @@ or technical explanation may need a longer sentence. When a compact surface comb
 unrelated jobs, split at the change; retain a connective when it carries a real logical
 relationship that juxtaposition would lose.
 
-### What Korean products actually sound like
+### Service character is not human impersonation
 
-Successful Korean consumer products such as Toss, 당근, and Kakao show that consistency is
-not the same as informality. Their compact action and state copy is precise within its chosen
-register. Heroes often lead with the user's change; documentation, comparisons, and feature
-details may explain mechanism when mechanism is the useful fact.
+User-supplied guidance makes two boundaries explicit:
 
-배민 (Baemin) operates in a distinct creative register — warm, witty, deliberately playful —
-but the underlying commitment is the same: a consistent voice that was designed and held,
-not allowed to drift. Their UX writing interview at bcut.baemin.com describes the first
-UX writer's mandate as "ensuring the text inside the app communicates clearly with users
-and protecting consistency." The register is brand-specific; the structural commitment is
-universal.
+- 해요체 is a speech-level decision, not permission for a service to pretend it is a person.
+  Human-sounding fillers, emotions, or first-person claims still need a truthful speaker and
+  a useful job.
+- UI text reflects this service's character and philosophy. Do not copy another service's
+  vocabulary or branded friendliness. Reuse shared domain terms when users already know the
+  concept; name a product-specific feature from its own behavior.
+
+The same guidance prioritizes accuracy, concision, and consistency before brand voice.
+Consistency means one term per concept and one intentional speech level per speaker and
+relationship, with explicit exceptions for quoted speech, legal text, safety, or another
+changed speaker. It does not mean every string has the same sentence shape.
+
+Woowa Brothers' first-party account of an internal UX-writing assistant reinforces the
+need for explicit, maintained, context-aware rules and for asking which component a string
+will occupy. Its currency example is Baemin-specific and must not become a Korean-wide
+format rule. ([Woowa Brothers](https://techblog.woowahan.com/23836/))
 
 ### Document-structure narration: write the content, not that content is coming
 
@@ -544,15 +551,15 @@ conclusion is about domain specialisation in attention heads, not about copy reg
   (copyhackers.com/how-to-do-rapid-fire-review-mining/) — voice-of-customer method:
   mine real user language from reviews and forums; the customer names the value better
   than the copywriter
-- Toss Tech. (2022). "토스의 8가지 라이팅 원칙들."
-  toss.tech/article/8-writing-principles-of-toss — eight principles built from A/B test
-  data: Predictable hint, Weed cutting, Remove empty sentences, Focus on key message, Easy
-  to speak (avoid 한자어 and 문어체), Suggest over force, Universal words, Find hidden emotion
-- Toss Developer Center, UX Writing Guide
-  (developers-apps-in-toss.toss.im/design/ux-writing.html) — 해요체 as the product-wide
-  standard; active voice preference; one message per sentence; native Korean over Sino-Korean
-- 배민 UX Writing interview (bcut.baemin.com/6287/) — first UX writer mandate: clear
-  communication and consistency of voice; register as a designed commitment, not a default
+- Toss Tech. (2022), ["토스의 8가지 라이팅 원칙들"](https://toss.tech/article/8-writing-principles-of-toss)
+  — directional principles for Toss's product context, including predictable hints,
+  removing empty sentences, spoken clarity, and contextual emotion; not universal A/B laws
+  or a voice to copy
+- Toss Tech. (2023), ["첫 UX writer는 무슨 일을 해야 할까"](https://toss.tech/article/1st_uxwriter)
+  — Toss-specific voice adoption and the value of concrete examples over abstract voice prose
+- Woowa Brothers. (2025), ["안녕하세요! AI UX라이터 제민희입니다. 무엇을 도와드릴까요?"](https://techblog.woowahan.com/23836/)
+  — first-party case study on explicit, grounded, component-aware writing rules; product-specific
+  examples do not establish universal Korean copy conventions
 - Qian et al. (2025). "Enhancing Human-Like Responses in Large Language Models."
   arxiv.org/abs/2501.05032 — dialogue preference evidence for register fit; not static UI
   authorship evidence and not authority for phrase-level lint

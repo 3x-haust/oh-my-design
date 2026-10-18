@@ -1,6 +1,6 @@
 # Korean typography for product interfaces
 
-Korean type is a production system, not a font-name choice. Prove Hangul, Latin, numerals, punctuation, wrapping, fallback, and loading with the copy and containers that will ship. A label that breaks inside a Korean word is a hard failure.
+Korean type is a production system, not a font-name choice. Prove Hangul, Latin, numerals, punctuation, wrapping, fallback, and loading with the copy and containers that will ship. An intra-word break in a short label or heading is a strong review signal; a control label that splits internally is blocked by the current measured control-wrap check. Long prose and narrow dynamic cells can lawfully use Korean character-based breaking when overflow would be worse.
 
 ## Choose a family from the task
 
@@ -41,19 +41,29 @@ Never subset to only the glyphs in today's copy deck. User names, addresses, sea
 
 ## Role ranges
 
-These are rendering ranges, not automatic tokens. Test each at 1280 by 900, 390 by 844, 320 CSS px, and 200 percent zoom.
+These are OMD starting conventions, not Korean standards or automatic tokens. They are informed by
+role-based systems such as Material and Atlassian, then narrowed for common product specimens.
+Test each at 1280 by 900, 390 by 844, 320 CSS px, and 200 percent zoom; change them when the
+actual font, task, reading distance, or platform text system requires it.
+([Material 3](https://developer.android.com/develop/ui/compose/designsystems/material3),
+[Atlassian](https://atlassian.design/foundations/typography))
 
 | Role | Size | Line height | Letter spacing | Notes |
 | --- | --- | --- | --- | --- |
 | Display | 40 to 64px | 1.08 to 1.2 | -0.035em to -0.015em | Marketing only when the heading is the true anchor. |
 | Page heading | 28 to 40px | 1.2 to 1.3 | -0.025em to -0.01em | Keep final Korean line from becoming one syllable. |
 | Section heading | 20 to 28px | 1.25 to 1.4 | -0.02em to -0.005em | Use weight before excessive size jumps. |
-| Body | 15 to 16px | 1.5 to 1.6 | -0.01em to 0 | Never add positive tracking to Korean body copy. |
+| Body | 15 to 16px | 1.4 to 1.6 | -0.01em to 0 | Start from the font's normal spacing; positive tracking needs rendered evidence. |
 | Compact body or control | 14 to 15px | 1.4 to 1.5 | -0.01em to 0 | Keep touch target size independent from type size. |
 | Dense table | 13 to 14px | 1.4 to 1.45 | -0.005em to 0 | Use 13px only when density and display conditions support it. |
 | Caption or metadata | 12 to 13px | 1.4 to 1.5 | 0 | 12px is the floor, not a target. |
 
-Positive tracking breaks the joined visual rhythm of Hangul body text. Slight negative tracking can settle headings, but clipping, crowded punctuation, or closed counters means it went too far. Don't place labels below 12px.
+Latin all-caps tracking advice does not establish a Hangul preset. Start Korean body text at the
+font's normal spacing. Positive tracking at or above 0.05em is an OMD convention warning because
+that value is commonly suggested for Latin capitals, not Korean prose; inspect the actual font
+before deciding. Slight negative tracking can settle headings, but clipping, crowded punctuation,
+or closed counters means it went too far. The 12px label/caption value below is an OMD review floor,
+not a WCAG threshold. ([Butterick](https://practicaltypography.com/letterspacing.html))
 
 Use `font-variant-numeric: tabular-nums` for columns of prices, quantities, times, and changing counters. Keep proportional numerals in prose and isolated values. Right-align numeric table cells and align decimal separators when the task calls for comparison.
 
@@ -83,7 +93,10 @@ Use for ERP, operations, analytics, and expert workflows. Density doesn't permit
 | Secondary | 14px / 22px |
 | Caption | 12px / 18px |
 
-Use for help centers, reports, education, and content-heavy services. Keep Korean body measure near 35 to 55 full-width characters, then judge with real paragraphs.
+Use for help centers, reports, education, and content-heavy services. Do not enforce a fabricated
+Korean characters-per-line range. Judge representative Hangul-heavy and mixed-script paragraphs
+in the actual font and viewport; Latin 45–90-character guidance does not transfer directly.
+([Butterick](https://practicaltypography.com/line-length.html))
 
 ### Marketing
 
@@ -164,11 +177,29 @@ Units take a consistent project rule. Compact product values commonly use `12GB`
 * Fallback and loaded font wraps are compared at 1280, 390, and 320 CSS px and at 200 percent zoom.
 * Font loading doesn't hide task text, and measured layout shift is acceptable.
 * Dynamic subset ranges cover user-generated and server-provided text. They aren't limited to current copy glyphs.
-* Body is 15 to 16px unless a rendered task-specific reason supports another value. Captions and labels are at least 12px.
-* Korean body text has no positive tracking.
+* Body begins from the chosen semantic scale and real specimen; 15 to 16px is a common product starting range, not a universal requirement. Review captions and labels below 12px.
+* Korean body text starts from normal tracking; positive tracking, especially 0.05em or more, has a recorded rendered reason.
 * Tables and prices use tabular numerals where alignment helps comparison.
 * Headings have no clipping, accidental orphan, or one-syllable final line.
 * Buttons and navigation have an explicit no-wrap, width, overflow, and truncation policy.
-* No label breaks inside a Korean word. This is a hard failure.
+* Short labels and headings keep ordinary Korean words intact unless a documented narrow-content exception makes character breaking the safer choice. Control-label splits remain blocking in measurement.
 * Dates, money, units, and abbreviations follow one documented format per surface.
 * The final production container, not only a neutral specimen, passes the same checks.
+
+## Sources and evidence limits
+
+- CSS Text defines both Korean syllable-level breaking under `normal` and word-preserving
+  behavior under `keep-all`; surface and overflow conditions choose between them.
+  ([CSS Text Level 3](https://www.w3.org/TR/css-text-3/))
+- KLREQ documents Hangul and mixed-script layout concerns but is a work-in-progress W3C Group
+  Note, not a universal browser conformance threshold.
+  ([KLREQ](https://www.w3.org/TR/klreq/))
+- Pretendard, Spoqa Han Sans Neo, and Noto Sans KR project pages establish available families,
+  weights, formats, and stated coverage; they do not prove that one family is best for every
+  Korean product.
+  ([Pretendard](https://github.com/orioncactus/pretendard/blob/main/packages/pretendard/docs/en/README.md),
+  [Spoqa Han Sans Neo](https://github.com/spoqa/spoqa-han-sans/blob/main/README.md),
+  [Noto Sans KR](https://github.com/google/fonts/blob/main/ofl/notosanskr/DESCRIPTION.en_us.html))
+- No primary source reviewed here establishes a universal Korean body size, line-height,
+  characters-per-line, or heading-tracking threshold. Numeric values in this file remain
+  explicit OMD conventions to render and review.

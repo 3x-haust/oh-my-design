@@ -96,6 +96,23 @@ paragraph. OMD does not turn every U into a mandatory claim.
    destination or state. Simplifying the wording must not conceal setup, payment,
    prerequisites or a later actor. Keep exact commands and truthful feedback intact.
 
+The action's commitment level must match the next screen. Exploration labels such as
+`Check availability`, `Compare plans`, or `Preview` are appropriate only when the next
+state remains exploratory. Use `Buy`, `Book`, `Send`, or `Publish` when the click really
+commits that result. The Google Hotels `Book a room` → `Check availability` report belongs
+in `theory/microcopy.md`; it is one reported experiment, not a reusable conversion promise.
+
+Avoid generic links such as `Learn more` when several destinations compete or the label
+does not predict the landing content. Specific, sincere, substantial, and succinct link
+labels set an expectation the destination must fulfill.
+([NN/G](https://www.nngroup.com/articles/better-link-labels/))
+
+Do not fill a marketing template mechanically. A heading, subtitle, proof line, and CTA
+each need a distinct reader job. If the subtitle repeats the heading or a section only
+restates its title, omit it. Shopify explicitly cautions against adding subcopy merely
+because a component has room.
+([Shopify](https://polaris-react.shopify.com/content/fundamentals))
+
 The web-reading studies by Morkes and Nielsen support concise, scannable, factual text in
 their tested settings. Use informative entry points and one useful idea per paragraph;
 do not transplant historical percentages into a forecast for this page.
