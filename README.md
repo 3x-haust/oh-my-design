@@ -1,20 +1,110 @@
-# Oh My Design
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/readme/header-dark.svg">
+    <img alt="Oh My Design" src="brand/readme/header-light.svg" width="560">
+  </picture>
+</p>
 
-[![CI](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg)](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h3 align="center">AI that designs like a human.</h3>
 
-**AI that designs like a human.** Give OMD one request. It researches, compares real material, chooses a direction, builds, renders, and repairs internally. The model adapts its methods to observed evidence rather than requiring routine reference or draft approval; account access and external-action permissions remain separate.
+<p align="center">
+An open-source design harness for coding agents. Before it draws anything, OMD asks who the page is for,<br>
+measures real references, compares structures blind, builds once, and checks its own render for AI slop.
+</p>
 
-Native Pi uses the same production engine for normal autonomous execution and explicitly enabled private developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md). Technical integration is tested; human-level quality claims still require real held-out blind ratings.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@3xhaust/oh-my-design"><img alt="npm" src="https://img.shields.io/npm/v/%403xhaust%2Foh-my-design?color=ff5a1f&label=npm"></a>
+  <a href="https://www.npmjs.com/package/@3xhaust/oh-my-design"><img alt="npm downloads" src="https://img.shields.io/npm/dm/%403xhaust%2Foh-my-design?color=ff8a1f"></a>
+  <a href="https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/3x-haust/oh-my-design/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/3x-haust/oh-my-design?color=e0263f"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0a0a0a"></a>
+</p>
 
-[한국어](README.ko.md)
+<p align="center">
+  <b>Claude Code</b> · <b>Codex</b> · <b>Pi</b>
+  &nbsp;—&nbsp;
+  <a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="https://3x-haust.github.io/oh-my-design/">Landing page</a> · <a href="README.ko.md">한국어</a>
+</p>
+
+https://github.com/user-attachments/assets/7d8a77e4-fc07-4f95-a5f5-a7fe107d1fa8
+
+<p align="center"><sub>The OMD launch film (30 s, with sound): a one-shot AI page goes in, the same page comes back redesigned one decision at a time.</sub></p>
+
+## Same request. Different process.
+
+<p align="center"><img src="brand/readme/before-after.png" width="900" alt="The same bakery booking request as a one-shot AI page and as an OMD page, with omd check output under each"></p>
+
+The same bakery booking request. On the left, the page a model draws in one shot; on the right, the page OMD designed.
+Under each is the real `omd check` output for that page: the left trips the slop rules (two equal primary buttons,
+three identical cards, gradient text), the right returns no findings. The pages are the illustrative examples from
+our launch film. Slop findings are a quality floor, not proof of authorship.
+
+## Quick start
+
+```bash
+npm install -g @3xhaust/oh-my-design
+oh-my-design install    # adds the skills and agents to every detected host
+omd doctor              # checks the runtime, Chromium, write access and the theory pack
+```
+
+Then ask your agent for a design:
+
+| Host | Try |
+| --- | --- |
+| Claude Code | `/ultradesign a booking page for a neighbourhood bakery` |
+| Codex | `$omd-ultradesign a booking page for a neighbourhood bakery` |
+| Pi | `pi install npm:@3xhaust/oh-my-design`, then run `/omd` for a project check |
+
+Needs Node.js 22.19+. Every install option, the Claude Code marketplace and the browser provider are under [Install](#install).
+
+## Four habits a one-shot prompt skips
+
+| Asks first | Measures, not mood boards | Chooses blind | Checks its own work |
+| --- | --- | --- | --- |
+| Records the problem, the primary task and the costliest error before any layout. | Collects measured references — type, density, composition — and transfers principles, never pixels. | Fresh reviewers compare anonymous structures without the builder's rationale. | Renders desktop and mobile, runs `omd check` and a slop scan, then repairs and re-renders. |
+
+## How it works
+
+```mermaid
+flowchart LR
+  A([Your request]) --> B[Frame<br/>who is it for?]
+  B --> C[Research<br/>measured references]
+  C --> D[Copy and type<br/>reviewed blind]
+  D --> E[Structures<br/>compared blind]
+  E --> F[Build once]
+  F --> G[See and check<br/>renders · omd check · slop scan]
+  G -- repair or reframe --> F
+```
+
+The route is adaptive, not a mandatory checklist: OMD selects the methods the request needs and records a reason for
+every step it skips. The full sixteen-step loop is under [The human design loop](#the-human-design-loop).
+
+## Skills
+
+Six user-facing skills. Canonical names use the `omd-` prefix; Codex shows them as `(omd) <skill>`, and the Claude marketplace flavor references them as `oh-my-design:<skill>`.
+
+| Skill | Use it for |
+| --- | --- |
+| `omd-ultradesign` | Run the complete human design loop for a page, app, dashboard, blog, landing page, or redesign. |
+| `omd-figma` | Pull a Figma file, synthesize its system, implement frames, compare responsive pairs, and report measured fidelity. |
+| `omd-scout` | Build a measured LEGO fragment inventory and chat-ready Markdown candidate/usage tables without designing or implementing. It closes consequential coverage gaps and reports uncertainty instead of filling quotas. |
+| `omd-critique` | Review an existing design without changing it; group deterministic findings by root cause and judge rendered craft. |
+| `omd-humanize` | Preserve facts while locally repairing sound discourse or reconstructing a misshapen message from verified facts, voice, and surface action. |
+| `omd-coach` | Read accumulated check history, identify recurring problems and trends, and suggest what to practise next. It does not read taste records. |
 
 ## Built with OMD — in one shot
 
 The landing page was generated by OMD itself from a single one-shot prompt — the visual output was not hand-tuned. View it at **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)**.
 
-## What it is
+## Documentation
+
+<details>
+<summary><b>What “design like a human” means</b></summary>
+
+### What it is
+
+**AI that designs like a human.** Give OMD one request. It researches, compares real material, chooses a direction, builds, renders, and repairs internally. The model adapts its methods to observed evidence rather than requiring routine reference or draft approval; account access and external-action permissions remain separate.
+Native Pi uses the same production engine for normal autonomous execution and explicitly enabled private developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md). Technical integration is tested; human-level quality claims still require real held-out blind ratings.
 
 Here, “design like a human” means accountable judgment, not a signature look. The goal is a repeatable process; the result can be quiet, expressive, conventional, or strange. What stays constant is the chain of decisions behind it.
 
@@ -44,15 +134,25 @@ a product capability merely to make an under-specified greenfield concept look d
 
 OMD runs inside **Codex**, **Claude Code**, and hosts that implement the public **Pi extension API**. It ships six user-facing skills, nine internal pipeline agents, a local `omd` CLI, design theory and recipe packs, and a durable project record under `.omd/`.
 
-## Requirements
+</details>
+
+<details>
+<summary><b>Requirements</b></summary>
+
+### Requirements
 
 - **Node.js 22.19 or newer** (the CLI runs the TypeScript entrypoints directly)
 - **Claude Code, Codex, or a Pi-compatible host**
 - A browser provider: **browser-rs v0.1.10** is preferred on its two supported platforms; **Playwright + Chromium** remains the required fallback for rendering, probing, and typography proofs (see below)
 
-## Install
+</details>
 
-### npm — global CLI (recommended)
+<details>
+<summary><b>Install — every option, Pi, browser provider, reference research</b></summary>
+
+### Install
+
+#### npm — global CLI (recommended)
 
 ```bash
 npm install -g @3xhaust/oh-my-design
@@ -65,7 +165,7 @@ omd doctor              # verify the runtime, Chromium, project write access, an
 
 > Install the **scoped** package `@3xhaust/oh-my-design`. The unscoped `oh-my-design` on npm is an unrelated project.
 
-### Pi-compatible hosts — extension package
+#### Pi-compatible hosts — extension package
 
 OMD is a standard Pi package. Pi and API-compatible forks such as Senpi load the same extension
 and canonical skills; OMD does not probe or launch a Senpi executable.
@@ -221,7 +321,7 @@ Bind the documents using `omd schema design-handoff`, then run
 This checks document integrity, reference evidence, and write scope. It does not attest application
 behavior or independent review authorship.
 
-### Claude Code — plugin marketplace
+#### Claude Code — plugin marketplace
 
 ```text
 /plugin marketplace add 3x-haust/oh-my-design
@@ -230,7 +330,7 @@ behavior or independent review authorship.
 
 Then open a session and run `/ultradesign`.
 
-### From source (contributors)
+#### From source (contributors)
 
 ```bash
 git clone https://github.com/3x-haust/oh-my-design
@@ -243,7 +343,7 @@ node bin/omd.ts doctor
 pi -e ./extensions/omd.ts
 ```
 
-### Browser provider and Chromium (after global installation)
+#### Browser provider and Chromium (after global installation)
 
 After globally installing `@3xhaust/oh-my-design`, OMD prefers the `browser-rs` MCP provider for interactive reference research, user-directed region captures, and visual QA. It is a deliberately narrow v0.1.10 integration, not a claim of universal browser compatibility:
 
@@ -286,7 +386,12 @@ npx playwright install chromium
 node bin/omd.ts doctor
 ```
 
-## Chat-first LEGO reference assembly
+</details>
+
+<details>
+<summary><b>Chat-first LEGO reference assembly</b></summary>
+
+### Chat-first LEGO reference assembly
 
 OMD treats a reference as a set of traceable bricks selected for the approved brief, not as a whole-site style to copy. The canonical sequence is:
 
@@ -315,7 +420,7 @@ omd ref check
 
 `omd ref candidates` emits a Korean-first Markdown table with source site/page, captured UI or image part, proposed route/component, take, avoid, and adaptation. It does not open a board. The selection is hash-bound to both validated raw evidence and its sanitized reference assembly.
 
-### Captures, clean-room composition, and final traceability
+#### Captures, clean-room composition, and final traceability
 
 Short standalone component examples need not be mistaken for empty pages: OMD checks the requested HTML element's rendered size, visibility styles, and text. This is not a visual-quality verdict. HTTP 403, server errors, and challenge pages remain rejected.
 
@@ -331,11 +436,16 @@ During implementation, each selected source part receives a `used`, `rejected`, 
 
 See the [reference assembly protocol](core/protocol/reference-assembly.md) for capture, evidence, source-isolation, and transfer contracts.
 
-### Early concept studies on Codex
+#### Early concept studies on Codex
 
 When a design direction is still open, Codex running through `omd-codex` can make provisional HTML studies from supplied content before the full composition is approved. Desktop and mobile renders let you compare how different arrangements communicate that content. These optional studies are separate from production: they do not replace reference work, copy and typography checks, or final review. This is an HTML-study capability, not an image-generation service or a guarantee of design quality. See the [study protocol](core/theory/imagegen.md#provisional-source-studies) for the supported host workflow.
 
-## Designed around your material
+</details>
+
+<details>
+<summary><b>Designed around your material</b></summary>
+
+### Designed around your material
 
 Ordinary `/ultradesign` use needs no style vocabulary. When real first-party content has a stable
 shape, OMD may adapt composition to its lengths, counts, aspect ratios, or semantic outliers. The
@@ -344,7 +454,12 @@ evidence lives. OMD stores hashes, project-relative paths, and bounded measureme
 and it never infers taste from silence. The related CLI commands are an expert and debugging surface,
 not a new step for everyday use.
 
-## Designed for the language and market you actually mean
+</details>
+
+<details>
+<summary><b>Designed for the language and market you actually mean</b></summary>
+
+### Designed for the language and market you actually mean
 
 OMD does not treat localization as sentence translation, and it does not map a language code to a
 country theme. It keeps the conversation language separate from the surface locale, explicit market,
@@ -398,7 +513,12 @@ decisions cannot silently become design rules. Composer, Hand, and Eye see only 
 slot-to-decision projection, while source-owner-only IDs and capture hashes remain withheld from those
 downstream roles in the evidence record.
 
-## The human design loop
+</details>
+
+<details>
+<summary><b>The human design loop — all sixteen steps</b></summary>
+
+### The human design loop
 
 `omd-ultradesign` coordinates the applicable work below. This is the complete capability map, not a
 universal sequence: the adaptive route records selected stages and methods, dependency order, and a
@@ -423,20 +543,12 @@ reason for every omitted optional item.
 
 Figma files and explicit visual targets already supply structural decisions, so the loop may skip structural divergence in those routes — but it records why.
 
-## Skills
+</details>
 
-Six user-facing skills. Canonical names use the `omd-` prefix; Codex shows them as `(omd) <skill>`, and the Claude marketplace flavor references them as `oh-my-design:<skill>`.
+<details>
+<summary><b>Internal pipeline agents</b></summary>
 
-| Skill | Use it for |
-| --- | --- |
-| `omd-ultradesign` | Run the complete human design loop for a page, app, dashboard, blog, landing page, or redesign. |
-| `omd-figma` | Pull a Figma file, synthesize its system, implement frames, compare responsive pairs, and report measured fidelity. |
-| `omd-scout` | Build a measured LEGO fragment inventory and chat-ready Markdown candidate/usage tables without designing or implementing. It closes consequential coverage gaps and reports uncertainty instead of filling quotas. |
-| `omd-critique` | Review an existing design without changing it; group deterministic findings by root cause and judge rendered craft. |
-| `omd-humanize` | Preserve facts while locally repairing sound discourse or reconstructing a misshapen message from verified facts, voice, and surface action. |
-| `omd-coach` | Read accumulated check history, identify recurring problems and trends, and suggest what to practise next. It does not read taste records. |
-
-## Internal pipeline agents
+### Internal pipeline agents
 
 Nine agents are implementation details of the loop, not public commands. They do not pin a concrete model. By default, each uses the user's configured model and its source-owned effort tier.
 
@@ -472,7 +584,12 @@ the mapped child. Unmapped roles still omit a model argument and keep their agen
 
 Claude Code can enforce declared denied tools in agent metadata. Codex agent files have no equivalent tool-restriction field, so read-only limits there are prompt contracts rather than a hard sandbox. OMD does not describe those contracts as filesystem isolation.
 
-## Evidence boundaries and artifacts
+</details>
+
+<details>
+<summary><b>Evidence boundaries and artifacts</b></summary>
+
+### Evidence boundaries and artifacts
 
 | Stage | Durable output | Boundary |
 | --- | --- | --- |
@@ -494,7 +611,12 @@ Claude Code can enforce declared denied tools in agent metadata. Codex agent fil
 
 Human approval checkpoints are separate from craft checkpoints. Projects default to `checkpoint: none`; concept, structure, or both can be enabled in `.omd/config.json`.
 
-## Stack routing
+</details>
+
+<details>
+<summary><b>Stack routing</b></summary>
+
+### Stack routing
 
 Every builder follows the same precedence:
 
@@ -506,7 +628,12 @@ explicit user request
 
 Existing vanilla HTML is an existing stack. An unrecognized package or toolchain is investigated and preserved, not treated as an empty repository. Plain HTML for a new greenfield project is used only when the user explicitly asks for it. Greenfield scaffold dependencies are allowed; existing projects should not receive unnecessary ones.
 
-## Verification stack
+</details>
+
+<details>
+<summary><b>Verification stack</b></summary>
+
+### Verification stack
 
 OMD combines deterministic checks with rendered review.
 
@@ -527,7 +654,12 @@ OMD combines deterministic checks with rendered review.
 
 Slop findings are a quality floor and warnings; they do not prove a design was generated by AI. A written overrule records intent but does not suppress a finding or change command status. Rendered critique remains necessary — a rule engine cannot safely judge optical balance, composition rhythm, typography craft, or whether the memorable moment belongs to the concept.
 
-## Interaction applicability
+</details>
+
+<details>
+<summary><b>Interaction applicability</b></summary>
+
+### Interaction applicability
 
 The copy deck declares exactly one interaction scope.
 
@@ -539,7 +671,12 @@ The copy deck declares exactly one interaction scope.
 
 Loading, empty, error, success, disabled, offline, and recovery states are designed only when the surface can reach them — the harness does not add fake states to satisfy a checklist. Probe plans use declared click, fill, and keypress steps with explicit expectations, are limited to local files and localhost/loopback URLs, and reject authenticated, remote, destructive, or undeclared actions. OMD never discovers controls and clicks them automatically.
 
-## Project state
+</details>
+
+<details>
+<summary><b>Project state</b></summary>
+
+### Project state
 
 Durable, reviewable records live directly under `.omd/`:
 
@@ -549,7 +686,12 @@ Durable, reviewable records live directly under `.omd/`:
 
 Generated IR, renders, filmstrips, sketch candidates, probe results, and scratch output live under `.omd/.cache/`; deleting the cache should not erase design intent. `oh-my-design uninstall` removes installed OMD files and config changes while preserving the project’s `.omd/` directory.
 
-## CLI reference
+</details>
+
+<details>
+<summary><b>CLI reference</b></summary>
+
+### CLI reference
 
 A compact map of `node bin/omd.ts --help`:
 
@@ -597,7 +739,12 @@ omd figma pull <file-url>  |  omd figma system  |  omd figma diff <frame-id> <pa
 omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
 ```
 
-## Architecture
+</details>
+
+<details>
+<summary><b>Architecture</b></summary>
+
+### Architecture
 
 Prompt source of truth:
 
@@ -610,7 +757,12 @@ Generated outputs — **do not edit directly**; `npm run build` regenerates them
 
 Edited directly: `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`, and the theory and recipe packs under `core/`.
 
-## Testing
+</details>
+
+<details>
+<summary><b>Testing</b></summary>
+
+### Testing
 
 Tests are classified as unit, integration, browser, native, or packaging. `npm test` builds stale generated output when needed and runs every tier with safe concurrency; use `npm run test:unit` or another `test:<tier>` command for focused work. Coverage uses the deterministic unit and integration tiers.
 
@@ -620,6 +772,8 @@ npm run test:coverage
 npm run typecheck
 npm run build
 ```
+
+</details>
 
 ## Contributing
 
@@ -633,3 +787,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test classification, three-lay
 - Plugin/marketplace manifests are shipped artifacts; the from-source direct installer is the path covered by install-to-doctor regression tests.
 
 Licensed under the [MIT License](LICENSE).
+
+## Star history
+
+<a href="https://star-history.com/#3x-haust/oh-my-design&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=3x-haust/oh-my-design&type=Date&theme=dark">
+    <img alt="Star history" src="https://api.star-history.com/svg?repos=3x-haust/oh-my-design&type=Date" width="600">
+  </picture>
+</a>

@@ -1,20 +1,110 @@
-# Oh My Design
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/readme/header-dark.svg">
+    <img alt="Oh My Design" src="brand/readme/header-light.svg" width="560">
+  </picture>
+</p>
 
-[![CI](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg)](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h3 align="center">사람처럼 디자인하는 AI.</h3>
 
-**사람처럼 디자인하는 AI.** 요청을 한 번 입력하면 OMD가 실제 자료를 조사·비교하고 방향을 선택한 뒤 제작·렌더·수정을 내부에서 이어갑니다. 관찰한 근거에 따라 방법을 조정하며, 일상적인 레퍼런스·시안 승인을 요구하지 않습니다. 계정 접근과 외부 변경 권한은 별도로 유지합니다.
+<p align="center">
+코딩 에이전트를 위한 오픈소스 디자인 하네스입니다. OMD는 그리기 전에 누구를 위한 화면인지 묻고,<br>
+실제 레퍼런스를 재고, 구조를 블라인드로 비교한 뒤 한 번 만들고, 렌더한 결과에서 AI 티를 스스로 검사합니다.
+</p>
 
-네이티브 Pi의 일반 자율 실행과 명시적으로 켠 비공개 개발자 평가는 같은 제작 엔진을 사용합니다. [실행 방법·비공개 평가·버전별 보정 안내](core/protocol/autonomous-design.md)를 참고하세요. 기술적 연결은 테스트했지만 사람 수준 품질 주장은 실제 블라인드 평가가 필요합니다.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@3xhaust/oh-my-design"><img alt="npm" src="https://img.shields.io/npm/v/%403xhaust%2Foh-my-design?color=ff5a1f&label=npm"></a>
+  <a href="https://www.npmjs.com/package/@3xhaust/oh-my-design"><img alt="npm downloads" src="https://img.shields.io/npm/dm/%403xhaust%2Foh-my-design?color=ff8a1f"></a>
+  <a href="https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/3x-haust/oh-my-design/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/3x-haust/oh-my-design?color=e0263f"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0a0a0a"></a>
+</p>
 
-[English](README.md)
+<p align="center">
+  <b>Claude Code</b> · <b>Codex</b> · <b>Pi</b>
+  &nbsp;—&nbsp;
+  <a href="#빠른-시작">빠른 시작</a> · <a href="#동작-방식">동작 방식</a> · <a href="https://3x-haust.github.io/oh-my-design/">랜딩 페이지</a> · <a href="README.md">English</a>
+</p>
+
+https://github.com/user-attachments/assets/7d8a77e4-fc07-4f95-a5f5-a7fe107d1fa8
+
+<p align="center"><sub>OMD 소개 영상(30초, 소리 있음): AI가 한 번에 만든 페이지를 넣으면, 같은 페이지가 결정 하나씩 다시 디자인되어 나옵니다.</sub></p>
+
+## 같은 요청, 다른 과정
+
+<p align="center"><img src="brand/readme/before-after.png" width="900" alt="같은 빵집 예약 요청을 AI가 한 번에 만든 페이지와 OMD가 만든 페이지, 각각의 omd check 결과"></p>
+
+같은 빵집 예약 페이지 요청입니다. 왼쪽은 모델이 한 번에 그린 화면, 오른쪽은 OMD가 디자인한 화면입니다.
+아래는 각 페이지에 실제로 돌린 `omd check` 출력입니다. 왼쪽은 슬롭 규칙(같은 무게의 버튼 두 개, 똑같은 카드 세 장,
+그라데이션 글자)에 걸리고, 오른쪽은 경고가 없습니다. 두 페이지는 소개 영상에 쓴 예시 페이지이며,
+슬롭 경고는 품질의 바닥선일 뿐 AI가 만들었다는 증거는 아닙니다.
+
+## 빠른 시작
+
+```bash
+npm install -g @3xhaust/oh-my-design
+oh-my-design install    # 감지된 모든 호스트에 스킬과 에이전트를 설치
+omd doctor              # 런타임, Chromium, 쓰기 권한, theory pack 확인
+```
+
+그다음 에이전트에게 디자인을 요청하세요.
+
+| 호스트 | 예시 |
+| --- | --- |
+| Claude Code | `/ultradesign 성수동 빵집 예약 페이지 만들어줘` |
+| Codex | `$omd-ultradesign 성수동 빵집 예약 페이지 만들어줘` |
+| Pi | `pi install npm:@3xhaust/oh-my-design` 후 `/omd`로 프로젝트 점검 |
+
+Node.js 22.19 이상이 필요합니다. 모든 설치 방법, Claude Code 마켓플레이스, 브라우저 공급자는 [설치](#설치)에 있습니다.
+
+## 원샷 프롬프트가 건너뛰는 네 가지 습관
+
+| 먼저 묻기 | 무드보드 대신 측정 | 블라인드로 고르기 | 스스로 검사하기 |
+| --- | --- | --- | --- |
+| 레이아웃 전에 문제, 핵심 작업, 가장 비싼 실수를 기록합니다. | 타입·밀도·구성을 잰 레퍼런스를 모으고, 픽셀이 아니라 원리를 옮깁니다. | 새 리뷰어가 만든 사람의 설명 없이 익명 구조를 비교합니다. | 데스크톱·모바일을 렌더하고 `omd check`와 슬롭 스캔을 돌린 뒤 고치고 다시 렌더합니다. |
+
+## 동작 방식
+
+```mermaid
+flowchart LR
+  A([요청]) --> B[프레임<br/>누구를 위한가?]
+  B --> C[리서치<br/>측정한 레퍼런스]
+  C --> D[카피·타이포<br/>블라인드 리뷰]
+  D --> E[구조 비교<br/>블라인드]
+  E --> F[한 번 만들기]
+  F --> G[보고 검사하기<br/>렌더 · omd check · 슬롭 스캔]
+  G -- 수정 또는 재정의 --> F
+```
+
+정해진 체크리스트가 아니라 적응형 경로입니다. 요청에 필요한 방법을 고르고, 건너뛴 단계마다 이유를 기록합니다.
+16단계 전체는 [휴먼 디자인 루프](#휴먼-디자인-루프)에 있습니다.
+
+## 스킬
+
+여섯 개의 사용자용 스킬입니다. 정본 이름은 `omd-` 접두사를 쓰며, Codex는 `(omd) <스킬>` 로 표시하고, Claude 마켓플레이스 플레이버는 `oh-my-design:<스킬>` 로 참조합니다.
+
+| 스킬 | 용도 |
+| --- | --- |
+| `omd-ultradesign` | 페이지, 앱, 대시보드, 블로그, 랜딩 페이지, 리디자인을 위한 전체 휴먼 디자인 루프를 실행합니다. |
+| `omd-figma` | Figma 파일을 가져와 시스템을 합성하고, 프레임을 구현하고, 반응형 쌍을 비교하고, 측정된 충실도를 보고합니다. |
+| `omd-scout` | 디자인·구현 없이 측정된 LEGO 조각 인벤토리와 채팅용 Markdown 후보·사용 표를 만듭니다. 할당량을 채우는 대신 결정적 커버리지 공백을 메우고 불확실성을 보고합니다. |
+| `omd-critique` | 기존 디자인을 바꾸지 않고 검토합니다. 결정적 발견을 근본 원인별로 묶고 렌더된 크래프트를 판단합니다. |
+| `omd-humanize` | 사실을 보존하면서 건전한 담화를 국소적으로 수리하거나, 검증된 사실·보이스·표면 동작으로부터 뒤틀린 메시지를 재구성합니다. |
+| `omd-coach` | 누적된 검사 이력을 읽고 반복되는 문제와 추세를 찾아 다음에 연습할 것을 제안합니다. taste 기록은 읽지 않습니다. |
 
 ## OMD로 만든 결과 — 원샷 프롬프트
 
 OMD가 단일 원샷 프롬프트로 생성한 랜딩 페이지입니다 — 시각 출력은 손으로 다듬지 않았습니다. **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)** 에서 볼 수 있습니다.
 
-## OMD란
+## 문서
+
+<details>
+<summary><b>‘사람처럼 디자인한다’의 뜻</b></summary>
+
+### OMD란
+
+**사람처럼 디자인하는 AI.** 요청을 한 번 입력하면 OMD가 실제 자료를 조사·비교하고 방향을 선택한 뒤 제작·렌더·수정을 내부에서 이어갑니다. 관찰한 근거에 따라 방법을 조정하며, 일상적인 레퍼런스·시안 승인을 요구하지 않습니다. 계정 접근과 외부 변경 권한은 별도로 유지합니다.
+네이티브 Pi의 일반 자율 실행과 명시적으로 켠 비공개 개발자 평가는 같은 제작 엔진을 사용합니다. [실행 방법·비공개 평가·버전별 보정 안내](core/protocol/autonomous-design.md)를 참고하세요. 기술적 연결은 테스트했지만 사람 수준 품질 주장은 실제 블라인드 평가가 필요합니다.
 
 여기서 ‘사람처럼 디자인한다’는 것은 특정한 결과 스타일이 아니라 근거를 남기는 판단을 뜻합니다. 목표는 반복 가능한 프로세스이며, 결과는 차분할 수도 과감할 수도 익숙하거나 낯설 수도 있습니다. 일관되는 것은 결과의 생김새가 아니라 그 뒤에 남은 결정의 흐름입니다.
 
@@ -44,15 +134,25 @@ outcome + facts + risk → selected methods and reasoned skips → one productio
 
 OMD는 **Codex**, **Claude Code**, 그리고 공개 **Pi extension API**를 구현한 호스트에서 동작합니다. 여섯 개의 사용자용 스킬, 아홉 개의 내부 파이프라인 에이전트, 로컬 `omd` CLI, 디자인 이론·레시피 팩, 그리고 `.omd/` 아래의 내구 프로젝트 기록을 제공합니다.
 
-## 요구 사항
+</details>
+
+<details>
+<summary><b>요구 사항</b></summary>
+
+### 요구 사항
 
 - **Node.js 22.19 이상** (CLI가 TypeScript 진입점을 직접 실행합니다)
 - **Claude Code, Codex, 또는 Pi 호환 호스트**
 - 브라우저 공급자: 두 지원 플랫폼에서는 **browser-rs v0.1.10**을 우선 사용하고, 렌더·프로브·타이포그래피 증명을 위해 **Playwright + Chromium** 폴백을 유지합니다(아래 참고).
 
-## 설치
+</details>
 
-### npm — 전역 CLI (권장)
+<details>
+<summary><b>설치 — 모든 방법, Pi, 브라우저 공급자, 레퍼런스 리서치</b></summary>
+
+### 설치
+
+#### npm — 전역 CLI (권장)
 
 ```bash
 npm install -g @3xhaust/oh-my-design
@@ -65,7 +165,7 @@ omd doctor              # 런타임, Chromium, 프로젝트 쓰기 권한, 이�
 
 > 반드시 **스코프** 패키지 `@3xhaust/oh-my-design` 를 설치하세요. 스코프 없는 `oh-my-design` 은 무관한 다른 프로젝트입니다.
 
-### Pi 호환 호스트 — extension package
+#### Pi 호환 호스트 — extension package
 
 OMD는 표준 Pi package입니다. Pi와 Senpi 같은 API 호환 fork는 동일한 extension과 canonical
 skill을 로드합니다. OMD가 Senpi 실행 파일을 탐색하거나 별도 프로세스로 실행하지 않습니다.
@@ -197,7 +297,7 @@ SPA 화면·모달·오류 상태는 각 뷰에 `state: {name,startRoute,route,a
 `omd completion design-check --input .omd/design-handoff.json --json`으로 확인합니다.
 이 검사는 문서 무결성·레퍼런스 증거·쓰기 범위를 검증하며, 앱 동작이나 리뷰어 독립성을 인증하지 않습니다.
 
-### Claude Code — 플러그인 마켓플레이스
+#### Claude Code — 플러그인 마켓플레이스
 
 ```text
 /plugin marketplace add 3x-haust/oh-my-design
@@ -206,7 +306,7 @@ SPA 화면·모달·오류 상태는 각 뷰에 `state: {name,startRoute,route,a
 
 이후 세션을 열고 `/ultradesign` 을 실행합니다.
 
-### 소스에서 설치 (기여자)
+#### 소스에서 설치 (기여자)
 
 ```bash
 git clone https://github.com/3x-haust/oh-my-design
@@ -219,7 +319,7 @@ node bin/omd.ts doctor
 pi -e ./extensions/omd.ts
 ```
 
-### 브라우저 공급자와 Chromium (전역 설치 후)
+#### 브라우저 공급자와 Chromium (전역 설치 후)
 
 전역으로 `@3xhaust/oh-my-design`을 설치한 뒤 OMD는 대화형 레퍼런스 조사, 사용자가 지정한 영역 캡처, 시각 QA에서 `browser-rs` MCP 공급자를 우선합니다. 이는 의도적으로 범위를 좁힌 v0.1.10 통합이며, 모든 브라우저/사이트 호환성을 주장하지 않습니다.
 
@@ -262,7 +362,12 @@ npx playwright install chromium
 node bin/omd.ts doctor
 ```
 
-## 채팅 우선 LEGO 레퍼런스 조립
+</details>
+
+<details>
+<summary><b>채팅 우선 LEGO 레퍼런스 조립</b></summary>
+
+### 채팅 우선 LEGO 레퍼런스 조립
 
 OMD는 전체 사이트 스타일을 복제하지 않고, 확정된 브리프에 맞춰 추적 가능한 레고 부품으로 레퍼런스를 선택합니다. 표준 순서는 다음과 같습니다.
 
@@ -291,7 +396,7 @@ omd ref check
 
 `omd ref candidates`는 출처 사이트/페이지, 캡처한 UI·이미지 부분, 제안 경로/컴포넌트, 가져올 점, 피할 점, 적용 방식을 담은 한국어 우선 Markdown 표를 출력합니다. 보드를 열지 않습니다. 선택은 검증된 원시 근거와 정제된 레퍼런스 조립 양쪽의 해시에 결속됩니다.
 
-### 캡처, 클린룸 구성, 최종 추적성
+#### 캡처, 클린룸 구성, 최종 추적성
 
 짧은 독립 컴포넌트 예제를 빈 페이지로 오인하지 않도록, 지정한 HTML 요소의 렌더 크기·표시 스타일·텍스트를 확인합니다. 이 확인이 시각적 품질 판정은 아닙니다. HTTP 403·서버 오류·봇 확인 화면은 계속 거부합니다.
 
@@ -307,11 +412,16 @@ composer는 정제된 선택 조립만 받습니다. 즉 전달 가능한 구조
 
 캡처·근거·출처 격리·적용 계약은 [레퍼런스 조립 프로토콜](core/protocol/reference-assembly.md)을 참고하세요.
 
-### Codex에서 초기 시안 비교
+#### Codex에서 초기 시안 비교
 
 디자인 방향이 아직 열려 있다면 `omd-codex`로 실행한 Codex에서 제공된 콘텐츠로 잠정 HTML 시안을 만들 수 있습니다. 전체 구성이 승인되기 전에도 데스크톱·모바일 렌더를 보며 어떤 배치가 내용을 더 잘 전달하는지 비교할 수 있습니다. 선택적으로 만드는 이 시안은 실제 제작물과 분리되며, 참고자료 조사·카피·조판 확인·최종 리뷰를 대신하지 않습니다. HTML 시안 기능이지 이미지 생성 서비스나 디자인 품질 보장은 아닙니다. 지원 호스트의 작업 방식은 [시안 프로토콜](core/theory/imagegen.md#provisional-source-studies)을 참고하세요.
 
-## 실제 콘텐츠에 맞춘 디자인
+</details>
+
+<details>
+<summary><b>실제 콘텐츠에 맞춘 디자인</b></summary>
+
+### 실제 콘텐츠에 맞춘 디자인
 
 일반적인 `/ultradesign` 사용에는 스타일 용어가 필요 없습니다. 실제 자사 콘텐츠에 안정된
 형태가 있으면 OMD는 길이, 개수, 종횡비, 의미상 예외를 바탕으로 구성을 조정할 수 있습니다.
@@ -320,7 +430,12 @@ Fit Receipt가 포함됩니다. OMD는 원문 대신 해시, 프로젝트 상대
 말하지 않은 취향을 추론하지 않습니다. 관련 CLI 명령은 전문가와 디버깅을 위한 표면일 뿐,
 일상 사용에 새 단계를 추가하지 않습니다.
 
-## 실제로 의도한 언어와 시장에 맞춘 디자인
+</details>
+
+<details>
+<summary><b>실제로 의도한 언어와 시장에 맞춘 디자인</b></summary>
+
+### 실제로 의도한 언어와 시장에 맞춘 디자인
 
 OMD는 로컬라이제이션을 문장 번역으로 보지 않고, 언어 코드를 국가 테마에 연결하지도 않습니다.
 대화 언어와 화면 로케일, 명시한 시장, 사용자와 과업, 도메인, 화면 유형, 브랜드 불변 조건을
@@ -378,7 +493,12 @@ omd ref locale-bind-check --json
 출처가 제거된 슬롯-결정 투영만 봅니다. 출처 소유자 전용 ID와 캡처 해시는 이 downstream 역할에
 공개되지 않은 채 근거 기록에 남습니다.
 
-## 휴먼 디자인 루프
+</details>
+
+<details>
+<summary><b>휴먼 디자인 루프 — 16단계 전체</b></summary>
+
+### 휴먼 디자인 루프
 
 `omd-ultradesign` 은 아래 작업 중 해당되는 것만 조율합니다. 아래 목록은 전체 능력 지도이지
 보편적인 순서가 아닙니다. 적응형 라우트가 선택한 단계·방법, 의존 순서, 생략한 선택 항목의
@@ -403,20 +523,12 @@ omd ref locale-bind-check --json
 
 Figma 파일과 명시적 시각 타깃은 이미 구조적 결정을 제공하므로, 해당 경로에서는 구조적 발산을 건너뛸 수 있지만 그 이유를 기록합니다.
 
-## 스킬
+</details>
 
-여섯 개의 사용자용 스킬입니다. 정본 이름은 `omd-` 접두사를 쓰며, Codex는 `(omd) <스킬>` 로 표시하고, Claude 마켓플레이스 플레이버는 `oh-my-design:<스킬>` 로 참조합니다.
+<details>
+<summary><b>내부 파이프라인 에이전트</b></summary>
 
-| 스킬 | 용도 |
-| --- | --- |
-| `omd-ultradesign` | 페이지, 앱, 대시보드, 블로그, 랜딩 페이지, 리디자인을 위한 전체 휴먼 디자인 루프를 실행합니다. |
-| `omd-figma` | Figma 파일을 가져와 시스템을 합성하고, 프레임을 구현하고, 반응형 쌍을 비교하고, 측정된 충실도를 보고합니다. |
-| `omd-scout` | 디자인·구현 없이 측정된 LEGO 조각 인벤토리와 채팅용 Markdown 후보·사용 표를 만듭니다. 할당량을 채우는 대신 결정적 커버리지 공백을 메우고 불확실성을 보고합니다. |
-| `omd-critique` | 기존 디자인을 바꾸지 않고 검토합니다. 결정적 발견을 근본 원인별로 묶고 렌더된 크래프트를 판단합니다. |
-| `omd-humanize` | 사실을 보존하면서 건전한 담화를 국소적으로 수리하거나, 검증된 사실·보이스·표면 동작으로부터 뒤틀린 메시지를 재구성합니다. |
-| `omd-coach` | 누적된 검사 이력을 읽고 반복되는 문제와 추세를 찾아 다음에 연습할 것을 제안합니다. taste 기록은 읽지 않습니다. |
-
-## 내부 파이프라인 에이전트
+### 내부 파이프라인 에이전트
 
 아홉 개의 에이전트는 루프의 구현 세부이며 공개 명령이 아닙니다. 구체적 모델을 고정하지 않습니다. 기본적으로 사용자가 설정한 모델과 소스에 선언된 effort 단계를 사용합니다.
 
@@ -452,7 +564,12 @@ omd-codex exec -C /path/to/project \
 
 Claude Code는 에이전트 메타데이터에 선언된 거부 도구를 강제할 수 있습니다. Codex 에이전트 파일에는 이에 해당하는 도구 제한 필드가 없어, 그곳의 읽기 전용 한계는 하드 샌드박스가 아니라 프롬프트 계약입니다. OMD는 이 계약을 파일시스템 격리라고 표현하지 않습니다.
 
-## 근거 경계와 산출물
+</details>
+
+<details>
+<summary><b>근거 경계와 산출물</b></summary>
+
+### 근거 경계와 산출물
 
 | 단계 | 내구 산출물 | 경계 |
 | --- | --- | --- |
@@ -474,7 +591,12 @@ Claude Code는 에이전트 메타데이터에 선언된 거부 도구를 강제
 
 사람 승인 체크포인트는 크래프트 체크포인트와 별개입니다. 프로젝트는 기본 `checkpoint: none` 이며, `.omd/config.json` 에서 concept·structure·둘 다를 켤 수 있습니다.
 
-## 스택 라우팅
+</details>
+
+<details>
+<summary><b>스택 라우팅</b></summary>
+
+### 스택 라우팅
 
 모든 builder는 동일한 우선순위를 따릅니다.
 
@@ -486,7 +608,12 @@ Claude Code는 에이전트 메타데이터에 선언된 거부 도구를 강제
 
 기존 바닐라 HTML은 기존 스택입니다. 인식되지 않는 패키지나 툴체인은 조사·보존되며 빈 저장소로 취급되지 않습니다. 새 그린필드에 순수 HTML은 사용자가 명시적으로 요청할 때만 씁니다. 그린필드 스캐폴드 의존성은 허용되지만, 기존 프로젝트에는 불필요한 의존성을 추가하지 않습니다.
 
-## 검증 스택
+</details>
+
+<details>
+<summary><b>검증 스택</b></summary>
+
+### 검증 스택
 
 OMD는 결정적 검사와 렌더 리뷰를 결합합니다.
 
@@ -507,7 +634,12 @@ OMD는 결정적 검사와 렌더 리뷰를 결합합니다.
 
 slop 발견은 품질 하한이자 경고이며, 디자인이 AI로 생성되었음을 증명하지 않습니다. 서면 오버룰은 의도를 기록하지만 발견을 억제하거나 명령 상태를 바꾸지 않습니다. 렌더 비평은 여전히 필요합니다 — 규칙 엔진은 광학적 균형, 컴포지션 리듬, 타이포그래피 크래프트, 또는 기억에 남을 순간이 컨셉의 것인지를 안전하게 판단할 수 없습니다.
 
-## 인터랙션 적용성
+</details>
+
+<details>
+<summary><b>인터랙션 적용성</b></summary>
+
+### 인터랙션 적용성
 
 카피 덱은 정확히 하나의 인터랙션 범위를 선언합니다.
 
@@ -519,7 +651,12 @@ slop 발견은 품질 하한이자 경고이며, 디자인이 AI로 생성되었
 
 로딩·빈·오류·성공·비활성·오프라인·복구 상태는 표면이 실제로 도달할 수 있을 때만 설계합니다 — 하네스는 체크리스트를 채우려고 가짜 상태를 더하지 않습니다. 프로브 계획은 명시적 기대가 있는 선언된 클릭·입력·키 단계를 쓰고, 로컬 파일과 localhost/loopback URL로 제한되며, 인증·원격·파괴적·미선언 동작을 거부합니다. OMD는 컨트롤을 스스로 찾아 자동으로 클릭하지 않습니다.
 
-## 프로젝트 상태
+</details>
+
+<details>
+<summary><b>프로젝트 상태</b></summary>
+
+### 프로젝트 상태
 
 내구적이고 검토 가능한 기록은 `.omd/` 바로 아래에 있습니다.
 
@@ -529,7 +666,12 @@ slop 발견은 품질 하한이자 경고이며, 디자인이 AI로 생성되었
 
 생성된 IR, 렌더, 필름스트립, 스케치 후보, 프로브 결과, 스크래치 출력은 `.omd/.cache/` 아래에 있으며, 캐시를 지워도 디자인 의도가 사라지면 안 됩니다. `oh-my-design uninstall` 은 설치된 OMD 파일과 설정 변경을 제거하되 프로젝트의 `.omd/` 디렉터리는 보존합니다.
 
-## CLI 레퍼런스
+</details>
+
+<details>
+<summary><b>CLI 레퍼런스</b></summary>
+
+### CLI 레퍼런스
 
 `node bin/omd.ts --help` 의 압축 지도입니다.
 
@@ -577,7 +719,12 @@ omd figma pull <file-url>  |  omd figma system  |  omd figma diff <frame-id> <pa
 omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
 ```
 
-## 아키텍처
+</details>
+
+<details>
+<summary><b>아키텍처</b></summary>
+
+### 아키텍처
 
 프롬프트 원본:
 
@@ -590,7 +737,12 @@ omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd targe
 
 직접 편집하는 경로: `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`, 그리고 `core/` 아래 이론·레시피 팩.
 
-## 테스트
+</details>
+
+<details>
+<summary><b>테스트</b></summary>
+
+### 테스트
 
 테스트는 unit, integration, browser, native, packaging 티어로 분류됩니다. `npm test`는 필요할 때 오래된 생성 산출물을 먼저 빌드하고 안전한 동시성으로 모든 티어를 실행합니다. 집중 실행에는 `npm run test:unit` 같은 `test:<tier>` 명령을 사용하세요. 커버리지는 결정적인 unit 및 integration 티어를 사용합니다.
 
@@ -600,6 +752,8 @@ npm run test:coverage
 npm run typecheck
 npm run build
 ```
+
+</details>
 
 ## 기여
 
@@ -613,3 +767,12 @@ npm run build
 - 플러그인/마켓플레이스 매니페스트는 배포되는 산출물이며, install→doctor 회귀 테스트가 다루는 경로는 소스 기반 직접 설치입니다.
 
 [MIT License](LICENSE) 로 배포됩니다.
+
+## 스타 추이
+
+<a href="https://star-history.com/#3x-haust/oh-my-design&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=3x-haust/oh-my-design&type=Date&theme=dark">
+    <img alt="Star history" src="https://api.star-history.com/svg?repos=3x-haust/oh-my-design&type=Date" width="600">
+  </picture>
+</a>
