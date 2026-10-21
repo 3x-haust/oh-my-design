@@ -26,9 +26,9 @@
   <a href="#빠른-시작">빠른 시작</a> · <a href="#동작-방식">동작 방식</a> · <a href="https://3x-haust.github.io/oh-my-design/">랜딩 페이지</a> · <a href="README.md">English</a>
 </p>
 
-https://github.com/user-attachments/assets/7d8a77e4-fc07-4f95-a5f5-a7fe107d1fa8
+https://github.com/user-attachments/assets/f19a0543-e66c-4be5-bb28-20e0f42aced9
 
-<p align="center"><sub>OMD 소개 영상(30초, 소리 있음): AI가 한 번에 만든 페이지를 넣으면, 같은 페이지가 결정 하나씩 다시 디자인되어 나옵니다.</sub></p>
+<p align="center"><sub>OMD 소개 영상(39초, 소리 있음): AI가 한 번에 만든 페이지를 넣으면, 같은 페이지가 결정 하나씩 다시 디자인되어 나옵니다.</sub></p>
 
 ## 같은 요청, 다른 과정
 

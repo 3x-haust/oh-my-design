@@ -26,9 +26,9 @@ measures real references, compares structures blind, builds once, and checks its
   <a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="https://3x-haust.github.io/oh-my-design/">Landing page</a> · <a href="README.ko.md">한국어</a>
 </p>
 
-https://github.com/user-attachments/assets/7d8a77e4-fc07-4f95-a5f5-a7fe107d1fa8
+https://github.com/user-attachments/assets/07910831-4b34-4015-bfd8-f4a2216d9088
 
-<p align="center"><sub>The OMD launch film (30 s, with sound): a one-shot AI page goes in, the same page comes back redesigned one decision at a time.</sub></p>
+<p align="center"><sub>The OMD launch film (39 s, with sound): a one-shot AI page goes in, the same page comes back redesigned one decision at a time.</sub></p>
 
 ## Same request. Different process.
 
