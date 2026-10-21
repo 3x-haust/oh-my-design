@@ -775,6 +775,16 @@ npm run build
 
 </details>
 
+## FAQ
+
+**Do I need a browser?** Yes, for rendered checks. OMD uses Playwright + Chromium for deterministic rendering and probes; on supported platforms a healthy browser-rs provider is preferred for interactive browser work. Run `omd doctor` if a browser check fails.
+
+**Does it copy reference sites?** No. It records what was observed and what to transfer or avoid; production receives a source-isolated design direction. A public reference is not permission to reuse its pixels. [Reference protocol](core/protocol/reference-assembly.md)
+
+**Will it guarantee a great design?** No. Checks and browser evidence make decisions reviewable, but visual quality still needs contextual human judgment.
+
+**Can I use it on an existing project?** Yes. OMD inspects the current stack and existing design rather than replacing them with a fixed scaffold. [Workflow](core/protocol/human-design-loop.md)
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test classification, three-layer enforcement, generated artifacts, and the branch-to-PR workflow. New linter rules must remain narrow, include positive and negative tests, and always use warning severity.
