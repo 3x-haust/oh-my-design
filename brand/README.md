@@ -5,14 +5,14 @@ a red light at the bottom right) and four white handles on its corners, like a s
 The film uses the same mark, so the icon, avatar, favicon and film read as one system.
 
 ## Geometry
-- Master grid 128. Body (27,27)–(101,101), corner radius 15.4. Handles 17.5×17.5 centred on the body corners, with a
-  3.3 border. These are the film's proportions: body 0.72, handle 0.17, radius 0.15 of the mark box.
+- Master grid 128. Body (27,27)–(101,101), a square with no corner radius. Handles 17.5×17.5 centred on the body
+  corners: a #0a0a0a border of 3.3 around a white centre. Body 0.72 and handle 0.17 of the mark box, as in the film.
 - Pixel-aligned optical masters: `web/favicon-{16,20,24,32,48}.svg`. Do not scale the 128 master below 64px.
 
 ## Colour
 - Body, three layers: linear #ff8a1f → #ff4a1c (top left to bottom right); radial #ffd36a at 28%/26% (r 58%);
   radial #e0263f at 80%/80% (r 62%).
-- Handles: #ffffff with a #0a0a0a border; on the dark UI ground (#131314) the border takes the ground colour.
+- Handles: #ffffff with a #0a0a0a border on every ground, light or dark.
 - Single colour: `omd-mark-{black,white,light,dark}.svg`. The body and handle rings are one ink and the handle
   centres are cut through, so the silhouette survives without the gradient.
 
