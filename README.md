@@ -1,20 +1,110 @@
-# Oh My Design
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/readme/header-dark.svg">
+    <img alt="Oh My Design" src="brand/readme/header-light.svg" width="560">
+  </picture>
+</p>
 
-[![CI](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg)](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+<h3 align="center">AI that designs like a human.</h3>
 
-**AI that designs like a human.** Give OMD one request. It researches, compares real material, chooses a direction, builds, renders, and repairs internally. The model adapts its methods to observed evidence rather than requiring routine reference or draft approval; account access and external-action permissions remain separate.
+<p align="center">
+An open-source design harness for coding agents. Before it draws anything, OMD asks who the page is for,<br>
+finds and measures real references, builds once, and compares its render blind against human-made pages to catch AI slop.
+</p>
 
-Native Pi uses the same production engine for normal autonomous execution and explicitly enabled private developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md). Technical integration is tested; human-level quality claims still require real held-out blind ratings.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@3xhaust/oh-my-design"><img alt="npm" src="https://img.shields.io/npm/v/%403xhaust%2Foh-my-design?color=ff5a1f&label=npm"></a>
+  <a href="https://www.npmjs.com/package/@3xhaust/oh-my-design"><img alt="npm downloads" src="https://img.shields.io/npm/dm/%403xhaust%2Foh-my-design?color=ff8a1f"></a>
+  <a href="https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/3x-haust/oh-my-design/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/3x-haust/oh-my-design?color=e0263f"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-0a0a0a"></a>
+</p>
 
-[한국어](README.ko.md)
+<p align="center">
+  <b>Claude Code</b> · <b>Codex</b> · <b>Pi</b>
+  &nbsp;—&nbsp;
+  <a href="#quick-start">Quick start</a> · <a href="#how-it-works">How it works</a> · <a href="https://3x-haust.github.io/oh-my-design/">Landing page</a> · <a href="README.ko.md">한국어</a>
+</p>
+
+https://github.com/user-attachments/assets/07910831-4b34-4015-bfd8-f4a2216d9088
+
+<p align="center"><sub>The OMD launch film (39 s, with sound): a one-shot AI page goes in, the same page comes back redesigned one decision at a time.</sub></p>
+
+## Same request. Different process.
+
+<p align="center"><img src="brand/readme/before-after.png" width="900" alt="The same bakery booking request as a one-shot AI page and as an OMD page, with omd check output under each"></p>
+
+The same bakery booking request. On the left, the page a model draws in one shot; on the right, the page OMD designed.
+Under each is the real `omd check` output for that page: the left trips the slop rules (two equal primary buttons,
+three identical cards, gradient text), the right returns no findings. The pages are the illustrative examples from
+our launch film. Slop findings are a quality floor, not proof of authorship.
+
+## Quick start
+
+```bash
+npm install -g @3xhaust/oh-my-design
+oh-my-design install    # adds the skill and reviewer agent to every detected host
+omd doctor              # checks the runtime, Chromium, write access and the theory pack
+```
+
+Then ask your agent for a design:
+
+| Host | Try |
+| --- | --- |
+| Claude Code | `/ultradesign a booking page for a neighbourhood bakery` |
+| Codex | `$omd-ultradesign a booking page for a neighbourhood bakery` |
+| Pi | `pi install npm:@3xhaust/oh-my-design`, then `/ultradesign a booking page for a neighbourhood bakery` (`/omd` checks the project) |
+
+Needs Node.js 22.19+. Every install option, the Claude Code marketplace and the browser provider are under [Install](#install).
+
+## Four habits a one-shot prompt skips
+
+| Asks first | Measures, not mood boards | Reviewed blind | Checks its own work |
+| --- | --- | --- | --- |
+| Records the goal, the required and prohibited outcomes, and the task contract before any layout. | Collects measured references — type, density, composition — and transfers principles, never pixels. | An isolated reviewer that did not build the page judges its captures without the builder's rationale. | Renders desktop and mobile with `omd first-render check`, repairs what the review finds, and finishes through `omd lifecycle finish`. |
+
+## How it works
+
+```mermaid
+flowchart LR
+  A([Your request]) --> B[Read the situation<br/>new · existing · Figma]
+  B --> C[Route<br/>goal and outcomes]
+  C --> D[Research<br/>measured references]
+  D --> E[Build]
+  E --> F[First render<br/>desktop · mobile · isolated review]
+  F -- repair --> E
+  F --> G[Finish<br/>browser checks · final review]
+```
+
+The route is adaptive, not a mandatory checklist: the model chooses the methods the request needs, and a method it
+does not use needs no written skip. The full loop is under [The human design loop](#the-human-design-loop).
+
+## Skill
+
+One user-facing skill, `omd-ultradesign`, is the only entry point. Codex shows it as `(omd) ultradesign`, and the Claude marketplace flavor references it as `oh-my-design:ultradesign`. It reads the project and the full request itself and never asks which mode to use.
+
+| Situation | What `omd-ultradesign` does |
+| --- | --- |
+| No product source yet | Builds the complete requested product from scratch, inspecting strong references before choosing a direction. |
+| Existing project | Reads the stack, routes, components, tokens and current renders first. A new feature extends the existing system; a redesign captures the current desktop and mobile screens as a baseline and keeps every function, route and data contract; a fix stays local. |
+| Figma link in the request | Treats the frames as the target, then repeats `omd figma diff` and `omd figma review` until the isolated reviewer returns `match`. |
+| Images or URLs you supply | Keeps the role you gave them: delivery target, inspiration, domain evidence, or a rejected result that serves only as a comparison baseline. |
+
+Reference, Figma, copy, critique, audit and coaching guidance ships as internal guides that the skill opens only when they apply (`omd pack guides/<name>.md`).
 
 ## Built with OMD — in one shot
 
 The landing page was generated by OMD itself from a single one-shot prompt — the visual output was not hand-tuned. View it at **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)**.
 
-## What it is
+## Documentation
+
+<details>
+<summary><b>What “design like a human” means</b></summary>
+
+### What it is
+
+**AI that designs like a human.** Give OMD one request. It researches, compares real material, chooses a direction, builds, renders, and repairs internally. The model adapts its methods to observed evidence rather than requiring routine reference or draft approval; account access and external-action permissions remain separate.
+Native Pi uses the same production engine for normal autonomous execution and explicitly enabled private developer evaluation. See [usage, private evaluation and versioned calibration](core/protocol/autonomous-design.md). Technical integration is tested; human-level quality claims still require real held-out blind ratings.
 
 Here, “design like a human” means accountable judgment, not a signature look. The goal is a repeatable process; the result can be quiet, expressive, conventional, or strange. What stays constant is the chain of decisions behind it.
 
@@ -27,36 +117,46 @@ can share a brand palette. Visual drafts help choose a direction even when the d
 entirely HTML and CSS. OMD compares feasible directions for their visible design and task fit;
 passing a build or fidelity check alone does not establish visual quality.
 
-Oh My Design (OMD) keeps a coding agent from jumping straight from a request to polished UI. It asks what problem is being solved, records evidence, separates writing from layout, compares anonymous structures, and critiques the rendered output without exposing the reviewer to the builder’s rationale.
+Oh My Design (OMD) keeps a coding agent from jumping straight from a request to polished UI. It asks what problem is being solved, records evidence, compares real references, and has an isolated reviewer critique the rendered output without exposing it to the builder’s rationale.
 
 The durable loop is adaptive rather than a mandatory stage checklist:
 
 ```text
-outcome + facts + risk → selected methods and reasoned skips → one production build
-                       → real-surface interaction and visual evidence → causal repair or reframe
+original request → route (outcome, scope, evidence) → references and model-chosen methods
+                 → production build → first render: isolated desktop/mobile review → repair
+                 → lifecycle finish: package checks, real browser captures, independent review
 ```
 
-Task-critical product work can select a task-flow benchmark, semantic entry-surface contract, and
-source-bound browser plan. Marketing work can select a different evidence, copy, composition, and
-motion path. OMD preserves the user's model choice in both cases. It derives evaluator selectors
-from current task records instead of accepting a caller-authored answer key, and it does not invent
-a product capability merely to make an under-specified greenfield concept look distinctive.
+Product work and marketing work are researched differently: product UI is compared with populated
+task screens of real services, a landing or launch page with finished service websites. OMD
+preserves the user's model choice in both cases, and it does not invent a product capability merely
+to make an under-specified greenfield concept look distinctive.
 
-OMD runs inside **Codex**, **Claude Code**, and hosts that implement the public **Pi extension API**. It ships six user-facing skills, nine internal pipeline agents, a local `omd` CLI, design theory and recipe packs, and a durable project record under `.omd/`.
+OMD runs inside **Codex**, **Claude Code**, and hosts that implement the public **Pi extension API**. It ships one user-facing skill (`omd-ultradesign`), one read-only reviewer agent (`omd-eye`), a local `omd` CLI, design theory and recipe packs, and a durable project record under `.omd/`.
 
-## Requirements
+</details>
+
+<details>
+<summary><b>Requirements</b></summary>
+
+### Requirements
 
 - **Node.js 22.19 or newer** (the CLI runs the TypeScript entrypoints directly)
 - **Claude Code, Codex, or a Pi-compatible host**
 - A browser provider: **browser-rs v0.1.10** is preferred on its two supported platforms; **Playwright + Chromium** remains the required fallback for rendering, probing, and typography proofs (see below)
 
-## Install
+</details>
 
-### npm — global CLI (recommended)
+<details>
+<summary><b>Install — every option, Pi, browser provider, reference research</b></summary>
+
+### Install
+
+#### npm — global CLI (recommended)
 
 ```bash
 npm install -g @3xhaust/oh-my-design
-oh-my-design install    # copy skills + agents into every detected host and patch its config
+oh-my-design install    # install the plugin into every detected host and patch its config
 oh-my-design doctor     # verify the host install
 omd doctor              # verify the runtime, Chromium, project write access, and the theory pack
 ```
@@ -65,10 +165,10 @@ omd doctor              # verify the runtime, Chromium, project write access, an
 
 > Install the **scoped** package `@3xhaust/oh-my-design`. The unscoped `oh-my-design` on npm is an unrelated project.
 
-### Pi-compatible hosts — extension package
+#### Pi-compatible hosts — extension package
 
 OMD is a standard Pi package. Pi and API-compatible forks such as Senpi load the same extension
-and canonical skills; OMD does not probe or launch a Senpi executable.
+and canonical skill; OMD does not probe or launch a Senpi executable.
 
 ```bash
 pi install npm:@3xhaust/oh-my-design
@@ -76,17 +176,17 @@ pi install npm:@3xhaust/oh-my-design
 
 For a compatible fork, use that host's package-install command with the same npm package. The
 extension registers `/omd` for a project doctor check and the structured `omd_cli` tool for the
-existing OMD CLI. Compatibility requires the public Pi extension/package API; fork-only APIs are
-not used.
+existing OMD CLI. `/ultradesign <request>` is an alias for `/skill:omd-ultradesign <request>`.
+Compatibility requires the public Pi extension/package API; fork-only APIs are not used.
 
 Pi's `omd_cli` does not need an external activation file. First run
 `omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
 then publish with `route classify`. An input validation error is not missing host authentication.
 
-[Three-layer enforcement](core/protocol/three-layer-enforcement.md) connects **declaration → stage/owner procedure → automatic refusal**.
-The coordinator inspects each brief, delivers its contracts, then runs `omd brief <stage> --check --json`.
-Plain brief inspection is not entry permission. Production entry uses the full production readiness
-validator; routed `recipe add` checks all targets before writing, even outside Pi.
+[Three-layer enforcement](core/protocol/three-layer-enforcement.md) connects **declaration → procedure → automatic refusal**.
+After `route classify`, `omd stage next --json` reports the current model-led action. `omd guard production --json`
+must pass before source work, and a failed guard does not mutate application source. `omd guard completion --json`
+reports any blocker that withholds a success claim.
 Pi's public `tool_call` / `message_end` hooks ensure native `write`/`edit` application mutations
 and arbitrary `bash` wait for current pre-production inputs; research inputs and directly owned
 design documents remain writable. The completion hook withholds an unverified final success claim.
@@ -102,7 +202,7 @@ Hooks are workflow gates, not an OS sandbox or proof of design quality. External
 mutation tools are outside this hook boundary, and streamed draft text may precede final validation.
 Independent reviewer authorization is still required by implementation final evidence; Pi does not
 manufacture it. After upgrading, revalidate/reclassify the original approved route with the current
-build if old build/skill authority is stale. `stage status.completed` means artifact presence only.
+build if old build/skill authority is stale.
 
 Reference research is saved separately: `.omd/refs/domain/research.json` for similar-service screens,
 features and flows, and `.omd/refs/design/research.json` for composition, type, density and component
@@ -160,68 +260,13 @@ heading elsewhere on the directory cannot qualify an unrelated service. Every de
 chosen retained capture is time-limited. Each global fallback source also binds to the exact signed
 search/direct receipt whose visible label reached it.
 
-After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
-domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using
-`omd ref apply-set --input <application.json>`; `omd ref apply-check --json` verifies it. Each screen
-keeps separate domain/design reference IDs, direct/partial/brief-derived coverage, gaps, what to
-apply, what not to transfer, why, and future rendered checks. `.omd/reference-application.md` shows
-the plan; briefs and selected handoffs deliver only the source-free decision projection. Research
-or scope changes invalidate it. Current v4 captures can be retained without recapture, but no
-decisions are invented for them. This adapts Design Flow Harness's screen-linked research approach,
-not its fixed Figma pipeline. A plan does not prove rendered use, quality, or user approval.
-
-Source sealing now binds the application plan. After authenticated final evidence, run
-`omd ref apply-review-plan --json`, inspect each criterion on current desktop/mobile captures,
-then `apply-review-set --input <json>` and `apply-review-check --json`. Missing, unresolved or stale
-judgments block terminal completion; changes require resealing, recapture and re-review.
-Review reasons are agent-authored, not human approval. `omd schema reference-flow-input` and
-`omd benchmark record --input <flow.json>` execute public navigation/disclosure steps in one fresh
-context and publish signed, project-bound receipts. Only bound completed flows can report
-`liveFlowVerified: true`; artifact-only history remains unverified and cannot clear a selected product
-benchmark. Login, payment, submission and destructive controls remain explicit exclusions.
-
 Similarity discovery may keep intermediate native captures in each lane's optional `navigation`
 array (`url`, PNG `evidence`, JSON `capture`). Only observed links rooted in a successful search
-extend the chain. Screen application v2 binds each destination route/state before production;
-final review cannot substitute a home capture for a different surface. First-render checking uses
-`--page <local-build.html>` plus the observed projection, saves a native capture, and invalidates
-its report when the hypothesis/source/build changes. Comparison is explicitly task-applicable and
-advisories do not block completion by themselves.
+extend the chain. `omd first-render check --page <local-build.html>` captures the local production
+build, not a preview URL; agent-authored surface input is refused. Advisories do not block
+completion by themselves.
 
-For an existing service, `omd init --json` inventories static CSS variables/declarations and `$value`
-token JSON into `.omd/existing-design-system.json` and `.md`. Scopes, aliases and source locations/hashes
-remain intact. It never changes app files or approved `.omd/tokens.json`. Future briefs reuse the
-inventory; `omd init --check` detects stale inputs and `omd init --refresh` refreshes observations.
-Keep authored decisions in `.omd/design-system-decisions.md`, preserved across refreshes. Runtime styles,
-Tailwind configuration and component variants are not silently inferred from static files.
-For runtime values use `omd schema runtime-design-inventory-input` then `omd init --input <input.json>`:
-named component selectors and optional SPA states are rendered from a bundled local build. Computed
-CSS-in-JS/utility styles and custom properties are saved in `.omd/runtime-design-system.json` and `.md`.
-`init --check` detects stale source/build/captures; `init --refresh` repeats the recorded scope. Future
-briefs reuse current observations, never treating them as approved semantic tokens or unvisited variants.
-
-Implementation completion uses `omd schema slop-scope` → `omd slop checkpoint --input <scope.json>` →
-inspect the native captures → `omd slop review-set --input <review.json>`. Confirmed issues require
-owner repair, rebuild, same-scope recapture/rescan, and an explicit after-render resolution.
-`omd slop review-check`, CLI finalization and terminal preflight reject missing, stale or unresolved
-loops. Candidates/warnings remain advisory; reasoned dismissals are valid and a clean first review
-needs no invented repair. Capture currently supports local HTML build entries, not arbitrary localhost
-ports. Optional per-view `state: {name,startRoute,route,actions,assertions}` covers SPA routes, modals
-and error states; the native executor preserves state and blocks external networking/API writes.
-Final linked browser states require matching route/state/viewport scope and exact viewport pixels
-from the authenticated final capture; replay the same deterministic data and settled state. Native
-checkpoint/inventory signatures reject edited documents masquerading as observations. This does not replace
-functional coverage, independent quality review, or user approval.
-Legacy files are preserved; renamed identical images still cannot satisfy both lanes.
-
-For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.
-Output stays under `.omd/**`; research, design, review, and handoff proceed without application source.
-Bind the documents using `omd schema design-handoff`, then run
-`omd completion design-check --input .omd/design-handoff.json --json`.
-This checks document integrity, reference evidence, and write scope. It does not attest application
-behavior or independent review authorship.
-
-### Claude Code — plugin marketplace
+#### Claude Code — plugin marketplace
 
 ```text
 /plugin marketplace add 3x-haust/oh-my-design
@@ -230,20 +275,20 @@ behavior or independent review authorship.
 
 Then open a session and run `/ultradesign`.
 
-### From source (contributors)
+#### From source (contributors)
 
 ```bash
 git clone https://github.com/3x-haust/oh-my-design
 cd oh-my-design
 npm install
-node bin/omd-install.ts install    # copy skills + agents into detected hosts
+node bin/omd-install.ts install    # install the plugin into detected hosts
 node bin/omd.ts doctor
 
 # Test the source extension in Pi without installing it globally.
 pi -e ./extensions/omd.ts
 ```
 
-### Browser provider and Chromium (after global installation)
+#### Browser provider and Chromium (after global installation)
 
 After globally installing `@3xhaust/oh-my-design`, OMD prefers the `browser-rs` MCP provider for interactive reference research, user-directed region captures, and visual QA. It is a deliberately narrow v0.1.10 integration, not a claim of universal browser compatibility:
 
@@ -286,36 +331,27 @@ npx playwright install chromium
 node bin/omd.ts doctor
 ```
 
-## Chat-first LEGO reference assembly
+</details>
 
-OMD treats a reference as a set of traceable bricks selected for the approved brief, not as a whole-site style to copy. The canonical sequence is:
+<details>
+<summary><b>Reference capture</b></summary>
 
-```text
-brief blocks → fragment inventory → brick analysis → candidate assemblies
-→ selected assembly → clean-room composite → production usage ledger → final provenance report
-```
+### Reference capture
 
-The conversation is the interface. Codex/Claude shows the candidate table and the final Korean/English provenance table directly in chat. There is no `omd-board` executable, DESIGN UI, HTML board, or PNG board. The reference board is an internal, validated `.omd/reference-board.json` record; the package exposes only the public `omd` and `oh-my-design` bins.
-
-Behind the conversation, an agent can capture a component, validate the evidence, render the chat-ready candidates, and bind the user’s chat choice:
+OMD treats a reference as evidence for a specific decision, not as a whole-site style to copy. On the default route the model researches through `omd ref browse` sessions — real services in the same category and market in the domain lane, design, graphic and whole-site galleries in the design lane — keeps whole originals with a reason, and records the originals it actually compared through `omd ref context`: exactly one primary and any supplemental originals, each named for the destination component it informed. That record is comparison context, not approval; the early and final reviewers receive those exact originals privately and compare them with the real render.
 
 ```bash
-# Internal agent operations; the person reviews the resulting Markdown in chat.
-omd ref add <url-or-local-page> --as <component> --selector '<css>' --blueprint --shot
+# Internal agent operations.
+omd ref browse start --lane design --json
+omd ref browse search dribbble "<words from this brief>" --session <id> --json
+omd ref browse keep --role component-support --reason "..." --session <id>
+omd ref add <url-or-local-page> --as <component> --lane design --selector '<css>' --blueprint --shot
+omd ref add <url> --as <component> --lane design --preparation <state.json> --no-energy
 omd ref import-image ./local-fragment-input.json
-omd ref board --input candidate-assemblies.json
-# Market-grounded routes also author and check the source-free slot-to-decision binding.
-omd ref locale-bind --input reference-locale-binding.json
-omd ref locale-bind-check
-omd ref check
-omd ref candidates
-omd ref select <candidate-id>
-omd ref check
+omd ref context --input consulted-references.json --json
 ```
 
-`omd ref candidates` emits a Korean-first Markdown table with source site/page, captured UI or image part, proposed route/component, take, avoid, and adaptation. It does not open a board. The selection is hash-bound to both validated raw evidence and its sanitized reference assembly.
-
-### Captures, clean-room composition, and final traceability
+#### Captures and traceability
 
 Short standalone component examples need not be mistaken for empty pages: OMD checks the requested HTML element's rendered size, visibility styles, and text. This is not a visual-quality verdict. HTTP 403, server errors, and challenge pages remain rejected.
 
@@ -325,32 +361,38 @@ Motion reference capture can observe a loaded component while background request
 
 A component brick is a selector-scoped blueprint plus a local PNG. For Pinterest-like galleries and similar sources, browser-rs performs the **user-directed** region capture and `omd ref import-image` imports that local PNG. The input records absolute HTTP(S) `sourcePage`, optional `sourceImage`, human-readable `captureRegion`, optional `cropBox`, `licenseStatus` (`allowed`, `restricted`, or `unknown`), rights notes, visual role/principles, and canonical provenance time. OMD does not scrape, hotlink, download remote source images, or ship their pixels.
 
-The composer receives only the sanitized selected assembly: transferable structure/principles/geometry, never a source URL, **source selector**, provenance, screenshot, local source image, or raw pixels. The assembly intentionally retains its **target `targetSelector`** so implementation can map a selected part to its destination. `.omd/reference-composite-lineage.json` records either a hash-bound `generated` clean-room composite or an `unavailable` reason. When host image generation is available, independent concept drafts may be generated concurrently and compared, with the count chosen for the unresolved design question; no image-provider or API-key layer is added. When unavailable, use a CSS/SVG/evidence fallback. Existing motion, `prefers-reduced-motion`, and WebGL/3D gates are unchanged.
-
-During implementation, each selected source part receives a `used`, `rejected`, or `anti-reference` row in `.omd/reference-usage.json`. `.omd/reference-report.md` and the final chat response contain Korean and English tables with: status; source site/page; exact captured UI/image region; shipped route/component/selector; borrowed properties; explicitly non-borrowed properties; transformation; and production evidence path, selector, and verification note.
+Production takes what designers take from a reference — padding, spacing rhythm, hierarchy and control anatomy — and leaves its colour, branding and copy behind. Research images remain comparison evidence, never shipped product assets. The final answer presents the consulted originals and their source URLs beside the generated desktop and mobile screens, with the transferred structure and its limits.
 
 See the [reference assembly protocol](core/protocol/reference-assembly.md) for capture, evidence, source-isolation, and transfer contracts.
 
-### Early concept studies on Codex
+</details>
 
-When a design direction is still open, Codex running through `omd-codex` can make provisional HTML studies from supplied content before the full composition is approved. Desktop and mobile renders let you compare how different arrangements communicate that content. These optional studies are separate from production: they do not replace reference work, copy and typography checks, or final review. This is an HTML-study capability, not an image-generation service or a guarantee of design quality. See the [study protocol](core/theory/imagegen.md#provisional-source-studies) for the supported host workflow.
+<details>
+<summary><b>Designed around your material</b></summary>
 
-## Designed around your material
+### Designed around your material
 
 Ordinary `/ultradesign` use needs no style vocabulary. When real first-party content has a stable
 shape, OMD may adapt composition to its lengths, counts, aspect ratios, or semantic outliers. The
 result includes a read-only Fit Receipt showing what stayed intact and where the desktop and mobile
 evidence lives. OMD stores hashes, project-relative paths, and bounded measurements, not raw content,
-and it never infers taste from silence. The related CLI commands are an expert and debugging surface,
-not a new step for everyday use.
+and it never infers taste from silence.
 
-## Designed for the language and market you actually mean
+</details>
+
+<details>
+<summary><b>Designed for the language and market you actually mean</b></summary>
+
+### Designed for the language and market you actually mean
 
 OMD does not treat localization as sentence translation, and it does not map a language code to a
 country theme. It keeps the conversation language separate from the surface locale, explicit market,
 audience and task, domain, surface type, and brand invariants. `ja-JP` can establish Japanese script
 mechanics; it cannot by itself authorize a Japanese market aesthetic. Bare `zh` does not silently
 become mainland China, and `zh-CN` and `zh-TW` remain separate contexts.
+
+A Korean-language brief with no other market named may default reference discovery to Korean
+services. That is a research default only; it does not establish a Korean aesthetic or cultural fit.
 
 For ordinary `/ultradesign` use, state the surface language and intended market/audience. If market
 or audience authority is missing, OMD asks one focused question and stops that research route if it
@@ -365,8 +407,9 @@ institution is not an equivalent. Recorded unavailability limits confidence and 
 convergence.
 
 Expert/debugging surface. This is not a standalone quickstart: run only the commands selected by the
-current route. The host launcher supplies `OMD_ACTIVATION_PATH`; each `omd schema` command prints the
-input skeleton, and source capture repeats once for each declared evidence source.
+current route. `--activation` takes a host-issued invocation file (`OMD_ACTIVATION_PATH` when the host
+supplies one); `omd schema` prints the input skeleton, and source capture repeats once for each declared
+evidence source.
 
 ```sh
 omd schema locale-design-context
@@ -379,225 +422,209 @@ omd locale source-capture --url https://example.org/current-source \
 omd locale profile --publish --input cultural-profile.json \
   --activation "$OMD_ACTIVATION_PATH" --json
 omd locale profile-check --activation "$OMD_ACTIVATION_PATH" --json
-omd schema reference-locale-binding
-omd ref locale-bind --input reference-locale-binding.json --json
-omd ref locale-bind-check --json
 ```
 
 The profile and sanitized projection are content-addressed and bound to current source bytes,
-target-language type proof, route context, and brand invariants. Production roles receive the
+target-language type proof, route context, and brand invariants. Production work receives the
 source-free projection, never source URLs or a country-style prompt. Agent review can report
 evidence-grounded adaptation only. OMD does not claim that a result is culturally native or preferred
 without genuine blind ratings from the named target audience, collected independently from actual members.
 
-When a market-grounded route also uses a reference board, the locale binding closes the last mile:
-each local reference slot must name the exact `supported` or `shared` profile decision it implements.
-Positive transfer requires a captured native-category component (and may also use a task-equivalent
-global source); anti-reference transfer requires a counterexample cited by the profile. `contested` and `unknown`
-decisions cannot silently become design rules. Composer, Hand, and Eye see only the source-free
-slot-to-decision projection, while source-owner-only IDs and capture hashes remain withheld from those
-downstream roles in the evidence record.
+</details>
 
-## The human design loop
+<details>
+<summary><b>The human design loop</b></summary>
 
-`omd-ultradesign` coordinates the applicable work below. This is the complete capability map, not a
-universal sequence: the adaptive route records selected stages and methods, dependency order, and a
-reason for every omitted optional item.
+### The human design loop
 
-1. **Preflight** — pin the project directory, run `omd doctor`, inspect the repository, and route Figma briefs to `omd-figma`.
-2. **Frame** — interrogate the brief and record the problem, reframe hypothesis, primary task, frequent action, and costliest error with cited evidence.
-3. **Concept** — choose a generator, visual register, typography direction, and the intended memorable moment.
-4. **Research** — collect measured references across the domain, competitors, audience language, components, typography, and relevant motion.
-5. **Write copy** — a dedicated writer creates a fact-traceable copy deck before layout begins.
-6. **Review copy blind** — a fresh reviewer sees the brief, copy, fact ledger, and voice evidence, but no render, code, layout, rationale, or authorship.
-7. **Prove typography blind** — a typesetter renders layout-neutral actual-copy specimens at 1280×900 and 390×844; a fresh eye reviews them without page structure or rationale, then the typesetter revises and rerenders.
-8. **Compose deliberately** — a fresh composer defines the experience spine, one dominant focal anchor, mass/rhythm, a lawful mechanism carrier or explicit alternate, responsive recomposition, and candidate axes. `omd composition --check` verifies input freshness.
-9. **Diverge structurally** — isolated agents receive the same composition contract. Normally they render fixed desktop/mobile plus supplemental full-page continuity proofs; when an exact routed candidate scene uses the host-evidence-only contract, the sketch implements that one preproduction scene and the host independently captures every proof and receipt.
-10. **Choose blind** — a fresh selector scores eight frozen 0–4 dimensions, rejects contract violations or any dimension below 2, and never equates a form above the fold with CTA reach.
-11. **Build once** — one selected structure becomes the production implementation. The builder does not generate another candidate set.
-12. **Reflect while building** — the builder records a semantic checkpoint, re-proves type in the selected desktop/mobile containers, then records the visual checkpoint before optional motion.
-13. **See the result** — desktop and mobile renders, squint views, applicable filmstrips, deterministic checks, and declared local probes supply the review evidence.
-14. **Triage source candidates** — after production source exists, a read-only scan proposes narrow candidates. The coordinator resolves each through rendered context; candidate presence alone is not a failure.
-15. **Critique, repair, and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and sanitized candidates, then repairs are rendered, checked, and rescanned.
-16. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
+`omd-ultradesign` runs the loop below on the default model-led route. The model chooses methods,
+candidate count and delegation; there is no mandatory role relay, candidate competition, written
+skip or intermediate design document for a method it does not use.
 
-Figma files and explicit visual targets already supply structural decisions, so the loop may skip structural divergence in those routes — but it records why.
+1. **Read the situation** — inspect the actual project and the full request: no product source yet, an existing project, a Figma link, or images and URLs you supplied. A Figma link makes its frames the target and brings in the internal Figma guide (`omd pack guides/figma.md`).
+2. **Route** — write `route-input` for existing or bounded work, or `product-route-input` for a new product, then `omd route validate` and `omd route classify`. `omd stage next --json` reports the current action.
+3. **State the task contract** — audience and expertise, task frequency, input modes, density, locale and representative content, before styling.
+4. **Research** — `omd ref browse` sessions search the domain lane (real services in the same category and market) and the design lane (design, graphic and whole-site galleries) in the brief's own words, component by component, including hover, focus, pressed and open states. The originals actually compared are recorded with `omd ref context`, with exactly one primary.
+5. **Words, type and flow** — labels state the true commitment, errors explain recovery beside the field, applicable loading, empty, error, success and disabled states are designed, and type roles are built up from body text using only fonts with unrestricted licences.
+6. **Build** — `omd guard production --json` passes before source work. One complete representative composition with realistic content and states is built and inspected as a whole render before the system is extended.
+7. **First render** — `omd first-render check --page <built file> --json` captures desktop (1280×900) and mobile (390×844) and launches the isolated early reviewer, which answers the designer judgments and compares the render with the primary original. Localized findings are repaired; after a regression `omd first-render restore` returns to the best iteration, and a stalled loop stops and reports the remaining findings.
+8. **Compare with human work** — `omd taste compare --json` runs blind A/B trials against captured human-made pages. The comparison itself is advisory and never blocks completion; the final judged-AI rate is reported honestly. On a new landing page, though, skipping section graphics or finishing with no observable motion is accepted only after this comparison finds the page indistinguishable from human-made work.
+9. **Finish** — one `trusted-lifecycle-manifest` is authored from the real controls. `omd lifecycle finish --json` runs package checks, real browser evaluation at desktop and mobile, source sealing, isolated visual, fidelity and outcome review, and final publication. `omd guard completion --json` withholds a success claim while a blocker remains.
 
-## Skills
+A linked Figma target is proven by its own frame diffs and reviews instead of a consulted primary original.
 
-Six user-facing skills. Canonical names use the `omd-` prefix; Codex shows them as `(omd) <skill>`, and the Claude marketplace flavor references them as `oh-my-design:<skill>`.
+</details>
 
-| Skill | Use it for |
-| --- | --- |
-| `omd-ultradesign` | Run the complete human design loop for a page, app, dashboard, blog, landing page, or redesign. |
-| `omd-figma` | Pull a Figma file, synthesize its system, implement frames, compare responsive pairs, and report measured fidelity. |
-| `omd-scout` | Build a measured LEGO fragment inventory and chat-ready Markdown candidate/usage tables without designing or implementing. It closes consequential coverage gaps and reports uncertainty instead of filling quotas. |
-| `omd-critique` | Review an existing design without changing it; group deterministic findings by root cause and judge rendered craft. |
-| `omd-humanize` | Preserve facts while locally repairing sound discourse or reconstructing a misshapen message from verified facts, voice, and surface action. |
-| `omd-coach` | Read accumulated check history, identify recurring problems and trends, and suggest what to practise next. It does not read taste records. |
+<details>
+<summary><b>Reviewer agent</b></summary>
 
-## Internal pipeline agents
+### Reviewer agent
 
-Nine agents are implementation details of the loop, not public commands. They do not pin a concrete model. By default, each uses the user's configured model and its source-owned effort tier.
+One internal agent, `omd-eye`, is an implementation detail of the loop, not a public command. It did not build the work: the host gives it one mode-bound packet — task constraints, evidence, fixed bindings and a closed output contract — and it returns only that contract, never source edits. It never mints signatures, capture hashes or human approval; its judgments are packet-bound model decisions, not user choices.
 
-For one Codex host invocation, the user can route an official role to a model and a
-`low`, `medium`, or `high` effort without changing package defaults:
-
-```bash
-omd-codex exec -C /path/to/project \
-  --model gpt-6-astra -c 'model_reasoning_effort="medium"' \
-  --omd-role-model omd-eye=gpt-5.6-sol \
-  --omd-role-effort omd-eye=high \
-  --omd-role-model omd-hand=gpt-5.6-sol \
-  --omd-role-effort omd-hand=medium \
-  '$omd-ultradesign continue the current route'
-```
-
-Repeat either host-only option for each mapped role. The launcher removes these private options
-before starting the coordinator, binds them to that run, and lets only the broker apply them to
-the mapped child. Unmapped roles still omit a model argument and keep their agent-profile effort.
-`omd-codex role run` and `omd-codex owner run` do not accept these options.
+The agent does not pin a concrete model. It uses the model selected for the host session, and its source declares only an effort tier (`high`): Claude Code receives `model: inherit` plus that effort, and Codex receives `model_reasoning_effort` with no model.
 
 | Agent | Responsibility | Write boundary |
 | --- | --- | --- |
-| `omd-framer` | Questions the brief and records an evidence-backed frame. | Read-only; records through the frame CLI. |
-| `omd-scout` | Researches measured evidence for pipeline coverage. | Read-only; records through reference CLI commands. |
-| `omd-writer` | Writes or repairs the copy deck and fact ledger. | Direct edits only to `.omd/copy-deck.md`. |
-| `omd-typesetter` | Builds and revises the pre-structure actual-copy typography proof. | Direct edits to `.omd/type-proof.md` and `.omd/.cache/type-proof/`. |
-| `omd-composer` | Converts sanitized evidence into the fresh composition contract before divergence. | Direct edits only to `.omd/composition.md`. |
-| `omd-sketch` | Produces one isolated grayscale structural candidate with real copy. | Only its cache candidate directory. |
-| `omd-hand` | Builds the selected structure and records two craft checkpoints. | Production repository and declared OMD records. |
-| `omd-glance` | Reports hierarchy from squint renders only. | No writes. |
-| `omd-eye` | Selects anonymous structures, reviews copy or typography proof blind, or critiques sharp renders. | No writes. |
+| `omd-eye` | Reviews one mode-bound packet: production visual review of anonymous captures, fidelity against the chosen system or reference, or protocol review of native receipts. | No writes. |
 
 Claude Code can enforce declared denied tools in agent metadata. Codex agent files have no equivalent tool-restriction field, so read-only limits there are prompt contracts rather than a hard sandbox. OMD does not describe those contracts as filesystem isolation.
 
-## Evidence boundaries and artifacts
+</details>
+
+<details>
+<summary><b>Evidence boundaries and artifacts</b></summary>
+
+### Evidence boundaries and artifacts
 
 | Stage | Durable output | Boundary |
 | --- | --- | --- |
-| Frame | `.omd/frame.md` | Claims need a user sentence, research line, datum, or named observation. Internal OMD instructions are not evidence. |
-| Research | `.omd/refs/*.json` | Builders receive measurements and principles, not screenshots to imitate. Scouting stops on decision/component coverage, independence, and source trust — not a universal capture count or gallery quota. |
-| Copy | `.omd/copy-deck.md` | Each shipped factual claim points to a `verified` fact ID. `fixture` facts test density only; `open` facts cannot support shipped claims. |
-| Blind copy review | review handoff | The reviewer cannot inspect renders, source, layout, frame, decisions, or authorship and does not edit the deck. The writer applies the review, then `omd copy --check` runs again. |
-| Typography proof | `.omd/type-proof.md`; specimens in `.omd/.cache/type-proof/` | Actual target-language copy proves roles, source/licence, glyph coverage, requested/computed family and weight, axes, fallback/loading, wraps/clips, and rejected alternatives at both viewports. Browser evidence does not identify the physical font used for each glyph. |
-| Composition contract | `.omd/composition.md` | A clean-room composer receives sanitized evidence and defines a focal anchor, CTA path, mechanism carrier/alternate, and responsive relationships without requiring a photo or form above the fold. Exact hashes make stale inputs fail. |
-| Structural sketches | `.omd/.cache/sketches/<id>/` | Each candidate normally supplies fixed 1280×900 and 390×844 acceptance renders plus full-page desktop/mobile continuity evidence. Under the explicit host-evidence-only scene contract, Sketch writes candidate source only; the host owns every render, receipt, optical record, check, and packet. Full-page captures inform dependency/rhythm only. |
-| Blind choice | `.omd/taste/preferences.jsonl` | The selector sees anonymous renders and sanitized task context, not candidate rationale or authorship. `omd choose` stores the selected candidate and its reason as an agent choice. |
-| Production build | repository source | One builder implements one selected structure and preserves the copy deck. Separate `omd decision` entries record implementation reasons in `.omd/decisions.md`. |
-| Production evidence | `.omd/attribution.md` | The builder records the sources behind shipped tokens, motion, composition, and graphics. |
-| Craft checkpoints | `.omd/craft.jsonl` | Selected semantic and visual checkpoints record the inspected criterion, render, and decision to revise, retain, or reframe. Explicit decisions bind PNG bytes; they do not grant final acceptance. |
-| Source-candidate triage | raw JSON in `.omd/.cache/`; reasoning in `.omd/decisions.md` | `omd slop scan` exposes controlled signals without source excerpts. `needs-render` is transitional; final untriaged and needs-render counts are both zero. |
-| Rendered review | cache renders, filmstrip, probe output | The squint reviewer sees only squint renders. The sharp reviewer receives sanitized task context plus measured outputs, never the builder’s rationale. |
-| Reframe | `.omd/frame.md` revision | `omd frame reframe` appends what the render revealed instead of erasing the original framing. |
-| Final source seal | `.omd/source-seal.json` | `omd source --seal` records final copy/type/composition and sorted production-source hashes; `--check` proves byte freshness only, not semantic fidelity. |
+| Route | `.omd/route.json` | Classified from the validated `route-input` or `product-route-input`. Preserves the exact request, scope, allowed paths and evidence claims; production writes stay inside the allowed paths. |
+| Research | `.omd/refs/`, `.omd/discovery/` | Builders receive transferable structure, not screenshots to imitate. Failed URLs and challenge pages are acquisition failures, not evaluated alternatives. |
+| Consulted references | `.omd/consulted-references.json` | Exactly one primary whole original with its digest, source URL, destination component and optional state. Required for model-led visual work except copy-only work or a Figma target. Comparison context, not approval. |
+| First render | `.omd/first-render/` | Desktop and mobile captures, reports, reviews and checkpoints for each iteration. The early review is a model judgment, neither source-fidelity proof nor human approval. |
+| Qualitative feedback | `.omd/qualitative-feedback.json` | `omd feedback report` keeps your verbatim opinion and the exact images you were shown separate from the model's interpretation. Comparison-only, not approval. |
+| Taste comparison | `.omd/taste/` | Blind A/B results against captured human-made pages and graphic comparisons. Advisory. |
+| Figma | `.omd/figma/` | Snapshot, diffs, renders and exports for a linked Figma target. |
+| Final source seal | `.omd/source-seal.json` | Written by `omd lifecycle finish`; proves byte freshness of production source, not semantic fidelity. |
+| Final review | `.omd/final-review/` | Independent visual, fidelity and outcome review over real browser captures. Independent model review is not human aesthetic approval. |
 
-Human approval checkpoints are separate from craft checkpoints. Projects default to `checkpoint: none`; concept, structure, or both can be enabled in `.omd/config.json`.
+The normal user supplies the request, not a sequence of design approvals.
 
-## Stack routing
+</details>
 
-Every builder follows the same precedence:
+<details>
+<summary><b>Stack routing</b></summary>
+
+### Stack routing
+
+Every build follows the same precedence:
 
 ```text
 explicit user request
   > existing repository stack and toolchain
-  > React + Vite + TypeScript for a truly blank greenfield
+  > React + Vite + strict TypeScript for any new web project, landings included
 ```
 
-Existing vanilla HTML is an existing stack. An unrecognized package or toolchain is investigated and preserved, not treated as an empty repository. Plain HTML for a new greenfield project is used only when the user explicitly asks for it. Greenfield scaffold dependencies are allowed; existing projects should not receive unnecessary ones.
+Existing vanilla HTML is an existing stack. An unrecognized package or toolchain is investigated and preserved, not treated as an empty repository. A bare `index.html`/`.css`/`.js` with no manifest next to an `.omd/` from a prior OMD run is OMD's own leftover output, not a user stack. Browser TypeScript is compiled to JavaScript; uncompiled TypeScript is not shipped. New projects are written for review: one component per section or reusable part, real `dev`/`build`/`typecheck`/`test` scripts, and formatted source. `omd lifecycle finish` refuses hand-authored source packed onto long lines. Existing projects should not receive unnecessary dependencies.
 
-## Verification stack
+</details>
+
+<details>
+<summary><b>Verification stack</b></summary>
+
+### Verification stack
 
 OMD combines deterministic checks with rendered review.
 
 | Layer | Commands and evidence |
 | --- | --- |
-| Contracts | `omd copy --check` validates deck structure and fact references. `omd composition --check` validates composition sections and input freshness. `omd source --seal/--check` validates final approved-input/source bytes without claiming semantic fidelity. `omd design --check` validates design-contract coverage. |
-| Typography proof | Layout-neutral desktop/mobile specimens run before sketches; selected-container reproof runs after semantic structure and before the visual checkpoint. Copy, font/file, weight/axis, or container-width changes invalidate the proof. |
-| Render evidence | `omd render` captures the exact viewport by default; `--full-page` is supplementary continuity evidence, `--squint` isolates hierarchy with grayscale and blur, `--filmstrip` captures load-time frames. |
-| Candidate admission | `omd optical --input <raw.json> --json` recomputes clipped Q/I unions independently of the rectangle collector. `omd packet --check --input <packet.json> --json` re-hashes and semantically validates every fixed/full render, full capture-receipt projection, byte-exact `[]` check with no trailing newline, optical report, and interaction projection before anonymous review. |
+| Route and guards | `omd route validate` and `route classify` check the route input. `omd guard production --json` gates source work; `omd guard completion --json` reports completion blockers. |
+| Render evidence | `omd render` captures the exact viewport by default; `--full-page` is supplementary continuity evidence, `--squint` isolates hierarchy with grayscale and blur, `--filmstrip` captures load-time frames, `--motion` records a load and scroll timeline with a contact sheet, and `--graphic` renders a graphic built in code to a 2x image. `omd record` captures product footage from declared steps. |
+| First render | `omd first-render check --page <local-build.html> --json` measures the desktop and mobile captures and runs the isolated early review; `first-render review` re-runs that review and `first-render restore` returns to the best recorded iteration. |
+| Measurement | `omd measure --entry <local.html|URL> --json` records native visual measurements of a local build or URL. |
 | Interaction | `omd probe` executes only a declared, safe local plan and reports expectation or tab-order failures. |
 | Source candidates | `omd slop scan [root] [--json]` reads supported production source without writing it. Candidates require contextual triage; they are not `omd check` warnings, scores, or authorship claims. |
 | Design lint | `omd check` evaluates `system`, `a11y`, `slop`, `motion`, and `ux` conditions. Contrast and hit-area rules are errors; slop and other quality-floor rules are warnings where authored that way. Any finding exits 1, so it is usable in CI. |
 | Site consistency | `omd check --site <dir>` or multi-page positional checks report cross-page ladder and token drift. |
-| Reference distance | Bare `omd ref distance <page>` remains advisory. `omd ref distance <page> --selected --gate --json` compares every selected used measurable slot at its destination selector, writes the current receipt, and exits non-zero below `0.6` or on stale evidence; new art-selected final-v2 publication requires that passing receipt. |
-| Figma fidelity | `omd figma pull`, `system`, and `diff` connect a Figma snapshot to a measured implementation report. Requires `export FIGMA_TOKEN=…`; `omd doctor` treats a missing token as optional. |
+| Human comparison | `omd taste compare --json` runs advisory blind A/B trials against captured human-made pages. `omd taste graphic <png> --against <kept image>` judges a section graphic blind beside a kept reference. |
+| Figma fidelity | `omd figma pull`, `system`, `diff`, and `review` connect a Figma snapshot to the implementation; `review` returns the isolated reviewer's concrete region fixes until `match`. Requires `export FIGMA_TOKEN=…`; `omd doctor` treats a missing token as optional. |
 | Visual target | `omd target set <image-path-or-url> --as <name>` and `omd target diff` run a bounded image comparison against a registered PNG target. A URL must be a direct HTTP(S) image URL. |
 | Performance | `omd lighthouse <lighthouse-report.json>` gates a Lighthouse JSON report against a performance budget (default: performance ≥ 90 and Core Web Vitals within Google's "good" thresholds). You run Lighthouse (`npx lighthouse <url> --output=json`); OMD gates its report and exits non-zero on a breach. |
+| Completion | `omd lifecycle verify install|ci|build|typecheck|test|lint` runs one package check; `omd lifecycle finish` runs package checks, real browser evaluation, isolated review and final publication together. |
 
 Slop findings are a quality floor and warnings; they do not prove a design was generated by AI. A written overrule records intent but does not suppress a finding or change command status. Rendered critique remains necessary — a rule engine cannot safely judge optical balance, composition rhythm, typography craft, or whether the memorable moment belongs to the concept.
 
-## Interaction applicability
+</details>
 
-The copy deck declares exactly one interaction scope.
+<details>
+<summary><b>Interaction applicability</b></summary>
 
-| Scope | Required evidence |
+### Interaction applicability
+
+The trusted lifecycle manifest (`omd schema trusted-lifecycle-manifest`) carries one browser script per current task outcome. Each script performs real actions and asserts what a visitor would then see.
+
+| Assertion | Use it for |
 | --- | --- |
-| `stateful` | Primary and recovery copy, `.omd/probes/primary.json`, and `.omd/probes/recovery.json`. Both probes run. |
-| `navigation-only` | Primary copy and the primary probe. Recovery copy and recovery probe are `N/A` with concrete reasons. |
-| `static` | Primary copy. Recovery copy and both probes are `N/A` with concrete reasons. |
+| `visible-text` | Text that appears because of the actions; it fails when the text was already visible before them. |
+| `preserved-text` | Text that must stay visible through the actions. |
+| `absent-text` | Text that must not be visible, such as an invented claim the outcome forbids. |
+| `element-state` | `hovered`, `focused`, `focus-visible`, `pressed`, or `expanded` on the exact element that receives it; a `captureState` needs one. |
 
-Loading, empty, error, success, disabled, offline, and recovery states are designed only when the surface can reach them — the harness does not add fake states to satisfy a checklist. Probe plans use declared click, fill, and keypress steps with explicit expectations, are limited to local files and localhost/loopback URLs, and reject authenticated, remote, destructive, or undeclared actions. OMD never discovers controls and clicks them automatically.
+Loading, empty, error, success, disabled, offline, and recovery states are designed only when the surface can reach them — the harness does not add fake states to satisfy a checklist. `omd probe` plans (`.omd/probes/primary.json` by default) use declared click, fill, and keypress steps with explicit expectations, are limited to local files and localhost/loopback URLs, and reject authenticated, remote, destructive, or undeclared actions. OMD never discovers controls and clicks them automatically.
 
-## Project state
+</details>
+
+<details>
+<summary><b>Project state</b></summary>
+
+### Project state
 
 Durable, reviewable records live directly under `.omd/`:
 
-- `frame.md`, `copy-deck.md`, `type-proof.md`, `composition.md`, `source-seal.json`, `design.md`, `decisions.md`
-- `attribution.md`, `motion-spec.md`, `craft.jsonl`, `config.json`
-- `refs/*.json`, `reference-board.json`, `reference-locale-binding.json`, `reference-locale-binding-evidence.json`, `reference-selection.json`, `reference-composite-lineage.json`, `reference-usage.json`, `reference-report.md`, declared `probes/*.json`, `taste/preferences.jsonl`, and `history.jsonl`
+- `route.json`, `consulted-references.json`, `qualitative-feedback.json`, `locale-design-context.json`, `source-seal.json`
+- `refs/`, `discovery/`, `first-render/`, `final-review/`, `taste/`, `figma/`
+- declared `probes/*.json` and `history.jsonl`
 
-Generated IR, renders, filmstrips, sketch candidates, probe results, and scratch output live under `.omd/.cache/`; deleting the cache should not erase design intent. `oh-my-design uninstall` removes installed OMD files and config changes while preserving the project’s `.omd/` directory.
+Route inputs, the trusted lifecycle manifest, and other scratch output live under `.omd/.cache/`; deleting the cache should not erase design intent. `oh-my-design uninstall` removes installed OMD files and config changes while preserving the project’s `.omd/` directory.
 
-## CLI reference
+</details>
 
-A compact map of `node bin/omd.ts --help`:
+<details>
+<summary><b>CLI reference</b></summary>
+
+### CLI reference
+
+A compact map of `omd help`:
 
 ```text
-omd ir <page> [-o file]
-omd render <page> -o shot.png [--viewport WxH] [--full-page] [--squint] [--filmstrip]
-omd probe <page> [--plan path] [--json] [--out path]
+omd route starter|validate|classify|show|check
+omd schema list  |  omd schema <name>  |  omd schema ai-judgment --purpose <purpose>
+omd stage next [--json]
+omd guard production|completion [--json]
+omd lifecycle verify install|ci|build|typecheck|test|lint [--project <dir>] [--json]
+omd lifecycle finish [--project <dir>] [--manifest <json>] [--json]
+
+omd ref browse|tidy|context|navigate|control-observe|cookie-control
+omd ref discover-plan|discover-batch|work-next|advance|exclude|direction-review
+omd ref research-set|research-check|search|leads
+omd ref add <url|file> --as <component> [--lane domain|design] [--selector "css"] [--image] [--blueprint] [--shot]
+omd ref add-batch|list|show|principles|audit|import-image
+omd feedback report|translate|check
+omd language translate|check
+omd ai-judgment publish|check
+omd locale plan|profile|profile-check|source-capture|source-stability|check
+
+omd first-render check --page <local-build.html> [--json]  |  omd first-render review|restore [--json]
+omd render <page|url> [--viewport WxH] [--out file.png] [--full-page] [--squint]
+omd render <page|url> --graphic | --motion | --proofs | --filmstrip
+omd record <page> --steps <steps.json> [--viewport WxH] [--out dir]
 omd check [<page>|--ir file] [--json] [--category slop] [--no-log]
-omd check --site <dir>
-omd check <page1> <page2> ...
-omd slop scan [root] [--json]
-omd coach
-omd composition --check [--json]
-omd source --seal [root]  |  omd source --check [root] [--json]
+omd check --site <dir>  |  omd check <page1> <page2> ...
+omd probe <page> [--plan path] [--viewport WxH] [--json] [--out path]
+omd slop scan [root] [--json]  |  omd slop score --input <invariants.json> --corpus <corpus.json> [--json]
+omd lighthouse <report.json> [options]
+omd measure --entry <local.html|URL> [--scope <scope.json>] [--json]
 
-omd frame show
-omd frame set --problem P --reframe R --why EVIDENCE [--task T --frequent-action A --costliest-error E]
-omd frame reframe --to "..." --because "..."
-omd frame generator --set "metaphor"
-omd choose c1 c2 --chose c2 --why "..."
-omd decision "what" --why "why"
-omd taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user
-omd taste profile [--all]
-omd config set checkpoint none|concept|structure|both  |  omd config show
-omd craft checkpoint semantic|visual --render path --observed "..." --decision revise|retain|reframe --criterion "..." --reason "..." [--changed "..."]
-omd craft status [--json]
-
-omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]
-omd ref list  |  omd ref distance <page> [--selected [--gate]] [--json]
-omd ref principles <source> --as <component> --add "..."
-omd ref show <source> --as <component>
-omd ref board --input candidate-assemblies.json
-omd ref locale-bind --input reference-locale-binding.json  |  omd ref locale-bind-check [--json]
-omd ref check [manifest] [--json]
-omd ref import-image <input.json> [--json]
-omd ref candidates [manifest]                 # chat-ready Korean-first Markdown; no board UI
-omd ref select <candidate-id> [--json]
-
-omd design  |  omd design --check
-omd copy --check [--json]
-omd pack dir | list | <relpath>
-omd doctor
-
-omd figma pull <file-url>  |  omd figma system  |  omd figma diff <frame-id> <page-or-url>
+omd figma pull <file-url>  |  omd figma system  |  omd figma diff <frame-id> <page-or-url> [--json]  |  omd figma review <frame-id> [--json]
 omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
+omd taste compare [--anchor <url>] [--json]  |  omd taste graphic <rendered.png> --against <image.path> [--json]
+
+omd pack dir | list | <relpath> [--section <heading>]
+omd doctor
+omd browser setup|login|skip|status|forget
+omd coach
+omd learn predict|judge|observe|promote|rules
+omd usage [--json]
+omd hash <.omd/artifact-path> [--json]
 ```
 
-## Architecture
+</details>
+
+<details>
+<summary><b>Architecture</b></summary>
+
+### Architecture
 
 Prompt source of truth:
 
@@ -610,7 +637,12 @@ Generated outputs — **do not edit directly**; `npm run build` regenerates them
 
 Edited directly: `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`, and the theory and recipe packs under `core/`.
 
-## Testing
+</details>
+
+<details>
+<summary><b>Testing</b></summary>
+
+### Testing
 
 Tests are classified as unit, integration, browser, native, or packaging. `npm test` builds stale generated output when needed and runs every tier with safe concurrency; use `npm run test:unit` or another `test:<tier>` command for focused work. Coverage uses the deterministic unit and integration tiers.
 
@@ -621,6 +653,18 @@ npm run typecheck
 npm run build
 ```
 
+</details>
+
+## FAQ
+
+**Do I need a browser?** Yes, for rendered checks. OMD uses Playwright + Chromium for deterministic rendering and probes; on supported platforms a healthy browser-rs provider is preferred for interactive browser work. Run `omd doctor` if a browser check fails.
+
+**Does it copy reference sites?** No. It records what was observed and what to transfer or avoid; production receives a source-isolated design direction. A public reference is not permission to reuse its pixels. [Reference protocol](core/protocol/reference-assembly.md)
+
+**Will it guarantee a great design?** No. Checks and browser evidence make decisions reviewable, but visual quality still needs contextual human judgment.
+
+**Can I use it on an existing project?** Yes. OMD inspects the current stack and existing design rather than replacing them with a fixed scaffold. [Workflow](core/protocol/human-design-loop.md)
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test classification, three-layer enforcement, generated artifacts, and the branch-to-PR workflow. New linter rules must remain narrow, include positive and negative tests, and always use warning severity.
@@ -629,7 +673,16 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test classification, three-lay
 
 - The prompts define a disciplined workflow; they do not guarantee strong design without real project evidence, usable copy, rendered inspection, and project-specific validation.
 - Probes are for local, non-authenticated, non-destructive paths — not a general browser automation layer.
-- Reference distance, lint, and image diff are measurements. They inform judgment rather than replace it.
+- Native measurements, lint, and image diff inform judgment rather than replace it.
 - Plugin/marketplace manifests are shipped artifacts; the from-source direct installer is the path covered by install-to-doctor regression tests.
 
 Licensed under the [MIT License](LICENSE).
+
+## Star history
+
+<a href="https://star-history.com/#3x-haust/oh-my-design&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=3x-haust/oh-my-design&type=Date&theme=dark">
+    <img alt="Star history" src="https://api.star-history.com/svg?repos=3x-haust/oh-my-design&type=Date" width="600">
+  </picture>
+</a>
