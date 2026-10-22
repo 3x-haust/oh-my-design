@@ -503,11 +503,10 @@ Every build follows the same precedence:
 ```text
 explicit user request
   > existing repository stack and toolchain
-  > HTML/CSS + strict TypeScript for a new landing, marketing or content page;
-    a framework (React + Vite + TypeScript, or another) for a genuinely stateful application
+  > React + Vite + strict TypeScript for any new web project, landings included
 ```
 
-Existing vanilla HTML is an existing stack. An unrecognized package or toolchain is investigated and preserved, not treated as an empty repository. A bare `index.html`/`.css`/`.js` with no manifest next to an `.omd/` from a prior OMD run is OMD's own leftover output, not a user stack. Browser TypeScript is compiled to JavaScript; uncompiled TypeScript is not shipped. Framework scaffold dependencies are allowed when a framework is chosen; existing projects should not receive unnecessary ones.
+Existing vanilla HTML is an existing stack. An unrecognized package or toolchain is investigated and preserved, not treated as an empty repository. A bare `index.html`/`.css`/`.js` with no manifest next to an `.omd/` from a prior OMD run is OMD's own leftover output, not a user stack. Browser TypeScript is compiled to JavaScript; uncompiled TypeScript is not shipped. New projects are written for review: one component per section or reusable part, real `dev`/`build`/`typecheck`/`test` scripts, and formatted source. `omd lifecycle finish` refuses hand-authored source packed onto long lines. Existing projects should not receive unnecessary dependencies.
 
 </details>
 
