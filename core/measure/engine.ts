@@ -41,18 +41,23 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
       && limits(n).length === 1 && limits(n)[0] === 'opaque-content').map(n => n.id));
     // A native control's own glyphs are unmeasured whatever it is drawn on, so a chevron or icon painted as its
     // background image (a select's arrow) adds no further gap.
+    const p = paint(dom, c.png);
+    // A drawn canvas (a WebGL scene, a chart) is the same kind of gap: its pixels are in the capture, its internals
+    // and any text it draws are not in the DOM. A blank canvas, a scene that never rendered, still blocks.
+    const canvasPixels = new Set(dom.nodes.filter(n => n.visibleBox && n.tag === 'canvas' && p.drawnCanvas.has(n.id)
+      && limits(n).length === 1 && limits(n)[0] === 'opaque-content').map(n => n.id));
     const nativeText = new Set(dom.nodes.filter(n => n.visibleBox
       && (['input', 'select', 'textarea'].includes(n.tag) && n.unsupported.includes('native-control-text')
         && n.unsupported.every(reason => reason === 'native-control-text' || reason === 'complex-backdrop')
         || n.tag === 'option' && n.unsupported.length === 1 && n.unsupported[0] === 'native-option-text')).map(n => n.id));
-    const excluded = [...dom.excluded, ...dom.nodes.filter(n => n.visibleBox && n.unsupported.length && !svgPixels.has(n.id) && !nativeText.has(n.id)).map(n => ({ subjectId: n.id, reason: n.unsupported.join(',') }))];
+    const excluded = [...dom.excluded, ...dom.nodes.filter(n => n.visibleBox && n.unsupported.length && !svgPixels.has(n.id) && !canvasPixels.has(n.id) && !nativeText.has(n.id)).map(n => ({ subjectId: n.id, reason: n.unsupported.join(',') }))];
     if (!dom.fonts.ready || dom.fonts.failedFamilies.length) excluded.push({ subjectId: c.view.id, reason: 'fonts-not-ready-or-failed' });
     if (c.binding.stability.status !== 'stable') excluded.push({ subjectId: c.view.id, reason: 'unstable-capture' });
     const ids = dom.nodes.map(n => n.id), area = dom.viewport.innerWidth * dom.viewport.innerHeight;
-    const p = paint(dom, c.png), conforms = conformance(dom, contracts, c.view.id);
+    const conforms = conformance(dom, contracts, c.view.id);
     // An image cut by the viewport edge to a sliver thinner than the sampling grid falls between samples and
     // carries no salience; it is noted, not left as an unmeasured subject that blocks completion.
-    const unsampledMedia = dom.nodes.filter(n => n.visibleBox && n.media && !p.mediaContrast.has(n.id) && !svgPixels.has(n.id));
+    const unsampledMedia = dom.nodes.filter(n => n.visibleBox && n.media && !p.mediaContrast.has(n.id) && !svgPixels.has(n.id) && !canvasPixels.has(n.id));
     const slivers = unsampledMedia.filter(n => Math.min(n.visibleBox!.w, n.visibleBox!.h) < dom.gridStep).map(n => n.id);
     // An image whose sample points all land on something drawn over it (a skip link shown on focus, an open menu) is
     // covered in this state: nothing of it shows, so it carries no salience to measure.
@@ -82,6 +87,9 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     const quality = metrics.get('contract-conformance')!;
     if (svgPixels.size) finding('MEASUREMENT_INCOMPLETE', metrics.get('salience-regions')!, [...svgPixels], null,
       'SVG internal paint and salience are unmeasured; inspect these subjects in the authenticated whole captures. No SVG contrast or salience proof is claimed.',
+      'coverage', ['contrastColorRoles', 'hierarchy', 'composition', 'beautyDesirability'], 'advisory');
+    if (canvasPixels.size) finding('MEASUREMENT_INCOMPLETE', metrics.get('salience-regions')!, [...canvasPixels], null,
+      'Canvas internals, salience and any text drawn into a canvas are unmeasured; inspect these subjects in the authenticated whole captures. No canvas contrast or salience proof is claimed.',
       'coverage', ['contrastColorRoles', 'hierarchy', 'composition', 'beautyDesirability'], 'advisory');
     if (slivers.length) finding('MEASUREMENT_INCOMPLETE', metrics.get('salience-regions')!, slivers, null,
       'Images cut by the viewport edge to a sliver thinner than the sampling grid were not sampled; they carry no salience.',
