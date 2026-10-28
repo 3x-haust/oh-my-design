@@ -134,7 +134,8 @@ export function parseStageWork(text: string): StageWorkPointer | null {
   const value: unknown = JSON.parse(text);
   if (typeof value !== 'object' || value === null || !['stage-next-v1', 'stage-next-v2'].includes(Reflect.get(value, 'schema'))) return null;
   const stageValue = Reflect.get(value, 'stage');
-  if (stageValue === null && Reflect.get(value, 'schema') === 'stage-next-v1') return null;
+  // Current terminal evidence leaves no stage work: the completion guard below decides the report.
+  if (stageValue === null && (Reflect.get(value, 'schema') === 'stage-next-v1' || Reflect.get(value, 'action') === 'report-completion')) return null;
   const stage = typeof stageValue === 'string' ? stageValue : Reflect.get(value, 'deliveryMode') === 'design-only' ? 'design-handoff' : 'production';
   const progress = Reflect.get(value, 'progress');
   const routeSha256 = typeof progress === 'object' && progress !== null ? Reflect.get(progress, 'routeSha256') : null;
