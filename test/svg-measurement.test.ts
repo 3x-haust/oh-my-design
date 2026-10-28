@@ -214,3 +214,31 @@ test('a logo image in a header with a blurred translucent ground is sampled agai
   assert.ok(packet.measurements.every(m => !m.coverage.excluded.some(e => e.reason === 'media-salience-unsampled')),
     JSON.stringify(packet.measurements.flatMap(m => m.coverage.excluded).filter(e => e.reason.includes('media'))));
 });
+
+test('a drawn canvas is an advisory limitation while other opaque content still blocks', async t => {
+  for (const kind of ['canvas', 'iframe'] as const) {
+    await t.test(kind, async t => {
+      const fixture = measurementFixture('clean');
+      t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+      const style = 'display:block;width:100%;max-width:480px;aspect-ratio:3/2;border:0';
+      const content = kind === 'canvas'
+        ? `<canvas id="scene" width="480" height="320" style="${style}"></canvas>`
+          + '<script>const g=document.getElementById("scene").getContext("2d");g.fillStyle="#1d3b8f";g.fillRect(0,0,480,320);g.fillStyle="#f2c14e";g.beginPath();g.arc(240,160,90,0,7);g.fill();</script>'
+        : `<iframe title="지도" style="${style}" srcdoc="<p>프레임 안의 문장</p>"></iframe>`;
+      const html = fixture.html.toString().replace('<h1>', `${content}<h1>`);
+      writeFileSync(join(fixture.root, 'src/index.html'), html);
+      writeFileSync(join(fixture.root, 'dist/index.html'), html);
+      const result = await measureProject({ ...fixture, entry: 'dist/index.html' });
+      const packet = loadMeasurement(fixture.root, result.packet);
+      const ownIds = new Set(packet.subjects.filter(s => s.locator.endsWith(`${kind}:nth-of-type(1)`)).map(s => s.id));
+      const blocking = packet.findings.filter(f => f.code === 'MEASUREMENT_INCOMPLETE' && f.severity === 'blocking');
+      if (kind === 'canvas') {
+        assert.equal(packet.summary.deterministicVerdict, 'PASS', JSON.stringify(packet.findings));
+        assert.ok(packet.findings.some(f => f.severity === 'advisory' && f.subjectIds.some(id => ownIds.has(id))));
+      } else {
+        assert.equal(packet.summary.deterministicVerdict, 'RED');
+        assert.ok(blocking.some(f => (f.observed?.value ?? '').includes('opaque-content')), JSON.stringify(packet.findings));
+      }
+    });
+  }
+});

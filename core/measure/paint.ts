@@ -3,7 +3,7 @@ import type { MeasurementDom, MetricValues, RGBA } from './types.ts';
 import { hsl, backdrop, luminance } from './color.ts';
 import { area } from './geometry.ts';
 /** Histogram is exact PNG RGB; ownership is explicitly a bounded DOM grid estimate. */
-export function paint(dom: MeasurementDom, png: Buffer): Pick<MetricValues, 'canvas-color' | 'accent-distribution'> & { canvasPaintShare: number; mediaContrast: Map<string, number> } {
+export function paint(dom: MeasurementDom, png: Buffer): Pick<MetricValues, 'canvas-color' | 'accent-distribution'> & { canvasPaintShare: number; mediaContrast: Map<string, number>; drawnCanvas: Set<string> } {
   const image = decodePng(png), histogram = new Map<string, number>();
   for (let i = 0; i < image.pixels.length; i += image.channels) { const key = `${image.pixels[i]},${image.pixels[i + 1]},${image.pixels[i + 2]}`; histogram.set(key, (histogram.get(key) ?? 0) + 1); }
   const root = dom.rootCanvas, canvasPixels = histogram.get(root.slice(0, 3).map(Math.round).join(',')) ?? 0;
@@ -43,7 +43,30 @@ export function paint(dom: MeasurementDom, png: Buffer): Pick<MetricValues, 'can
     'accent-distribution': { clusters: groups.map(g => ({ hue: (Math.atan2(g.reduce((s, p) => s + Math.sin(p.hue * Math.PI / 180), 0), g.reduce((s, p) => s + Math.cos(p.hue * Math.PI / 180), 0)) * 180 / Math.PI + 360) % 360, pixelShare: g.length / dom.paintSamples.length, sampleCount: g.length, subjectIds: [...new Set(g.flatMap(s => s.subjectId ? [s.subjectId] : []))].sort(), role: 'unassigned' as const })).sort((a, b) => a.hue - b.hue), gridStep: dom.gridStep, unattributedShare: dom.paintSamples.length ? unattributed / dom.paintSamples.length : 1, samplingErrorBound: 1 },
     canvasPaintShare: canvasPixels / total,
     mediaContrast: new Map([...media].map(([id, sample]) => [id, sample.sum / sample.count])),
+    drawnCanvas: drawnCanvas(image, dom),
   };
+}
+
+/**
+ * Canvases whose captured pixels show something drawn: more than one colour inside the visible box. A blank or
+ * single-fill canvas (a scene that failed to render) is not drawn.
+ */
+function drawnCanvas(image: ReturnType<typeof decodePng>, dom: MeasurementDom): Set<string> {
+  const drawn = new Set<string>();
+  for (const node of dom.nodes) {
+    const box = node.visibleBox;
+    if (node.tag !== 'canvas' || !box || box.w < 1 || box.h < 1) continue;
+    const colours = new Set<string>();
+    for (let gy = 0; gy < 12 && colours.size < 2; gy++) for (let gx = 0; gx < 12 && colours.size < 2; gx++) {
+      const x = Math.min(image.width - 1, Math.floor((box.x + (gx + 0.5) * box.w / 12) * image.width / dom.viewport.innerWidth));
+      const y = Math.min(image.height - 1, Math.floor((box.y + (gy + 0.5) * box.h / 12) * image.height / dom.viewport.innerHeight));
+      const i = (y * image.width + x) * image.channels;
+      // Quantized so encoder noise on one flat fill does not read as drawing.
+      colours.add([0, 1, 2].map(offset => image.pixels[i + offset]! >> 4).join(','));
+    }
+    if (colours.size > 1) drawn.add(node.id);
+  }
+  return drawn;
 }
 
 /** The mean colour of the rendered pixels a few pixels outside a box's left and right edges, or null off-canvas. */
