@@ -62,3 +62,26 @@ test('a still page reports no motion rather than inventing choreography', { time
   assert.equal(timeline.reducedMotion, null);
   assert.ok(timeline.notes.includes('No load motion observed in sampled content elements.'));
 });
+
+const canvasPage = (animated: boolean) => `<!doctype html><meta charset="utf-8"><title>c</title>
+<style>body{margin:0;font:18px system-ui}canvas{display:block;width:640px;height:400px}</style>
+<h1>Scene</h1><canvas width="640" height="400"></canvas>
+<script>
+const g=document.querySelector('canvas').getContext('2d');
+const draw=t=>{g.fillStyle='#f4efe6';g.fillRect(0,0,640,400);g.fillStyle='#2a6';g.fillRect(40+(t/8)%480,160,80,80);${animated ? 'requestAnimationFrame(draw);' : ''}};
+requestAnimationFrame(draw);
+</script>`;
+
+test('a canvas scene that keeps playing after content settles gets canvas frames; a still canvas gets none', { timeout: 120_000 }, async t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-motion-canvas-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const playing = join(root, 'playing.html'), still = join(root, 'still.html');
+  writeFileSync(playing, canvasPage(true));
+  writeFileSync(still, canvasPage(false));
+  const moving = await observeMotion(playing, { viewport: { width: 1280, height: 800 }, scroll: false, reduced: false });
+  assert.equal(moving.frames.filter(frame => frame.label.startsWith('canvas ')).length, 4);
+  assert.ok(moving.timeline.notes.some(note => note.includes('canvas frames')), JSON.stringify(moving.timeline.notes));
+  const resting = await observeMotion(still, { viewport: { width: 1280, height: 800 }, scroll: false, reduced: false });
+  assert.equal(resting.frames.filter(frame => frame.label.startsWith('canvas ')).length, 0);
+  assert.ok(!resting.timeline.notes.some(note => note.includes('canvas frames')));
+});
