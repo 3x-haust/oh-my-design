@@ -68,3 +68,23 @@ test('a stalled first-render report keeps the agent report and asks for no furth
   assert.match(result.message.content[1]!.text, /not verified completion[\s\S]*persistent-findings/);
   assert.deepEqual(sent, []);
 });
+
+test('current terminal evidence lets the guard decide the report instead of asking for another repair', async () => {
+  const stage = { schema: 'stage-next-v2', stage: null, owner: 'coordinator', action: 'report-completion',
+    next: 'omd guard completion --json', instruction: 'Terminal evidence is current. Run the completion guard before reporting completion.',
+    problems: [], progress: { routeSha256: 'b'.repeat(64), validatedStages: [], materialProgressIdentities: [] } };
+  const commands: string[][] = [];
+  const { input } = task(stage);
+  const sent: unknown[] = [];
+  const result = await handleOmdMessageEnd({ ...input, workflowStarted: true,
+    run: async (args: readonly string[]) => {
+      commands.push([...args]);
+      return { text: JSON.stringify(args[0] === 'stage' ? stage : { limitations: [debt] }), details: { code: 0, killed: false } };
+    },
+    pi: { ...input.pi, sendMessage: (message: unknown) => { sent.push(message); } } }) as { message: { content: { text: string }[] } };
+  assert.deepEqual(commands, [['stage', 'next', '--json'], ['guard', 'completion', '--json']]);
+  assert.equal(result.message.content[0]!.text, 'Delivered the application.');
+  assert.ok(result.message.content[1]!.text.includes(debt.reason));
+  assert.deepEqual(sent, []);
+});
+
