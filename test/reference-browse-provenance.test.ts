@@ -36,6 +36,25 @@ test('a gallery work page titled with the first part of a site name discovers th
   assert.equal(gotoFromSearchResults('https://flintsystem.design/', [search], observations), false, 'the results page itself is not the work page');
 });
 
+test('a whole-site gallery page clicked from that gallery\'s results is found; one opened from memory is not', () => {
+  const search = { seq: 1, action: { verb: 'search', provider: 'onepagelove', query: '3d interactive' }, url: 'https://onepagelove.com/?s=3d%20interactive',
+    finalUrl: 'https://onepagelove.com/?s=3d%20interactive', observation: { sha256: 's' } } as unknown as BrowseEvent;
+  const click = { seq: 2, action: { verb: 'click', text: 'Ueno. 3D Interview' }, finalUrl: 'https://onepagelove.com/ueno-3d-interview',
+    observation: { sha256: 'u' } } as unknown as BrowseEvent;
+  const observations = new Map([
+    ['s', { title: 'One Page Love', text: '', linkClaims: [] } as unknown as BrowseObservation],
+    ['u', { title: 'Ueno. 3D Interview — One Page Website Award', text: 'This website has been redesigned', linkClaims: [] } as unknown as BrowseObservation],
+  ]);
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/ueno-3d-interview', [search, click], observations), true);
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/ueno-3d-interview/', [search, click], observations), true);
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/the-boat', [search, click], observations), false, 'another work was not clicked');
+  const goto = { seq: 2, action: { verb: 'goto', url: 'https://onepagelove.com/ueno-3d-interview' }, finalUrl: 'https://onepagelove.com/ueno-3d-interview',
+    observation: { sha256: 'u' } } as unknown as BrowseEvent;
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/ueno-3d-interview', [search, goto], observations), false, 'typed from memory');
+  const earlyClick = { ...click, seq: 0 } as unknown as BrowseEvent;
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/ueno-3d-interview', [earlyClick, { ...search, seq: 1 } as unknown as BrowseEvent], observations), false, 'clicked before any search');
+});
+
 test('a destination counts as found only when an earlier search result links to or names its site', () => {
   const observations = new Map([
     ['s', observation('Landing gallery', [{ url: 'https://nook.ai.kr/site/1', text: 'Raycast IT/스타트업' }])],
