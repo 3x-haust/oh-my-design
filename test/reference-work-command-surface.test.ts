@@ -18,7 +18,7 @@ function emittedCommands(): readonly EmittedCommand[] {
   const emitted: EmittedCommand[] = [];
   for (const file of recommenderFiles) {
     const source = readFileSync(join(root, file), 'utf8');
-    for (const match of source.matchAll(/args:\s*\[((?:\s*'[^']*'\s*,?)+)\]/gu)) {
+    for (const match of source.matchAll(/args:\s*\[(\s*'[^']*'(?:\s*,\s*'[^']*')*\s*,?\s*)\]/gu)) {
       const body = match[1];
       if (body === undefined) continue;
       const args = [...body.matchAll(/'([^']*)'/gu)]

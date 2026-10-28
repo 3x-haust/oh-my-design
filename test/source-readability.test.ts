@@ -13,7 +13,7 @@ test('packed hand-authored source is refused; formatted source, generated output
   const rules = Array.from({ length: 40 }, (_, index) => `.block-${index}{display:grid;gap:${index}px;padding:12px 16px}`);
   put('src/style.css', rules.join(''));
   put('package.json', JSON.stringify({ name: 'landing', private: true, type: 'module', scripts: { dev: 'vite', build: 'tsc -b && vite build', test: 'vitest run' } }));
-  put('src/app.css', rules.map(rule => rule.replace('{', ' {\n  ').replaceAll(';', ';\n  ').replace(/\s*}$/, '\n}')).join('\n\n'));
+  put('src/app.css', rules.map(rule => rule.replaceAll('{', ' {\n  ').replaceAll(';', ';\n  ').replace(/\s*}$/, '\n}')).join('\n\n'));
   put('src/App.tsx', 'export function App() {\n  return <main>Readable</main>;\n}\n');
   put('dist/assets/index.css', rules.join(''));
   put('public/vendor.min.js', rules.join(''));

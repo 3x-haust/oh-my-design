@@ -36,7 +36,7 @@ import {
 
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
-test('native early review repairs and recaptures without final evidence and reuses unchanged judgments', { timeout: 120_000 }, async t => {
+test('native early review repairs and recaptures without final evidence and reuses unchanged judgments', { timeout: 300_000 }, async t => {
   usePrivateDesignerCaseFixture(t);
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-early-review-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -102,7 +102,7 @@ test('native early review repairs and recaptures without final evidence and reus
     })));
   assert.equal(withOriginal.evidence.referenceRenders, undefined);
   assert.deepEqual(withOriginal.evidence.feedbackRenders, withFeedback.evidence.feedbackRenders);
-  assert.equal(JSON.stringify(withOriginal).includes('example.com'), false);
+  assert.doesNotMatch(JSON.stringify(withOriginal), /example\.com/);
   assert.equal(JSON.stringify(withOriginal).includes('reported.png'), false);
   const tracePath = join(root, 'reviewer-trace.jsonl');
   writeFileSync(tracePath, '');

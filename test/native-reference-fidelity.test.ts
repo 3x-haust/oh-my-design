@@ -79,6 +79,6 @@ test('reported consulted originals reach only measured fidelity and remain byte-
   const fidelity = JSON.parse(nativeFinalLanePacket({ ...fixture, lane: 'fidelityLane' }).toString('utf8'));
   const protocol = JSON.parse(nativeFinalLanePacket({ ...fixture, lane: 'protocolLane' }).toString('utf8'));
   assert.equal(fidelity.evidence.referenceRenders[0].pngBase64, source.toString('base64'));
-  assert.equal(JSON.stringify(fidelity).includes('example.com'), false);
+  assert.doesNotMatch(JSON.stringify(fidelity), /example\.com/);
   assert.deepEqual(protocol.evidence.referenceRenders, []);
 });

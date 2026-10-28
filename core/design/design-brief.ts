@@ -30,7 +30,8 @@ export type DesignBrief = Readonly<{
 
 /** Each visual decision names what in the brand or content it comes from; "modern" chooses nothing. */
 export const DECISION_KEYS = ['ground', 'accent', 'type', 'layout'] as const;
-const VAGUE = /^(?:[\s,.·/&+-]*(?:모던|깔끔|세련|미니멀|심플|트렌디|감각적|고급|프리미엄|clean|modern|minimal|minimalist|sleek|simple|elegant|premium|professional|bold|fresh|and|하고|하게|한|와|과|및)[\s,.·/&+-]*)+$/i;
+// Each word is followed only by separators, so no two parts of the pattern compete for the same characters.
+const VAGUE = /^[\s,.·/&+-]*(?:(?:모던|깔끔|세련|미니멀|심플|트렌디|감각적|고급|프리미엄|clean|modern|minimalist|minimal|sleek|simple|elegant|premium|professional|bold|fresh|and|하고|하게|한|와|과|및)[\s,.·/&+-]*)+$/i;
 
 /**
  * What the hero puts in front of the visitor as proof: the product's own interface working on a realistic input

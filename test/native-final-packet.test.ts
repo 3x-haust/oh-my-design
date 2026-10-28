@@ -69,7 +69,7 @@ test('reported whole originals reach measured fidelity without leaking source lo
       [['page', 'default', 'desktop'], ['page', 'default', 'mobile']],
     );
     assert.ok(fidelity.outputContract.reviewerFields.includes('consultedReferenceComparisons'));
-    assert.equal(JSON.stringify(fidelity).includes('example.com'), false);
+    assert.doesNotMatch(JSON.stringify(fidelity), /example\.com/);
     const protocol = JSON.parse(packets.nativeFinalLanePacket({ ...fixture, lane: 'protocolLane' }).toString());
     assert.equal(protocol.evidence.referenceRenders.length, 0);
     const blind = JSON.parse(finalRenderReviewerPacket({ ...fixture, packetInput: {
