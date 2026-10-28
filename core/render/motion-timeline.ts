@@ -11,9 +11,12 @@
  * It observes rendered results, so CSS transitions, WAAPI, GSAP, Framer Motion and rAF loops are
  * all visible; it does not read library internals. The output is advisory evidence for the author
  * and reviewer (`omd render <page> --motion`), never a completion gate. Clip-path, filter and
- * canvas/WebGL motion are outside the sampled properties; the contact-sheet frames still show them.
+ * canvas/WebGL motion are outside the sampled properties; the contact-sheet frames still show them,
+ * and a canvas whose pixels keep changing after content settles gets its own frames.
  */
+import { createHash } from 'node:crypto';
 import { basename, join } from 'node:path';
+import { decodePng } from '../motion/energy.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { browserExpression } from '../ref/browser-evaluation.ts';
 import { resolveRenderTarget } from './serve.ts';
@@ -586,6 +589,13 @@ const HIDDEN_FIRST_VIEWPORT = `() => {
   }
   return hidden;
 }`;
+const CANVAS_BOXES = `() => [...document.querySelectorAll('canvas')].flatMap(canvas => {
+  const rect = canvas.getBoundingClientRect();
+  const x = Math.max(0, rect.left), y = Math.max(0, rect.top);
+  const width = Math.min(innerWidth, rect.right) - x, height = Math.min(innerHeight, rect.bottom) - y;
+  return width >= 48 && height >= 48 && getComputedStyle(canvas).visibility !== 'hidden'
+    ? [{ x: Math.round(x), y: Math.round(y), width: Math.floor(width), height: Math.floor(height) }] : [];
+})`;
 const inPage = <T>(page: Page, source: string): Promise<T> => page.evaluate(browserExpression(source)) as Promise<T>;
 
 const readCapture = (page: Page) =>
@@ -608,6 +618,34 @@ async function settle(page: Page, maxMs: number, settleMs: number, frames: Frame
     if (ready && current > 1200 && current - changedAt >= settleMs) return;
     await page.waitForTimeout(60);
   }
+}
+
+type Box = Readonly<{ x: number; y: number; width: number; height: number }>;
+const CANVAS_FRAMES = 4;
+const CANVAS_FRAME_MS = 400;
+
+function canvasDigest(png: Buffer, boxes: readonly Box[]) {
+  const image = decodePng(png), hash = createHash('sha256');
+  for (const box of boxes) for (let y = box.y; y < Math.min(image.height, box.y + box.height); y++) {
+    const start = (y * image.width + box.x) * image.channels;
+    hash.update(image.pixels.subarray(start, start + Math.min(box.width, image.width - box.x) * image.channels));
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * Content settles while a canvas or WebGL scene keeps playing, so the load frames stop before its motion shows.
+ * Frames of the page at rest are kept only when the pixels inside a visible canvas change between them.
+ */
+async function canvasFrames(page: Page): Promise<Frame[]> {
+  const boxes = await inPage<Box[]>(page, CANVAS_BOXES);
+  if (boxes.length === 0) return [];
+  const frames: Frame[] = [];
+  for (let index = 0; index < CANVAS_FRAMES; index++) {
+    if (index > 0) await page.waitForTimeout(CANVAS_FRAME_MS);
+    frames.push({ label: `canvas t=${await now(page)}ms`, png: await page.screenshot({ fullPage: false }) });
+  }
+  return new Set(frames.map(frame => canvasDigest(frame.png, boxes))).size > 1 ? frames : [];
 }
 
 async function scrollThrough(page: Page, viewport: Viewport, frames: Frame[]) {
@@ -664,6 +702,8 @@ export async function observeMotion(
     await page.goto(resolved.url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     const frames: Frame[] = [];
     await settle(page, 7000, 900, frames, 220);
+    const canvas = await canvasFrames(page);
+    frames.push(...canvas);
     let scrollStartMs: number | null = null;
     let scrollWindows: [number, number][] = [];
     if (opts.scroll !== false) {
@@ -678,7 +718,9 @@ export async function observeMotion(
     };
     await context.close();
     const reduced = opts.reduced === false ? null : await reducedMotionPass(browser, resolved.url, opts.viewport);
-    const timeline = analyzeMotion(raw, target, reduced);
+    const analyzed = analyzeMotion(raw, target, reduced);
+    const timeline = canvas.length === 0 ? analyzed : { ...analyzed, notes: [...analyzed.notes,
+      `A visible canvas kept changing after content settled; its motion is shown in the ${canvas.length} canvas frames, not in the sampled tracks.`] };
     // Keep load frames up to the first one after motion settled; later stills repeat it.
     const loadFrames = frames.filter(frame => frame.atMs !== undefined);
     const firstSettled = loadFrames.findIndex(frame => frame.atMs! > timeline.load.settledMs);
@@ -713,15 +755,18 @@ export function contactSheetHtml(timeline: MotionTimeline, frames: readonly Fram
     '<!doctype html><meta charset="utf-8"><style>',
     'body{margin:0;padding:20px;background:#fff;color:#111;font:12px/1.45 ui-sans-serif,system-ui;width:1160px}',
     'h1{font-size:15px;margin:0 0 6px}h2{font-size:13px;margin:18px 0 6px}ul{margin:0;padding-left:18px}',
-    '.f{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.f figure{margin:0}.f img{width:100%;border:1px solid #ccc;display:block}',
+    '.f{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.f.c{grid-template-columns:repeat(2,1fr)}.f figure{margin:0}.f img{width:100%;border:1px solid #ccc;display:block}',
     'figcaption{font-size:11px;color:#555;padding:2px 0}.l{font-size:11px;fill:#222}.m{font-size:10px;fill:#666}.g{stroke:#eee}',
     'table{border-collapse:collapse;font-size:11px}td{border-bottom:1px solid #eee;padding:3px 8px 3px 0}',
     '</style>',
     `<h1>Motion timeline — ${escapeHtml(basename(timeline.target))} @ ${timeline.viewport.width}×${timeline.viewport.height}</h1>`,
     `<ul>${timeline.notes.map(note => `<li>${escapeHtml(note)}</li>`).join('')}</ul>`,
     '<h2>Frames (load, then scroll-through)</h2><div class="f">',
-    ...frames.map(frame => `<figure><img src="data:image/png;base64,${frame.png.toString('base64')}"><figcaption>${escapeHtml(frame.label)}</figcaption></figure>`),
+    ...frames.filter(frame => !frame.label.startsWith('canvas ')).map(frame => `<figure><img src="data:image/png;base64,${frame.png.toString('base64')}"><figcaption>${escapeHtml(frame.label)}</figcaption></figure>`),
     '</div>',
+    ...(frames.some(frame => frame.label.startsWith('canvas ')) ? ['<h2>Canvas at rest (pixels change between frames)</h2><div class="f c">',
+      ...frames.filter(frame => frame.label.startsWith('canvas ')).map(frame => `<figure><img src="data:image/png;base64,${frame.png.toString('base64')}"><figcaption>${escapeHtml(frame.label)}</figcaption></figure>`),
+      '</div>'] : []),
     tracks.length ? `<h2>Load choreography (ms)</h2><svg width="${chartWidth}" height="${32 + tracks.length * rowHeight}">${grid}${bars}</svg>` : '',
     scrollRows ? `<h2>Scroll motion</h2><table><tr><td>mode</td><td>element</td><td>scrollY</td><td>entry (vh)</td><td>duration</td><td>easing</td><td>properties</td></tr>${scrollRows}</table>` : '',
   ].join('\n');
