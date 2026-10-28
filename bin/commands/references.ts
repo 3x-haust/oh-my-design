@@ -11,13 +11,26 @@ function unknown(sub: string | undefined): never {
   throw new Error(`unknown command ref${sub ? ` ${sub}` : ''}; run omd help`);
 }
 
+/** Ends a browse session still open, so its keeps are filed before references are reviewed or published. */
+async function endLiveBrowseSession(opts: Opts): Promise<void> {
+  const { readBrowsePointer } = await import('../../core/ref/browse/client.ts');
+  const live = readBrowsePointer(process.cwd());
+  if (live === null) return;
+  const { runBrowseCli } = await import('../../core/ref/browse/cli.ts');
+  await runBrowseCli(['end', '--session', live.sessionId, '--json'], process.cwd(), (activation, command) =>
+    invocationFromActivation({ ...opts, _: [], ...(activation === null ? {} : { activation }) }, command)).catch(() => undefined);
+}
+
 async function cmdRefDirectionReview(opts: Opts): Promise<never> {
   const command = 'omd ref direction-review';
   if (opts._.length) throw new Error(`usage: ${command} [--input <reference-zone-review-input.json>] [--json]`);
   const invocation = invocationFromActivation(opts, command);
   const { readPersistedRoute } = await import('../../core/route/index.ts');
   const route = readPersistedRoute(process.cwd(), invocation);
-  if (route.references.decision !== 'discover') throw new Error('REFERENCE_DIRECTION_REVIEW_NOT_SELECTED');
+  const { isModelLedProcess } = await import('../../core/route/process-policy.ts');
+  if (route.references.decision !== 'discover' && !isModelLedProcess(route.sourceContract)) throw new Error('REFERENCE_DIRECTION_REVIEW_NOT_SELECTED');
+  // The review reads filed keeps; a session still open is ended first rather than refused.
+  await endLiveBrowseSession(opts);
   if (opts.input) {
     const { reviewReferenceZone } = await import('../reference-zone-command.ts');
     const record = await reviewReferenceZone(process.cwd(), inputJson(opts.input, command), {
@@ -59,7 +72,10 @@ async function cmdRefDirectionReview(opts: Opts): Promise<never> {
       purpose: 'visual-direction',
     }).eligible;
   });
-  if (references.length === 0) throw new Error('REFERENCE_DIRECTION_CAPTURE_REQUIRED');
+  if (references.length === 0) {
+    throw new Error('REFERENCE_DIRECTION_CAPTURE_REQUIRED: no kept whole-page design capture is filed yet. Keeps are filed when the browse '
+      + 'session ends: run omd ref browse end --session <id>, then omd ref direction-review --json again.');
+  }
   const {
     planReferenceDirectionReview,
     publishReferenceDirectionAdmission,
@@ -107,6 +123,8 @@ async function cmdRefDirectionReview(opts: Opts): Promise<never> {
     directions: record.admissions.filter(item => item.verdict === 'direction').length,
     supports: record.admissions.filter(item => item.verdict === 'support').length,
     rejected: record.admissions.filter(item => item.verdict === 'reject').length,
+    // One packet holds only so many captures; the rest wait for the next run.
+    ...(plan.pending > 0 ? { next: `${plan.pending} kept reference(s) still wait for review: run omd ref direction-review --json again` } : {}),
   }, null, opts.json ? undefined : 2)}\n`);
   process.exit(0);
 }
@@ -143,7 +161,23 @@ export async function runReferences(args: string[]): Promise<never> {
       || Reflect.get(input, 'requestSha256') !== sha256(readPersistedRoute(process.cwd(), invocation).request)) {
       throw new Error('CONSULTED_REFERENCES: request scope');
     }
-    console.log(JSON.stringify(publishConsultedReferences(process.cwd(), input, projectWriter(invocation))));
+    // Publishing references settles them: a browse session still open is ended first so its keeps are filed and citable.
+    await endLiveBrowseSession(opts);
+    const { requireKeptConsultedImages } = await import('../../core/ref/capture-intake.ts');
+    const { requireReferenceKinds, requireReviewedPrimary, requireSectionReferences } = await import('../../core/design/new-surface-advisories.ts');
+    const cited: unknown = Reflect.get(input, 'images');
+    const images = Array.isArray(cited) ? cited.map(image => ({
+      sha256: String(Reflect.get(Object(image), 'sha256')), sourceUrl: String(Reflect.get(Object(image), 'sourceUrl')) })) : [];
+    requireKeptConsultedImages(process.cwd(), invocation, images);
+    requireReferenceKinds(readPersistedRoute(process.cwd(), invocation), images);
+    requireSectionReferences(process.cwd(), readPersistedRoute(process.cwd(), invocation), Array.isArray(cited) ? cited.map(image => ({
+      component: String(Reflect.get(Object(image), 'component') ?? ''), role: String(Reflect.get(Object(image), 'role')),
+      sourceUrl: String(Reflect.get(Object(image), 'sourceUrl')), sha256: String(Reflect.get(Object(image), 'sha256')) })) : []);
+    requireReviewedPrimary(process.cwd(), readPersistedRoute(process.cwd(), invocation), Array.isArray(cited) ? cited.map(image => ({
+      sha256: String(Reflect.get(Object(image), 'sha256')), role: String(Reflect.get(Object(image), 'role')) })) : []);
+    const published = publishConsultedReferences(process.cwd(), input, projectWriter(invocation));
+    const { referenceBreadth } = await import('../../core/ref/component-references.ts');
+    console.log(JSON.stringify({ ...published, references: referenceBreadth(process.cwd()) }));
     process.exit(0);
   }
 

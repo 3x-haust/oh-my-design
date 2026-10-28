@@ -15,7 +15,9 @@ import {
 } from './first-render-checkpoint-common.ts';
 
 export const FIRST_RENDER_CHECKPOINT_SCHEMA = 'first-render-source-checkpoint-v1' as const;
-export const MAX_FIRST_RENDER_CHECKPOINT_BYTES = 16 * 1024 * 1024;
+// Blobs are content-addressed, so an unchanged video or font is stored once across checkpoints; the cap bounds one
+// snapshot, which on a landing can hold real product footage.
+export const MAX_FIRST_RENDER_CHECKPOINT_BYTES = 64 * 1024 * 1024;
 
 const EXCLUDED_SEGMENTS = new Set(['.git', '.omd', 'build', 'dist', 'node_modules']);
 
@@ -94,7 +96,7 @@ export function firstRenderAllowedSourceFiles(root: string, route: AdaptiveRoute
     }
   };
   visit(root);
-  return files;
+  return files.sort();
 }
 
 export function collectFirstRenderSourceSnapshot(
@@ -102,11 +104,16 @@ export function collectFirstRenderSourceSnapshot(
   route: AdaptiveRouteRecord,
 ): FirstRenderSnapshotSource {
   let totalBytes = 0;
-  const files = firstRenderAllowedSourceFiles(root, route).map(path => {
+  const paths = firstRenderAllowedSourceFiles(root, route);
+  const files = paths.map(path => {
     const bytes = readFileSync(resolve(root, path));
     totalBytes += bytes.byteLength;
     if (totalBytes > MAX_FIRST_RENDER_CHECKPOINT_BYTES) {
-      return failCheckpoint(`allowed source snapshot exceeds ${MAX_FIRST_RENDER_CHECKPOINT_BYTES} bytes`);
+      // Name the heaviest files: usually duplicated vendor copies or media the page does not use.
+      const heaviest = paths.map(item => ({ item, size: lstatSync(resolve(root, item)).size })).sort((a, b) => b.size - a.size).slice(0, 3)
+        .map(({ item, size }) => `${item} (${Math.round(size / 1024 / 1024 * 10) / 10} MB)`).join(', ');
+      return failCheckpoint(`allowed source snapshot exceeds ${MAX_FIRST_RENDER_CHECKPOINT_BYTES} bytes; heaviest: ${heaviest}. `
+        + 'Remove copies the page does not load (duplicate fonts or vendor files, unused videos) before capturing again');
     }
     return { path, sha256: sha256(bytes), byteLength: bytes.byteLength, bytes };
   });
@@ -159,8 +166,8 @@ function parseCheckpoint(value: unknown): FirstRenderSourceCheckpoint {
     };
   });
   if (new Set(files.map(file => file.path)).size !== files.length
-    || [...files].sort((left, right) => left.path.localeCompare(right.path))
-      .some((file, index) => file.path !== files[index]?.path)
+    || files.map(file => file.path).sort()
+      .some((path, index) => path !== files[index]?.path)
     || files.reduce((sum, file) => sum + file.byteLength, 0) !== row.totalBytes) {
     return failCheckpoint('source checkpoint file inventory is invalid');
   }

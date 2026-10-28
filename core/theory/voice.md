@@ -138,10 +138,10 @@ are the phrases the copy should use or echo. The user who writes "I used to spen
 hours a week reconciling this manually" has handed you a sentence. The copy that quotes
 their situation back to them is the copy that converts.
 
-This connects directly to the scout's community captures. A Reddit thread where users argue
-about exactly this product category, a Hacker News comment naming why a redesign failed —
-these are not sentiment data. They are voice data. The scout captures them; the hand uses
-them. A voice study that records how a site writes is the positive model; the community
+This connects directly to community captures kept as references. A Reddit thread where users
+argue about exactly this product category, a Hacker News comment naming why a redesign
+failed — these are not sentiment data. They are voice data. Keep them, then use them in the
+copy. A voice study that records how a site writes is the positive model; the community
 captures record the phrases the audience already uses for the problem.
 
 ---
@@ -346,9 +346,9 @@ honest or performed. A genuine takeaway — something the writer actually learne
 — earns the closure. A resolution that smoothes over ongoing uncertainty changes the claim.
 If the answer does not exist yet, retain that uncertainty instead of packaging a lesson.
 
-### Uniform sentence endings and not-X-but-Y: pre-handoff checks, not linter rules
+### Uniform sentence endings and not-X-but-Y: pre-build checks, not linter rules
 
-Two Korean patterns require contextual pre-handoff review and cannot become safe
+Two Korean patterns require contextual pre-build review and cannot become safe
 deterministic rules:
 
 **Three or more consecutive identical sentence-final endings** (이에요./이에요./이에요. or
@@ -357,7 +357,7 @@ product benefit lists deliberately use parallel endings: "빠릅니다.
 정확합니다. 쉽습니다." is valid copy that would false-positive on every legitimate feature
 section. A linter rule would fire on too much legitimate writing to be trusted.
 
-Pre-handoff check: if adjacent sentences share an ending, ask whether the ideas are truly
+Pre-build check: if adjacent sentences share an ending, ask whether the ideas are truly
 parallel. Keep the form when it supports comparison or recall. If sameness hides a change in
 communicative job, repair that sentence's job rather than forcing a different ending.
 
@@ -367,13 +367,13 @@ a brand that deliberately contrasts itself with a
 category norm ("빠른 게 아니라 정확합니다") uses this construction with intent. No narrow
 regex distinguishes the cases reliably.
 
-Pre-handoff check: when this construction appears in the hero or opening paragraph, ask
-whether the contrast is a designed claim (cite it in decisions.md with the brand reason)
+Pre-build check: when this construction appears in the hero or opening paragraph, ask
+whether the contrast is a designed claim (say so in the report with the brand reason)
 or a hedge that weakens the useful claim. Delete empty hedges; keep designed contrasts. "AI가 만든
 게 아니라, 사람이 썼어요" as a self-description of the tool is a hedge; "비싼 게 아니라
 오래 씁니다" as a product claim is a designed contrast.
 
-Neither pattern has an `omd check` rule. Both belong on the hand's pre-handoff review pass.
+Neither pattern has an `omd check` rule. Both belong in the maker's own read before building.
 
 Translated English marketing is the loudest failure mode. The sentence structure of
 English product copy — subject, action verb, object, benefit clause — does not map cleanly
@@ -473,7 +473,7 @@ The self-introduction pattern is regex-describable:
 It is not a safe linter rule. Product comparison tables, developer documentation, feature
 detail sections, and UI tooltip copy all use constructions that match this pattern
 legitimately. Without reliable hero-node detection, the rule would false-positive on too
-much legitimate writing to be trusted. It belongs on the hand's pre-handoff review pass,
+much legitimate writing to be trusted. It belongs in the maker's own read before building,
 in the same category as the not-X-but-Y construction documented above under Korean copy.
 
 ---
@@ -589,10 +589,9 @@ preview is not a sent request; sent is not received; received is not an appointm
 appointment is not a visit; a visit is not completion. Likewise, in-memory state, tab-scoped
 session storage, persistent browser storage, and remote persistence are different claims.
 
-Record those limits in the copy deck's typed Truth contract before writing action,
-confirmation, status, or summary text. If a frozen requirement label exceeds either boundary,
-return it to the framer instead of preserving an overclaim or inventing a softer downstream
-synonym. Confirmation copy names the achieved boundary first. It adds a reference, next actor,
+Settle those limits before writing action, confirmation, status, or summary text. If a
+requested label exceeds either boundary, rename it to the verified boundary and say so in the
+report instead of preserving an overclaim or inventing a softer downstream synonym. Confirmation copy names the achieved boundary first. It adds a reference, next actor,
 timing, or recovery only when that information exists and changes what the user can do.
 
 This separation follows the state distinctions visible in GOV.UK confirmation patterns,
@@ -602,37 +601,36 @@ one transition, but the evidence must establish every transition the copy names.
 
 ---
 
-## Official evidence map and layer ownership
+## Official evidence map by layer
 
-- **Toss writing principles** — https://toss.tech/article/21022 — writer: one key message,
+- **Toss writing principles** — https://toss.tech/article/21022 — copy: one key message,
   remove repeated/empty lines, make the next screen predictable, use one spoken breath,
-  preserve user choice. Eye: read aloud and test CTA prediction.
-- **Toss marketing writing** — https://toss.tech/article/Marketing_Writing — writer: connect
+  preserve user choice. Review: read aloud and test CTA prediction.
+- **Toss marketing writing** — https://toss.tech/article/Marketing_Writing — copy: connect
   the audience's present concern to a concrete next action; do not turn a click-rate tactic
   into an unsupported product claim.
 - **Apple Writing HIG** — https://developer.apple.com/design/human-interface-guidelines/writing
-  — writer: clear, concise, useful labels in the platform's voice. Hand: place text where it
+  — copy: clear, concise, useful labels in the platform's voice. Build: place text where it
   explains the affected control or state.
 - **Microsoft UI text guide** — https://learn.microsoft.com/en-us/windows-server/manage/windows-admin-center/extend/guides/ui-text-style-guide
-  — writer: consistent terminology, direct action labels, sentence-style capitalization.
-- **W3C Writing for Web Accessibility** — https://www.w3.org/WAI/tips/writing/ — writer:
-  descriptive headings/link text and plain language. Hand: expose the same meaning to
+  — copy: consistent terminology, direct action labels, sentence-style capitalization.
+- **W3C Writing for Web Accessibility** — https://www.w3.org/WAI/tips/writing/ — copy:
+  descriptive headings/link text and plain language. Build: expose the same meaning to
   assistive technology.
 - **GOV.UK confirmation pages** — https://design-system.service.gov.uk/patterns/confirmation-pages/
-  — writer/eye: name the completed boundary and include useful next-step truth.
+  — copy/review: name the completed boundary and include useful next-step truth.
 - **NHS online GP forms** — https://www.nhs.uk/nhs-services/gps/using-an-online-form-to-contact-your-gp-surgery/
-  — writer/eye: keep request submission and downstream service response distinct.
+  — copy/review: keep request submission and downstream service response distinct.
 - **Seoul 120 civil complaints** — https://www.120dasan.or.kr/dsnc/main/contents.do?menuNo=200022
-  — writer/eye: receipt, transfer, processing, and result remain distinct operational states.
+  — copy/review: receipt, transfer, processing, and result remain distinct operational states.
 
-Ownership is deliberate. `omd-writer` establishes facts, audience language, voice, and
-surface copy in `.omd/copy-deck.md`. Copy-editor eye judges fact fidelity, scan, repetition,
-CTA prediction, register, emotion, and recovery in context. `omd copy --check` verifies only
-explicit structure, state applicability, exact unresolved sentinels, and fact-ID links.
+The maker writes the copy from the brief: facts, audience language, voice, and surface
+strings. The isolated first-render reviewer judges fact fidelity, scan, repetition, action
+prediction, register, and recovery in the rendered page.
 
 Screenshot phrases and common connectives are prompt/eval observations, never global lint:
 legitimate brands and sentences use them. AI detectors, perplexity thresholds, and sentence-
 length distributions are forbidden as shipping gates: domain, language, accessibility copy,
 and short UI labels create false positives, and a statistical signal cannot establish
-authorship or copy quality. Use those ideas only to prompt a contextual human/eye review;
-never reject a deck because a detector score or distribution looks machine-like.
+authorship or copy quality. Use those ideas only to prompt a contextual human or reviewer read;
+never reject copy because a detector score or distribution looks machine-like.

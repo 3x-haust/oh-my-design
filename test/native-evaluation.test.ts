@@ -38,8 +38,9 @@ function manifest() {
   };
 }
 
-function fixture(t: TestContext, options: Readonly<{ broken?: boolean }> = {}) {
+function fixture(t: TestContext, options: Readonly<{ broken?: boolean; taskNeed?: string }> = {}) {
   const input = modelLedInput(request);
+  if (options.taskNeed) (input.referenceDiscovery as Record<string, unknown>).taskNeed = options.taskNeed;
   input.taskOutcome = {
     schema: 'task-outcome-contract-v1',
     goal: 'Review shipment evidence.',
@@ -136,4 +137,15 @@ test('native completion distinguishes an uncached browser proposal from a cached
   const cached = nativeCompletionWork(value.root, value.invocation);
   assert.equal(cached.action, 'finish-model-led');
   assert.equal(cached.next, 'omd lifecycle finish --json');
+});
+
+test('lifecycle finish reports a failing browser check before spending an isolated visual review', async t => {
+  const { runModelLedCompletion } = await import('../bin/model-led-completion-command.ts');
+  const value = fixture(t, { broken: true, taskNeed: 'copy-only-edit' });
+  const started = Date.now();
+  const result = await runModelLedCompletion({ ...value, manifest: manifest() });
+  assert.equal(result.phase, 'browser', JSON.stringify(result.diagnostic));
+  assert.equal(result.diagnostic?.code, 'FINAL_BEHAVIOR_FAILED');
+  assert.equal(result.firstRender, undefined, 'no first-render review ran');
+  assert.ok(Date.now() - started < 120_000);
 });

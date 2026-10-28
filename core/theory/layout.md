@@ -129,10 +129,10 @@ the number and intensity depend on page length, narrative beats, and competing t
 ## Composition recipes are hypotheses
 
 The files under `core/composition/` are candidate mechanisms, not templates or defaults.
-Their breakpoint values and token slots are demonstration values. A composer may cite a
-recipe only after its condition gate matches the experience spine and must rewrite its
-structure, values, and responsive transitions for the actual content. Candidate sketches
-should compare meaningful axes rather than merely choosing different recipes.
+Their breakpoint values and token slots are demonstration values. Cite a recipe only after
+its condition gate matches the experience spine, and rewrite its structure, values, and
+responsive transitions for the actual content. When comparing directions, vary meaningful
+axes rather than merely choosing different recipes.
 
 ## Decision record
 

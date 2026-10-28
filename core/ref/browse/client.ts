@@ -31,6 +31,12 @@ function readState(root: string, id: string): State {
   if (!/^[a-f0-9]{32}$/.test(id)) browseFail('BROWSE_SESSION_ID', 'invalid session id', 2);
   return parseCanonical<State>(readContainedRegularFile(root, statePath(id), 'private browse state'));
 }
+/** The recorded driver ran on this machine and its process no longer exists. */
+function driverDead(state: State): boolean {
+  if (state.host !== hostname()) return false;
+  try { process.kill(state.pid, 0); return false; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true; throw error; }
+}
 export function readBrowsePointer(root: string): { sessionId: string } | null {
   if (!existsSync(resolve(root, currentPath))) return null;
   return parseCanonical(readContainedRegularFile(root, currentPath, 'browse session pointer'));
@@ -59,7 +65,14 @@ async function rpc<T>(state: State, args: DriverRequest, invocation: ProjectRunI
   // Publishing an action may outlive the HTTP keep-alive lease (especially under coverage).
   // Never reuse an idle socket for the next signed ACK: its peer may have already closed it.
   const response = await fetch(endpoint, { method: 'POST', headers: { authorization: `Bearer ${state.connection.capability}`, 'content-type': 'application/json', connection: 'close' },
-    body: JSON.stringify({ ticket, args }), redirect: 'error', signal: AbortSignal.timeout(60_000) });
+    body: JSON.stringify({ ticket, args }), redirect: 'error', signal: AbortSignal.timeout(60_000) }).catch((error: unknown) => {
+    if (error instanceof TypeError) browseFail('BROWSE_DRIVER_LOST', `the session's browser process is gone; run omd ref browse end --reason interrupted --session ${state.binding.sessionId}, then start a new session`, 2);
+    if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      browseFail('BROWSE_DRIVER_SLOW', 'the page did not settle within a minute; the session finishes that action on its own: wait a few seconds, '
+        + `then shot again, or end the session (omd ref browse end --session ${state.binding.sessionId}) and move on to another page`, 2);
+    }
+    throw error;
+  });
   const text = await response.text(); if (text.length > 360 * 1024 * 1024) browseFail('BROWSE_RPC_SIZE', 'reply exceeds session bound', 2);
   const value = JSON.parse(text);
   if (!response.ok) browseFail(value.code ?? 'BROWSE_RPC_FAILED', value.message ?? 'driver failed', value.exitCode ?? 2);
@@ -122,15 +135,28 @@ export async function executeBrowseCommand(rootInput: string, command: BrowseCom
   if (command.action.verb === 'start') {
     const start = command.action, now = Date.now();
     const consent = authorizeBrowseConsent(start, route.request, route.sourceContractSha256, now);
+    // A previous session whose browser died is sealed from its last signed prefix instead of blocking new research.
+    const previous = readBrowsePointer(root);
+    const previousState = previous ? readState(root, previous.sessionId) : null;
+    if (previousState && !previousState.seal && previousState.checkpoint && driverDead(previousState)) {
+      const reply = recoverInterruptedBrowse(previousState.binding, previousState.checkpoint, randomBytes(16).toString('hex'));
+      finish(root, publish(root, previousState, reply, invocation, writer), writer, invocation, route.sourceContractSha256);
+    }
     const sessionId = randomBytes(16).toString('hex'), release = acquireProjectMutationLock(root, invocation);
     try {
       const existing = readBrowsePointer(root);
-      if (existing && !readState(root, existing.sessionId).seal) browseFail('BROWSE_SESSION_BUSY', 'end the existing live/interrupted session first', 2);
+      const existingState = existing ? readState(root, existing.sessionId) : null;
+      if (existingState && !existingState.seal && !(existingState.checkpoint === null && driverDead(existingState))) {
+        browseFail('BROWSE_SESSION_BUSY', `end the existing session first: omd ref browse end --session ${existingState.binding.sessionId}`, 2);
+      }
       const cyclePath = `.omd/.cache/ref-browse/budget-${route.sourceContractSha256}.json`;
       let budget: BrowseBudget = { startedAt: new Date(now).toISOString(), deadline: new Date(now + start.budgetMinutes * 60_000).toISOString(), maxActions: start.budgetActions, actions: 0, metadataEvents: 0 };
       if (existsSync(resolve(root, cyclePath))) {
         const cycle = parseCanonical<{ schema: string; sourceContractSha256: string; budget: BrowseBudget; signature: string }>(readContainedRegularFile(root, cyclePath, 'browse cycle budget')); verifySigned(root, cycle); budget = cycle.budget;
-        if (start.budgetActions > budget.maxActions || now >= Date.parse(budget.deadline) || budget.actions >= budget.maxActions || budget.metadataEvents >= 128) browseFail('BROWSE_CYCLE_BUDGET', 'research-cycle allowance exhausted; restarting cannot grant a new budget', 3);
+        if (start.budgetActions > budget.maxActions || budget.actions >= budget.maxActions || budget.metadataEvents >= 128) browseFail('BROWSE_CYCLE_BUDGET', 'research-cycle allowance exhausted; restarting cannot grant new actions', 3);
+        // Actions are the research-cycle cap; every new session gets its own time window, so a session opened after
+        // another ended does not inherit the few minutes the earlier one had left.
+        budget = { ...budget, startedAt: new Date(now).toISOString(), deadline: new Date(now + start.budgetMinutes * 60_000).toISOString() };
       }
       const binding: Binding = { root, sessionId, sourceContractSha256: route.sourceContractSha256, buildSha256: invocation.current.buildSha256, consent, start, budget };
       // A fresh random session directory is created by the guarded writer under a restrictive
@@ -158,15 +184,12 @@ export async function executeBrowseCommand(rootInput: string, command: BrowseCom
       stopReason: seal.stopReason, nextAllowed: ['status', 'end'], tray: seal.keeps, snapshotStale: true, seal: state.seal,
       confidenceDebt: seal.confidenceDebt, ...(summary ? { retained: summary.retained } : {}) };
   }
-  if (command.action.verb === 'end' && command.action.reason === 'interrupted' && state.host === hostname() && state.checkpoint) {
-    let dead = false;
-    try { process.kill(state.pid, 0); } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') dead = true; else throw error; }
-    if (dead) {
-      const reply = recoverInterruptedBrowse(state.binding, state.checkpoint, randomBytes(16).toString('hex'));
-      state = publish(root, state, reply, invocation, writer);
-      const summary = finish(root, state, writer, invocation, route.sourceContractSha256);
-      return { ...reply.result, seal: state.seal!, retained: summary.retained, confidenceDebt: summary.confidenceDebt };
-    }
+  // Ending a session whose browser process died certifies its last signed prefix, whatever reason was given.
+  if (command.action.verb === 'end' && state.checkpoint && driverDead(state)) {
+    const reply = recoverInterruptedBrowse(state.binding, state.checkpoint, randomBytes(16).toString('hex'));
+    state = publish(root, state, reply, invocation, writer);
+    const summary = finish(root, state, writer, invocation, route.sourceContractSha256);
+    return { ...reply.result, seal: state.seal!, retained: summary.retained, confidenceDebt: summary.confidenceDebt };
   }
   const pending = await rpc<{ id: string; reply: DriverReply } | null>(state, { operation: 'pending' }, invocation, writer);
   if (pending) {

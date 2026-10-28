@@ -7,6 +7,7 @@ import { must, asRecord, readJson } from './helpers.ts';
 
 const ir = normalize(readJson<RawIr>(new URL('./fixtures/ir.raw.json', import.meta.url)));
 const builtin = loadRules(new URL('../core/rules/builtin/', import.meta.url).pathname);
+const landingRules = loadRules(new URL('../core/rules/landing/', import.meta.url).pathname);
 
 test('loadRules reads every builtin rule and validates required fields', () => {
   assert.ok(builtin.length >= 4);
@@ -257,6 +258,7 @@ const richText = (id: string, over: Partial<RawNode>): RawNode => ({
   box: { x: 0, y: 0, w: 320, h: 20 }, children: [], text: 'Some readable body text here.', ...over,
 });
 const runSlop = (nodes: RawNode[]) => check(normalize({ nodes }), builtin, { categories: ['slop'] });
+const runLanding = (nodes: RawNode[]) => check(normalize({ nodes }), landingRules, { categories: ['slop'] });
 const runA11y = (nodes: RawNode[]) => check(normalize({ nodes }), builtin, { categories: ['a11y'] });
 
 test('SLOP-FONT-CIRCUS fires at four or more distinct font families, not three', () => {
@@ -1371,6 +1373,10 @@ test('SLOP-CARD-UNIFORMITY flags mostly same-radius bordered content wrappers', 
   assert.ok(runSlop(uniformCardNodes(4)).some((x) => x.id === 'SLOP-CARD-UNIFORMITY'));
 });
 
+test('SLOP-CARD-UNIFORMITY finishes within the rule time limit on a large reference page', () => {
+  assert.ok(runSlop(uniformCardNodes(1500)).some((x) => x.id === 'SLOP-CARD-UNIFORMITY'));
+});
+
 test('SLOP-CARD-UNIFORMITY allows varied containers that do not impose one radius', () => {
   assert.ok(!runSlop(uniformCardNodes(4, true)).some((x) => x.id === 'SLOP-CARD-UNIFORMITY'));
 });
@@ -1384,4 +1390,136 @@ test('SLOP-EVERYTHING-CENTERED allows compact centered emphasis and left-aligned
   const short = richText('short', { text: 'A compact centered statement', textAlign: 'center' });
   const long = richText('long', { text: 'A long paragraph can carry substantial context without becoming difficult to scan when every line returns to a stable left edge.', textAlign: 'left' });
   assert.ok(!runSlop([accentRoot([short.id, long.id]), short, long]).some((x) => x.id === 'SLOP-EVERYTHING-CENTERED'));
+});
+
+// ── SLOP-TYPED-ARROW-ICON ─────────────────────────────────────────────────────
+
+const arrowIr = (text: string, interactive = true) => normalize({ nodes: [{
+  id: 'n1', name: 'Label', type: 'TEXT', path: 'Screen/Label',
+  parent: null, box: { x: 0, y: 0, w: 160, h: 40 }, children: [], text, ...(interactive ? { interactive: true } : {}),
+} satisfies RawNode] });
+
+test('SLOP-TYPED-ARROW-ICON fires on links and buttons that carry a typed arrow as their icon', () => {
+  for (const text of ['GitHub ↗', 'GitHub↗', '시작하기 →', '→ View all', '←', 'Next ⟶', 'Docs ➜']) {
+    const v = check(arrowIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some(x => x.id === 'SLOP-TYPED-ARROW-ICON'), `expected SLOP-TYPED-ARROW-ICON for: ${text}`);
+  }
+});
+
+test('SLOP-TYPED-ARROW-ICON ignores arrows inside sentences, flows in body copy and plain labels', () => {
+  const quiet: [string, boolean][] = [
+    ['요청 → 구현 → 검증', false],
+    ['GitHub ↗', false],
+    ['Compare A → B plans', true],
+    ['GitHub', true],
+    ['다음 단계', true],
+  ];
+  for (const [text, interactive] of quiet) {
+    const v = check(arrowIr(text, interactive), builtin, { categories: ['slop'] });
+    assert.ok(!v.some(x => x.id === 'SLOP-TYPED-ARROW-ICON'), `unexpected SLOP-TYPED-ARROW-ICON for: ${text}`);
+  }
+});
+// ── SLOP-ANNOTATION-LOAD ──────────────────────────────────────────────────────
+// One section group per step: a heading, its body line and the given small notes beside it.
+const annotatedPage = (steps: number, notesPerStep: number, extra: (step: number) => RawNode[] = () => []): RawNode[] => {
+  const nodes: RawNode[] = [];
+  const groups = Array.from({ length: steps }, (_u, step) => {
+    const group = `g${step}`, copy = `c${step}`;
+    const notes = Array.from({ length: notesPerStep }, (_v, n) => richText(`n${step}-${n}`, { parent: copy, fontSize: 12,
+      path: `Root/${group}/${copy}/n${step}-${n}`, text: n === 0 ? `0${step + 1}` : '요청 · 목표 · 범위' }));
+    const heading = richText(`h${step}`, { parent: copy, fontSize: 32, heading: 2, path: `Root/${group}/${copy}/h${step}`, text: '그리기 전에, 상황을 읽습니다.' });
+    const body = richText(`b${step}`, { parent: copy, fontSize: 17, path: `Root/${group}/${copy}/b${step}`,
+      text: '누구를 위한 화면인지, 무엇을 할 수 있어야 하는지. 기존 프로젝트의 구조와 요청부터 이해합니다.' });
+    const more = extra(step);
+    nodes.push({ id: copy, name: 'Copy', type: 'FRAME', path: `Root/${group}/${copy}`, parent: group, box: { x: 0, y: 0, w: 600, h: 300 },
+      children: [heading.id, body.id, ...notes.map(n => n.id)] }, heading, body, ...notes, ...more);
+    return { id: group, name: 'Group', type: 'FRAME' as const, path: `Root/${group}`, parent: 'root', box: { x: 0, y: step * 400, w: 1200, h: 400 },
+      children: [copy, ...more.filter(n => n.parent === group).map(n => n.id)] };
+  });
+  return [accentRoot(groups.map(g => g.id)), ...groups, ...nodes];
+};
+test('SLOP-ANNOTATION-LOAD fires when the heading groups carry kickers, numbers and tag rows', () => {
+  const v = runLanding(annotatedPage(3, 3));
+  assert.ok(v.some((x) => x.id === 'SLOP-ANNOTATION-LOAD'), 'three notes beside each of three headings should fire');
+});
+test('SLOP-ANNOTATION-LOAD ignores a kicker per section and small text inside a graphic', () => {
+  assert.ok(!runLanding(annotatedPage(5, 1)).some((x) => x.id === 'SLOP-ANNOTATION-LOAD'), 'one kicker per section is not a load');
+  const mock = (step: number): RawNode[] => [{ id: `img${step}`, name: 'svg', type: 'FRAME', path: `Root/g${step}/svg.art`, parent: `g${step}`,
+    box: { x: 600, y: 0, w: 600, h: 400 }, children: [] }];
+  assert.ok(!runLanding(annotatedPage(3, 3, mock)).some((x) => x.id === 'SLOP-ANNOTATION-LOAD'),
+    'labels inside a group that holds a graphic belong to the graphic');
+});
+
+// ── SLOP-NAV-LINK-ICON ────────────────────────────────────────────────────────
+const navPage = (withIcon: boolean, place = 'header'): RawNode[] => [
+  { id: 'root', name: 'Root', type: 'FRAME', path: 'body', parent: null, box: { x: 0, y: 0, w: 1280, h: 900 }, children: ['nav'] },
+  { id: 'nav', name: 'Nav', type: 'FRAME', path: `body/${place}`, parent: 'root', box: { x: 0, y: 0, w: 1280, h: 72 }, children: ['link'] },
+  { id: 'link', name: 'a', type: 'FRAME', path: `body/${place}/a`, parent: 'nav', interactive: true, box: { x: 900, y: 20, w: 90, h: 32 },
+    children: withIcon ? ['label', 'icon'] : ['label'] },
+  { id: 'label', name: 'span', type: 'TEXT', path: `body/${place}/a/span`, parent: 'link', text: 'GitHub', box: { x: 900, y: 26, w: 60, h: 20 }, children: [] },
+  ...(withIcon ? [{ id: 'icon', name: 'svg', type: 'FRAME' as const, path: `body/${place}/a/svg`, parent: 'link', box: { x: 966, y: 28, w: 16, h: 16 }, children: [] }] : []),
+];
+test('SLOP-NAV-LINK-ICON fires on a header link that carries a drawn arrow', () => {
+  assert.ok(runLanding(navPage(true)).some(x => x.id === 'SLOP-NAV-LINK-ICON'));
+});
+test('SLOP-NAV-LINK-ICON ignores plain navigation words and icons outside the header', () => {
+  assert.ok(!runLanding(navPage(false)).some(x => x.id === 'SLOP-NAV-LINK-ICON'), 'plain words');
+  assert.ok(!runLanding(navPage(true, 'main')).some(x => x.id === 'SLOP-NAV-LINK-ICON'), 'a card link in main is not navigation');
+});
+// ── SLOP-PAPER-TONE ───────────────────────────────────────────────────────────
+const ground = (fill: string): RawNode[] => [{ id: 'root', name: 'Root', type: 'FRAME', path: 'body', parent: null,
+  box: { x: 0, y: 0, w: 1280, h: 3000 }, children: [], fill: { value: fill, token: null } }];
+test('SLOP-PAPER-TONE fires on a cream page ground, including one the body inherits from html', () => {
+  for (const fill of ['#F6F5F0', '#F7F3EA', '#FAF6EE', '#FAF9F6']) assert.ok(runLanding(ground(fill)).some(x => x.id === 'SLOP-PAPER-TONE'), fill);
+  const inherited = ground('#FAF9F6'); inherited[0]!.fill = { value: '#FAF9F6', token: null, inherited: true };
+  assert.ok(runLanding(inherited).some(x => x.id === 'SLOP-PAPER-TONE'), 'canvas colour propagated from html');
+});
+test('SLOP-PAPER-TONE ignores white, neutral grey, dark and saturated grounds', () => {
+  for (const fill of ['#FFFFFF', '#F5F5F5', '#111111', '#FFE8C2', '#EEF2FF']) {
+    assert.ok(!runLanding(ground(fill)).some(x => x.id === 'SLOP-PAPER-TONE'), fill);
+  }
+});
+
+// ── SLOP-MIDDOT-META ──────────────────────────────────────────────────────────
+const metaPage = (text: string, place = 'main'): RawNode[] => [
+  { id: 'root', name: 'Root', type: 'FRAME', path: 'body', parent: null, box: { x: 0, y: 0, w: 1280, h: 900 }, children: ['t'] },
+  { id: 't', name: 'p', type: 'TEXT', path: `body/${place}/p`, parent: 'root', text, box: { x: 0, y: 100, w: 400, h: 20 }, children: [] },
+];
+test('SLOP-MIDDOT-META fires on dot-joined meta rails in the content', () => {
+  for (const text of ['요청 · 목표 · 범위', '오픈소스 · MIT', 'Claude Code · Codex · Pi']) {
+    assert.ok(runLanding(metaPage(text)).some(x => x.id === 'SLOP-MIDDOT-META'), text);
+  }
+});
+test('SLOP-MIDDOT-META also reads dots set as their own spans between the tokens', () => {
+  const nodes: RawNode[] = [
+    { id: 'root', name: 'Root', type: 'FRAME', path: 'body', parent: null, box: { x: 0, y: 0, w: 1280, h: 900 }, children: ['row'] },
+    { id: 'row', name: 'div', type: 'FRAME', path: 'body/main/div', parent: 'root', box: { x: 0, y: 100, w: 400, h: 20 }, children: ['a', 'd1', 'b', 'd2', 'c'] },
+    ...[['a', 'Claude Code'], ['d1', '·'], ['b', 'Codex'], ['d2', '·'], ['c', 'Pi']].map(([id, text], i) => ({ id: id!, name: 'span', type: 'TEXT' as const,
+      path: `body/main/div/span${i}`, parent: 'row', text: text!, box: { x: i * 60, y: 100, w: 50, h: 20 }, children: [] })),
+  ];
+  const v = runLanding(nodes).find(x => x.id === 'SLOP-MIDDOT-META');
+  assert.ok(v && /Claude Code · Codex · Pi/.test(v.message));
+});
+test('SLOP-MIDDOT-META ignores footer policy links and ordinary sentences', () => {
+  assert.ok(!runLanding(metaPage('이용약관 · 개인정보처리방침 · 사업자정보', 'footer')).some(x => x.id === 'SLOP-MIDDOT-META'), 'footer convention');
+  assert.ok(!runLanding(metaPage('코딩 에이전트가 화면을 그리기 전에 레퍼런스를 찾고, 렌더한 결과를 다시 봅니다.')).some(x => x.id === 'SLOP-MIDDOT-META'));
+});
+// ── SLOP-SCREEN-WORDS ─────────────────────────────────────────────────────────
+const wordyPage = (words: number, y = 100): RawNode[] => [
+  { id: 'root', name: 'Root', type: 'FRAME', path: 'body', parent: null, box: { x: 0, y: 0, w: 1280, h: 1800 }, children: ['t'] },
+  { id: 't', name: 'p', type: 'TEXT', path: 'body/main/p', parent: 'root', text: Array.from({ length: words }, (_u, i) => `단어${i}`).join(' '),
+    box: { x: 0, y, w: 600, h: 400 }, children: [] },
+];
+test('SLOP-SCREEN-WORDS fires when one screen carries far more words than a look takes in', () => {
+  const v = runLanding(wordyPage(160));
+  assert.ok(v.some(x => x.id === 'SLOP-SCREEN-WORDS' && /screen 1: 160 words/.test(x.message)));
+});
+test('SLOP-SCREEN-WORDS ignores a screen of ordinary length', () => {
+  assert.ok(!runLanding(wordyPage(70)).some(x => x.id === 'SLOP-SCREEN-WORDS'));
+});
+
+test('landing rules stay out of the builtin set that product screens are measured against', () => {
+  const ids = new Set(builtin.map(rule => rule.id));
+  for (const rule of landingRules) assert.equal(ids.has(rule.id), false, rule.id);
+  assert.deepEqual(landingRules.map(rule => rule.id).sort(), ['SLOP-ANNOTATION-LOAD', 'SLOP-MIDDOT-META', 'SLOP-NAV-LINK-ICON', 'SLOP-PAPER-TONE', 'SLOP-SCREEN-WORDS']);
 });

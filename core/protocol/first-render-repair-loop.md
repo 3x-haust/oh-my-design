@@ -18,6 +18,12 @@ Historical v3, v4, and v5 review records retain their original task and handback
 
 ## Procedure
 
+A `reframe` returns work to the current production owner within the existing route
+scope. The production guard reports the unresolved review as a warning so that the
+owner can repair the source; it does not grant new paths or bypass current lineage
+checks. Browser acceptance and terminal publication still refuse an unresolved
+reframe. A request to repair must not make the repair itself impossible.
+
 The route keeps an ordered iteration history and chooses the latest retained iteration as best;
 until one exists, it chooses the latest reviewed iteration that was not regressed. A regressed
 review sends the maker to `omd first-render restore --json` before a materially different
@@ -26,9 +32,16 @@ all blobs, and every allowed path before the first project mutation, then writes
 only through the guarded project-write adapter.
 
 Four consecutive comparable reviews without `improved` or `retain`, or any finding id that
-persists through three consecutive non-retained reviews, produces `FIRST_RENDER_LOOP_STALLED`.
+persists through three consecutive non-retained reviews (unless the last two each judged the
+work `improved`, which is a large repair in progress, up to six reviews), produces
+`FIRST_RENDER_LOOP_STALLED`.
 This is escalation, not approval: restore the best iteration and report the remaining findings
 with the current desktop/mobile captures instead of requesting another repair.
+
+After a retained review, `omd taste compare` shows the current desktop/mobile captures beside
+captured human-made pages in blind, order-swapped A/B trials, each in its own isolated reviewer.
+A `distinguishable` verdict (judged AI-made in at least 75% of trials) makes its recurring aiTells
+whole-system repair targets; it is advisory, never a completion gate, and the final rate is reported as observed.
 
 ## Evidence basis and limits
 

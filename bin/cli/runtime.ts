@@ -1,5 +1,5 @@
-import { readFileSync, realpathSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { validateActivationContext } from '../../core/runtime/activation.ts';
 import { createLocalCliInvocation, validateCurrentProjectRun, type ProjectRunInvocation } from '../../core/runtime/invocation.ts';
@@ -58,6 +58,12 @@ export interface Opts {
   direction?: string;
   /** Felt-quality phrase for a mood item; repeat for each. */
   quality?: string | string[];
+  /** Human-designed comparison page for `omd taste compare` (repeatable). */
+  anchor?: string | string[];
+  /** Kept reference image for `omd taste graphic` (repeatable). */
+  against?: string | string[];
+  /** Why a landing carries no graphic (`omd taste graphic --skip "<reason>"`). */
+  skip?: string;
   /** Source page URL for a mood capture. */
   source?: string;
   selector?: string;
@@ -65,11 +71,19 @@ export interface Opts {
   text?: string;
   image?: boolean;
   filmstrip?: boolean;
+  /** `omd render --motion`: sample load and scroll-through choreography into a timeline. */
+  motion?: boolean;
+  noScroll?: boolean;
+  noReduced?: boolean;
   squint?: boolean;
   fullPage?: boolean;
   fromUser?: boolean;
   all?: boolean;
   plan?: string;
+  steps?: string;
+  graphic?: boolean;
+  help?: boolean;
+  transparent?: boolean;
   render?: string;
   observed?: string;
   changed?: string;
@@ -186,7 +200,7 @@ export interface Opts {
   purpose?: string;
 }
 
-const FLAGS = new Set(['current', 'json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish', 'consent']);
+const FLAGS = new Set(['help', 'graphic', 'transparent', 'current', 'json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'motion', 'no-scroll', 'no-reduced', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish', 'consent']);
 
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
@@ -194,6 +208,8 @@ const ALIASES: Record<string, keyof Opts> = {
   'no-energy': 'noEnergy',
   'no-shot': 'noShot',
   'no-shot-reason': 'noShotReason',
+  'no-scroll': 'noScroll',
+  'no-reduced': 'noReduced',
   'from-user': 'fromUser',
   'full-page': 'fullPage',
   'frequent-action': 'frequentAction',
@@ -312,7 +328,11 @@ export function projectWriterFromActivation(opts: Opts, command: string, project
 }
 
 export function ensureProjectParent(adapter: ProjectWriteAdapter, target: string): void {
-  const parent = realpathSync(dirname(resolve(target)));
+  // Resolve the nearest existing ancestor, so a fresh nested output folder is created rather than refused.
+  let existing = dirname(resolve(target));
+  const missing: string[] = [];
+  while (!existsSync(existing) && dirname(existing) !== existing) { missing.unshift(basename(existing)); existing = dirname(existing); }
+  const parent = join(realpathSync(existing), ...missing);
   if (parent !== adapter.projectRoot) adapter.mkdir(relative(adapter.projectRoot, parent));
 }
 

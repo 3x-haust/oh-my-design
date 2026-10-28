@@ -13,6 +13,7 @@ export type CompletionDiagnostic = Readonly<{
   findings?: Readonly<{
     hardFloors: Evaluation['receipt']['hardFloors'];
     failedOutcomes: Evaluation['receipt']['outcomeResults'];
+    repairHints: readonly string[];
     accessTargets: readonly unknown[];
     transcript: readonly string[];
   }>;
@@ -38,6 +39,19 @@ export function completionErrorDiagnostic(phase: CompletionPhase, error: unknown
     evidencePaths: [] };
 }
 
+/** What each behavior finding means for the manifest author; the codes alone kept being misread. */
+const BEHAVIOR_REPAIR_HINTS: Readonly<Record<string, string>> = Object.freeze({
+  'required-state-transition-missing': 'visible-text asserts text that appears after the actions, and this text was already visible before them. Assert text that only exists after the action, or use preserved-text for text that must stay visible through it.',
+  'required-preserved-state-missing': 'preserved-text needs the text visible both before and after the actions.',
+  'required-visible-result-missing': 'the asserted text was not visible after the actions.',
+  'required-result-not-rendered': 'the selector and text did not match exactly one rendered, visible element (spacing and line breaks are ignored).',
+  'required-element-state-missing': 'the element did not reach the asserted state after the actions; assert on the element that actually receives focus, hover or press.',
+  'required-action-unavailable': 'the action could not run within 2s: the selector matched nothing visible, matched several elements, or the target was covered or off screen.',
+  'required-render-not-settled': 'the page kept changing after the actions; let timers and animations settle or assert a settled state.',
+  'required-page-unavailable': 'the built page did not load.',
+  'required-browser-script-missing': 'no browser script covers this outcome.',
+});
+
 export function browserFailureDiagnostic(result: Evaluation): CompletionDiagnostic {
   const floors = result.receipt.hardFloors;
   const category = floors.behavior === 'fail' ? 'behavior-or-proposal' : floors.access === 'fail' ? 'access'
@@ -54,6 +68,8 @@ export function browserFailureDiagnostic(result: Evaluation): CompletionDiagnost
     evidencePaths: [...new Set([result.receiptPath, result.observationPath,
       ...result.receipt.captures.flatMap(capture => [capture.path, ...(capture.measurement ? [capture.measurement.packet.path] : [])])])],
     findings: { hardFloors: floors, failedOutcomes: result.receipt.outcomeResults.filter(outcome => outcome.status === 'fail'),
+      repairHints: [...new Set(result.receipt.outcomeResults.filter(outcome => outcome.status === 'fail').flatMap(outcome => outcome.findings))]
+        .flatMap(finding => BEHAVIOR_REPAIR_HINTS[finding] ? [`${finding}: ${BEHAVIOR_REPAIR_HINTS[finding]}`] : []),
       accessTargets, transcript: result.receipt.transcript },
   };
 }

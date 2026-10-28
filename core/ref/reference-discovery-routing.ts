@@ -119,7 +119,8 @@ function text(input: unknown): string {
 
 function taskNeed(input: unknown): ReferenceDiscoveryTaskNeed {
   if (typeof input !== 'string' || !REFERENCE_DISCOVERY_TASK_NEEDS.includes(input as ReferenceDiscoveryTaskNeed)) {
-    return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT');
+    return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT',
+      `taskNeed must be one of ${REFERENCE_DISCOVERY_TASK_NEEDS.join(', ')}; choose the one that describes this request, not the template value.`);
   }
   return input as ReferenceDiscoveryTaskNeed;
 }
@@ -128,7 +129,7 @@ function uncertainty(input: unknown): ReferenceDiscoveryUncertainty {
   switch (input) {
     case 'unresolved': return input;
     case 'resolved': return input;
-    default: return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT');
+    default: return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT', 'uncertainty must be unresolved or resolved.');
   }
 }
 
@@ -137,7 +138,7 @@ function evidence(input: unknown): ReferenceDiscoveryEvidence {
     case 'none': return input;
     case 'insufficient': return input;
     case 'sufficient': return input;
-    default: return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT');
+    default: return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT', 'existingEvidence must be none, insufficient or sufficient.');
   }
 }
 

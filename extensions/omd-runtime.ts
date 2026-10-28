@@ -8,6 +8,9 @@ import type { PiRequestBindingInfo } from './omd-request-binding.ts';
 import { compactPiRouteOutput } from './omd-route-output.ts';
 import { compactPiDiscoveryOutput } from './omd-discovery-output.ts';
 import type { PiHostContext, PiNativeRuns } from './omd-native-run.ts';
+import { designerCaseToolContext, type DesignerCasePart } from './omd-designer-cases.ts';
+import { omdCliBudgetMs } from './omd-cli-budget.ts';
+export { omdCliBudgetMs };
 
 const MAX_OUTPUT_CHARS = 50_000;
 const require = createRequire(import.meta.url);
@@ -47,6 +50,7 @@ type ExecResult = Readonly<{
 
 export type OmdRunResult = Readonly<{
   text: string;
+  context?: readonly DesignerCasePart[];
   details: { code: number; killed: boolean; requestBinding?: PiRequestBindingInfo };
 }>;
 
@@ -114,17 +118,13 @@ export function monitorOmdProgress(
   return stop;
 }
 
-export const omdCliBudgetMs = (args: readonly string[]): number =>
-  args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '') ? 660_000
-    : args[0] === 'ref' && ['advance', 'navigate', 'add', 'add-batch', 'discover-batch', 'search', 'leads'].includes(args[1] ?? '')
-    ? 300_000 : 600_000;
-
 export class OmdTimeoutError extends Error {
   override readonly name = 'OmdTimeoutError';
   readonly code = 'OMD_CLI_TIMEOUT';
   readonly budgetMs: number;
   constructor(budgetMs: number, args: readonly string[]) {
-    super(`OMD_CLI_TIMEOUT: omd ${args.slice(0, 2).join(' ')} 명령이 ${Math.floor(budgetMs / 1000)}초를 초과했습니다. ref work-next를 확인하고 다른 소스를 선택하세요.`);
+    super(`OMD_CLI_TIMEOUT: omd ${args.slice(0, 2).join(' ')} 명령이 ${Math.floor(budgetMs / 1000)}초를 초과했습니다. `
+      + (args[0] === 'ref' ? 'ref work-next를 확인하고 다른 소스를 선택하세요.' : '같은 명령을 한 번 다시 실행하고, 다시 넘기면 그대로 보고하세요.'));
     this.budgetMs = budgetMs;
   }
 }
@@ -308,7 +308,10 @@ export async function runOmd(
     if (result.code !== 0 || result.killed) {
       throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
     }
-    return { text: text || 'OMD completed successfully.', details: { code: result.code, killed: result.killed } };
+    const context = designerCaseToolContext(runtimeSnapshot.root, args, result.stdout);
+    return { text: text || 'OMD completed successfully.',
+      ...(context.length === 0 ? {} : { context }),
+      details: { code: result.code, killed: result.killed } };
   } catch (error) {
     if (timedOut) { await timeoutTeardown; throw new OmdTimeoutError(budgetMs, args); }
     if (signal?.aborted) throw new OmdCancelledError();

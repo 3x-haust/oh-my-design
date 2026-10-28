@@ -3,7 +3,9 @@
 A parallax effect moves background and foreground elements at different rates as the
 user scrolls, creating an illusion of depth. The CSS scroll-driven implementation
 (`animation-timeline: scroll()`) moves an element by a fixed offset over the full
-scroll range of its container, running off the main thread with no JavaScript per frame.
+scroll range of its container without author JavaScript on each frame. The browser still
+performs rendering work, and off-main-thread execution is not guaranteed for every
+property, browser, or page.
 
 Read the restraint clause below before deciding whether to use this recipe. The evidence
 for not using parallax is substantial, and the recipe's conditions are narrow.
@@ -21,12 +23,12 @@ scroll-narrative and the concept explicitly requires it."
 Condition against: product UI. Navigation elements. Any page where the user is scanning
 for content rather than experiencing a narrative. `core/theory/motion.md` cites the
 NN/g evidence directly: users scroll quickly to scan for keywords; parallax requires slow
-scrolling to read; users who scroll at normal speed miss the effect entirely, and users
-with vestibular disorders are harmed by it. The NN/g research ("What Parallax Lacks",
-2013) documents three failures — invisible to fast scrollers, classified as decorative
-noise by experienced users, and a vestibular trigger for sensitive users. The 2024
-performance data adds a fourth: parallax-heavy pages showed LCP exceeding 8 seconds and
-poor INP scores, constituting Core Web Vitals failures.
+scrolling to read; users who scroll at normal speed can miss the effect, and parallax can
+trigger vestibular symptoms. The NN/g article "What Parallax Lacks" (2019) reports
+content missed by fast scrollers, reading and control problems, dizziness, effects that
+go unnoticed, and lukewarm user reactions. Measure Core Web Vitals and frame delivery
+on the actual implementation rather than attributing an unverified performance case
+to this pattern.
 
 If you are reaching for parallax because the page needs more visual interest, the correct
 answer is a better layout or a stronger type decision — not depth simulation. Apply this
@@ -38,7 +40,7 @@ narrative test is met.
 ```css
 :root {
   /* How far the element moves over the full scroll range of its container.
-     Keep small. 20–40px creates depth without visible motion-sickness.
+     20–40px is an illustrative subtle range, not a safety threshold.
      Negative values move the element against the scroll direction (classic parallax).
      Positive values move it with scroll (subtle, less disorienting). */
   --parallax-offset: -30px;
@@ -65,7 +67,7 @@ narrative test is met.
 ```
 
 ```css
-/* ── CSS scroll-driven (preferred; off-thread) ────────────────────────────── */
+/* ── CSS scroll-driven (preferred when supported and measured) ───────────── */
 
 .parallax-section {
   /* Establish a scroll timeline scoped to this container. */
@@ -119,7 +121,7 @@ function attachParallax(el) {
     const progress = (viewH - rect.top) / (viewH + rect.height);
     const clamped = Math.max(0, Math.min(1, progress));
 
-    // Apply only transform — compositor-only property.
+    // Transform avoids changing document layout; rendering cost still needs profiling.
     el.style.transform = `translateY(${clamped * offset}px)`;
     ticking = false;
   }
@@ -214,20 +216,19 @@ restraint clause above (applying this recipe narrowly) is the stronger intervent
 
 ## Performance note
 
-The CSS scroll-driven path runs entirely off the main thread in Chromium. The element's
-layer is promoted by the animation; the scroll position update drives the transform
-without touching JavaScript. This is measurably lighter than the JS `requestAnimationFrame`
-path, which fires a callback, computes a value, and writes a style on every scroll frame.
+The CSS scroll-driven path removes the author-side per-frame callback, but it does not
+guarantee an off-main-thread pipeline or lower total cost. Compare it with the
+`requestAnimationFrame` fallback in browser performance tools using the real background,
+section size, and surrounding page.
 
 The JS path uses the `ticking` pattern to batch updates to one `requestAnimationFrame`
-per scroll event burst — standard debounce for scroll handlers. The `{ passive: true }`
-flag is required; without it the browser cannot optimise scroll performance.
+per scroll event burst. `{ passive: true }` communicates that the handler will not call
+`preventDefault()`; it does not guarantee smooth scrolling.
 
-`will-change: transform` on the parallax element is applied implicitly by the scroll-
-driven animation and the Framer Motion `useTransform` hook. Do not add it manually on
-top; double promotion provides no benefit.
+Do not assume that the scroll-driven animation or Framer Motion has promoted a stable
+layer. Add `will-change` only when profiling demonstrates a benefit, and remove it when
+the animation is no longer imminent.
 
-Keep `--parallax-offset` small. A 30px offset over a full-viewport-height section
-produces a 3% depth differential — perceptible as depth without producing foreground-
-background collision. At 100px on a 400px-tall section, foreground and background
-visibly separate, causing the page to look broken rather than deep.
+Keep `--parallax-offset` proportionate to the section. The `30px` example is a restrained
+starting point; test larger and smaller values for legibility, overlap, and vestibular
+comfort rather than treating one ratio as a perceptual guarantee.

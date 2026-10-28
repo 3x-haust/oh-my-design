@@ -1,5 +1,6 @@
 import { readPiRequest } from './omd-request-source.ts';
 import { ensureNativePiRun, stageNativePiCommand } from '../core/runtime/native-pi-run.ts';
+import { omdCliBudgetMs } from './omd-cli-budget.ts';
 import { nativePiCalibrationPinIdentity, observedNativePiHost } from '../core/runtime/native-pi-run-record.ts';
 import { fileURLToPath } from 'node:url';
 import { captureDesignExecutionPolicy, type DesignExecutionPolicy } from '../core/config/design-execution.ts';
@@ -66,7 +67,8 @@ export class PiNativeRuns {
       this.calibrations.set(cwd, calibration);
     }
     const run = ensureNativePiRun({ ...runInput, calibration });
-    const command = stageNativePiCommand({ run, runtimeRoot, argv: args });
+    // Authority lasts as long as the command may run, plus a margin to write its result.
+    const command = stageNativePiCommand({ run, runtimeRoot, argv: args, ttlMs: omdCliBudgetMs(args) + 5 * 60_000 });
     return { args: command.argv, dispose: command.dispose };
   }
 }

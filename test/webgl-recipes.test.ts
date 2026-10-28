@@ -61,9 +61,9 @@ test('webgl-scene-scaffold.md codifies lazy init, a DPR cap, teardown, and conte
 });
 
 // The pack lives in interaction/recipes and must not disturb the locked motion cookbook count.
-test('the WebGL pack does not disturb the 12 CSS motion recipes', () => {
+test('the WebGL pack does not disturb the 14 CSS motion recipes', () => {
   const motion = readdirSync(join(root, 'core', 'motion', 'recipes')).filter((f) => f.endsWith('.md'));
-  assert.equal(motion.length, 12, `expected motion recipes to remain 12, found ${motion.length}`);
+  assert.equal(motion.length, 14, `expected motion recipes to remain 14, found ${motion.length}`);
 });
 test('expressive.md points at the WebGL escalation pack so it is discoverable at the showpiece ceiling', () => {
   const expressive = readFileSync(join(root, 'core', 'theory', 'expressive.md'), 'utf8');

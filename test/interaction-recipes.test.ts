@@ -66,7 +66,7 @@ test('signature-lighting.md does not gate its reference against core/ref/distanc
 test('core/interaction/recipes/ does not disturb the motion recipe count', () => {
   const motionRecipesDir = join(root, 'core', 'motion', 'recipes');
   const files = readdirSync(motionRecipesDir).filter((f) => f.endsWith('.md'));
-  assert.equal(files.length, 12, `expected motion recipes to remain 12, found ${files.length}`);
+  assert.equal(files.length, 14, `expected motion recipes to remain 14, found ${files.length}`);
 });
 
 test('core/interaction/recipes/ does not disturb the composition recipe count', () => {

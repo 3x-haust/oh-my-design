@@ -110,8 +110,10 @@ export class PiReviewerRpc {
     }
     return value;
   }
-  waitEvent(type: string, timeoutMs = 10 * 60_000): Promise<Record<string, unknown>> {
-    const found = this.events.find(event => event.type === type);
+  /** Resolves with the first `type` event at or after index `after` in `events`. */
+  // A measured final review reads every required view of the page and measured in at about 13 minutes per turn.
+  waitEvent(type: string, timeoutMs = 20 * 60_000, after = 0): Promise<Record<string, unknown>> {
+    const found = this.events.slice(after).find(event => event.type === type);
     if (found !== undefined) return Promise.resolve(found);
     return this.#promise(pending => this.#waiters.add({ type, pending }), timeoutMs);
   }

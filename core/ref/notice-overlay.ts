@@ -238,7 +238,9 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     }));
     if (!selector) obstruction(`notice cannot be isolated for visual suppression: ${title}`);
     const binding = await overlayJudgment?.(selector, page.url());
-    if (!binding) obstruction('AI_JUDGMENT_REQUIRED: no signed overlay authorization');
+    if (!binding) obstruction(`AI_JUDGMENT_REQUIRED: a notice covers this page (${title}) and ref add cannot dismiss it on its own. Open the `
+      + 'page in a browse session instead (omd ref browse goto <url> --reason "..."), clear the notice with omd ref browse cookie --text '
+      + '"<its reject or necessary-only button>", then shot and keep');
     if (binding.subjectId !== `${page.url()}#${selector}`) obstruction('overlay judgment targets another document or dialog');
     if ((await referenceDecision('overlay-action', binding)).decision !== 'suppress-informational')
       obstruction('overlay judgment does not authorize informational suppression');

@@ -118,6 +118,8 @@ export type MintReceiptInput = Readonly<{
   /** Injection point for tests; production callers omit it. */
   now?: number;
   nonce?: string;
+  /** How long the command may run before its authority lapses; a command that outlives it cannot write its result. */
+  ttlMs?: number;
 }>;
 
 /**
@@ -137,7 +139,7 @@ export function mintSelfSignedReceipt(input: MintReceiptInput): { receipt: SelfS
       purpose: authorization.purpose,
       payloadSha256: authorization.payloadSha256,
     }))),
-    expiresAt: (input.now ?? Date.now()) + SELF_SIGNED_RECEIPT_TTL_MS,
+    expiresAt: (input.now ?? Date.now()) + Math.max(SELF_SIGNED_RECEIPT_TTL_MS, input.ttlMs ?? 0),
     nonce: input.nonce ?? randomBytes(16).toString('hex'),
   });
   const signature = sign(null, Buffer.from(canonical(receipt)), privateKey);

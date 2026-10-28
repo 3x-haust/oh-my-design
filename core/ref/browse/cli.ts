@@ -40,7 +40,8 @@ export async function runBrowseCli(argv: readonly string[], root: string,
     const command = parseBrowseCommand(argv);
     const invocation = authorize(command.activation, `omd ref browse ${command.action.verb}`);
     const route = readPersistedRoute(root, invocation);
-    if (route.references.decision !== 'discover') browseFail('REFERENCE_DISCOVERY_NOT_SELECTED', 'route must select reference discovery', 2);
+    // Browsing is read-only research. A route that skipped discovery up front may still need to look up
+    // one component later (a filter, a pricing card), so the browser stays available whatever the route chose.
     const result = await executeBrowseCommand(root, command, route, invocation, createProjectWriteAdapter(root, invocation));
     return { result, exitCode: result.ok ? 0 : result.outcome === 'budget-exhausted' ? 3 : 1 };
   } catch (error) {

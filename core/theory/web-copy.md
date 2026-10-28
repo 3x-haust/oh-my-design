@@ -4,7 +4,7 @@ Use this pack for marketing, adoption, landing and homepage copy, including a de
 tool's website. It is not the grammar for operating a product, a reference manual or a
 recovery message. Those surfaces may need an exact mechanism or instruction first.
 This pack supplies writing decisions, not a new pipeline or a universal page template.
-The existing writer, copy deck, copy editor and invalidation rules remain authoritative.
+The brief's one message and its cut list decide what stays on the page.
 
 ## Start with the reader's decision
 
@@ -67,8 +67,8 @@ paragraph. OMD does not turn every U into a mandatory claim.
 
 ## Turn research into actual copy
 
-1. **Establish the input, not a fictional persona.** Use the current brief, verified fact
-   ledger and cited audience evidence. Record assumed awareness or motivation as an
+1. **Establish the input, not a fictional persona.** Use the current brief, verified facts
+   and cited audience evidence. Record assumed awareness or motivation as an
    assumption, not a customer quotation or tested preference. Public category discussion
    may supply language; it cannot prove this product's performance.
 2. **Write the plain offer before the slogan.** In ordinary target-language prose, explain
@@ -92,6 +92,14 @@ paragraph. OMD does not turn every U into a mandatory claim.
    restore actor/action/condition where needed, and use concrete task vocabulary. Do not
    ban nouns, questions, contrasts or technical terms wholesale. A short noun label may
    be exactly right; a technically correct paragraph can still obscure the offer.
+   Korean readers now recognise these generated habits (each is fine once; a page built
+   from them reads machine-made): "A는 단순히 B가 아니라 C" and "A보다 B에 가깝습니다"
+   where the plain claim would do; "~를 함께 봅니다" with no concrete action; abstract
+   sensory compounds ("정서의 결", "여운의 농도", "맥락의 밀도"); "이", "그", "이를 통해"
+   whose referent the previous sentence never named; dictionary compounds ("판단 기준",
+   "작동 구조", "운영 관점") instead of the action; closing declarations that add nothing
+   ("기준은 분명합니다", "중요한 것은 ~입니다"); a dropped subject where the actor matters;
+   and an automatic list of three. Replace each with the actual action, actor or fact.
 7. **Predict the click.** The action label and adjacent support identify the immediate
    destination or state. Simplifying the wording must not conceal setup, payment,
    prerequisites or a later actor. Keep exact commands and truthful feedback intact.
@@ -136,35 +144,21 @@ W3C recommends descriptive headings, meaningful link text and clear instructions
 apply to visible text and its accessible semantics; a catchy CTA must still communicate
 its destination. [W3C](https://www.w3.org/WAI/tips/writing/)
 
-## Record application, not a checklist of names
+## Apply a method where it changes a line
 
-Inside the existing **Humanize audit**, add a compact **Marketing message map** when this
-pack applies: region; reader question; actual answer; verified fact IDs; selected method
-and the wording/order change it caused. Record the opening angles, selected choice and
-rejected alternatives in the writer's existing decision entry. These are analytical
-records, not user-facing copy. No new standalone artifact or self-awarded quality score.
+Apply a method only where it changes an actual line or the order of information, for a
+reason you can state. Listing AIDA, citing an article, adding an adjective or repeating a
+feature under a benefit label is not application. Keep verified facts and exact functional
+labels intact.
 
-Applied means an actual line or information sequence changed for a stated reason. Merely
-listing AIDA, citing an article, adding an adjective or repeating a feature under a
-benefit label does not establish application. Preserve the factual ledger and exact
-functional labels; return an inaccurate frozen label to the framer for correction.
+Before building, read only the page's strings in their reading order and check that you
+can say what is offered, for whom, why it is credible and what the main action does. If the
+offer only becomes clear from your notes, rewrite the lines. The same holds when methods
+are listed without user value, when every heading could fit an unrelated offering, when
+the hook is not fulfilled, or when a formula creates repetition or an unsupported promise.
+A clear factual category, specific mechanism, necessary qualification or direct
+instruction is not a defect merely for being unpoetic.
 
-## Independent copy review
-
-The copy editor first reads only the proposed surface strings in their intended reading
-order. Before considering the writer's audit or formula rationale, state in its own words:
-what is offered, for whom, what task it helps with, why that is credible, and what the
-primary action does. Then verify those answers against the allowed facts and voice.
-This is a model-based comprehension proxy, not a timed human study or conversion test.
-
-Reject a marketing draft when the offer only becomes understandable in the audit; when
-methods are listed without relevant user value; when every heading could fit an unrelated
-offering; when the hook is not fulfilled; or when the formula creates repetition or an
-unsupported promise. A clear factual category, specific technical mechanism, necessary
-qualification or direct instruction is not a defect merely for being unpoetic.
-
-Return exact lines and their reader consequence through the existing copy-editor report.
-The writer repairs the deck. Changed copy invalidates affected copy review, typography,
-composition and rendered evidence; previous approval never blesses the new words. Verify
-the current deck and actual rendered line lengths after the revision. Human preference,
-comprehension or conversion improvement requires independent target-reader evidence.
+The isolated first-render reviewer judges the rendered copy; changed words need a fresh
+render. This is a model-based comprehension proxy, not a timed human study or conversion
+test, and it needs no extra record.

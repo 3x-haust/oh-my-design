@@ -4,9 +4,16 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 /** Deliberately small pre-production shell allowance. This is not a shell parser or OS sandbox.
  * Use read for file contents and omd_cli for research; interpreters/redirection can write source.
  */
+// A project-relative path: no leading slash, no parent step, no shell metacharacters.
+const READ_PATH = String.raw`(?!/)(?![^ ]*\.\.)[A-Za-z0-9_./-]+`;
+/** One inventory step: pwd, ls of project paths, or a bounded find that only lists (no -exec, -delete or -fprint). */
+const READ_STEP = new RegExp(String.raw`^(?:pwd|ls(?: -[alhR1]+)?(?: ${READ_PATH})*|find ${READ_PATH}(?: -maxdepth [1-9])?(?: -type [fd])?(?: -name '[A-Za-z0-9_.*-]+')?(?: \| head (?:-n )?[1-9][0-9]{0,3}| \| head -[1-9][0-9]{0,3})?)$`);
+
 export function isPreproductionReadCommand(command: unknown): boolean {
   if (typeof command !== 'string') return false;
   const text = command.trim();
+  // Inventory steps joined by ; or && read nothing but names, so they stay read-only together.
+  if (!/[\n\r`$<>]/.test(text) && text.split(/ *(?:;|&&) */).every(step => READ_STEP.test(step.trim()))) return true;
   if (/^(?:pwd|ls(?: -[alh]+)?|rg --files(?: --hidden)?|git (?:status(?: --short)?|diff(?: --stat)?|log -[1-9][0-9]* --oneline))$/.test(text)) return true;
   // A closed inventory grammar, NOT arbitrary shell pipelines/options. In particular no rg
   // --pre, substitutions, redirections, paths, newline commands or unquoted metacharacters.
@@ -29,6 +36,7 @@ const OMD_MUTATING_PAIRS = new Set([
 
 export function isMutatingOmdCommand(args: readonly string[]): boolean {
   if (args.includes('--help') || args.includes('-h')) return false;
+  if (args[0] === 'pack' && args[1]?.startsWith('cases/')) return true;
   if (args[0] === 'recipe' && args[1] === 'add') return true;
   if (OMD_MUTATING_PAIRS.has(`${args[0] ?? ''} ${args[1] ?? ''}`)) return true;
   return OMD_MUTATING_ROOTS.test(args[0] ?? '') && !OMD_READ_ACTIONS.test(args[1] ?? '');

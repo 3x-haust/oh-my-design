@@ -97,7 +97,7 @@ classification in a fresh authorized route, then reissue all affected contracts 
 ## Domain analysis
 
 When the route selects domain analysis, it records `.omd/domain-brief.json`
-(`domain-brief-v1`, validated by `omd domain check`). A selected domain stage keeps its owner and
+(`domain-brief-v1`, validated where it is read, for example by `omd ref discover-plan`). A selected domain stage keeps its owner and
 checks; an unselected optional stage does not become mandatory by omission. This step
 identifies the domain, its canonical surfaces, its core objects, and its audience, and emits the
 scout's two-role reference queries (component design and top-tier craft). Every surface, object, and
@@ -108,10 +108,15 @@ code. The full contract is `protocol/domain-analysis.md`.
 
 ## Stack routing
 
-Default new web source to HTML/CSS and strict TypeScript, without a framework when a landing,
-marketing, or content page does not need one. Compile browser TypeScript to JavaScript; do not ship
-uncompiled TypeScript. Reach for a framework (React + Vite + TypeScript, or another) only when the user explicitly
-asks for one or the surface is a genuinely stateful application (dashboard, console, CRUD, editor).
+Default new web source to React + Vite + strict TypeScript, landings and marketing pages included,
+unless the user names another stack. Start it with `omd scaffold`, which copies the official Vite template
+into the route scope without touching material folders; hand-written `index.html`, Vite and TypeScript config
+drift apart and break the build. `core/guides/code.md` owns its folder layout and conventions. Write it the way a product team would review it: one component per
+section or reusable part in its own file, styles beside the components that own them, constants and copy
+kept out of markup logic, a package manifest whose `dev`, `build`, `typecheck` and `test` scripts call the
+real toolchain (Vite, `tsc`, Vitest with Testing Library rendering the components) rather than hand-rolled build scripts or a
+syntax check, and every file formatted the way the project's formatter would leave it — never packed onto
+long lines. `omd lifecycle finish` refuses packed hand-authored source (`SOURCE_NOT_READABLE`) and, in a new project, a file carrying several components or tests that never render them (`SOURCE_NOT_REVIEWABLE`).
 Always build in an existing repository's stack instead of replacing it — a package manifest, a build
 config, or files the user points at. A bare `index.html`/`.css`/`.js` with no manifest, next to an
 `.omd/` from a prior OMD run, is OMD's own leftover output, not a user stack, and never pins the
@@ -274,7 +279,8 @@ motion state through the native workflow. A locale supplies language mechanics, 
 same-language references can establish line density and wrapping without a cultural-fit claim.
 
 When imagery, crop, subject treatment, or spatial visual direction is the unresolved marketing
-decision, Codex checks its native image-generation tool before choosing a study method. Capability
+decision — as it is for a new landing's composition — Codex checks its native image-generation tool
+before choosing a study method. Capability
 alone does not select image-first exploration. Follow `theory/imagegen.md` for qualified early drafts,
 later reference-grounded selection, and code translation. Image generation is a native design tool,
 not an external harness, and a no-shipped-bitmap constraint does not prohibit a decision image.
@@ -978,7 +984,7 @@ writable, project-local, or replayed receipts fail closed.
 - Register default is part of the GREEN target and follows evidence, not a house style. A `marketing` surface may select the first-class `content-led`, `confident`, or `showpiece` register from the brief, audience, subject, and available material; `confident` is no longer the silent default. Content-led marketing may use a true-white canvas, readable density, ordinary flow, and no mandatory display moment or decorative carrier. A competent restrained page is not RED merely because it declines spectacle. Motion remains independent: `one` arises only from explicit policy or selected evidence. Product/tool surfaces remain quiet unless their task evidence supports another intensity.
 - Restrained-colour ambition is judged by legibility and content priority. A `confident` or `showpiece` direction may need stronger scale or structure when colour is restrained, but no universal display-scale moment is required. `SLOP-FLAT-STACK` is a prompt to inspect hierarchy, not an automatic failure; fail only when the rendered reading order or subject specificity collapses. Product and content-led surfaces may correctly use moderate type and true white.
 - Visual material is conditional on the communication job. Use supplied photographs, product imagery, data, or diagrams when they carry evidence or explanation; leaving relevant authentic material unused still needs a reason. When no image-specific job exists, a clear text-led marketing surface may ship without generated CSS/SVG ornament. Missing final art never authorizes a placeholder, decorative gradient, or fake screenshot: acquire the approved asset, recompose around available real material, or remove the image zone.
-- A shipped abstract/atmospheric AI asset is lawful only when exact prompt/provider provenance binds
+- A shipped abstract/atmospheric/illustrative AI asset is lawful only when exact prompt/provider provenance binds
   the stable-read current content-addressed `omd decision` record in this trusted project, that record
   binds the exact current invocation, and the host authorizes the purpose-bound project/invocation/
   decision-digest payload. Caller-computed hashes and `currentDecision` data are comparisons only;

@@ -78,6 +78,26 @@ function verifyCapture(root: string, capture: TrustedBrowserReceipt['captures'][
   }
 }
 
+function verifyTemporalCapture(
+  root: string,
+  capture: NonNullable<TrustedBrowserReceipt['temporalCaptures']>[number],
+): void {
+  let bytes: Buffer;
+  try {
+    bytes = stableBytes(root, capture.path, 'trusted browser temporal capture');
+  } catch {
+    throw new TrustedEvaluationObservationError('STALE_TRUSTED_BROWSER_CAPTURE');
+  }
+  if (hash(bytes) !== capture.sha256
+    || bytes.length < 24
+    || !bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
+    || bytes.toString('ascii', 12, 16) !== 'IHDR'
+    || bytes.readUInt32BE(16) !== capture.width
+    || bytes.readUInt32BE(20) !== capture.height) {
+    throw new TrustedEvaluationObservationError('STALE_TRUSTED_BROWSER_CAPTURE');
+  }
+}
+
 export function writeTrustedEvaluationObservation(input: Readonly<{
   root: string;
   writer: ProjectWriteAdapter;
@@ -100,6 +120,9 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
     throw new TrustedEvaluationObservationError('STALE_TRUSTED_PRODUCTION_REVISION');
   }
   for (const capture of receipt.captures) verifyCapture(input.root, capture);
+  for (const capture of receipt.temporalCaptures ?? []) {
+    verifyTemporalCapture(input.root, capture);
+  }
   for (const capture of receipt.captures) if (capture.measurement) {
     const m = capture.measurement, packet = loadMeasurement(input.root, m.packet);
     const view = packet.scope.find(view => view.id === m.viewId), pixels = packet.captures.find(c => c.viewId === m.viewId);

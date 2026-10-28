@@ -57,3 +57,12 @@ test('missing route is unclassified, not malformed or a request for external act
     return true;
   });
 });
+
+test('an unchosen task need names every allowed value instead of a template default', () => {
+  const existing = structuredClone(inputSkeleton('route-input').skeleton) as Record<string, unknown>;
+  const message = diagnoseAdaptiveRouteInput(existing).find(row => row.path === 'referenceDiscovery')?.message ?? '';
+  assert.match(message, /taskNeed must be one of new-product, new-marketing, existing-product-change, copy-only-edit/);
+  (existing.referenceDiscovery as Record<string, unknown>).taskNeed = 'new-marketing';
+  assert.equal(diagnoseAdaptiveRouteInput(existing).some(row => row.path === 'referenceDiscovery'), false);
+  assert.match(inputSkeleton('route-input').constraints?.join('\n') ?? '', /Folders to read .* are material/);
+});

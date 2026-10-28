@@ -10,6 +10,7 @@ import { executeReferenceSearch, parseSearchInput, readSearchExecution, validate
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { buildReferenceDiscoveryPlan } from '../core/ref/discovery-plan.ts';
+import { componentGalleryQuery, gallerySearchInputs, gallerySearchProvider } from '../core/ref/gallery-search.ts';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
@@ -47,7 +48,7 @@ test('installed CLI flushes the complete discovery plan for automation consumers
   const discovered = run(['ref', 'discover-plan', '--json']);
   assert.equal(discovered.status, 0, discovered.stderr);
   const plan = JSON.parse(discovered.stdout);
-  assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Mobbin', 'Page Flows', 'Pinterest', 'Behance']);
+  assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Mobbin', 'Page Flows', 'Pinterest', 'Behance', 'Dribbble', 'Notefolio', 'Cosmos', 'Component Gallery', 'Refero']);
 });
 
 test('product-screen providers accept concrete screens but reject their directory pages', () => {
@@ -183,4 +184,60 @@ test('gallery search requires observed same-provider items; login walls and unre
       assert.throws(() => validateSearchCoverage(root, 'design', [inputs[0].query], [failed], [item]), /not an observed/);
     }
   });
+});
+
+test('component galleries search one element at a time across Pinterest, Dribbble, Behance and Notefolio', () => {
+  assert.equal(componentGalleryQuery('filter'), 'filter ui design');
+  assert.equal(componentGalleryQuery('pricing table web design'), 'pricing table web design');
+  assert.equal(componentGalleryQuery('필터 UI 디자인'), '필터 UI 디자인');
+  const product = gallerySearchInputs('filter ui design', 'product');
+  assert.deepEqual(product.map(input => gallerySearchProvider(input)), ['Pinterest', 'Dribbble', 'Behance', 'Notefolio']);
+  const marketing = gallerySearchInputs('hero section ui design', 'marketing');
+  assert.deepEqual(marketing.map(input => gallerySearchProvider(input)), ['Pinterest', 'Dribbble', 'Behance', 'Notefolio', 'Siteinspire']);
+  // A search URL that does not carry the exact query is not that provider's search.
+  assert.equal(gallerySearchProvider({ lane: 'design', query: 'filter', url: 'https://notefolio.net/search?search=other', queryParam: 'search' }), null);
+  assert.equal(gallerySearchProvider({ lane: 'design', query: 'filter', url: 'https://www.behance.net/search/projects/other', queryParam: 'path' }), null);
+  // The path form is refused by Behance itself (403); only its own ?search= form counts.
+  assert.equal(gallerySearchProvider({ lane: 'design', query: 'filter', url: 'https://www.behance.net/search/projects/filter', queryParam: 'path' }), null);
+  assert.equal(gallerySearchProvider({ lane: 'design', query: 'filter', url: 'https://www.behance.net/search/projects?search=filter', queryParam: 'search' }), 'Behance');
+});
+
+test('Notefolio works are items and its service pages are not', () => {
+  assert.equal(designDiscoveryProvider('https://notefolio.net/studio_kim/412345'), 'Notefolio');
+  assert.equal(designDiscoveryItemIdentity('https://notefolio.net/studio_kim/412345'), 'Notefolio:412345');
+  assert.equal(designDiscoveryProvider('https://notefolio.net/service/workshop/409'), null);
+  assert.equal(designDiscoveryProvider('https://notefolio.net/search'), null);
+  assert.equal(designDiscoveryDirectoryProvider('https://notefolio.net/search'), 'Notefolio');
+});
+
+test('public galleries that answer without login are recognised by their item and search pages only', () => {
+  const items: [string, string][] = [
+    ['https://refero.design/pages/92a55726-992a-478e-87b6-cf4e1962f8cc', 'Refero'],
+    ['https://www.awwwards.com/sites/bb-price', 'Awwwards'],
+    ['https://21st.dev/@diarmuradi/components/pricing-7', '21st.dev'],
+    ['https://fontsinuse.com/uses/53210/some-poster', 'Fonts In Use'],
+    ['https://component.gallery/components/tabs/', 'Component Gallery'],
+    ['https://nook.ai.kr/site/2f24009d-a3b6-4021-87ff-8780578bb0d2', 'Nook'],
+    ['https://www.landing.love/sites/defiant/', 'Landing Love'],
+  ];
+  for (const [url, provider] of items) assert.equal(designDiscoveryProvider(url), provider, url);
+  const directories: [string, string][] = [
+    ['https://www.cosmos.so/search/elements/ui%20illustration', 'Cosmos'],
+    ['https://refero.design/search?query=pricing', 'Refero'],
+    ['https://www.awwwards.com/websites/?text=pricing', 'Awwwards'],
+    ['https://21st.dev/s/hero', '21st.dev'],
+    ['https://onepagelove.com/?s=pricing', 'One Page Love'],
+    ['https://www.lapa.ninja/search/?q=pricing', 'Lapa Ninja'],
+    ['https://fontsinuse.com/search?terms=pretendard', 'Fonts In Use'],
+    ['https://nook.ai.kr/?q=%EB%9E%9C%EB%94%A9', 'Nook'],
+    ['https://www.landing.love/search/?q=fintech', 'Landing Love'],
+  ];
+  for (const [url, provider] of directories) assert.equal(designDiscoveryDirectoryProvider(url), provider, url);
+  // Account, pricing and unrelated pages of the same hosts are neither items nor directories.
+  for (const url of ['https://refero.design/pricing', 'https://www.awwwards.com/sites/', 'https://21st.dev/login',
+    'https://onepagelove.com/7-practical-seo-tips', 'https://component.gallery/about/', 'https://www.cosmos.so/login',
+    'https://nook.ai.kr/login', 'https://www.landing.love/authors/', 'https://www.landing.love/sites/']) {
+    assert.equal(designDiscoveryProvider(url), null, url);
+    assert.equal(designDiscoveryDirectoryProvider(url), null, url);
+  }
 });

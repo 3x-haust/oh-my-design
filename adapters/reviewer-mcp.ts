@@ -947,6 +947,7 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
             if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
               && ((parsed as Record<string, unknown>).schema === 'adaptive-rendered-refinement-reviewer-transport-v1'
                 || (parsed as Record<string, unknown>).schema === 'adaptive-final-render-reviewer-transport-v1'
+                || (parsed as Record<string, unknown>).schema === 'native-pi-final-lane-transport-v1'
                 || (parsed as Record<string, unknown>).schema === 'measured-final-reviewer-transport-v1')) {
               visual = parsed as Record<string, unknown>;
             }
@@ -983,6 +984,8 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
                   surfaceReviewContract: evidenceRecord.surfaceReviewContract,
                   surfaceContext: evidenceRecord.surfaceContext,
                   documents: evidenceRecord.documents,
+                  outcomeExecution: evidenceRecord.outcomeExecution,
+                  temporalEvidenceLimits: evidenceRecord.temporalEvidenceLimits,
                 }
                 : {
                   schema: visual.schema,
@@ -1060,6 +1063,19 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
                   if (!raw || typeof raw !== 'object' || typeof raw.pngBase64 !== 'string') throw new ReviewerLaunchError('Reference render is malformed');
                   const { pngBase64, ...label } = raw;
                   content.push({ type: 'text', text: JSON.stringify({ reference: true, ...label }) });
+                  content.push({ type: 'image', data: pngBase64, mimeType: 'image/png' });
+                }
+              }
+              if (evidenceRecord.temporalRenders !== undefined) {
+                if (!Array.isArray(evidenceRecord.temporalRenders)) throw new ReviewerLaunchError('Temporal render inventory is malformed');
+                for (const raw of evidenceRecord.temporalRenders) {
+                  if (!raw || typeof raw !== 'object' || typeof raw.pngBase64 !== 'string') throw new ReviewerLaunchError('Temporal render is malformed');
+                  const { pngBase64, ...label } = raw;
+                  if (typeof raw.captureSha256 !== 'string'
+                    || createHash('sha256').update(Buffer.from(pngBase64, 'base64')).digest('hex') !== raw.captureSha256) {
+                    throw new ReviewerLaunchError('Temporal render digest changed');
+                  }
+                  content.push({ type: 'text', text: JSON.stringify({ temporal: true, ...label }) });
                   content.push({ type: 'image', data: pngBase64, mimeType: 'image/png' });
                 }
               }

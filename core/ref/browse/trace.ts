@@ -42,10 +42,15 @@ export function replayBrowseKeeps(events: readonly BrowseEvent[], observations: 
       const action = event.action;
       const capture = events.find(item => item.hash === action.capture && item.seq < event.seq);
       const observation = capture?.observation ? observations.get(capture.observation.sha256) : undefined;
-      if (!capture || capture.action.verb !== 'shot' || !capture.screenshot || !observation?.retainable || observation.crop !== null
-        || capture.outcome !== 'observed' || (action.lane && action.lane !== event.lane)
-        || action.reason.length < 20 || action.reason.length > 500
-        || (event.lane === 'design' ? action.role === 'task-flow' : action.role !== 'task-flow')) browseFail('BROWSE_KEEP_BINDING', 'keep is not bound to a successful same-lane capture', 2);
+      // Name the one thing to fix; a bare refusal sent agents around the browser to ref add or raw renders.
+      const problem = !capture || capture.action.verb !== 'shot' ? 'keep follows a shot: run omd ref browse shot on this page, then keep'
+        : !capture.screenshot || capture.outcome !== 'observed' ? 'the last shot failed; take another shot'
+        : !observation?.retainable ? `the shot cannot be kept: ${observation?.limitation ?? 'the page was not readable'} Dismiss an obscuring consent with omd ref browse cookie, or keep a different page`
+        : observation.crop !== null ? 'a zoom detail is kept with its whole-screen parent; keep the whole shot first'
+        : (action.lane && action.lane !== event.lane) || (event.lane === 'design' ? action.role === 'task-flow' : action.role !== 'task-flow')
+          ? 'the keep role or lane does not match this session lane'
+        : action.reason.length < 20 || action.reason.length > 500 ? 'the keep reason must be 20 to 500 characters' : null;
+      if (problem !== null || !capture || !observation || !capture.screenshot) return browseFail('BROWSE_KEEP_BINDING', `keep is not bound to a successful same-lane capture: ${problem}`, 2);
       keeps.set(event.hash, { id: event.hash, capture: eventRef(capture), keep: eventRef(event), reason: action.reason,
         role: action.role ?? (event.lane === 'domain' ? 'task-flow' : 'visual-direction'), direction: action.direction,
         rights: action.rights, rightsNotes: action.rightsNotes, source: observation.url, image: capture.screenshot,

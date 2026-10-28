@@ -254,6 +254,33 @@ function zoomProfileException(filePath: string, source: string, mutations: reado
   return 'disposable native browser-zoom profile (fixed OS temp prefix; exact profile removed in finally)';
 }
 
+function footageScratchException(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): string | undefined {
+  if (filePath !== 'core/render/product-footage.ts'
+    || mutations.map(m => m.operation).sort().join(',') !== 'mkdtempSync,rmSync'
+    || !source.includes("const scratch = mkdtempSync(join(tmpdir(), 'omd-footage-'));")
+    || !source.includes('recordVideo: { dir: scratch,')
+    || !source.includes('rmSync(scratch, { recursive: true, force: true });')) return undefined;
+  return 'disposable raw footage recording (fixed OS temp prefix; exact directory removed in finally)';
+}
+
+function scaffoldScratchException(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): string | undefined {
+  if (filePath !== 'core/design/react-scaffold.ts'
+    || mutations.map(m => m.operation).sort().join(',') !== 'mkdtempSync,rmSync'
+    || !source.includes("const work = mkdtempSync(join(tmpdir(), 'omd-scaffold-'));")
+    || !source.includes('writer.write(path, readFileSync(join(app, path)));')
+    || !source.includes('rmSync(work, { recursive: true, force: true });')) return undefined;
+  return 'disposable template scaffold (fixed OS temp prefix; project files written only through the guarded writer; exact directory removed in finally)';
+}
+
+function ideaScratchException(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): string | undefined {
+  if (filePath !== 'core/design/idea-image.ts'
+    || mutations.map(m => m.operation).sort().join(',') !== 'mkdtempSync,rmSync'
+    || !source.includes("const work = mkdtempSync(join(tmpdir(), 'omd-idea-'));")
+    || !source.includes('writer.write(path, bytes);')
+    || !source.includes('rmSync(work, { recursive: true, force: true });')) return undefined;
+  return 'disposable idea-image workspace (fixed OS temp prefix; project files written only through the guarded writer; exact directory removed in finally)';
+}
+
 function sourcePath(repositoryRoot: string, absolutePath: string): string {
   return relative(repositoryRoot, absolutePath).split('\\').join('/');
 }
@@ -632,7 +659,10 @@ export function inventoryProjectRunMutations(
     const activationKeyAdapter = activationKeyStoreAdapter(filePath, source, directMutations);
     const browserUserAdapter = browserUserStoreAdapter(filePath, source, directMutations);
     const nativePiAdapterException = nativePiWriterException(filePath, source, directMutations)
-      ?? zoomProfileException(filePath, source, directMutations);
+      ?? zoomProfileException(filePath, source, directMutations)
+      ?? footageScratchException(filePath, source, directMutations)
+      ?? scaffoldScratchException(filePath, source, directMutations)
+      ?? ideaScratchException(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')
       && source.includes('export function createExternalObservationDirectory');

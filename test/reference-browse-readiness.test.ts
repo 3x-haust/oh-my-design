@@ -110,7 +110,30 @@ test('browse capture still refuses content changed across every screenshot', { t
     await assert.rejects(captureBrowseObservation(browser.page, browser.document, 'readiness-fixture', {
       media: browser.media, search: false, readySelector: 'main', timeout: 5000,
     }), /BROWSE_UNSTABLE_RENDER/);
-    assert.equal(captures, 2);
+    assert.equal(captures, 3);
+    // A design reference only needs one frame: the same ever-changing page is kept as its last frame, labelled so.
+    const frame = await captureBrowseObservation(browser.page, browser.document, 'readiness-fixture', {
+      media: browser.media, search: false, readySelector: 'main', timeout: 5000, oneFrame: true,
+    });
+    assert.equal(frame.observation.retainable, true);
+    assert.match(frame.observation.limitation ?? '', /kept changing/);
+  } finally { await browser.close(); }
+});
+
+test('a long entry animation is frozen where it stands rather than blocking the capture', { timeout: 30000 }, async () => {
+  const browser = await openBrowseBrowser(binding(), { transport: async route => {
+    await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Work</title><main><h1>Work list</h1><p id="record">Selected record</p></main>' });
+  } });
+  try {
+    await browser.page.goto('https://readiness.fixture.test/work', { waitUntil: 'domcontentloaded' });
+    await browser.page.evaluate(() => {
+      document.getElementById('record')?.animate([{ transform: 'translateY(40px)' }, { transform: 'none' }], { duration: 60000, fill: 'forwards' });
+    });
+    const result = await captureBrowseObservation(browser.page, browser.document, 'readiness-fixture', {
+      media: browser.media, search: false, readySelector: 'main', timeout: 800,
+    });
+    assert.match(result.observation.text, /Selected record/);
+    assert.equal(await browser.page.evaluate(() => document.getAnimations()[0]?.playState), 'running', 'released after capture');
   } finally { await browser.close(); }
 });
 
@@ -141,5 +164,101 @@ test('browse capture observes finite transition completion before the first snap
     });
     assert.equal(captures, 1);
     assert.match(result.observation.text, /Selected record/);
+  } finally { await browser.close(); }
+});
+
+test('a gallery that fills its results by script is observed after they arrive', { timeout: 30000 }, async () => {
+  const browser = await openBrowseBrowser(binding(), { transport: async route => {
+    await route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><title>Search</title><main id="results"></main>
+      <script>setTimeout(() => { document.getElementById('results').innerHTML = Array.from({ length: 6 },
+        (_, i) => '<article><h2>Result ' + i + '</h2><p>Feature card illustration</p></article>').join(''); }, 1500);</script>` });
+  } });
+  try {
+    await browser.page.goto('https://readiness.fixture.test/search', { waitUntil: 'domcontentloaded' });
+    const result = await captureBrowseObservation(browser.page, browser.document, 'readiness-fixture', {
+      media: browser.media, search: true, timeout: 8000,
+    });
+    assert.match(result.observation.text, /Result 5/);
+  } finally { await browser.close(); }
+});
+
+test('the headless reference browser presents its ordinary Chrome name', { timeout: 30000 }, async () => {
+  const browser = await openBrowseBrowser(binding(), { transport: async route => {
+    await route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Agent</title><main>agent</main>' });
+  } });
+  try {
+    await browser.page.goto('https://readiness.fixture.test/agent', { waitUntil: 'domcontentloaded' });
+    const agent = await browser.page.evaluate(() => navigator.userAgent);
+    assert.doesNotMatch(agent, /HeadlessChrome/);
+    assert.match(agent, /Chrome\/\d+/);
+  } finally { await browser.close(); }
+});
+
+test('a looping hero is captured on the frame on screen and keeps running afterwards', { timeout: 30000 }, async () => {
+  const browser = await openBrowseBrowser(binding(), { transport: async route => {
+    await route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><title>Loop</title><style>
+      .spin{width:80px;height:80px;background:#2f4bff;animation:spin 1.5s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+    </style><main><h1>Looping hero</h1><div class="spin"></div><canvas id="c" width="160" height="80"></canvas></main>
+    <script>window.frames=0;const x=document.getElementById('c').getContext('2d');
+    (function loop(t){window.frames++;x.fillStyle='hsl('+(t/4%360)+' 80% 50%)';x.fillRect(0,0,160,80);requestAnimationFrame(loop)})(0);</script>` });
+  } });
+  try {
+    await browser.page.goto('https://readiness.fixture.test/loop', { waitUntil: 'domcontentloaded' });
+    const result = await captureBrowseObservation(browser.page, browser.document, 'readiness-fixture', {
+      media: browser.media, search: false, readySelector: 'main', timeout: 5000,
+    });
+    assert.match(result.observation.text, /Looping hero/);
+    const before = Number(await browser.page.evaluate('window.frames'));
+    await browser.page.waitForTimeout(200);
+    assert.ok(Number(await browser.page.evaluate('window.frames')) > before, 'the loop resumes after capture');
+    assert.equal(await browser.page.evaluate("document.getAnimations()[0].playState"), 'running');
+  } finally { await browser.close(); }
+});
+
+test('Korean domain research can search Naver by name', async () => {
+  const { searchUrl } = await import('../core/ref/browse/safety.ts');
+  assert.equal(searchUrl('naver', '디자인 하네스', 'q'), 'https://search.naver.com/search.naver?query=%EB%94%94%EC%9E%90%EC%9D%B8%20%ED%95%98%EB%84%A4%EC%8A%A4');
+  // Login-free galleries: Pinterest pins through public image search, curated graphics by category, UI motion by pattern.
+  assert.equal(searchUrl('pinterest', '3d icon', 'q'), 'https://search.naver.com/search.naver?where=image&query=pinterest%203d%20icon');
+  assert.equal(searchUrl('inspora', '3D', 'q'), 'https://www.inspora.design/?category=3D');
+  assert.equal(searchUrl('60fps', 'bottom-sheet', 'q'), 'https://60fps.design/shots/filter/bottom-sheet');
+});
+
+test('a whole-image selector that matches several images says how many and how to pick one', { timeout: 30000 }, async () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const browser = await openBrowseBrowser(binding(), { transport: async route => {
+    if (route.request().url().endsWith('.png')) return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(png, 'base64') });
+    await route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><title>Gallery</title><main><h1>Results</h1>${[1, 2, 3].map(n => `<img alt="" width="120" height="90" src="/shot-${n}.png">`).join('')}</main>` });
+  } });
+  try {
+    await browser.page.goto('https://readiness.fixture.test/gallery', { waitUntil: 'domcontentloaded' });
+    await assert.rejects(captureBrowseObservation(browser.page, browser.document, 'readiness-fixture', {
+      media: browser.media, search: false, readySelector: 'main', timeout: 5000, wholeImageSelector: 'main img',
+    }), /matched 3 images; add >> nth=<index>/);
+  } finally { await browser.close(); }
+});
+
+test('a whole-image selector that misses lists the visible images to pick and flags one a card link covers', { timeout: 30000 }, async () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  const browser = await openBrowseBrowser(binding(), { transport: async route => {
+    if (route.request().url().endsWith('.png')) return route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(png, 'base64') });
+    // As on many galleries, the card link is a layer beside the image rather than around it.
+    await route.fulfill({ status: 200, contentType: 'text/html', body: `<!doctype html><title>Gallery</title><main><h1>Results</h1>
+      <figure style="position:relative;width:200px;height:150px;margin:0"><img alt="Tool landing" width="200" height="150" src="/shot-1.png">
+        <a href="/shots/1" style="position:absolute;inset:0" aria-label="open"></a></figure>
+      <img alt="Plain shot" width="200" height="150" src="/shot-2.png"><img alt="avatar" width="24" height="24" src="/a.png"></main>` });
+  } });
+  try {
+    await browser.page.goto('https://readiness.fixture.test/gallery', { waitUntil: 'domcontentloaded' });
+    const shot = (selector: string) => captureBrowseObservation(browser.page, browser.document, 'readiness-fixture', {
+      media: browser.media, search: false, readySelector: 'main', timeout: 5000, wholeImageSelector: selector });
+    await assert.rejects(shot('a[href="/shots/1"] img'), error => {
+      assert.match(String(error), /matched no image/);
+      assert.match(String(error), /img >> nth=0 \("Tool landing"\) \[covered: open its page\]/);
+      assert.match(String(error), /img >> nth=1 \("Plain shot"\)(?! \[covered)/);
+      assert.doesNotMatch(String(error), /avatar/, 'small images are not works');
+      return true;
+    });
+    await assert.rejects(shot('img >> nth=0'), /covered by an overlay.*open the work's own page/);
   } finally { await browser.close(); }
 });

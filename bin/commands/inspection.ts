@@ -49,11 +49,53 @@ function warnDesktopBridge(target: string | undefined): void {
   );
 }
 
+export const RENDER_USAGE = [
+  'usage: omd render <page|url> [--viewport WxH] [--out file.png] [--full-page] [--squint]',
+  '       omd render <page|url> --graphic [--selector css] [--transparent] [--viewport WxH] --out public/graphics/name.png',
+  '         renders a graphic built in code to a 2x image; the output folder is created',
+  '       omd render <page|url> --motion [--out dir] [--no-scroll] [--no-reduced]',
+  '       omd render <page|url> --proofs [--out prefix] | --filmstrip [--out index.html]',
+].join('\n');
+
 async function cmdRender(opts: Opts): Promise<never> {
+  if (opts.help) { console.log(RENDER_USAGE); process.exit(0); }
   const { renderPage, renderProofs, renderFilmstrip, parseViewport } = await import('../../core/render/index.ts');
   const target = opts._[0];
   warnDesktopBridge(target);
   if (!target) printUsage();
+
+  if (opts.motion) {
+    // Choreography evidence: per-element load timeline, wheel-driven scroll-through, reduced-motion
+    // pass and one contact sheet. Advisory input for the author and reviewer, never a gate.
+    const { captureMotionTimeline } = await import('../../core/render/motion-timeline.ts');
+    const adapter = projectWriterFromActivation(opts, 'omd render');
+    const outDir = relative(adapter.projectRoot, resolve(opts.out ?? join('.omd', 'motion', 'capture')));
+    if (outDir.startsWith('..')) throw new Error('omd render --motion output must be inside the project');
+    const { timeline, files } = await captureMotionTimeline(target, {
+      viewport: parseViewport(opts.viewport ?? '1440x900'), outDir, adapter,
+      scroll: !opts.noScroll, reduced: !opts.noReduced,
+    });
+    if (opts.json) process.stdout.write(`${JSON.stringify(timeline)}\n`);
+    else {
+      for (const note of timeline.notes) console.log(`- ${note}`);
+      for (const file of files.filter(path => !path.includes('/frames/'))) console.log(file);
+    }
+    process.exit(0);
+  }
+
+  if (opts.graphic) {
+    // A graphic built in code becomes a shipped image: 2x pixels, optionally one element, optionally
+    // with a transparent background. Generated images are ideation only; this is the production path.
+    const { renderGraphic } = await import('../../core/render/index.ts');
+    const out = opts.out ?? 'graphic.png';
+    const adapter = projectWriterFromActivation(opts, 'omd render');
+    ensureProjectParent(adapter, out);
+    const selector = typeof opts.selector === 'string' ? opts.selector : undefined;
+    console.log(await renderGraphic(target, { viewport: parseViewport(opts.viewport ?? '1200x900'), out,
+      ...(selector ? { selector } : {}), ...(opts.transparent ? { transparent: true } : {}), adapter,
+      warn: message => console.error(`warning: ${message}`) }));
+    process.exit(0);
+  }
 
   if (opts.filmstrip) {
     // Filmstrip: 4–6 viewport screenshots at ~300ms intervals, plus an HTML index.
@@ -87,6 +129,28 @@ async function cmdRender(opts: Opts): Promise<never> {
     adapter,
   });
   console.log(out);
+  process.exit(0);
+}
+
+async function cmdRecord(opts: Opts): Promise<never> {
+  // Footage of the real running product: real input, a drawn cursor overlay, and a camera applied
+  // to the recorded frames afterwards. Nothing about the product is redrawn or altered.
+  const target = opts._[0];
+  if (!target || !opts.steps) {
+    throw new Error('usage: omd record <page> --steps <steps.json> [--viewport WxH] [--out dir] [--json]');
+  }
+  const { recordProductFootage, parseFootageSteps } = await import('../../core/render/product-footage.ts');
+  const { parseViewport } = await import('../../core/render/index.ts');
+  const steps = parseFootageSteps(JSON.parse(readFileSync(resolve(opts.steps), 'utf8')));
+  const adapter = projectWriterFromActivation(opts, 'omd record');
+  const outDir = relative(adapter.projectRoot, resolve(opts.out ?? join('.omd', 'footage', 'demo')));
+  if (outDir.startsWith('..')) throw new Error('omd record output must be inside the project');
+  const footage = await recordProductFootage(target, { viewport: parseViewport(opts.viewport ?? '1440x900'), steps, outDir, adapter });
+  if (opts.json) process.stdout.write(`${JSON.stringify(footage)}\n`);
+  else {
+    console.log(`- ${footage.durationSeconds}s of real interaction, ${footage.camera.length - 1} camera move(s).`);
+    for (const file of footage.files) console.log(file);
+  }
   process.exit(0);
 }
 
@@ -380,17 +444,74 @@ async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<nev
   if (mode !== 'check' || opts.input !== undefined || opts.page === undefined) {
     throw new Error('usage: omd first-render check --page <local-build.html> [--json]; remove --input (agent-authored surfaces are no longer accepted)');
   }
+  if (/^https?:\/\//i.test(String(opts.page))) {
+    // A dev server or deployed URL is an external page; only the local production build is measured.
+    throw new Error('FIRST_RENDER_LOCAL_BUILD: first-render check measures the local production build, not a URL. '
+      + 'Run the project build, then omd first-render check --page <build-output>/index.html (for example dist/index.html).');
+  }
   const invocation = invocationFromActivation(opts, 'omd first-render check');
+  // Packed or crowded source is cheap to fix now and expensive after rounds of visual review on it.
+  const { requireReviewableSource } = await import('../../core/design/source-readability.ts');
+  const { readPersistedRoute } = await import('../../core/route/index.ts');
+  const route = readPersistedRoute(process.cwd(), invocation);
+  requireReviewableSource(process.cwd(), route, 'first-render');
+  const { requireConsultedReferences, requireDesignBrief, requireGraphicsStarted, requirePageIdeas } = await import('../../core/design/new-surface-advisories.ts');
+  requireDesignBrief(process.cwd(), route);
+  requireConsultedReferences(process.cwd(), route);
+  requirePageIdeas(process.cwd(), route);
+  requireGraphicsStarted(process.cwd(), route);
   const checked = await publishFirstRenderCheck(process.cwd(), opts.page, undefined, projectWriter(invocation), invocation);
+  // The reviewer judges choreography from this observation; a capture failure leaves the review static, not blocked.
+  const { captureFirstRenderMotion } = await import('../../core/design/first-render-motion.ts');
+  // Said now, while the page is still being built, rather than first at lifecycle finish.
+  const { motionRequired, motionShortfall, MOTION_GUIDANCE } = await import('../../core/design/new-surface-advisories.ts');
+  const motion = await captureFirstRenderMotion(process.cwd(), opts.page, checked.reportSha256, projectWriter(invocation))
+    .then(observed => {
+      const shortfall = motionRequired(route) ? motionShortfall(observed.context.timeline) : null;
+      return { notes: observed.context.timeline.notes, ...(shortfall === null ? {} : { shortfall: `${shortfall} ${MOTION_GUIDANCE}` }) };
+    })
+    .catch((error: unknown) => ({ error: error instanceof Error ? error.message : String(error) }));
+  // Basics a designer keeps without being asked (header in reach, in-page links clear of it), observed on the real page.
+  const { capturePageBasics, pageBasicsTells, proofShowsOutput } = await import('../../core/design/page-basics.ts');
+  const basics = await capturePageBasics(process.cwd(), opts.page, checked.reportSha256, projectWriter(invocation))
+    .then(observed => pageBasicsTells(observed, proofShowsOutput(process.cwd()))).catch(() => []);
   const { runFirstRenderReview } = await import('../../core/design/first-render-review.ts');
   const visualReview = nativePiInvocation === undefined ? null
     : await runFirstRenderReview(process.cwd(), nativePiInvocation);
   const report = checked.report;
-  if (opts.json) process.stdout.write(JSON.stringify({ ...checked, visualReview,
-    next: visualReview?.next ?? 'inspect-both-captures-with-preproduction-eye' }));
+  // Hosts without the native reviewer hand these to their own eye; the native reviewer receives them in its packet.
+  const { designerJudgmentProjection } = await import('../../core/design/designer-judgments.ts');
+  const designerJudgments = visualReview !== null ? undefined : designerJudgmentProjection();
+  const { firstRenderTemplateTells } = await import('../../core/design/first-render-template-tells.ts');
+  const { loadMeasurement } = await import('../../core/measure/files.ts');
+  const templateTells = visualReview !== null ? undefined
+    : firstRenderTemplateTells(process.cwd(), loadMeasurement(process.cwd(), checked.measurements[0]!), motionRequired(route));
+  // Said back before the review so a page built on two or three references shows it; not a quota.
+  const { referenceBreadth } = await import('../../core/ref/component-references.ts');
+  const references = route.projectMode === 'greenfield' ? referenceBreadth(process.cwd()) : undefined;
+  const { REPAIR_KNOWLEDGE } = await import('../../core/design/compose-guidance.ts');
+  const repair = visualReview !== null && visualReview.decision !== 'retain' ? { repairGuidance: REPAIR_KNOWLEDGE } : {};
+  // Completion requires behavior tests; saying so at the first render saves a round trip at lifecycle finish.
+  const { missingBehaviorTests } = await import('../../core/design/source-readability.ts');
+  const pendingTests = route.projectMode === 'greenfield' ? missingBehaviorTests(process.cwd()) : null;
+  const completionNeeds = pendingTests === null ? {} : { completionNeeds: [`${pendingTests}; lifecycle finish requires a test script that renders `
+    + 'or drives the components (for example Vitest with Testing Library); add it while building, not at finish'] };
+  if (opts.json) process.stdout.write(JSON.stringify({ ...checked, visualReview, ...repair, ...completionNeeds, ...(references === undefined ? {} : { references }),
+    ...(basics.length ? { basics: basics.map(tell => tell.message) } : {}),
+    ...(designerJudgments === undefined ? {} : { designerJudgments }),
+    ...(templateTells === undefined ? {} : { templateTells }), motion,
+    // A retained look still finishes only with the motion a landing needs; adding it now beats a late rework at finish.
+    next: visualReview?.next === 'continue-selected-production' && 'shortfall' in motion
+      ? 'add-the-required-motion-then-run-first-render-check-again' : visualReview?.next ?? 'inspect-both-captures-with-preproduction-eye' }));
   else {
     console.log(`first render: ${report.verdict} (${report.findings.length} finding${report.findings.length === 1 ? '' : 's'})`);
     for (const finding of report.findings) console.log(`  [${finding.severity}] ${finding.id}: ${finding.message}`);
+    if (references !== undefined) console.log(`  ${references}`);
+    for (const tell of basics) console.log(`  basics: ${tell.message}`);
+    if ('notes' in motion) {
+      for (const note of motion.notes) console.log(`  motion: ${note}`);
+      if (motion.shortfall !== undefined) console.log(`  motion: ${motion.shortfall}`);
+    } else console.log(`  motion: not observed (${motion.error})`);
     if (visualReview) console.log(`visual review: ${visualReview.decision}; ${visualReview.next}`);
   }
   process.exit(visualReview === null || visualReview.decision === 'retain' ? 0 : 1);
@@ -430,6 +551,7 @@ export async function runInspection(args: string[]): Promise<never> {
   const command = args[0]!;
   const sub = args[1];
   if (command === 'render') return cmdRender(parseArgs(args.slice(1)));
+  if (command === 'record') return cmdRecord(parseArgs(args.slice(1)));
   if (command === 'check') return cmdCheck(parseArgs(args.slice(1)));
   if (command === 'probe') return cmdProbe(parseArgs(args.slice(1)));
   if (command === 'slop') {

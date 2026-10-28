@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,6 +23,21 @@ test('reference context CLI preserves scoped originals and refuses foreign reque
   const run = () => spawnSync(process.execPath, [cli, 'ref', 'context', '--input', 'references.json', '--json'],
     { cwd: root, encoding: 'utf8', timeout: 30_000 });
   writeFileSync(join(root, 'references.json'), JSON.stringify(input));
+  // A page only opened in the browser is not a reference: the cited image must be kept, from a searched site.
+  const unkept = run();
+  assert.equal(unkept.status, 1);
+  assert.match(unkept.stderr, /CONSULTED_REFERENCE_NOT_KEPT/);
+  assert.equal(existsSync(join(root, '.omd/consulted-references.json')), false);
+  // An image filed by ref import-image counts as kept, like a sealed browse keep.
+  mkdirSync(join(root, '.omd/refs/design/fragments'), { recursive: true });
+  writeFileSync(join(root, `.omd/refs/design/fragments/${sha256(png)}.png`), png);
+  const session = join(root, '.omd/discovery/browse/s1');
+  const memory = run();
+  assert.equal(memory.status, 1);
+  assert.match(memory.stderr, /DESIGN_REFERENCE_UNSEARCHED/);
+  mkdirSync(join(session, 'observations'), { recursive: true });
+  writeFileSync(join(session, 'trace.jsonl'), `${JSON.stringify({ action: { verb: 'search' }, observation: { sha256: 'o1' } })}\n`);
+  writeFileSync(join(session, 'observations/o1.json'), JSON.stringify({ text: 'Results', linkClaims: [{ url: 'https://example.com/portraits', text: 'Portraits' }] }));
   const accepted = run();
   assert.equal(accepted.status, 0, accepted.stderr);
   assert.equal(JSON.parse(accepted.stdout).authority, 'none');

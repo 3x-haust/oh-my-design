@@ -1,14 +1,15 @@
 # Easing vocabulary — curated token set
 
 The keyword easings shipped in CSS (`ease`, `ease-in`, `ease-out`, `ease-in-out`) are
-not a vocabulary — they are placeholders. A design system that stops there has one word
-for every kind of change. This file establishes the curated set this system uses, with
-the semantic reasoning for each curve and the register it belongs to.
+valid general-purpose curves. This file adds a curated token set for systems that need
+more specific, repeatable motion roles; it does not make custom curves mandatory or
+turn keyword easing into a defect.
 
 Cross-reference: `core/theory/motion.md` explains the semantics of ease-out vs. ease-in
 vs. ease-in-out in detail. The tokens below are the *specific curves* — the parameterised
-forms — that belong to each semantic slot. Recipes reference these tokens directly;
-hardcoding cubic-bezier values in a component is the same defect as a hardcoded hex colour.
+forms — offered for each semantic slot. Recipes reference these tokens directly so
+related components can share intentional timing. An isolated component can still use a
+keyword or local curve when that is the clearest expression of its behavior.
 
 ---
 
@@ -35,7 +36,8 @@ hardcoding cubic-bezier values in a component is the same defect as a hardcoded 
      Use for: playful UI, game-adjacent contexts, elements whose concept includes
      elasticity. Not appropriate for utility UI — the overshoot reads as imprecision in
      a product the user came to operate.
-     Register: showpiece only. Use sparingly — one element per page that earns a bounce. */
+     Register: showpiece. Use only where the interaction concept earns a bounce; the
+     appropriate count is an art-direction decision, not a universal page quota. */
   --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Circ: extremely crisp deceleration. Starts near-linear, stops hard.
@@ -52,8 +54,8 @@ hardcoding cubic-bezier values in a component is the same defect as a hardcoded 
 :root {
   /* Expo: slow pickup, fast exit. The object leaves with finality.
      Use for: dismissals, modals closing, elements exiting the viewport.
-     Almost never correct for entrances — a slow start reads as latency.
-     See core/theory/motion.md: "ease-in (gradual start, fast finish): an object leaving." */
+     Often a poor fit for direct-manipulation entrances because the slow onset can read
+     as latency; test it against the actual interaction. */
   --ease-in-expo: cubic-bezier(0.7, 0, 0.84, 0);
 
   /* Quint: softer ease-in. Use for exits that should feel deliberate without being
@@ -92,7 +94,8 @@ hardcoding cubic-bezier values in a component is the same defect as a hardcoded 
      Fallback: --ease-out-back for browsers without linear() support (check via
      @supports (animation-timing-function: linear(0, 1))).
      Use for: elements whose register is "physical" — draggable cards, shelf items,
-     anything that should feel like it has mass.
+     anything that should feel like it has mass. A spring is one available expression,
+     not a requirement for expressive motion.
      Register: showpiece. */
   --ease-spring: linear(
     0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%,
@@ -137,15 +140,14 @@ hardcoding cubic-bezier values in a component is the same defect as a hardcoded 
 
 ---
 
-## The 500ms ease-in-out problem
+## Avoid unexamined `transition: all`
 
-`transition: all 500ms ease-in-out` is the single most common signature of generated
-work. It is wrong for three independent reasons (see `core/theory/motion.md`): too slow
-for micro-interactions, too fast for meaningful spatial motion, and the uniform easing
-removes semantic distinction between different kinds of change. The token set above
-provides the antidote: distinct curves for arrivals, departures, pivots, and physical
-motion, each at the duration that earns it.
+`transition: all 500ms ease-in-out` is worth reviewing because `all` can animate
+properties that were never intended to move, and one unexplained timing choice may be
+serving unrelated interaction roles. Neither `500ms` nor `ease-in-out` is inherently
+wrong, however. Equal-role elements in a family can legitimately share one duration and
+easing, and keyword curves can be the clearest choice.
 
-When a hand reaches for `ease-in-out`, the question is: is this an arrival, a departure,
-or a pivot? Arrivals use an out-curve. Departures use an in-curve. Pivots — and only
-pivots — use in-out.
+Choose timing from the interaction, distance, property, interruption behavior, and
+measured result. Arrival, departure, and pivot tokens are useful distinctions when the
+roles actually differ; they are not a requirement to make every animated node unique.

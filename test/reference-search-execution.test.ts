@@ -72,7 +72,7 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     const challengedReceipt = await executeReferenceSearch(proxy, input, writer);
     const challenged = readSearchExecution(root, challengedReceipt, 'design');
     assert.equal(challenged.status, 'blocked', 'test-045 Google HTTP 429 is a challenge, not a usable result');
-    assert.match(challenged.error ?? '', /hand off/);
+    assert.match(challenged.error ?? '', /design gallery instead.*omd ref browse challenge/);
     assert.equal(validateSearchCoverage(root, 'design', [input.query], [challengedReceipt], []).failed, 1);
     status = 403;
     const failed = await executeReferenceSearch(proxy, input, writer);

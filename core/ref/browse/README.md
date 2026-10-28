@@ -23,6 +23,7 @@ omd ref browse scroll [--direction down|up|left|right]
   [--amount <pixels>] [--selector <container-css>] [--ready-selector <css>]
 omd ref browse click (--selector <css>|--text <exact-label>) [--ready-selector <css>]
 omd ref browse similar (--selector <css>|--text <exact-label>) [--ready-selector <css>]
+omd ref browse cookie (--selector <css>|--text <exact-label>)
 omd ref browse back [--ready-selector <css>]
 omd ref browse shot [--selector <whole-item-img>]
   [--screen-id <id> --state <label>]
@@ -66,7 +67,7 @@ The profile is OMD-owned (`~/.omd/browser-profile`). CDP creates a separate prox
 
 Every owned reference context uses the DNS-pinned public HTTPS proxy, blocks service workers, WebSockets and unproxied realtime transports, and accepts only read-only requests. Purchases, checkout, trials, destructive controls, downloads and arbitrary form submission are excluded. A narrowly guarded GET search is the only automated fill/submit exception. Pricing requires additional consent. Stateful actions are serialized and paced; server Retry-After and transition-rate limits cause a refusal, never an internal retry loop.
 
-Cookie/consent overlays are recorded, not visually removed. Sensitive entry controls are masked, and obstructed/authentication/error/search-wrapper observations are not retained. Ambiguous text contrast is conservatively excluded from market claims without freezing, recolouring or suppressing the live page.
+Cookie/consent overlays are recorded, not visually removed. `cookie` clicks the notice's own necessary-only button: the model reads the label and judges the choice; the browser accepts only a form-free button inside the dialog or fixed layer, refuses purchase/account/pricing labels and any navigation. Sensitive entry controls are masked, and obstructed/authentication/error/search-wrapper observations are not retained; a search result's original image taken with `shot --selector` is the item, not the wrapper. Ambiguous text contrast is conservatively excluded from market claims without freezing, recolouring or suppressing the live page.
 
 Authenticated pixels are private, study-only material. No automatic commit, export or asset shipping occurs. `rights=allowed` is an accountable supplied rights judgment, not native license attestation.
 
@@ -143,7 +144,8 @@ Visual saturation is conservative and advisory: two inspected directions, five n
 
 ## Deliberate current boundaries
 
-- No model credential entry, CAPTCHA/MFA handling, or manual-auth POST phase. Existing cookie-backed opted-in viewing works; storage-only/new-login requirements remain an access/capability gap.
+- Captchas: `challenge checkbox|click|drag|type` acts only on a recognised challenge page (Google's sorry page, a reCAPTCHA/hCaptcha/Turnstile frame or a challenge title), in pixels of the last screenshot. Read the challenge from that screenshot; tile clicks are free, but each challenge allows two submissions (checkbox, drag, typed answer, or a click with `--submit`), after which it refuses with `BROWSE_CHALLENGE_HANDOFF`: hand it to the person in profile/cdp mode or record the source as blocked and move on. Never a solving service, never a reload for an easier puzzle.
+- No model credential entry, MFA handling, or manual-auth POST phase. Existing cookie-backed opted-in viewing works; storage-only/new-login requirements remain an access/capability gap.
 - Popups are excluded rather than adopted as a second page; use an explicit public root where appropriate. No arbitrary existing CDP tab takeover.
 - Selector zoom details must match the kept viewport exactly. Image-coordinate zoom of original gallery media is not a separate command yet.
 - A driver loss before any authenticated checkpoint cannot be invented into browser continuity. Proven-prefix recovery is supported; ambiguous ownership requires diagnosis rather than killing/reusing a process.

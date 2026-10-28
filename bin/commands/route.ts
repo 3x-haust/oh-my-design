@@ -132,7 +132,22 @@ async function cmdGuard(mode: string | undefined, opts: Opts): Promise<never> {
     throw new Error('usage: omd guard production [--path <project-relative-file>] [--json] | omd guard completion [--json]');
   }
   const invocation = invocationFromActivation(opts, `omd guard ${mode}`);
-  const result = checkProductionReadiness(process.cwd(), invocation, join(ROOT, 'core'), opts.path);
+  const readiness = checkProductionReadiness(process.cwd(), invocation, join(ROOT, 'core'), opts.path);
+  // At production entry a new surface needs its brief and published references: the first render refuses without them,
+  // and saying so here saves building a page first.
+  const entry = mode !== 'production' ? [] : await (async () => {
+    const { readPersistedRoute } = await import('../../core/route/index.ts');
+    const { requireConsultedReferences, requireDesignBrief, requireGraphicSettled, requirePageIdeas, pageSourcePath } = await import('../../core/design/new-surface-advisories.ts');
+    let route: ReturnType<typeof readPersistedRoute>;
+    try { route = readPersistedRoute(process.cwd(), invocation); } catch { return []; }
+    // A landing's page ideas and graphics come before the page around them. This guard also gates writing the graphics,
+    // so only the page's own source (not a graphic, a package manifest or a font) waits for them.
+    const graphicsFirst = typeof opts.path === 'string' && pageSourcePath(opts.path) ? [requirePageIdeas, requireGraphicSettled] : [];
+    return [requireDesignBrief, requireConsultedReferences, ...graphicsFirst].flatMap(require => {
+      try { require(process.cwd(), route); return []; } catch (error) { return [error instanceof Error ? error.message : String(error)]; }
+    });
+  })();
+  const result = entry.length ? { ...readiness, ok: false, blockers: [...readiness.blockers, ...entry] } : readiness;
   if (!result.ok || mode === 'production') {
     if (opts.json) process.stdout.write(JSON.stringify(result));
     else console.log(result.ok ? 'ok — selected pre-production inputs are current; this is not completion' : result.blockers.join('\n'));

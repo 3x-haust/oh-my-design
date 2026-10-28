@@ -44,6 +44,26 @@ export type TrustedBrowserCapture = Readonly<{
   measurement?: TrustedCaptureMeasurement;
 }>;
 
+export type TrustedBrowserTemporalCapture = Readonly<{
+  path: string;
+  sha256: string;
+  width: number;
+  height: number;
+  outcomeRef: string;
+  component: string;
+  state: 'hover' | 'focus' | 'pressed' | 'open';
+  viewport: Readonly<{ width: number; height: number }>;
+  phase: 'before' | 'observed-intermediate' | 'settled';
+  captureMoment: 'pre-action/pre-actionability' | 'natural-playback' | 'post-action-settled';
+  playbackSampling: Readonly<{
+    kind: 'natural-playback';
+    source: 'css-transition-or-waapi';
+    timeline: 'document';
+    timelineFraction: null;
+    animationCount: number;
+  }> | null;
+}>;
+
 export type TrustedBrowserReceipt = Readonly<{
   schema: typeof TRUSTED_BROWSER_RECEIPT_SCHEMA
     | typeof TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA
@@ -70,6 +90,7 @@ export type TrustedBrowserReceipt = Readonly<{
     safety: 'pass' | 'fail';
   }>;
   captures: readonly TrustedBrowserCapture[];
+  temporalCaptures?: readonly TrustedBrowserTemporalCapture[];
   transcript: readonly string[];
   entrySurface?: Readonly<{
     benchmarkProjectionSha256: string;
@@ -91,6 +112,13 @@ const OUTCOME_KEYS = new Set(['outcomeRef', 'status', 'findings']);
 const FLOOR_KEYS = new Set(['behavior', 'access', 'safety']);
 const CAPTURE_KEYS = new Set(['path', 'sha256', 'width', 'height']);
 const OUTCOME_CAPTURE_KEYS = new Set(['path', 'sha256', 'width', 'height', 'outcomeRef']);
+const TEMPORAL_CAPTURE_KEYS = new Set([
+  'path', 'sha256', 'width', 'height', 'outcomeRef', 'component', 'state',
+  'viewport', 'phase', 'captureMoment', 'playbackSampling',
+]);
+const PLAYBACK_SAMPLING_KEYS = new Set([
+  'kind', 'source', 'timeline', 'timelineFraction', 'animationCount',
+]);
 const ENTRY_SURFACE_KEYS = new Set([
   'benchmarkProjectionSha256',
   'prerequisiteTaskId',
@@ -99,6 +127,7 @@ const ENTRY_SURFACE_KEYS = new Set([
 ]);
 const CODE = /^[a-z0-9]+(?:[-:][a-z0-9]+)*$/;
 const TRANSCRIPT = /^(?:action-reload|(?:action-click|action-fill|action-hover|action-focus|action-press-start|assertion-pass|assertion-fail):[a-f0-9]{64}|(?:access|safety)-finding:[a-z0-9]+(?:[-:][a-z0-9]+)*|rendered-copy-review:[1-9]\d{0,4}x[1-9]\d{0,4}:[A-Za-z0-9_-]{1,10924})$/;
+const TEMPORAL_UNAVAILABLE = /^temporal-evidence-unavailable:(?:document-changed|no-action-correlated-animation|no-finite-animation|multiple-independent-animations|unsupported-css-animation|unsupported-timeline|unsupported-view-transition|animation-cancelled-or-retargeted|observation-unavailable):[a-f0-9]{64}:(?:1280x900|390x844)$/;
 
 function malformed(): never {
   throw new TrustedBrowserReceiptError('MALFORMED_TRUSTED_BROWSER_RECEIPT');
@@ -137,7 +166,7 @@ function digest(value: unknown): string {
 }
 
 function checkTranscript(entry: string): void {
-  if (TRANSCRIPT.test(entry)) return;
+  if (TRANSCRIPT.test(entry) || TEMPORAL_UNAVAILABLE.test(entry)) return;
   const detailPrefix = 'access-finding:interactive-label-detail:';
   if (entry.startsWith(detailPrefix)) {
     if (entry.length > 4_000) return malformed();
@@ -193,6 +222,8 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
   const keys = new Set(candidate !== null && typeof candidate === 'object'
     && Object.hasOwn(candidate, 'entrySurface') ? ENTRY_TOP_KEYS : TOP_KEYS);
   if (executionBound) keys.add('executionPlanSha256');
+  if (candidate !== null && typeof candidate === 'object'
+    && Object.hasOwn(candidate, 'temporalCaptures')) keys.add('temporalCaptures');
   const receipt = record(
     input,
     keys,
@@ -273,6 +304,85 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
         }),
     });
   });
+  const temporalCaptures = receipt.temporalCaptures === undefined
+    ? undefined
+    : (() => {
+      if (!executionBound || !Array.isArray(receipt.temporalCaptures)
+        || receipt.temporalCaptures.length === 0
+        || receipt.temporalCaptures.length % 3 !== 0
+        || receipt.temporalCaptures.length > 192) return malformed();
+      const rows = receipt.temporalCaptures.map((candidate) => {
+        const row = record(candidate, TEMPORAL_CAPTURE_KEYS);
+        const viewport = record(row.viewport, new Set(['width', 'height']));
+        if (typeof row.path !== 'string' || row.path === '' || row.path.startsWith('/')
+          || row.path.includes('\\') || row.path.split('/').some((part) => part === '' || part === '.' || part === '..')
+          || !Number.isSafeInteger(row.width) || !Number.isSafeInteger(row.height)
+          || row.width !== viewport.width || row.height !== viewport.height
+          || !((row.width === 1280 && row.height === 900)
+            || (row.width === 390 && row.height === 844))
+          || typeof row.outcomeRef !== 'string' || row.outcomeRef === ''
+          || typeof row.component !== 'string' || row.component === '' || row.component.length > 256
+          || !['hover', 'focus', 'pressed', 'open'].includes(row.state as string)
+          || !['before', 'observed-intermediate', 'settled'].includes(row.phase as string)) return malformed();
+        const phase = row.phase as TrustedBrowserTemporalCapture['phase'];
+        const moment = phase === 'before'
+          ? 'pre-action/pre-actionability'
+          : phase === 'observed-intermediate'
+            ? 'natural-playback'
+            : 'post-action-settled';
+        if (row.captureMoment !== moment) return malformed();
+        let playbackSampling: TrustedBrowserTemporalCapture['playbackSampling'] = null;
+        if (phase === 'observed-intermediate') {
+          const sampling = record(row.playbackSampling, PLAYBACK_SAMPLING_KEYS);
+          if (sampling.kind !== 'natural-playback' || sampling.source !== 'css-transition-or-waapi'
+            || sampling.timeline !== 'document' || sampling.timelineFraction !== null
+            || sampling.animationCount !== 1) return malformed();
+          playbackSampling = Object.freeze({
+            kind: 'natural-playback',
+            source: 'css-transition-or-waapi',
+            timeline: 'document',
+            timelineFraction: null,
+            animationCount: 1,
+          });
+        } else if (row.playbackSampling !== null) return malformed();
+        return Object.freeze({
+          path: row.path,
+          sha256: digest(row.sha256),
+          width: row.width as number,
+          height: row.height as number,
+          outcomeRef: row.outcomeRef,
+          component: row.component,
+          state: row.state as TrustedBrowserTemporalCapture['state'],
+          viewport: Object.freeze({
+            width: viewport.width as number,
+            height: viewport.height as number,
+          }),
+          phase,
+          captureMoment: moment,
+          playbackSampling,
+        });
+      });
+      const ordinaryPaths = new Set(captures.map(capture => capture.path));
+      const groups = new Set<string>();
+      for (let index = 0; index < rows.length; index += 3) {
+        const before = rows[index]!, mid = rows[index + 1]!, settled = rows[index + 2]!;
+        if (before.phase !== 'before' || mid.phase !== 'observed-intermediate' || settled.phase !== 'settled'
+          || before.outcomeRef !== mid.outcomeRef || before.outcomeRef !== settled.outcomeRef
+          || before.component !== mid.component || before.component !== settled.component
+          || before.state !== mid.state || before.state !== settled.state
+          || before.width !== mid.width || before.width !== settled.width
+          || before.height !== mid.height || before.height !== settled.height
+          || ordinaryPaths.has(before.path) || ordinaryPaths.has(mid.path)
+          || before.path === mid.path
+          || !captures.some(capture => capture.outcomeRef === settled.outcomeRef
+            && capture.path === settled.path && capture.sha256 === settled.sha256
+            && capture.width === settled.width && capture.height === settled.height)) return malformed();
+        const group = `${before.outcomeRef}\0${before.width}x${before.height}`;
+        if (groups.has(group)) return malformed();
+        groups.add(group);
+      }
+      return Object.freeze(rows);
+    })();
   return Object.freeze({
     schema: executionBound
       ? TRUSTED_BROWSER_EXECUTION_RECEIPT_SCHEMA
@@ -304,6 +414,7 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
       safety: floors.safety as 'pass' | 'fail',
     }),
     captures: Object.freeze(captures),
+    ...(temporalCaptures === undefined ? {} : { temporalCaptures }),
     transcript,
     ...(entrySurface === undefined ? {} : { entrySurface }),
   });

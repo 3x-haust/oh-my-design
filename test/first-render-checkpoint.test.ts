@@ -282,3 +282,13 @@ test('restore CLI advertises the named-iteration JSON surface', t => {
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--iteration <id>/);
 });
+
+test('a finding still open while each review says improved is a repair in progress, until six reviews', async () => {
+  const { loopReasons } = await import('../core/design/first-render-loop-state.ts');
+  type Iteration = Parameters<typeof loopReasons>[0][number];
+  const review = (progress: string | null) => ({ reviewSha256: 'r', decision: 'reframe', progress, findingIds: ['F1'] }) as unknown as Iteration;
+  assert.deepEqual(loopReasons([review(null), review('improved'), review('improved')]), [], 'improving twice in a row');
+  assert.deepEqual(loopReasons([review(null), review('same'), review('improved')]), ['persistent-findings']);
+  assert.deepEqual(loopReasons([review(null), review('improved'), review('improved'), review('improved'), review('improved'), review('improved')]),
+    ['persistent-findings'], 'reported at the sixth review even while improving');
+});

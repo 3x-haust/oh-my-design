@@ -1,3 +1,4 @@
+import { resolveBackdropContrast } from './backdrop-pixels.ts';
 import type { CaptureBinding, Finding, FindingCode, MeasuredIr, Measurement, MetricKind, MetricValues, Subject, ViewSpec, VisualMeasurement } from './types.ts';
 import type { Contracts } from './contracts.ts';
 import { colorsForView } from './contracts.ts';
@@ -34,8 +35,10 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     // SVG internals remain unmeasured; that limitation does not invalidate
     // unrelated DOM geometry/text. Selected paint/target contracts still refuse
     // unsupported SVG through contrast/conformance below.
+    // A busy backdrop only matters to text read against it; a node with no text of its own (an icon) is not a text gap.
+    const limits = (n: (typeof dom.nodes)[number]): string[] => n.lines.length === 0 ? n.unsupported.filter(r => r !== 'complex-backdrop') : [...n.unsupported];
     const svgPixels = new Set(dom.nodes.filter(n => n.visibleBox && n.tag === 'svg'
-      && n.unsupported.length === 1 && n.unsupported[0] === 'opaque-content').map(n => n.id));
+      && limits(n).length === 1 && limits(n)[0] === 'opaque-content').map(n => n.id));
     const nativeText = new Set(dom.nodes.filter(n => n.visibleBox && n.unsupported.length === 1
       && (['input', 'select', 'textarea'].includes(n.tag) && n.unsupported[0] === 'native-control-text'
         || n.tag === 'option' && n.unsupported[0] === 'native-option-text')).map(n => n.id));
@@ -44,14 +47,40 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     if (c.binding.stability.status !== 'stable') excluded.push({ subjectId: c.view.id, reason: 'unstable-capture' });
     const ids = dom.nodes.map(n => n.id), area = dom.viewport.innerWidth * dom.viewport.innerHeight;
     const p = paint(dom, c.png), conforms = conformance(dom, contracts, c.view.id);
-    for (const n of dom.nodes.filter(n => n.visibleBox && n.media && !p.mediaContrast.has(n.id) && !svgPixels.has(n.id))) excluded.push({ subjectId: n.id, reason: 'media-salience-unsampled' });
-    const values: Omit<MetricValues, 'cross-viewport-order'> = { ...typography(dom.nodes, area), 'control-accessibility': controlAccessibility(dom), ...spacing(dom.nodes), 'contrast-pair': contrast(dom.nodes, colorsForView(contracts.composition, c.view.id)), ...layout(dom, contracts, p.canvasPaintShare, p.mediaContrast), 'canvas-color': p['canvas-color'], 'accent-distribution': p['accent-distribution'], 'contract-conformance': conforms.value };
+    // An image cut by the viewport edge to a sliver thinner than the sampling grid falls between samples and
+    // carries no salience; it is noted, not left as an unmeasured subject that blocks completion.
+    const unsampledMedia = dom.nodes.filter(n => n.visibleBox && n.media && !p.mediaContrast.has(n.id) && !svgPixels.has(n.id));
+    const slivers = unsampledMedia.filter(n => Math.min(n.visibleBox!.w, n.visibleBox!.h) < dom.gridStep).map(n => n.id);
+    // An image whose sample points all land on something drawn over it (a skip link shown on focus, an open menu) is
+    // covered in this state: nothing of it shows, so it carries no salience to measure.
+    const covered = unsampledMedia.filter(n => {
+      const box = n.visibleBox!;
+      const inside = dom.paintSamples.filter(sample => sample.x >= box.x && sample.x <= box.x + box.w && sample.y >= box.y && sample.y <= box.y + box.h);
+      return inside.length > 0 && inside.every(sample => sample.subjectId !== null && sample.subjectId !== n.id);
+    }).map(n => n.id);
+    for (const n of unsampledMedia.filter(n => !slivers.includes(n.id) && !covered.includes(n.id))) excluded.push({ subjectId: n.id, reason: 'media-salience-unsampled' });
+    // Text over a gradient or image is measured from the rendered pixels rather than left unmeasured.
+    const sampled = resolveBackdropContrast(contrast(dom.nodes, colorsForView(contracts.composition, c.view.id)).pairs, dom, c.png);
+    // A container whose only limitation is its own gradient has no text of its own to measure; the text
+    // inside it is measured above. Either way the backdrop no longer leaves a coverage gap.
+    const ownTextless = new Set(dom.nodes.filter(n => n.lines.length === 0).map(n => n.id));
+    for (let index = excluded.length - 1; index >= 0; index--) {
+      const entry = excluded[index]!;
+      if (entry.reason === 'complex-backdrop' && (sampled.resolved.has(entry.subjectId) || ownTextless.has(entry.subjectId))) excluded.splice(index, 1);
+    }
+    const values: Omit<MetricValues, 'cross-viewport-order'> = { ...typography(dom.nodes, area), 'control-accessibility': controlAccessibility(dom), ...spacing(dom.nodes), 'contrast-pair': { pairs: sampled.pairs }, ...layout(dom, contracts, p.canvasPaintShare, p.mediaContrast), 'canvas-color': p['canvas-color'], 'accent-distribution': p['accent-distribution'], 'contract-conformance': conforms.value };
     const metrics = new Map<MetricKind, Measurement>();
     for (const kind of Object.keys(values) as (keyof typeof values)[]) metrics.set(kind, add(kind, [c.view.id], ids, values[kind], excluded));
     const quality = metrics.get('contract-conformance')!;
     if (svgPixels.size) finding('MEASUREMENT_INCOMPLETE', metrics.get('salience-regions')!, [...svgPixels], null,
       'SVG internal paint and salience are unmeasured; inspect these subjects in the authenticated whole captures. No SVG contrast or salience proof is claimed.',
       'coverage', ['contrastColorRoles', 'hierarchy', 'composition', 'beautyDesirability'], 'advisory');
+    if (slivers.length) finding('MEASUREMENT_INCOMPLETE', metrics.get('salience-regions')!, slivers, null,
+      'Images cut by the viewport edge to a sliver thinner than the sampling grid were not sampled; they carry no salience.',
+      'coverage', [], 'advisory');
+    if (covered.length) finding('MEASUREMENT_INCOMPLETE', metrics.get('salience-regions')!, covered, null,
+      'Images fully covered by another drawn element in this state were not sampled; inspect the capture if the cover is unintended.',
+      'coverage', ['composition'], 'advisory');
     if (nativeText.size) finding('MEASUREMENT_INCOMPLETE', quality, [...nativeText], null,
       'Native form-value glyphs and text contrast are unmeasured; inspect these subjects in the authenticated whole captures. DOM metrics do not certify their painted text.',
       'coverage', ['typography', 'contrastColorRoles', 'usability', 'responsiveCraft'], 'advisory');
@@ -85,7 +114,14 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     if (clipped.length) finding('REQUIRED_CONTROL_CLIPPED', metrics.get('clipping-overflow')!, clipped.map(c => c.subjectId), null, canonicalJson(clipped), 'accessibility', ['usability', 'responsiveCraft']);
     if (values['clipping-overflow'].documentOverflowX > 1) finding('MEASUREMENT_INCOMPLETE', metrics.get('clipping-overflow')!, [], null, 'Document has horizontal overflow; reflow needs repair or a scoped access contract', 'coverage', ['responsiveCraft']);
     if (values['text-minimum'].under12) finding('TEXT_UNDER_12', metrics.get('text-minimum')!, values['text-minimum'].small.map(s => s.subjectId), null, `${values['text-minimum'].under12} visible text roles below 12 CSS px`, 'heuristic', ['typography'], 'advisory');
-    if (excluded.length) finding('MEASUREMENT_INCOMPLETE', quality, [], null, canonicalJson(excluded), 'coverage', []);
+    // A transformed, non-interactive node with no text of its own (a rotated logo piece, a tilted
+    // decorative card) has no type, contrast or target to measure; its exclusion is reported but does
+    // not block completion. A transformed control or text still blocks.
+    const textless = new Set(dom.nodes.filter(n => !n.text.trim() && !n.interactive && !n.media && n.tabIndex < 0).map(n => n.id));
+    const decorative = excluded.filter(e => e.reason === 'transformed-geometry' && textless.has(e.subjectId));
+    const unmeasured = excluded.filter(e => !decorative.includes(e));
+    if (unmeasured.length) finding('MEASUREMENT_INCOMPLETE', quality, [], null, canonicalJson(unmeasured), 'coverage', []);
+    if (decorative.length) finding('MEASUREMENT_INCOMPLETE', quality, decorative.map(e => e.subjectId), null, canonicalJson(decorative), 'coverage', [], 'advisory');
     return { view: c.view, dom };
   });
   add('cross-viewport-order', scope.map(s => s.id), subjects.map(s => s.id), responsive(doms));

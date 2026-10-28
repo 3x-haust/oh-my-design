@@ -62,7 +62,16 @@ test('clean true-white product has complete native metrics, strict citations, re
   assert.throws(() => validateSlopMeasurementDecision(disposition, ctx.index, { ...finding, behavioral: true }, absence), /behavioral/);
   const bad = structuredClone(green); bad.axes[0]!.evidence[0]!.measurementIds = [packet.measurements.find(m => m.kind === 'canvas-color')!.id];
   assert.throws(() => assertMeasuredDesignQualityGreen(bad, ctx), /unrelated/);
-  const missing = structuredClone(green); missing.axes[0]!.evidence.pop(); assert.throws(() => assertMeasuredDesignQualityGreen(missing, ctx), /omitted/);
+  // Each view must be cited by some axis; dropping a view from every axis leaves it unseen.
+  const lastView = green.axes[0]!.evidence.at(-1)!.viewId;
+  const unseen = structuredClone(green); for (const axis of unseen.axes) axis.evidence = axis.evidence.filter(row => row.viewId !== lastView);
+  assert.throws(() => assertMeasuredDesignQualityGreen(unseen, ctx), /not cited by any axis/);
+  const typography = green.axes.find(a => a.axis === 'typography')!, ladder = packet.measurements.find(m => m.kind === 'type-ladder')!;
+  const thin = structuredClone(green); const thinAxis = thin.axes.find(a => a.axis === 'typography')!;
+  for (const row of thinAxis.evidence) row.measurementIds = row.measurementIds.filter((id: string) => id !== ladder.id);
+  assert.ok(typography.evidence.some(row => row.measurementIds.includes(ladder.id)));
+  // The view is the reviewer's judgment; its other complete, passing inventories are taken from the native packet.
+  assert.equal(assertMeasuredDesignQualityGreen(thin, ctx).axes.length, 11);
   const lower = structuredClone(green); lower.axes.find(a => a.axis === 'hierarchy')!.score = 3; assert.throws(() => assertMeasuredDesignQualityGreen(lower, ctx), /AXIS_RED/);
   const malformed = structuredClone(packet); Reflect.set(malformed.measurements[0]!.value, 'invented', 4); assert.throws(() => parseVisualMeasurement(malformed), /exact fields/);
   const duplicate = structuredClone(packet); duplicate.measurements.push(duplicate.measurements[0]!); assert.throws(() => parseVisualMeasurement(duplicate), /duplicate/);

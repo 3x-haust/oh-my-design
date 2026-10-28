@@ -237,3 +237,25 @@ test('lifecycle manifest binds explicit interaction actions, state assertions an
     }],
   }), /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/);
 });
+
+test('a malformed lifecycle manifest names the field to repair', () => {
+  const manifest = (actions: unknown[], assertions: unknown[] = []) => ({
+    schema: 'trusted-lifecycle-manifest-v1', entryPath: 'dist/index.html',
+    scripts: [{ outcomeRef: 'outcome:copy', actions, assertions }],
+  });
+  const reason = (input: unknown) => {
+    try { parseTrustedLifecycleManifest(input); } catch (error) {
+      assert.ok(error instanceof TrustedEvaluationContractError);
+      assert.equal(error.code, 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      return error.message;
+    }
+    return assert.fail('expected a malformed manifest');
+  };
+  assert.match(reason(manifest([{ kind: 'click' }])), /scripts\[0\]\.actions\[0\] is missing selector/);
+  assert.match(reason(manifest([{ kind: 'swipe', selector: '#a' }])), /scripts\[0\]\.actions\[0\]\.kind must be/);
+  assert.match(reason(manifest([], [{ kind: 'visible-text', selector: '#a', text: ' ' }])), /scripts\[0\]\.assertions\[0\]\.text must be non-empty text/);
+  assert.match(reason({ ...manifest([]), schema: 'v0' }), /schema must be trusted-lifecycle-manifest-v1/);
+  // A well-formed manifest still parses unchanged.
+  assert.equal(parseTrustedLifecycleManifest(manifest([{ kind: 'click', selector: '#copy' }],
+    [{ kind: 'visible-text', selector: '#status', text: 'Copied' }])).scripts.length, 1);
+});

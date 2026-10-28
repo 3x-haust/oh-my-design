@@ -1,12 +1,13 @@
 import { test } from 'node:test';
+import { keptAnchor } from '../core/design/taste-graphic.ts';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { browseFixture } from './helpers/browse-fixture.ts';
 import { parseBrowseCommand } from '../core/ref/browse/parser.ts';
-import { authorizeBrowseConsent, authorizeBrowseDestination, browseUrl, searchUrl } from '../core/ref/browse/safety.ts';
+import { authorizeBrowseConsent, authorizeBrowseDestination, authorizeCookieChoice, browseUrl, isBrowserIntegrityCheck, searchUrl } from '../core/ref/browse/safety.ts';
 import { executeBrowseCommand } from '../core/ref/browse/client.ts';
 import { runBrowseDriver } from '../core/ref/browse/driver.ts';
 import { verifyBrowseSession } from '../core/ref/browse/verification.ts';
@@ -26,6 +27,14 @@ const contract = 'a'.repeat(64);
 const route = { sourceContractSha256: contract, request: 'Inspect comparable dashboard references' };
 function temp() { return mkdtempSync(join(tmpdir(), 'omd-browse-')); }
 
+test('a scroll distance guessed as --y or --dy is the amount', () => {
+  for (const flag of ['--y', '--dy']) {
+    const parsed = parseBrowseCommand(['scroll', flag, '800']);
+    assert.equal((parsed.action as { amount: number | null }).amount, 800);
+  }
+  assert.throws(() => parseBrowseCommand(['goto', 'https://example.org', '--y', '8']), /BROWSE_USAGE/);
+});
+
 test('public assigning guide does not impersonate a sign-in navigation', () => {
   const start = parseBrowseCommand(['start', '--lane', 'domain']).action as Start;
   const guide = 'https://docs.helpscout.com/article/842-assigning-conversations';
@@ -35,6 +44,11 @@ test('public assigning guide does not impersonate a sign-in navigation', () => {
     assert.throws(() => authorizeBrowseDestination(`https://docs.example${path}`, start),
       /BROWSE_SENSITIVE_ACTION/, path);
   }
+});
+
+test('a guessed flag is answered with the verb\'s real usage line', () => {
+  assert.throws(() => parseBrowseCommand(['scroll', '--delta', '500']), /unknown or repeated --delta; usage: scroll \[--direction down\|up\|left\|right\] \[--amount <pixels>\]/);
+  assert.throws(() => parseBrowseCommand(['cookie', '--help']), /cookie \(--selector <css>\|--text <exact-text>\)/);
 });
 
 test('strict command parsing, URL builders and explicit consent refuse malformed requests', () => {
@@ -75,6 +89,9 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     assert.equal(statSync(join(root, `.omd/.cache/ref-browse/${started.sessionId}/state.json`)).mode & 0o777, 0o600);
     await assert.rejects(run(['start', '--lane', 'domain']), /BROWSE_SESSION_BUSY/);
     const search = await run(['search', 'https://design.fixture.test/search', 'dashboard layout']); assert.equal(search.ok, true, JSON.stringify(search.error));
+    // The results page itself is a wrapper; one result's original image taken from it is the item.
+    assert.equal((await run(['shot'])).observation!.retainable, false);
+    const result = await run(['shot', '--selector', '#result']); assert.equal(result.observation!.retainable, true, JSON.stringify(result.error));
     await run(['click', '--selector', '#gallery']);
     const firstScroll = await run(['scroll', '--amount', '500']); assert.ok(firstScroll.observation!.scroll.y > 0);
     const scrolled = await run(['scroll', '--amount', '500']);
@@ -119,7 +136,18 @@ test('real stateful browser: whole-screen keeps, attached details, original item
     assert.ok(pageReference.imagePath);
     assert.equal(decodePng(readFileSync(join(root, pageReference.imagePath))).width, 1280);
     const fullImage = refs.find(ref => ref.kind === 'image')!; assert.equal(fullImage.viewport, undefined, 'image pixels do not invent the pictured app CSS viewport or DPR'); assert.equal(fullImage.invariants, null);
+    // A sealed keep in .omd/refs stands for human work in a blind graphic pairing; edited pixels do not.
+    assert.equal(keptAnchor(root, fullImage.imagePath!).sha256, fullImage.acquisition!.imageSha256);
+    const anchorPath = join(root, fullImage.imagePath!), anchorBytes = readFileSync(anchorPath);
+    writeFileSync(anchorPath, Buffer.concat([anchorBytes, Buffer.from('edited')]));
+    assert.throws(() => keptAnchor(root, fullImage.imagePath!), /changed after capture/); writeFileSync(anchorPath, anchorBytes);
     const verified = verifyBrowseSession(root, ended.seal!); assert.equal(verified.seal.keeps.length, 2);
+    // A kept capture stands for human work; any other image the session merely saw does not.
+    assert.equal(keptAnchor(root, verified.seal.keeps[0]!.image.path).sha256, verified.seal.keeps[0]!.image.sha256);
+    const unkept = verified.seal.assets.find(receipt => /\/assets\/[a-f0-9]{64}\.png$/.test(receipt.path)
+      && !verified.seal.keeps.some(keep => keep.image.sha256 === receipt.sha256))!;
+    assert.ok(unkept, 'fixture session keeps a seen-but-unkept capture');
+    assert.throws(() => keptAnchor(root, unkept.path), /never kept/);
     const sheetReceipt = verified.seal.assets.find(receipt => receipt.path.includes('/sheets/') && receipt.path.endsWith('.png'))!;
     const png = decodePng(readFileSync(join(root, sheetReceipt.path))); assert.equal(png.width, 1080); assert.equal(png.height, 320);
     const debt = readBrowseConfidenceDebtRecord(root, contract); assert.equal(debt.schema, 'confidence-debt-v1'); assert.ok(debt.items.every(item => item.stage === 'scout' && item.claim === 'not-verified'));
@@ -215,6 +243,9 @@ test('unavailable account access permits a public alternative without asking for
     }),
   });
   try {
+    // The user named the public site, so keeping it without a gallery search is allowed.
+    mkdirSync(join(root, '.omd/request-sources'), { recursive: true });
+    writeFileSync(join(root, '.omd/request-sources/request.json'), JSON.stringify({ request: 'Use public.fixture.test if the account screen is closed.' }));
     await run(['start', '--lane', 'design']);
     const unavailable = await run(['goto', 'https://app.fixture.test/password', '--reason', 'Inspect whether the requested product screen is publicly accessible.']);
     assert.equal(unavailable.ok, false);
@@ -244,4 +275,47 @@ test('domain walkthrough projects real same-context asserted transitions, not di
     const summary = JSON.parse(readFileSync(join(root, `.omd/discovery/browse/${ended.sessionId}/summary.json`), 'utf8'));
     const flow = readNativeReferenceFlow(root, summary.flows[0]); assert.equal(flow.status, 'completed'); assert.equal(flow.steps[1]!.action, 'click: #tab'); assert.equal(flow.steps.length, 2);
   } finally { await driver?.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('only a silent site integrity check may POST from the reference browser', () => {
+  assert.equal(isBrowserIntegrityCheck('POST', 'https://043df3.947e1d2c.us-east-1.token.awswaf.com/a/b/mp_verify', false), true);
+  assert.equal(isBrowserIntegrityCheck('POST', 'https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/flow', false), true);
+  assert.equal(isBrowserIntegrityCheck('POST', 'https://example.com/cdn-cgi/challenge-platform/h/g/jsd', false), true);
+  // Analytics, forms, logins and any navigation stay blocked.
+  assert.equal(isBrowserIntegrityCheck('POST', 'https://dribbble.com/client_app/events', false), false);
+  assert.equal(isBrowserIntegrityCheck('POST', 'https://example.com/login', false), false);
+  assert.equal(isBrowserIntegrityCheck('POST', 'https://x.token.awswaf.com/verify', true), false);
+  assert.equal(isBrowserIntegrityCheck('PUT', 'https://x.token.awswaf.com/verify', false), false);
+  assert.equal(isBrowserIntegrityCheck('POST', 'http://x.token.awswaf.com/verify', false), false);
+  assert.equal(isBrowserIntegrityCheck('POST', 'https://token.awswaf.com.evil.example/verify', false), false);
+});
+
+test('a cookie notice is cleared only through a form-free button in the layer that covers the page', { timeout: 90_000 }, async () => {
+  const root = temp(), fixture = await browseFixture();
+  const invocation = createTestProjectRunInvocation(root), writer = createTestProjectWriteAdapter(root, invocation);
+  const drivers: Awaited<ReturnType<typeof runBrowseDriver>>[] = [];
+  let clock = 0;
+  const dependencies = { launch: async (binding: Parameters<typeof runBrowseDriver>[0]) => {
+    const driver = await runBrowseDriver(binding, { transport: fixture.transport, monotonic: () => clock += 1001 }); drivers.push(driver); return driver;
+  } };
+  const run = (args: string[]) => executeBrowseCommand(root, parseBrowseCommand(args), route, invocation, writer, dependencies);
+  try {
+    await run(['start', '--lane', 'design']);
+    await run(['goto', 'https://design.fixture.test/item', '--reason', 'Open an item page whose tab button is not a cookie notice.']);
+    const page = await run(['cookie', '--selector', '#tab']);
+    assert.equal(page.ok, false); assert.equal(page.error!.code, 'BROWSE_COOKIE_CHOICE');
+    await run(['goto', 'https://design.fixture.test/cookie', '--reason', 'Open the page that a cookie notice covers completely.']);
+    assert.equal((await run(['shot'])).observation!.retainable, false);
+    const cleared = await run(['cookie', '--text', 'Necessary only']); assert.equal(cleared.ok, true, JSON.stringify(cleared.error));
+    assert.equal(cleared.observation!.obstructions.length, 0);
+    assert.equal((await run(['shot'])).observation!.retainable, true);
+  } finally { for (const driver of drivers) await driver.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a cookie choice label never reaches purchase, account or link controls', () => {
+  const button = { selector: '#b', tag: 'BUTTON', role: null, label: 'Reject all', href: null, type: 'button', expanded: null, controls: null, download: false, box: { x: 0, y: 0, width: 10, height: 10 } };
+  assert.doesNotThrow(() => authorizeCookieChoice(button));
+  for (const control of [{ ...button, label: 'Subscribe' }, { ...button, label: 'Sign in' }, { ...button, tag: 'A', href: 'https://a.example/' }]) {
+    assert.throws(() => authorizeCookieChoice(control), /BROWSE_COOKIE_CHOICE/);
+  }
 });

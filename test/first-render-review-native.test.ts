@@ -21,6 +21,9 @@ import { FINAL_RENDER_REVIEWER_TASK } from '../core/runtime/final-render-review.
 import { publishQualitativeFeedback } from '../core/design/qualitative-feedback.ts';
 import { publishConsultedReferences } from '../core/design/consulted-references.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { usePrivateDesignerCaseFixture } from './helpers/designer-cases.ts';
+import { loadDesignerCase } from '../core/cases/index.ts';
+import { recordDesignerCaseConsultation } from '../core/design/designer-cases.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { piRoleReceiptDigest } from '../core/runtime/pi-role-receipt.ts';
 import {
@@ -28,16 +31,19 @@ import {
   LEGACY_FIRST_RENDER_REVIEW_TASK,
   LEGACY_FIRST_RENDER_REVIEW_TASK_V4,
   LEGACY_FIRST_RENDER_REVIEW_TASK_V5,
+  LEGACY_FIRST_RENDER_REVIEW_TASK_V7,
 } from '../core/design/first-render-review-contract.ts';
 
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 
 test('native early review repairs and recaptures without final evidence and reuses unchanged judgments', { timeout: 120_000 }, async t => {
+  usePrivateDesignerCaseFixture(t);
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-early-review-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const oldMode = process.env.PI_REVIEWER_FIXTURE_MODE;
   const oldTrace = process.env.PI_REVIEWER_FIXTURE_TRACE;
   t.after(() => {
+    delete process.env.PI_REVIEWER_FIXTURE_BINDING_TYPO;
     if (oldMode === undefined) delete process.env.PI_REVIEWER_FIXTURE_MODE;
     else process.env.PI_REVIEWER_FIXTURE_MODE = oldMode;
     if (oldTrace === undefined) delete process.env.PI_REVIEWER_FIXTURE_TRACE;
@@ -110,9 +116,57 @@ test('native early review repairs and recaptures without final evidence and reus
   await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /quality coverage/);
   assert.equal(existsSync(join(root, '.omd/first-render/review.json')), false);
   assert.equal(readdirSync(join(root, '.omd/first-render/reviews')).length, 2);
+  const judgmentPacket = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
+  assert.ok(judgmentPacket.evidence.designerJudgments.judgments.length > 0);
+  assert.equal(judgmentPacket.outputContract.fixedBindings.designerJudgmentsSha256,
+    judgmentPacket.evidence.designerJudgments.sha256);
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-missing-judgments';
+  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /judgment check coverage/);
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-judgment-unbound';
+  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /judgment check finding binding/);
+  // A reviewer whose context was compacted answered from a summary and is refused before its answer is read.
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'auto-compaction-event';
+  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /child-context-or-extension-failure/);
+  // A reviewer that keeps mistyping a source-owned digest gets one correction turn, then fails the exact echo.
   process.env.PI_REVIEWER_FIXTURE_MODE = 'early-revise';
+  process.env.PI_REVIEWER_FIXTURE_BINDING_TYPO = 'persist';
+  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /evidence bindings changed/);
+  // The same holds for a digest mistyped inside the answer body: one correction turn, then the parser decides.
+  process.env.PI_REVIEWER_FIXTURE_BINDING_TYPO = 'contract-persist';
+  await assert.rejects(() => runFirstRenderReview(root, invocation, t.signal), /FIRST_RENDER_REVIEW_INVALID/);
+  // A consulted private designer case reaches only the early reviewer, as whole frames bound to its digest.
+  recordDesignerCaseConsultation(root, hash('reading task'), 'fixture-hierarchy', writer);
+  const casePacket = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
+  assert.equal(casePacket.evidence.designerCases.cases[0].caseSha256, loadDesignerCase('fixture-hierarchy').sha256);
+  assert.equal(casePacket.evidence.designerCaseRenders.length, 2);
+  assert.equal(casePacket.outputContract.fixedBindings.designerCasesSha256, casePacket.evidence.designerCases.sha256);
+  // The maker's page idea reaches the reviewer as an image, never as base64 text that would overflow its context.
+  mkdirSync(join(root, '.omd/ideas'), { recursive: true });
+  const ideaPng = Buffer.from(casePacket.evidence.renders[0].pngBase64, 'base64');
+  writeFileSync(join(root, '.omd/ideas/hero-1.png'), ideaPng);
+  writeFileSync(join(root, '.omd/ideas/hero-1.json'), JSON.stringify({ prompt: 'hero composition', kind: 'page', references: [] }));
+  const ideaPacket = firstRenderReviewPacket(root, invocation).packet;
+  const ideaEvidence = JSON.parse(ideaPacket.toString('utf8')).evidence;
+  assert.deepEqual(ideaEvidence.pageIdeas.map((row: { path: string; role: string }) => [row.role, row.path]), [['page-idea', '.omd/ideas/hero-1.png']]);
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'success';
+  await runPiFirstRenderReviewer({ root, invocation, packet: ideaPacket, signal: t.signal });
+  const forgedIdea = JSON.parse(ideaPacket.toString('utf8'));
+  forgedIdea.evidence.pageIdeas[0].pngBase64 = readFileSync(join(root, '.omd/ideas/hero-1.json')).toString('base64');
+  await assert.rejects(() => runPiFirstRenderReviewer({ root, invocation, packet: Buffer.from(JSON.stringify(forgedIdea)), signal: t.signal }), /packet-page-idea-drift/);
+  const smuggled = JSON.parse(ideaPacket.toString('utf8'));
+  smuggled.evidence.taskContext = { ...smuggled.evidence.taskContext, sketch: { pngBase64: ideaPng.toString('base64') } };
+  await assert.rejects(() => runPiFirstRenderReviewer({ root, invocation, packet: Buffer.from(JSON.stringify(smuggled)), signal: t.signal }), /packet-undelivered-images/);
+  rmSync(join(root, '.omd/ideas'), { recursive: true, force: true });
+  assert.equal(existsSync(join(root, '.omd/first-render/review.json')), false);
+  assert.equal(readFileSync(join(root, 'dist/index.html'), 'utf8'), html);
+  assert.equal(readdirSync(join(root, '.omd/first-render/reviews')).length, 6);
+  process.env.PI_REVIEWER_FIXTURE_MODE = 'early-revise';
+  // One mistyped digest no longer voids the review: the reviewer copies the bindings again.
+  process.env.PI_REVIEWER_FIXTURE_BINDING_TYPO = 'contract';
   const rejected = await runFirstRenderReview(root, invocation, t.signal);
+  delete process.env.PI_REVIEWER_FIXTURE_BINDING_TYPO;
   assert.equal(rejected.decision, 'revise');
+  assert.ok(readFileSync(tracePath, 'utf8').includes('binding-repair'));
   const deliveredImages = readFileSync(tracePath, 'utf8').trim().split('\n')
     .map(line => JSON.parse(line) as { event: string; pid: number });
   assert.ok(deliveredImages.some(({ pid }) => deliveredImages
@@ -176,6 +230,9 @@ test('native early review repairs and recaptures without final evidence and reus
   const nextPacket = JSON.parse(firstRenderReviewPacket(root, invocation).packet.toString('utf8'));
   assert.deepEqual(nextPacket.evidence.priorBaselines, packet.evidence.priorBaselines);
   assert.deepEqual(nextPacket.evidence.priorRenders, packet.evidence.priorRenders);
+  assert.deepEqual(nextPacket.outputContract.resolutionTemplates.map((row: { id: string; evidence: { viewport: string; observation: null }[] }) =>
+    [row.id, row.evidence.map(item => item.viewport)]), rejected.findings.map(finding =>
+    [finding.id, finding.viewport === 'both' ? ['desktop', 'mobile'] : [finding.viewport]]));
   const currentReview = readFileSync(join(root, '.omd/first-render/review.json'));
   const originPath = join(root, `.omd/first-render/reviews/${rejected.sha256}.json`);
   const originBytes = readFileSync(originPath);
@@ -211,6 +268,42 @@ test('native early review repairs and recaptures without final evidence and reus
   assert.equal(readFirstRenderReview(root)?.bindings.previousReviewSha256, stillRejected.sha256);
   const retainedBytes = readFileSync(join(root, retained.path));
   const retainedRecord = JSON.parse(retainedBytes.toString('utf8'));
+  assert.equal(retainedRecord.schema, 'first-render-review-v8');
+  assert.ok(JSON.parse(retainedRecord.roleResult.finalMessage).judgmentChecks.length > 0);
+  // Earlier generations predate designer judgments: strip the binding and the answers they never had.
+  const withoutJudgments = (record: Record<string, any>) => {
+    delete record.bindings.designerJudgmentsSha256;
+    delete record.designerJudgmentIds;
+    const handback = JSON.parse(record.roleResult.finalMessage);
+    delete handback.judgmentChecks;
+    delete handback.fixedBindings.designerJudgmentsSha256;
+    return handback;
+  };
+  // v7 is the previous iteration-review generation: it still reads, but cannot authorize completion.
+  {
+    const legacyRecord = structuredClone(retainedRecord);
+    legacyRecord.schema = 'first-render-review-v7';
+    const handback = withoutJudgments(legacyRecord);
+    handback.schema = 'first-render-reviewer-handback-v4';
+    const legacyReceipt = legacyRecord.roleResult.authority.receipt;
+    legacyReceipt.finalMessage = canonicalJson(handback);
+    legacyRecord.roleResult.finalMessage = legacyReceipt.finalMessage;
+    legacyReceipt.taskSha256 = hash(LEGACY_FIRST_RENDER_REVIEW_TASK_V7);
+    legacyReceipt.reviewerEvidence.taskSha256 = legacyReceipt.taskSha256;
+    legacyRecord.roleResult.authority.signature = signNativeObservation(
+      root, legacyReceipt.schema, piRoleReceiptDigest(legacyReceipt));
+    const { signature: _legacySignature, ...legacyUnsigned } = legacyRecord;
+    const legacyBytes = Buffer.from(canonicalJson({
+      ...legacyUnsigned,
+      signature: signNativeObservation(root, legacyUnsigned.schema, hash(canonicalJson(legacyUnsigned))),
+    }));
+    writer.writeContentAddressed(`.omd/first-render/reviews/${hash(legacyBytes)}.json`, legacyBytes);
+    writer.write(retained.path, legacyBytes);
+    assert.equal(readFirstRenderReview(root)?.schema, 'first-render-review-v7');
+    assert.equal(readFirstRenderReview(root)?.decision, 'retain');
+    assert.throws(() => requireRetainedFirstRenderReview(root, invocation), /current review generation/);
+    writer.write(retained.path, retainedBytes);
+  }
   for (const historical of [
     { schema: 'first-render-review-v3', task: LEGACY_FIRST_RENDER_REVIEW_TASK,
       handback: 'first-render-reviewer-handback-v2', comparison: false },
@@ -224,7 +317,7 @@ test('native early review repairs and recaptures without final evidence and reus
       previousIterationCaptures: _previousIterationCaptures,
       ...historicalRecord } = structuredClone(retainedRecord);
     historicalRecord.schema = historical.schema;
-    const handback = JSON.parse(historicalRecord.roleResult.finalMessage);
+    const handback = withoutJudgments(historicalRecord);
     handback.schema = historical.handback;
     delete handback.progress;
     if (!historical.comparison) delete handback.referenceComparisons;

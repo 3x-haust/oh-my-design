@@ -171,6 +171,9 @@ export function publishFinalEvidenceV2(
   rootInput: string,
   input: unknown,
   invocation: ProjectRunInvocation,
+  // A host that approves the manifest itself (native Pi) approves these exact bytes, so the approval
+  // and the check below can never disagree about serialization.
+  approveManifest?: (bytes: Buffer) => void,
 ): string {
   const root = requireAuthority(rootInput, invocation);
   const submitted = validateFinalEvidenceV2ManifestVariant(input);
@@ -178,6 +181,7 @@ export function publishFinalEvidenceV2(
   checkCompletionPublicationPrerequisites(root, submitted, invocation);
   const manifest = validateFinalEvidenceV2ManifestVariant({ ...submitted, graphRootHash: validated.rootHash });
   const bytes = manifestBytes(manifest);
+  approveManifest?.(bytes);
   requireFinalEvidenceManifestAuthorization(invocation, root, bytes);
   const release = acquireProjectMutationLock(root, invocation);
   try {

@@ -108,64 +108,19 @@ test('MOTION-LAYOUT-THRASH does not fire when motion.properties is absent (no na
   assert.ok(!v.some((x) => x.id === 'MOTION-LAYOUT-THRASH'));
 });
 
-// ── MOTION-UNIFORM ───────────────────────────────────────────────────────────
+// ── Retired MOTION-UNIFORM ───────────────────────────────────────────────────
 
-test('MOTION-UNIFORM fires when 3+ animated nodes share one duration and only default easings', () => {
-  // 500ms ease-in-out everywhere — the canonical generated-work signature.
+test('uniform durations with keyword easings are no longer a deterministic motion warning', () => {
+  // One shared duration can be a deliberate state family; role judgment belongs to the reviewer.
   const ir = makeIr([
     { parent: null },
     { motion: { durations: [500], animationNames: [], easings: ['ease-in-out'] } },
-    { motion: { durations: [500], animationNames: [], easings: ['ease-in-out'] } },
-    { motion: { durations: [500], animationNames: [], easings: ['ease-in-out'] } },
-  ]);
-  const v = check(ir, motionRules);
-  assert.ok(v.some((x) => x.id === 'MOTION-UNIFORM'), 'expected MOTION-UNIFORM to fire');
-});
-
-test('MOTION-UNIFORM does not fire when durations vary', () => {
-  const ir = makeIr([
-    { parent: null },
-    { motion: { durations: [160], animationNames: [], easings: ['ease-out'] } },
-    { motion: { durations: [280], animationNames: [], easings: ['ease-out'] } },
-    { motion: { durations: [400], animationNames: [], easings: ['ease-out'] } },
-  ]);
-  const v = check(ir, motionRules);
-  assert.ok(!v.some((x) => x.id === 'MOTION-UNIFORM'));
-});
-
-test('MOTION-UNIFORM does not fire when a cubic-bezier is in the easing vocabulary', () => {
-  // A measured easing curve breaks the "only defaults" condition.
-  const ir = makeIr([
-    { parent: null },
-    { motion: { durations: [500], animationNames: [], easings: ['cubic-bezier(0.2,0,0,1)'] } },
-    { motion: { durations: [500], animationNames: [], easings: ['cubic-bezier(0.2,0,0,1)'] } },
-    { motion: { durations: [500], animationNames: [], easings: ['cubic-bezier(0.2,0,0,1)'] } },
-  ]);
-  const v = check(ir, motionRules);
-  assert.ok(!v.some((x) => x.id === 'MOTION-UNIFORM'));
-});
-
-test('MOTION-UNIFORM does not fire with only 2 animated nodes', () => {
-  // The rule requires at least 3 — two nodes sharing a duration is not a pattern.
-  const ir = makeIr([
-    { parent: null },
     { motion: { durations: [500], animationNames: [], easings: ['ease-in-out'] } },
     { motion: { durations: [500], animationNames: [], easings: ['ease-in-out'] } },
   ]);
   const v = check(ir, motionRules);
   assert.ok(!v.some((x) => x.id === 'MOTION-UNIFORM'));
-});
-
-test('MOTION-UNIFORM does not fire when mixed easings include a non-default keyword', () => {
-  // step-start and step-end are in the default set; a real cubic-bezier is not.
-  const ir = makeIr([
-    { parent: null },
-    { motion: { durations: [300], animationNames: [], easings: ['ease-out'] } },
-    { motion: { durations: [300], animationNames: [], easings: ['ease-out', 'cubic-bezier(0.4,0,0.2,1)'] } },
-    { motion: { durations: [300], animationNames: [], easings: ['ease-out'] } },
-  ]);
-  const v = check(ir, motionRules);
-  assert.ok(!v.some((x) => x.id === 'MOTION-UNIFORM'));
+  assert.ok(!motionRules.some((rule) => rule.id === 'MOTION-UNIFORM'));
 });
 
 // ── Invariants: new fields from ir.meta.motion ───────────────────────────────

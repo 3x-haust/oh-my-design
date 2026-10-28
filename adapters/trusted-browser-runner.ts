@@ -8,6 +8,7 @@ import {
   trustedBrowserReceiptSha256,
   type TrustedBrowserCapture,
   type TrustedBrowserReceipt,
+  type TrustedBrowserTemporalCapture,
 } from '../core/runtime/trusted-browser-receipt.ts';
 import type {
   TrustedEntrySurface,
@@ -26,6 +27,11 @@ import { sealNativeMeasurement } from '../core/measure/files.ts';
 import type { ViewRequest, ViewSpec, VisualMeasurement } from '../core/measure/types.ts';
 import { parseMeasureScope } from '../core/measure/schema.ts';
 import { BASELINE_VIEWS } from '../core/measure/types.ts';
+import {
+  captureObservedTransition,
+  clearPreActionAnimations,
+  markPreActionAnimations,
+} from './trusted-transition-capture.ts';
 
 type Binding = Readonly<{
   runId: string;
@@ -110,8 +116,17 @@ async function settleTrustedRender(page: Page): Promise<boolean> {
   } catch { return false; }
 }
 
+/**
+ * Text as a visitor reads it: a line break (<br>) or wrapped markup shows as a gap between words, but the
+ * DOM text joins them with no space. Any whitespace in the expected text therefore also matches none,
+ * so "다음 요청부터, 디자인의 과정까지." matches a heading broken after the comma. Case-insensitive, like hasText.
+ */
+export function visibleTextPattern(text: string): RegExp {
+  return new RegExp(text.trim().split(/\s+/u).map(word => word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('\\s*'), 'iu');
+}
+
 async function resultIsRendered(page: Page, selector: string, text: string): Promise<boolean> {
-  return page.locator(selector).filter({ hasText: text }).evaluateAll((elements) => {
+  return page.locator(selector).filter({ hasText: visibleTextPattern(text) }).evaluateAll((elements) => {
     const element = elements.length === 1 ? elements[0] : undefined;
     if (element === undefined) return false;
     const box = element.getBoundingClientRect();
@@ -129,7 +144,7 @@ async function resultIsRendered(page: Page, selector: string, text: string): Pro
 async function waitForRenderedResult(page: Page, selector: string, text: string): Promise<boolean> {
   const deadline = performance.now() + 2_000;
   try {
-    await page.locator(selector).filter({ hasText: text }).waitFor({ state: 'visible', timeout: 2_000 });
+    await page.locator(selector).filter({ hasText: visibleTextPattern(text) }).waitFor({ state: 'visible', timeout: 2_000 });
     do {
       if (await resultIsRendered(page, selector, text)) return true;
       await page.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame())));
@@ -398,9 +413,9 @@ async function collectEntrySurfaceFindings(
   if (screens > 1) code('route-not-exclusive');
 
   const consequence = page.locator(entry.consequence.selector);
-  const beforeVisible = await consequence.filter({ hasText: entry.consequence.beforeText })
+  const beforeVisible = await consequence.filter({ hasText: visibleTextPattern(entry.consequence.beforeText) })
     .isVisible().catch(() => false);
-  const afterSignal = consequence.filter({ hasText: entry.consequence.afterText })
+  const afterSignal = consequence.filter({ hasText: visibleTextPattern(entry.consequence.afterText) })
     .waitFor({ state: 'visible', timeout: 2_000 })
     .then(() => true, () => false);
   try {
@@ -470,22 +485,30 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   const measured: RetainedCapture[] = [];
   const pendingCaptures: { path: string; bytes: Uint8Array }[] = [];
   const measurementMethod = measuredMode ? methodIdentity(browser.version()) : undefined;
-  const capture = async (page: Page, view: ViewSpec, outcomeRef?: string): Promise<void> => {
+  const temporalCaptures: TrustedBrowserTemporalCapture[] = [];
+  const capture = async (
+    page: Page,
+    view: ViewSpec,
+    outcomeRef?: string,
+  ): Promise<TrustedBrowserCapture> => {
     if (!measuredMode) {
       const url = page.url(), bytes = await page.screenshot({ fullPage: false });
       if (page.url() !== url) throw new Error('TRUSTED_BROWSER_CAPTURE_STATE_CHANGED');
       const hash = sha256(bytes), path = join(output, `${String(captures.length).padStart(3, '0')}-sha256-${hash}.png`);
       pendingCaptures.push({ path, bytes });
-      captures.push({ path, sha256: hash, ...view.viewport, ...(outcomeRef ? { outcomeRef } : {}), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
-      return;
+      const capture = { path, sha256: hash, ...view.viewport, ...(outcomeRef ? { outcomeRef } : {}), testedUrl: new URL(view.route, 'http://127.0.0.1').href };
+      captures.push(capture);
+      return capture;
     }
     const retained = await captureMeasuredView(page, view, loadedContracts.contracts, captureContext);
     measured.push(retained);
     const path = join(output, `${String(measured.length).padStart(3, '0')}-sha256-${retained.binding.capture.sha256}.png`);
     // This is the exact buffer whose pixels and DOM facts form the immutable measurement packet.
     pendingCaptures.push({ path, bytes: retained.png });
-    captures.push({ path, sha256: retained.binding.capture.sha256, width: retained.binding.image.width, height: retained.binding.image.height,
-      ...(outcomeRef === undefined ? {} : { outcomeRef }), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
+    const capture = { path, sha256: retained.binding.capture.sha256, width: retained.binding.image.width, height: retained.binding.image.height,
+      ...(outcomeRef === undefined ? {} : { outcomeRef }), testedUrl: new URL(view.route, 'http://127.0.0.1').href };
+    captures.push(capture);
+    return capture;
   };
   const behaviorByOutcome = new Map(
     input.binding.requiredOutcomeRefs.map((outcomeRef) => [outcomeRef, new Set<string>()]),
@@ -564,13 +587,39 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
               : undefined);
           let signals = actions.length === 0 ? visibleSignals() : [];
           let releasePress: (() => Promise<void>) | undefined;
+          let temporalSample: Readonly<{
+            before: Buffer;
+            mid: Buffer;
+            animationCount: number;
+          }> | undefined;
           for (const [actionIndex, action] of actions.entries()) {
             // Prerequisite actions may legitimately consume the whole assertion timeout. Subscribe
             // immediately before the final triggering/barrier action so the bounded waiter measures
             // the resulting state rather than expiring while the script is still preparing it.
             if (actionIndex === actions.length - 1) signals = visibleSignals();
+            const temporalAction = actionIndex === actions.length - 1
+              && script.captureState !== undefined
+              && script.captureState.state !== 'default'
+              && request.browserZoom === 1
+              && ((request.viewport.width === 1280 && request.viewport.height === 900)
+                || (request.viewport.width === 390 && request.viewport.height === 844))
+              && (action.kind === 'click' || action.kind === 'press'
+                || action.kind === 'hover' || action.kind === 'focus'
+                || action.kind === 'press-start')
+              ? action
+              : undefined;
+            const temporalBefore = temporalAction !== undefined
+              ? await page.screenshot({ fullPage: false })
+              : undefined;
+            if (temporalBefore !== undefined && temporalAction !== undefined) {
+              await markPreActionAnimations(page, [
+                temporalAction.selector,
+                ...script.assertions.map(assertion => assertion.selector),
+              ]);
+            }
             actionLog.push(`${action.kind === 'reload' ? 'reload' : `${action.kind} ${action.selector}${action.kind === 'press' ? ` ${action.key}` : ''}`} @ ${viewport.width}x${viewport.height}`);
             transcript.push(action.kind === 'reload' ? 'action-reload' : `action-${action.kind}:${action.kind === 'press' ? `${action.key}:` : ''}${sha256(Buffer.from(action.selector))}`);
+            let actionSucceeded = false;
             try {
               if (action.kind === 'reload') {
                 const response = await page.reload({ waitUntil: 'load' });
@@ -614,8 +663,23 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
                 else await control.fill(action.value, { timeout: 2_000 });
               }
               if (request.browserZoom === 2) await ensureMeasuredLayoutZoom(page, request.viewport);
+              actionSucceeded = true;
             } catch {
               findings.add('required-action-unavailable');
+            }
+            if (temporalBefore !== undefined && actionSucceeded) {
+              const midpoint = await captureObservedTransition(page);
+              if (midpoint.kind === 'sample') {
+                temporalSample = {
+                  before: temporalBefore,
+                  mid: midpoint.png,
+                  animationCount: midpoint.animationCount,
+                };
+              } else {
+                transcript.push(`temporal-evidence-unavailable:${midpoint.reason}:${sha256(Buffer.from(script.outcomeRef))}:${request.viewport.width}x${request.viewport.height}`);
+              }
+            } else if (temporalBefore !== undefined) {
+              await clearPreActionAnimations(page);
             }
           }
           try {
@@ -637,7 +701,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
                 ? initiallyVisible[index] && observedSignals[index] && rendered
                 : assertion.kind === 'visible-text'
                 ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
-                : !await page.locator(assertion.selector).filter({ hasText: assertion.text })
+                : !await page.locator(assertion.selector).filter({ hasText: visibleTextPattern(assertion.text) })
                   .isVisible().catch(() => false);
               if (passed) {
                 transcript.push(`assertion-pass:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
@@ -656,8 +720,67 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             const observedUrl = new URL(page.url());
             if (observedUrl.origin !== new URL(initialUrl).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
             const state = `outcome-${sha256(Buffer.from(script.outcomeRef)).slice(0, 16)}`;
-            await capture(page, { id: `${request.id}:${state}`, viewport: request.viewport, browserZoom: request.browserZoom,
+            const settled = await capture(page, { id: `${request.id}:${state}`, viewport: request.viewport, browserZoom: request.browserZoom,
               route: pageRoute(page), state, stateRecipeSha256: digest({ focusProbe: 'Tab', scripts: input.manifest.scripts.slice(0, scriptIndex + 1).map(s => ({ ...s, actions: s.actions.filter(a => a.viewports === undefined || a.viewports.includes(viewport.id)) })) }) }, script.outcomeRef);
+            if (temporalSample !== undefined && script.captureState !== undefined
+              && script.captureState.state !== 'default') {
+              const beforeSha256 = sha256(temporalSample.before);
+              const midSha256 = sha256(temporalSample.mid);
+              if (new Set([beforeSha256, midSha256, settled.sha256]).size > 1) {
+                const temporalPath = (phase: 'before' | 'observed-intermediate', digest: string): string =>
+                  join(output, `temporal-${String(temporalCaptures.length).padStart(3, '0')}-${phase}-sha256-${digest}.png`);
+                const beforePath = temporalPath('before', beforeSha256);
+                const midPath = temporalPath('observed-intermediate', midSha256);
+                pendingCaptures.push(
+                  { path: beforePath, bytes: temporalSample.before },
+                  { path: midPath, bytes: temporalSample.mid },
+                );
+                const shared = {
+                  outcomeRef: script.outcomeRef,
+                  component: script.captureState.component,
+                  state: script.captureState.state,
+                  viewport: request.viewport,
+                } as const;
+                temporalCaptures.push(
+                  {
+                    ...shared,
+                    path: beforePath,
+                    sha256: beforeSha256,
+                    width: request.viewport.width,
+                    height: request.viewport.height,
+                    phase: 'before',
+                    captureMoment: 'pre-action/pre-actionability',
+                    playbackSampling: null,
+                  },
+                  {
+                    ...shared,
+                    path: midPath,
+                    sha256: midSha256,
+                    width: request.viewport.width,
+                    height: request.viewport.height,
+                    phase: 'observed-intermediate',
+                    captureMoment: 'natural-playback',
+                    playbackSampling: {
+                      kind: 'natural-playback',
+                      source: 'css-transition-or-waapi',
+                      timeline: 'document',
+                      timelineFraction: null,
+                      animationCount: temporalSample.animationCount,
+                    },
+                  },
+                  {
+                    ...shared,
+                    path: settled.path,
+                    sha256: settled.sha256,
+                    width: settled.width,
+                    height: settled.height,
+                    phase: 'settled',
+                    captureMoment: 'post-action-settled',
+                    playbackSampling: null,
+                  },
+                );
+              }
+            }
           } finally {
             if (releasePress !== undefined) await releasePress();
           }
@@ -751,6 +874,9 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
         state: retained.view.state, stateRecipeSha256: retained.view.stateRecipeSha256, viewport: retained.view.viewport,
         layoutViewport: { width: retained.binding.observedViewport.innerWidth, height: retained.binding.observedViewport.innerHeight } } });
     })),
+    ...(temporalCaptures.length === 0
+      ? {}
+      : { temporalCaptures: Object.freeze(temporalCaptures.map(item => Object.freeze(item))) }),
     transcript: Object.freeze(transcript),
     ...(input.manifest.entrySurface === undefined
       ? {}

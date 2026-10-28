@@ -157,7 +157,7 @@ export function parseStageWork(text: string): StageWorkPointer | null {
     stage,
     owner: typeof owner === 'string' ? owner : `${stage} owner`,
     action: autonomousReading ? 'resolve-design-reading' : recovering ? 'replan-discovery' : typeof action === 'string' ? action : 'repair-output',
-    next: autonomousReading ? 'omd schema design-language-input' : recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : action === 'stop-blocked' ? '' : `omd brief ${stage} --check --json`,
+    next: autonomousReading ? 'omd schema design-language-input' : recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : '',
     instruction: typeof instruction === 'string' ? instruction : 'Perform the owned work, then recompute stage next.',
     problems: stringList(Reflect.get(value, 'problems')),
     entryBlockers: stringList(Reflect.get(value, 'entryBlockers')),
@@ -182,7 +182,7 @@ function actionPacket(work: StageWorkPointer): string {
   return [
     `Owner: ${work.owner}`,
     `Required action: ${work.action}`,
-    `Start/check: ${work.next}`,
+    `Start/check: ${work.next || 'no command; perform the required action directly'}`,
     ...(work.referenceWork?.action === null || work.referenceWork === null ? [] : [
       `Reference action: ${work.referenceWork.action.args.length > 0 ? `omd ${work.referenceWork.action.args.join(' ')}` : work.next}`,
       `Reference reason: ${work.referenceWork.action.reason}`,
@@ -259,6 +259,15 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
           : `Automatic repairs stopped with unresolved required defects. This is not quality approval. The current artifact and evidence remain in ${cwd}.`;
         return { message: { ...message, content: [{ type: 'text' as const,
           text: [status, ...work.problems, ...work.limitations].join('\n') }] } };
+      }
+      // Reporting the stalled loop is the required action itself: keep the agent's report and stop prompting.
+      if (work?.action === 'report-stalled-first-render') {
+        task.onReferenceWork?.(null);
+        const status = koreanMessage(message, task.responseLocale)
+          ? '첫 렌더 수정이 같은 지적에서 더 나아가지 못해 최선 버전을 복원하고 멈췄습니다. 검증을 통과한 결과는 아닙니다.'
+          : 'The first-render repair loop stalled and the best version is restored. This is not verified completion.';
+        return { message: { ...message, content: [...(message.content ?? []),
+          { type: 'text' as const, text: [status, ...work.problems, ...work.limitations].join('\n') }] } };
       }
       const stageQuestion = parseUserQuestion(result.text) ?? (work?.stage === 'reference-board' && work.referenceWork?.status === 'action'
         ? await readyBridgeQuestion(task.browserConsentHome, task.browserDoctor, work.referenceWork.workSha256, task.explicitUserBrowser) : null);
@@ -401,8 +410,8 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
         const korean = koreanMessage(message, task.responseLocale);
         const stallCode = decision.stalled && work.routeSha256 !== null && !askingForPlanning ? 'OMD_REPAIR_STALLED: Three consecutive completed repairs made no material progress.\n' : '';
         const status = korean
-          ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행하고 ${work.next}로 검증합니다.` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled && work.referenceWork !== null ? '수집된 실제 화면을 판단하고 아래 소유 작업을 완료해야 합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
-          : `OMD is incomplete at ${work.stage}. ${retry ? `Next, ${work.owner} performs ${work.action}, then validates with ${work.next}.` : questions ? 'User evidence is required for the planning statements below.' : decision.stalled && work.referenceWork !== null ? 'Inspect the acquired screen and complete the owned action below.' : decision.stalled ? 'Checks repeated without owned-artifact progress, so the loop stopped.' : 'Resolve the current stage inputs.'}`;
+          ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행${work.next ? `하고 ${work.next}로 검증합니다.` : '합니다.'}` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled && work.referenceWork !== null ? '수집된 실제 화면을 판단하고 아래 소유 작업을 완료해야 합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
+          : `OMD is incomplete at ${work.stage}. ${retry ? `Next, ${work.owner} performs ${work.action}${work.next ? `, then validates with ${work.next}` : ''}.` : questions ? 'User evidence is required for the planning statements below.' : decision.stalled && work.referenceWork !== null ? 'Inspect the acquired screen and complete the owned action below.' : decision.stalled ? 'Checks repeated without owned-artifact progress, so the loop stopped.' : 'Resolve the current stage inputs.'}`;
         return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
           { type: 'text', text: `${stallCode}${status}\n\n${questions || packet}` }] } };
       }

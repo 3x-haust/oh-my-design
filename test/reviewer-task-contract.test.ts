@@ -6,6 +6,7 @@ import {
   LEGACY_FIRST_RENDER_REVIEW_TASK,
   LEGACY_FIRST_RENDER_REVIEW_TASK_V4,
   LEGACY_FIRST_RENDER_REVIEW_TASK_V5,
+  LEGACY_FIRST_RENDER_REVIEW_TASK_V7,
   firstRenderReviewTaskForSchema,
 } from '../core/design/first-render-review-contract.ts';
 
@@ -21,6 +22,16 @@ test('first-render task history preserves every signed task generation', () => {
   assert.equal(firstRenderReviewTaskForSchema('first-render-review-v3'), LEGACY_FIRST_RENDER_REVIEW_TASK);
   assert.equal(firstRenderReviewTaskForSchema('first-render-review-v4'), LEGACY_FIRST_RENDER_REVIEW_TASK_V4);
   assert.equal(firstRenderReviewTaskForSchema('first-render-review-v5'), LEGACY_FIRST_RENDER_REVIEW_TASK_V5);
-  assert.equal(firstRenderReviewTaskForSchema('first-render-review-v6'), FIRST_RENDER_REVIEW_TASK);
+  const v6 = firstRenderReviewTaskForSchema('first-render-review-v6');
+  assert.ok(v6);
+  assert.equal(sha256(v6),
+    'af9be51ed1d87e2c2f5005e35052db3a100e1cc85f61ccd05cb71e8ea45b6615');
+  assert.equal(sha256(LEGACY_FIRST_RENDER_REVIEW_TASK_V7),
+    '91a5e378f820334a5b7e1937241ca526ea9ef0c447ecda8fecde88f0b1163aae');
+  assert.equal(firstRenderReviewTaskForSchema('first-render-review-v7'), LEGACY_FIRST_RENDER_REVIEW_TASK_V7);
+  assert.notEqual(LEGACY_FIRST_RENDER_REVIEW_TASK_V7, v6);
+  assert.equal(firstRenderReviewTaskForSchema('first-render-review-v8'), FIRST_RENDER_REVIEW_TASK);
+  assert.ok(FIRST_RENDER_REVIEW_TASK.startsWith(LEGACY_FIRST_RENDER_REVIEW_TASK_V7));
+  assert.match(FIRST_RENDER_REVIEW_TASK, /judgmentChecks/);
   assert.equal(firstRenderReviewTaskForSchema('first-render-review-v2'), null);
 });

@@ -88,9 +88,12 @@ const INPUT_KEYS = [
 ];
 const INPUT_KEY_SET = new Set<string>(INPUT_KEYS);
 
-function fail(code: DesignAxisRoutingErrorCode): never {
-  throw new DesignAxisRoutingError(code);
+function fail(code: DesignAxisRoutingErrorCode, detail?: string): never {
+  throw new DesignAxisRoutingError(code, detail);
 }
+// Name the field, the value given and the allowed values; a bare enum code sent agents guessing.
+const invalid = (code: DesignAxisRoutingErrorCode, field: string, value: unknown, allowed: readonly string[]): never =>
+  fail(code, `designAxes.${field} is ${JSON.stringify(value)}; use one of ${allowed.join(', ')}`);
 
 function objectValue(input: unknown): object {
   if (typeof input !== 'object' || input === null || Array.isArray(input)) {
@@ -122,7 +125,7 @@ function taskSize(input: unknown): TaskSize {
     case 'small': return input;
     case 'medium': return input;
     case 'large': return input;
-    default: return fail('INVALID_TASK_SIZE');
+    default: return invalid('INVALID_TASK_SIZE', 'taskSize', input, ['small', 'medium', 'large']);
   }
 }
 
@@ -131,7 +134,7 @@ function failureRisk(input: unknown): FailureRisk {
     case 'low': return input;
     case 'moderate': return input;
     case 'high': return input;
-    default: return fail('INVALID_FAILURE_RISK');
+    default: return invalid('INVALID_FAILURE_RISK', 'failureRisk', input, ['low', 'moderate', 'high']);
   }
 }
 
@@ -140,7 +143,7 @@ function uxNeed(input: unknown): UxNeed {
     case 'baseline': return input;
     case 'focused': return input;
     case 'rigorous': return input;
-    default: return fail('INVALID_UX_NEED');
+    default: return invalid('INVALID_UX_NEED', 'uxNeed', input, ['baseline', 'focused', 'rigorous']);
   }
 }
 
@@ -149,7 +152,7 @@ function expressiveDesignNeed(input: unknown): ExpressiveDesignNeed {
     case 'restrained': return input;
     case 'balanced': return input;
     case 'showpiece': return input;
-    default: return fail('INVALID_EXPRESSIVE_DESIGN_NEED');
+    default: return invalid('INVALID_EXPRESSIVE_DESIGN_NEED', 'expressiveDesignNeed', input, ['restrained', 'balanced', 'showpiece']);
   }
 }
 

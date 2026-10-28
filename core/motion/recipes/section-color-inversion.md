@@ -12,7 +12,8 @@ a conceptual pivot. The inversion must correspond to a narrative event: a before
 split, a transition from problem to solution, a shift from the user's world to the
 product's. The colour change makes the pivot felt as well as read. `expressive.md`:
 "The inversion makes the change visible and felt, not just read. One inversion per page
-is usually correct; more than one is a rhythm, not a pivot."
+is usually correct; more than one is a rhythm, not a pivot." Treat that count as this
+house style's heuristic, not a universal limit.
 
 Condition against: arbitrary decoration. Using two inversions because the page has three
 sections reads as a pattern, not a moment — the technique has been applied to a grid
@@ -33,9 +34,7 @@ modes will double-invert. Test in Windows High Contrast and macOS Invert Colours
   --color-bg-dark: var(--surface-inverse);     /* dark section background */
   --color-text-dark: var(--text-inverse);      /* dark section text */
 
-  /* Duration of the transition when the inversion fires.
-     Faster than a typical content transition — the switch should read as a cut,
-     not a dissolve. 200–280ms. */
+  /* Illustrative duration for a cut-like transition rather than a long dissolve. */
   --duration-invert: 240ms;
   --ease-invert: var(--ease-out-quint);
 }
@@ -87,8 +86,8 @@ active section's theme.
 }
 
 /* Optional: a very short opacity dip on direct section children softens the
-   colour inversion by briefly fading content as the palette switches. This is
-   a compositor-only property (opacity) — no layout cost. */
+   colour inversion by briefly fading content as the palette switches. Opacity
+   usually avoids layout changes, but rendering cost still needs measurement. */
 .section > * {
   transition: opacity var(--duration-invert) var(--ease-invert);
 }
@@ -205,12 +204,10 @@ is removed.
 
 ## Performance note
 
-Background colour transitions on a sticky header trigger the paint step but not the
-layout step — the dimensions of the header do not change. On modern browsers this is
-GPU-composited for elements with `will-change: transform` already applied (a sticky
-element implicitly gets this in most implementations). The transition is not on
-`transform` or `opacity`, so it is not off-thread, but the paint cost for a single
-header background colour change is negligible.
+Background colour transitions do not change the header's geometry, but they can trigger
+painting. Sticky positioning or an unrelated `will-change: transform` does not guarantee
+GPU compositing, and the paint cost is not universally negligible. Profile the actual
+header area, effects, and device mix.
 
 Do not animate `color` on large blocks of text — at scale this triggers text-specific
 paint operations on every frame. The inversion pattern here transitions only the header's

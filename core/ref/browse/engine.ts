@@ -1,4 +1,5 @@
 import { canonicalJson, sha256 } from './json.ts';
+import { galleryPageInsteadOfWork, gotoFromSearchResults, MEMORY_PICK_NOTE, projectSearchFound, proxiedOriginal, userNamedSite } from './provenance.ts';
 import { asset, captureBrowseObservation, inspectVisible } from './observation.ts';
 import { executeBrowseAction } from './actions.ts';
 import { openBrowseBrowser, type BrowseBrowser, type BrowseBrowserDependencies } from './browser.ts';
@@ -65,24 +66,43 @@ export class BrowseEngine {
     let stale = false;
     if (this.browser && this.observation) {
       const current = await inspectVisible(this.browser.page);
+      // Pixels and text alone are not an intervention: an animated page changes its render on every frame, and a
+      // cycling headline word or a ticking counter changes its text. A changed address, control set, link set or
+      // scroll position is.
       stale = this.browser.page.url() !== this.observation.url || canonicalJson(current.controls) !== canonicalJson(this.observation.controls)
-        || canonicalJson(current.scroll) !== canonicalJson(this.observation.scroll) || current.text !== this.observation.text
-        || current.taskText !== this.observation.taskText || canonicalJson(current.linkClaims) !== canonicalJson(this.observation.linkClaims)
-        || current.renderSha256 !== this.observation.renderSha256;
+        || canonicalJson(current.scroll) !== canonicalJson(this.observation.scroll)
+        || canonicalJson(current.linkClaims) !== canonicalJson(this.observation.linkClaims);
     }
     return { ...this.result(true, 'status'), snapshotStale: stale };
+  }
+  private unshotSinceArrival(): boolean {
+    const moved = this.events.findLastIndex(event => ['goto', 'search', 'click', 'similar', 'back', 'scroll', 'cookie'].includes(event.action.verb) && event.error === null);
+    const shot = this.events.findLastIndex(event => event.action.verb === 'shot' && event.outcome === 'observed');
+    return moved >= 0 && shot < moved;
   }
   async close() { if (this.deadline) clearTimeout(this.deadline); if (this.browser) { const browser = this.browser; this.browser = null; await browser.close(); } }
   async execute(input: BrowseAction, requestId: string, expectHead: string | null): Promise<DriverReply> {
     if (expectHead !== null && expectHead !== this.head()) browseFail('BROWSE_STALE_HEAD', 'head changed; no action executed', 2);
     if (input.verb === 'status') return { result: await this.status(), events: [], assets: [], checkpoint: null, seal: this.seal };
+    // Keeping the screen in view is what a keep without a capture means: when the page moved since the last shot
+    // (or was never shot), take that shot first instead of refusing, so a keep costs one command.
+    if (input.verb === 'keep' && !input.capture && this.browser && !this.seal && this.unshotSinceArrival()) {
+      const shot = await this.execute({ verb: 'shot', selector: null, screenId: null, state: null, assertVisible: [], assertHidden: [] }, requestId, null);
+      if (!shot.result.ok) return shot;
+      const kept = await this.execute(input, requestId, null);
+      return { ...kept, events: [...shot.events, ...kept.events], assets: [...shot.assets, ...kept.assets] };
+    }
     if (this.seal) {
       if (input.verb !== 'end') browseFail('BROWSE_ENDED', 'session already finalized', 2);
       return { result: this.result(true, 'sealed'), events: [], assets: [], checkpoint: null, seal: this.seal };
     }
     this.stop ??= evaluateBrowseStop(this.budget, this.now(), this.saturated());
     if (input.verb !== 'end' && (this.budget.metadataEvents >= 128 || this.events.length >= 498)) this.stop = 'budget';
-    if ((this.stop && ACQUISITION.has(input.verb)) || (input.verb !== 'end' && (this.budget.metadataEvents >= 128 || this.events.length >= 498))) return { result: this.result(false, 'budget-exhausted'), events: [], assets: [], checkpoint: null, seal: null };
+    if ((this.stop && ACQUISITION.has(input.verb)) || (input.verb !== 'end' && (this.budget.metadataEvents >= 128 || this.events.length >= 498))) {
+      return { result: this.result(false, 'budget-exhausted', { code: 'BROWSE_BUDGET', message: 'BROWSE_BUDGET: this session reached its time or action budget. '
+        + 'End it (omd ref browse end --reason budget --session <id>), which files its keeps, then start another session to keep looking.' }),
+      events: [], assets: [], checkpoint: null, seal: null };
+    }
     if (ACQUISITION.has(input.verb) && !['shot', 'crop'].includes(input.verb)) {
       const url = input.verb === 'goto' ? input.url : input.verb === 'search' ? searchUrl(input.provider, input.query, input.queryParam) : this.observation?.url;
       const origin = url ? new URL(url).origin : 'none';
@@ -108,7 +128,7 @@ export class BrowseEngine {
         if (this.observation && (await this.status()).snapshotStale) {
           this.record({ verb: 'external-intervention', reason: 'Page changed outside a recorded command; prior flow continuity is broken.' }, requestId);
           this.observation = null;
-          if (['click', 'similar', 'back'].includes(action.verb)) browseFail('BROWSE_EXTERNAL_INTERVENTION', 'take a fresh shot or choose an explicit root before continuing');
+          if (['click', 'similar', 'cookie', 'back'].includes(action.verb)) browseFail('BROWSE_EXTERNAL_INTERVENTION', 'take a fresh shot or choose an explicit root before continuing');
         }
         if (action.verb === 'crop') {
           const parent = action.reference ?? this.keeps.at(-1)?.id ?? null;
@@ -117,14 +137,16 @@ export class BrowseEngine {
           action = { ...action, reference: parent };
         }
         const beforeUrl = this.observation?.url ?? null;
-        const timeout = Math.max(1, Math.min(15_000, Date.parse(this.budget.deadline) - this.now()));
+        // The deadline gates starting an action; one started just before it still gets time to load and settle.
+        const timeout = Math.max(8_000, Math.min(15_000, Date.parse(this.budget.deadline) - this.now()));
         const target = await executeBrowseAction(this.browser.page, action, this.binding.start, this.observation, timeout);
         if (action.verb === 'search') this.searchPage = true;
         if (['goto', 'click', 'similar', 'back'].includes(action.verb)) this.searchPage = false;
         const captured = await captureBrowseObservation(this.browser.page, this.browser.document, this.binding.sessionId, {
           ...(action.verb === 'crop' ? { selector: action.selector } : {}),
           ...(action.verb === 'shot' && action.selector ? { wholeImageSelector: action.selector, media: this.browser.media } : {}), search: this.searchPage,
-          ...('readySelector' in action ? { readySelector: action.readySelector } : {}), timeout });
+          ...('readySelector' in action ? { readySelector: action.readySelector } : {}), timeout,
+          oneFrame: this.binding.start.lane === 'design' });
         if (action.verb === 'crop') {
           const parentId = action.reference, parent = this.keeps.find(keep => keep.id === parentId)!;
           if (captured.observation.screenshot.sha256 !== parent.image.sha256) browseFail('BROWSE_DETAIL_STATE', 'zoom detail must be an exact region of the kept whole viewport; keep the changed screen first. Gallery DOM cannot crop an original item image.');
@@ -145,6 +167,20 @@ export class BrowseEngine {
           && (referenceServiceFamily(reference.source) === referenceServiceFamily(candidate.source) || reference.acquisition?.imageSha256 === candidate.image.sha256))) {
           browseFail('BROWSE_LANE_OVERLAP', 'the other lane already uses this service family or these pixels');
         }
+        // On a gallery the reference is the work, not the gallery page around it with its header, comments and ads.
+        const shotEvent = this.events.find(item => item.hash === capture);
+        const shot = shotEvent?.observation ? this.observations.get(shotEvent.observation.sha256) : undefined;
+        if (this.binding.start.lane === 'design' && shot !== undefined && galleryPageInsteadOfWork(shot)) {
+          browseFail('BROWSE_KEEP_GALLERY_PAGE', `${shot.url} is a gallery page; keep the work itself: shot --selector <the work's img> (add >> nth=<index> when several match), then keep`);
+        }
+        // Refused here rather than first at omd ref context, so a page picked from memory costs one call, not a round.
+        const arrival = this.events.findLastIndex(event => ['goto', 'search', 'click'].includes(event.action.verb) && event.error === null);
+        const opened = arrival < 0 ? null : this.events[arrival]!;
+        if (this.binding.start.lane === 'design' && opened?.action.verb === 'goto' && typeof opened.action.url === 'string'
+          && !gotoFromSearchResults(opened.action.url, this.events.slice(0, arrival), this.observations)
+          && !projectSearchFound(this.binding.root, opened.action.url) && !userNamedSite(this.binding.root, opened.action.url)) {
+          browseFail('BROWSE_KEEP_UNSEARCHED', `${opened.action.url}: ${MEMORY_PICK_NOTE}`);
+        }
         this.record(action, requestId);
       } else if (action.verb === 'drop') {
         const keepId = action.keep;
@@ -164,7 +200,11 @@ export class BrowseEngine {
       const code = action.verb === 'start' ? 'BROWSE_BROWSER_CAPABILITY_GAP' : error instanceof BrowseError ? error.code : 'BROWSE_ACTION_FAILED';
       if (action.verb === 'start') this.stop = 'interrupted';
       // Playwright diagnostics can contain credentials/HTML. Persist bounded native codes, not raw browser traffic.
-      const message = error instanceof BrowseError ? error.message : 'Browser action could not produce a coherent read-only observation.';
+      // A timeout's name says what to do next without exposing page content.
+      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      const message = error instanceof BrowseError ? error.message : timedOut
+        ? 'The page did not load or settle in time; shot again, or move on to another page.'
+        : 'Browser action could not produce a coherent read-only observation.';
       this.record(action.verb === 'start' ? { ...action, cdpUrl: null } : action, requestId, { outcome: error instanceof BrowseError ? 'blocked' : 'failed', finalUrl: null, error: { code, message } });
       if (ACQUISITION.has(action.verb)) this.failedRequests.add(attemptKey);
     }
@@ -189,7 +229,12 @@ export class BrowseEngine {
           'Popups are excluded; authenticated material is private study-only. Dynamic visual probes are not measured.'] });
     }
     const last = this.events.at(-1)!;
-    return { result: { ...this.result(last.error === null, this.seal ? 'sealed' : last.outcome, last.error ?? undefined), ...(contactSheet ? { contactSheet } : {}) },
+    const original = action.verb === 'shot' && last.error === null ? proxiedOriginal(this.observation?.mediaUrl ?? null) : null;
+    const memoryPick = action.verb === 'goto' && last.error === null && this.binding.start.lane === 'design'
+      && !gotoFromSearchResults(action.url, this.events, this.observations);
+    return { result: { ...this.result(last.error === null, this.seal ? 'sealed' : last.outcome, last.error ?? undefined), ...(contactSheet ? { contactSheet } : {}),
+      ...(memoryPick ? { note: MEMORY_PICK_NOTE } : {}),
+      ...(original !== null ? { note: `This is the search engine's small thumbnail. Full-size original: ${original} — open it with omd ref browse goto <that url> --reason "...", then shot --selector img and keep that instead.` } : {}) },
       events: this.events.slice(first), assets: [...this.assets.values()].filter(item => !knownAssets.has(item.receipt.sha256)), checkpoint: prefix, seal: this.seal };
   }
 }

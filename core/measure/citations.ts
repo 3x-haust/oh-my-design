@@ -42,7 +42,20 @@ export class MeasurementIndex {
       if (packet.summary.deterministicVerdict !== 'PASS' || packet.findings.some(f => f.severity === 'blocking' && f.viewIds.includes(viewId) && (!f.axes.length || f.axes.includes(axis)))) v.fail('deterministic RED/incomplete scope cannot be overruled by GREEN');
       kinds.add(measurement.kind);
     }
-    if (AXIS_METRICS[axis].some(kind => !kinds.has(kind))) v.fail(`axis ${axis} omitted a mandatory measured inventory`);
+    // The reviewer's judgment is the cited view; the remaining inventories of that view are fixed by the packets, so a
+    // kind the reviewer left out is taken from the native measurement when it is complete and its packet passed.
+    // Only a kind with no complete passing measurement for the view is a real gap.
+    const implied = (kind: MetricKind): boolean => [...this.#packets.values()].some(packet => packet.summary.deterministicVerdict === 'PASS'
+      && !packet.findings.some(f => f.severity === 'blocking' && f.viewIds.includes(viewId) && (!f.axes.length || f.axes.includes(axis)))
+      && packet.measurements.some(m => m.kind === kind && m.viewIds.includes(viewId) && m.coverage.status === 'complete'));
+    const missing = AXIS_METRICS[axis].filter(kind => !kinds.has(kind) && !implied(kind));
+    if (missing.length) {
+      // Name what to add: each missing kind and the complete measurement ids that cover this view.
+      const available = missing.map(kind => `${kind} [${[...this.#packets].flatMap(([packetSha256, packet]) => packet.measurements
+        .filter(m => m.kind === kind && m.viewIds.includes(viewId) && m.coverage.status === 'complete')
+        .map(m => `packet ${packetSha256} measurement ${m.id}`)).slice(0, 4).join(', ') || 'none measured'}]`);
+      v.fail(`axis ${axis} omitted a mandatory measured inventory for ${viewId}; also cite ${available.join('; ')}`);
+    }
   }
 }
 export type SlopMeasurementDecision = { id: string; status: 'confirmed' | 'dismissed'; reason: string; viewIds: string[]; measurementRefs: MeasurementRef[]; disposition: 'not-present-in-render' | 'contextual-exception' | 'repair-required'; contractEvidenceRefs: { receipt: Receipt; field: string }[] };

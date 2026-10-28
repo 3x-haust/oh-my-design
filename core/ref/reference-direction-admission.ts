@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isModelLedProcess } from '../route/process-policy.ts';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { PiRoleResult } from '../runtime/pi-role-receipt.ts';
@@ -337,7 +338,9 @@ export function planReferenceDirectionReview(root: string, input: Readonly<{
     return !prior.some(row => row.sourceId === refIdentity(reference.source, reference.component)
       && row.imageSha256 === sha256(image)
       && row.captureSha256 === sha256(capture));
-  }).sort((a, b) => refIdentity(a.source, a.component).localeCompare(refIdentity(b.source, b.component)));
+  // Finished-site pages are the primary candidates, so they are reviewed first when one packet cannot hold everything.
+  }).sort((a, b) => Number(a.kind === 'image') - Number(b.kind === 'image')
+    || refIdentity(a.source, a.component).localeCompare(refIdentity(b.source, b.component)));
   const selected: Reference[] = [];
   let packet: Buffer | null = null;
   for (const reference of fresh) {
@@ -601,7 +604,10 @@ function currentReferenceDirectionBinding(root: string): Readonly<{ sourceContra
     if (sha256(bytes) !== expected) fail('REFERENCE_DIRECTION_ROUTE_INVALID');
     const record = object(JSON.parse(bytes.toString('utf8')), 'REFERENCE_DIRECTION_ROUTE_INVALID');
     const references = object(record.references, 'REFERENCE_DIRECTION_ROUTE_INVALID');
-    return references.decision === 'discover' ? Object.freeze({
+    // A model-led route browses and keeps references itself, so its keeps are reviewed the same way.
+    const modelLed = typeof record.sourceContract === 'object' && record.sourceContract !== null
+      && isModelLedProcess(record.sourceContract as Parameters<typeof isModelLedProcess>[0]);
+    return references.decision === 'discover' || modelLed ? Object.freeze({
       sourceContractSha256: digest(record.sourceContractSha256, 'REFERENCE_DIRECTION_ROUTE_INVALID'),
       task: text(record.request, 'REFERENCE_DIRECTION_ROUTE_INVALID'),
     }) : null;

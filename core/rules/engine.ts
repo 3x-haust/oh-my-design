@@ -29,7 +29,9 @@ export const CONTEXTUAL_COPY_RULE_IDS = new Set([
 type Compiled = Script;
 
 const cache = new Map<string, Compiled>();
-const RULE_EVALUATION_TIMEOUT_MS = 250;
+// Bounds a runaway rule. A fresh VM context is slow to create while reviewers and browsers load the machine;
+// at 250ms a one-line rule timed out and failed a whole completion run.
+const RULE_EVALUATION_TIMEOUT_MS = 2000;
 
 function compile(ruleId: string, expr: string): Compiled {
   const key = ruleId + ' ' + expr;

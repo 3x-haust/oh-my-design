@@ -12,7 +12,7 @@ export function reviewProfileBinding(lane: ProfileReviewLane) {
 }
 export function measuredReviewerTask(lane: ProfileReviewLane): string {
   const profile = trustedReviewProfile(lane);
-  const task = lane === 'blindLane' ? 'Judge only the anonymous production images and native measurements, never maker rationale or reference images.'
+  const task = lane === 'blindLane' ? 'Judge only the anonymous production images and native measurements, never maker rationale or reference images. Optional temporal renders supplement comparison of observed states; they are not additional required measured views. Use settled measured renders for static design quality. A sampled intermediate frame does not establish the whole progression, speed, smoothness, input latency, interruption, reduced-motion parity or reference timing. The control-accessibility measurement covers form fields only (input, select, textarea): an empty list on a page without form fields is complete coverage, not missing evidence; judge buttons and links from the captures and the behavior evidence.'
     : lane === 'fidelityLane' ? 'Compare the production images against the supplied approved contracts and reference context. Complete every supplied consulted-reference component, state, viewport and digest comparison; a non-pass comparison requires findings and RED reference fidelity.'
     : 'Audit the native evidence, current source bindings, and publication protocol; do not replace deterministic checks with a judgment.';
   // Exactly one trusted profile body reaches the isolated task. Its digest also binds the system

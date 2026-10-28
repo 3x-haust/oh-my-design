@@ -8,8 +8,8 @@ const ACTION_KEYS: Record<BrowseAction['verb'], readonly string[]> = {
   start: ['lane', 'mode', 'cdpUrl', 'userOptIn', 'headed', 'allowAuthOrigins', 'allowPricing', 'budgetActions', 'budgetMinutes', 'viewport'],
   goto: ['url', 'reason', 'scope', 'sourceId', 'flowId', 'readySelector'],
   search: ['provider', 'query', 'queryParam', 'querySelector', 'submitSelector', 'scope', 'readySelector'],
-  scroll: ['direction', 'amount', 'selector', 'readySelector'], click: ['selector', 'text', 'readySelector'], similar: ['selector', 'text', 'readySelector'],
-  back: ['readySelector'], shot: ['selector', 'screenId', 'state', 'assertVisible', 'assertHidden'], crop: ['selector', 'reference', 'as', 'slot'],
+  scroll: ['direction', 'amount', 'selector', 'readySelector'], click: ['selector', 'text', 'readySelector'], similar: ['selector', 'text', 'readySelector'], cookie: ['selector', 'text', 'readySelector'],
+  back: ['readySelector'], challenge: ['method', 'x', 'y', 'toX', 'toY', 'text', 'submit'], shot: ['selector', 'screenId', 'state', 'assertVisible', 'assertHidden'], crop: ['selector', 'reference', 'as', 'slot'],
   keep: ['sourceApp', 'capture', 'lane', 'reason', 'role', 'direction', 'rights', 'rightsNotes'], drop: ['keep', 'reason'],
   'contact-sheet': ['page', 'columns'], status: [], end: ['reason'], 'external-intervention': ['reason'],
 };

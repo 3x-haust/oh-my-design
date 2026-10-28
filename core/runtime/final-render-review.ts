@@ -203,7 +203,7 @@ export function finalRenderReviewerPacket(input: Readonly<{
     parsed.observationSha256s,
   );
   const developerCalibration = currentDeveloperCalibration(root, input.invocation);
-  if (requiresMeasuredTerminal(route) && developerCalibration === null) {
+  if (requiresMeasuredTerminal(route)) {
     return measuredFinalRenderPacket(root, input.invocation, parsed.observationSha256s);
   }
   const rows = browser.observations.flatMap((item) => {

@@ -4,7 +4,7 @@ import { spawn, fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import { channel } from 'node:diagnostics_channel';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from 'playwright';
@@ -137,4 +137,46 @@ test('pending command retry is replay-safe and an unacknowledged click is publis
     const response = await fetch(driver!.endpoint, { method: 'POST', headers: { authorization: `Bearer ${driver!.capability}`, 'content-type': 'application/json' }, body: JSON.stringify({ ticket: afterEnd, args: pending }) });
     assert.equal(response.status, 200); assert.equal(await response.json(), null);
   } finally { await driver?.close(); await fixture.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+test('keep accepts the ref context role words primary and supplemental', () => {
+  const keep = (role: string) => parseBrowseCommand(['keep', '--role', role, '--reason', 'kept for its first-screen hierarchy and light']);
+  assert.equal((keep('primary').action as { role: string }).role, 'visual-direction');
+  assert.equal((keep('supplemental').action as { role: string }).role, 'component-support');
+  assert.equal((keep('task-flow').action as { role: string }).role, 'task-flow');
+  assert.throws(() => keep('hero'), /--role: visual-direction\|component-support\|task-flow/);
+});
+
+test('a dead driver never blocks research: end needs no reason and a new start seals the old session first', { timeout: 90_000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-recovery-start-'));
+  const invocation = createTestProjectRunInvocation(root), writer = createTestProjectWriteAdapter(root, invocation);
+  const current = { sourceContractSha256: 'a'.repeat(64), request: 'Inspect reference screens' };
+  const children: ReturnType<typeof fork>[] = [];
+  const launch = async (binding: Binding) => {
+    const child = fork(fileURLToPath(new URL('../core/ref/browse/daemon.ts', import.meta.url)), [], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'], execArgv: [] });
+    children.push(child);
+    const ready = once(child, 'message', { signal: AbortSignal.timeout(15_000) }); child.send(binding);
+    const [value] = await ready; assert.equal(value.ready, true); return value as BrowseConnection;
+  };
+  const kill = async (child: ReturnType<typeof fork>) => { const exited = once(child, 'exit', { signal: AbortSignal.timeout(10_000) }); child.kill('SIGKILL'); await exited; };
+  try {
+    const first = await executeBrowseCommand(root, parseBrowseCommand(['start', '--lane', 'design', '--budget-minutes', '0.5']), current, invocation, writer, { launch });
+    await kill(children[0]!);
+    const second = await executeBrowseCommand(root, parseBrowseCommand(['start', '--lane', 'design', '--budget-minutes', '0.5']), current, invocation, writer, { launch });
+    assert.notEqual(second.sessionId, first.sessionId);
+    // A session opened after another gets its own window rather than the minutes the earlier one had left.
+    assert.ok(Date.parse(second.budget.deadline) > Date.parse(first.budget.deadline));
+    assert.equal(existsSync(join(root, `.omd/discovery/browse/${first.sessionId}/summary.json`)), true);
+    await kill(children[1]!);
+    const ended = await executeBrowseCommand(root, parseBrowseCommand(['end', '--reason', 'complete']), current, invocation, writer);
+    assert.equal(ended.outcome, 'recovered-interrupted');
+    // After the first window has passed, a later session (graphics after the build) still gets its own time window.
+    const firstDeadline = Date.parse(first.budget.deadline);
+    await new Promise(done => setTimeout(done, Math.max(0, firstDeadline - Date.now()) + 500));
+    const third = await executeBrowseCommand(root, parseBrowseCommand(['start', '--lane', 'design', '--budget-minutes', '0.5']), current, invocation, writer, { launch });
+    assert.ok(Date.parse(third.budget.deadline) > Date.now());
+  } finally {
+    for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+    rmSync(root, { recursive: true, force: true });
+  }
 });

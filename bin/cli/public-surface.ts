@@ -1,7 +1,7 @@
 export const PUBLIC_COMMANDS = [
   '--version', 'help', 'lifecycle', 'route', 'schema', 'stage', 'guard', 'ref',
-  'feedback', 'language', 'ai-judgment', 'locale', 'first-render', 'render', 'check',
-  'probe', 'slop', 'lighthouse', 'measure', 'figma', 'target', 'pack', 'doctor',
+  'feedback', 'language', 'ai-judgment', 'locale', 'first-render', 'render', 'record', 'check',
+  'probe', 'slop', 'lighthouse', 'measure', 'figma', 'target', 'taste', 'scaffold', 'brief', 'imagegen', 'pack', 'doctor',
   'browser', 'coach', 'learn', 'usage', 'hash',
 ] as const;
 
@@ -21,6 +21,7 @@ export const PUBLIC_SCHEMA_NAMES = new Set([
   'locale-contract',
   'locale-design-context',
   'cultural-design-profile',
+  'design-brief',
 ]);
 
 export const PUBLIC_REF_COMMANDS = [

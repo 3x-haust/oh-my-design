@@ -27,6 +27,7 @@ import { clearReferenceNotices, suspendReferenceScriptsForShot, type NoticeDismi
 import { isNearUniformBlankCapture } from '../ref/blank-capture.ts';
 import type { ReferenceJudgmentBinding } from '../ref/judgment-policy.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
+import { graphicRenderRecordPath, pictureRaster, RASTER_DOMINANT_SHARE, type GraphicRenderRecord } from './graphic-render-record.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 const MAX_NODES = 4000;
@@ -417,6 +418,117 @@ export function renderPage(target: string, opts: { viewport: Viewport; out: stri
     await writeScreenshot(() => page.screenshot({ fullPage: opts.fullPage === true }), requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.out);
     return opts.out;
   });
+}
+
+/**
+ * Render a graphic built in code (HTML/CSS/SVG/WebGL) into a shippable image at 2x. The page may set
+ * `window.__ready = true` once a canvas has drawn; otherwise fonts and network idle decide. With a
+ * selector only that element is captured, and `transparent` keeps the page background out of it.
+ */
+export async function renderGraphic(target: string, opts: {
+  viewport: Viewport; out: string; selector?: string; transparent?: boolean; adapter: ProjectWriteAdapter;
+  /** Advisory: called once per raster image the 2x capture would have to enlarge. */
+  warn?: (message: string) => void;
+}): Promise<string> {
+  const { chromium } = await import('playwright');
+  const resolved = await resolveTarget(target);
+  const browser = await chromium.launch({ headless: true, args: ['--ignore-gpu-blocklist'] });
+  try {
+    const page = await browser.newPage({ viewport: opts.viewport, deviceScaleFactor: 2 });
+    // Every large raster the graphic page loads, whether placed as <img> or mapped onto a WebGL plane as a texture:
+    // a screenshot on a 3D card is still a screenshot.
+    const loadedRasters: { name: string; bytes: number }[] = [];
+    const reading: Promise<void>[] = [];
+    page.on('response', response => {
+      const type = response.headers()['content-type'] ?? '';
+      if (!/^image\/(?:png|jpe?g|webp|avif|gif)/i.test(type)) return;
+      reading.push(response.body().then(body => {
+        if (pictureRaster(body)) loadedRasters.push({ name: response.url().split('/').pop()?.split('?')[0] ?? response.url(), bytes: body.length });
+      }).catch(() => undefined));
+    });
+    await page.goto(resolved.url, { waitUntil: 'networkidle', timeout: 30_000 });
+    await page.evaluate(browserCallback(async () => {
+      await document.fonts.ready;
+      const flagged = document.querySelector('canvas') !== null;
+      const started = Date.now();
+      while (flagged && Reflect.get(window, '__ready') !== true && Date.now() - started < 15_000) {
+        await new Promise(done => setTimeout(done, 100));
+      }
+    }));
+    await page.waitForTimeout(200);
+    // A raster drawn larger than half its pixels is enlarged in the 2x image and reads soft beside sharp type.
+    const soft = await page.evaluate(browserCallback((selector: string | null) => {
+      const scope = selector ? document.querySelector(selector) : document.body;
+      return [...(scope?.querySelectorAll('img') ?? [])].flatMap(image => {
+        const box = image.getBoundingClientRect();
+        const scale = image.naturalWidth ? box.width * 2 / image.naturalWidth : 0;
+        return image.complete && box.width > 0 && scale > 1.1
+          ? [{ src: image.currentSrc.split('/').pop() ?? '', natural: `${image.naturalWidth}x${image.naturalHeight}`,
+            drawn: `${Math.round(box.width)}x${Math.round(box.height)}`, scale: Math.round(scale * 10) / 10 }] : [];
+      });
+    }), opts.selector ?? null);
+    for (const image of soft) {
+      opts.warn?.(`omd render --graphic: ${image.src} has ${image.natural} pixels but is drawn at ${image.drawn} CSS px, `
+        + `so the 2x image enlarges it ${image.scale}x and it will look soft. Build it in code or use a source at least twice its drawn size.`);
+    }
+    const largestRaster = await page.evaluate(browserCallback((selector: string | null) => {
+      const scope = selector ? document.querySelector(selector) : document.documentElement;
+      if (!scope) return null;
+      const frame = selector ? scope.getBoundingClientRect() : new DOMRect(0, 0, innerWidth, innerHeight);
+      const area = frame.width * frame.height;
+      if (area <= 0) return null;
+      const rasters = [...scope.querySelectorAll('*')].flatMap(element => {
+        const background = getComputedStyle(element).backgroundImage.match(/url\(["']?([^"')]+)/)?.[1];
+        const src = element instanceof HTMLImageElement ? element.currentSrc : background;
+        if (!src || /\.svg(?:[?#]|$)|^data:image\/svg/i.test(src)) return [];
+        const box = element.getBoundingClientRect();
+        const w = Math.min(box.right, frame.right) - Math.max(box.left, frame.left);
+        const h = Math.min(box.bottom, frame.bottom) - Math.max(box.top, frame.top);
+        return w > 0 && h > 0 ? [{ src: src.split('/').pop() ?? src, share: Math.round(w * h / area * 100) / 100 }] : [];
+      });
+      return rasters.sort((a, b) => b.share - a.share)[0] ?? null;
+    }), opts.selector ?? null);
+    const webglShare = await page.evaluate(browserCallback((selector: string | null) => {
+      const scope = selector ? document.querySelector(selector) : document.documentElement;
+      if (!scope) return 0;
+      const frame = selector ? scope.getBoundingClientRect() : new DOMRect(0, 0, innerWidth, innerHeight);
+      const area = frame.width * frame.height;
+      if (area <= 0) return 0;
+      // A canvas that already holds a 2D context answers null for WebGL, so only WebGL canvases count.
+      const covered = [...scope.querySelectorAll('canvas')].reduce((sum, canvas) => {
+        const webgl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+        if (webgl === null) return sum;
+        const box = canvas.getBoundingClientRect();
+        const w = Math.min(box.right, frame.right) - Math.max(box.left, frame.left);
+        const h = Math.min(box.bottom, frame.bottom) - Math.max(box.top, frame.top);
+        return w > 0 && h > 0 ? sum + w * h : sum;
+      }, 0);
+      return Math.round(Math.min(1, covered / area) * 100) / 100;
+    }), opts.selector ?? null);
+    const capture = opts.selector
+      ? async () => {
+        const element = page.locator(opts.selector!).first();
+        if (await element.count() === 0) throw new Error(`omd render --graphic: selector matched nothing: ${opts.selector}`);
+        return element.screenshot({ omitBackground: opts.transparent === true });
+      }
+      : () => page.screenshot({ omitBackground: opts.transparent === true });
+    const adapter = requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter);
+    const bytes = await capture();
+    await Promise.all(reading);
+    const written = adapter.write(projectOutputPath(adapter, opts.out), bytes);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const record: GraphicRenderRecord = { schema: 'graphic-render-v1', path: projectOutputPath(adapter, opts.out), sha256, largestRaster, webglShare,
+      loadedRasters: [...new Set(loadedRasters.map(raster => raster.name))] };
+    adapter.write(graphicRenderRecordPath(sha256), `${JSON.stringify(record, null, 2)}\n`);
+    if (largestRaster !== null && largestRaster.share >= RASTER_DOMINANT_SHARE) {
+      opts.warn?.(`omd render --graphic: ${largestRaster.src} covers ${Math.round(largestRaster.share * 100)}% of the graphic. A screenshot or photo `
+        + 'placed in a frame is an image, not a graphic; omd taste graphic refuses it. Build the explanation in code.');
+    }
+    return written;
+  } finally {
+    await browser.close();
+    await resolved.close();
+  }
 }
 
 /**
@@ -822,7 +934,9 @@ export async function capturePageForRef(
     opts.deadline?.assertLive();
     if (opts.requireImageElement) {
       const candidates = await collectGalleryImageCandidates(page);
-      const candidateText = candidates.length === 0 ? 'candidates: none currently meet the loaded, visible 100x100 image criteria'
+      const candidateText = candidates.length === 0 ? 'candidates: none currently meet the loaded, visible 100x100 image criteria '
+        + '(galleries often load the work late or only in a real session): open it in your browse session instead with omd ref browse goto <url> '
+        + '--reason "...", then shot --selector <the work\'s img> and keep'
         : `candidates: ${candidates.map(candidate => `${candidate.selector} (${Math.round(candidate.width)}x${Math.round(candidate.height)})`).join('; ')}`;
       if (!opts.selector || !opts.shotOut) throw new Error(`DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image and retain its screenshot; ${candidateText}`);
       const eligible = await page.locator(opts.selector).evaluateAll(browserCallback((elements: Element[]) => {

@@ -19,7 +19,7 @@ const REQUIRED_HEADINGS = [
   '## Performance note',
 ];
 
-// ── Exactly 12 recipe files ──────────────────────────────────────────────────
+// ── Exactly 14 recipe files ──────────────────────────────────────────────────
 const EXPECTED_RECIPES = [
   'split-text-entrance.md',
   'scroll-reveal.md',
@@ -33,6 +33,8 @@ const EXPECTED_RECIPES = [
   'image-hover-distortion.md',
   'view-transitions.md',
   'parallax.md',
+  'hero-intro-sequence.md',
+  'scroll-scene-timeline.md',
 ];
 
 test('core/motion/easing.md exists', () => {
@@ -43,19 +45,19 @@ test('core/motion/recipes/ directory exists', () => {
   assert.ok(existsSync(recipesDir), `recipes directory not found at ${recipesDir}`);
 });
 
-test('all 12 expected recipe files exist', () => {
+test('all 14 expected recipe files exist', () => {
   for (const name of EXPECTED_RECIPES) {
     const path = join(recipesDir, name);
     assert.ok(existsSync(path), `missing recipe: ${name}`);
   }
 });
 
-test('recipes directory contains exactly 12 .md files', () => {
+test('recipes directory contains exactly 14 .md files', () => {
   const files = readdirSync(recipesDir).filter((f) => f.endsWith('.md'));
   assert.equal(
     files.length,
-    12,
-    `expected 12 recipe files, found ${files.length}: ${files.join(', ')}`
+    14,
+    `expected 14 recipe files, found ${files.length}: ${files.join(', ')}`
   );
 });
 
@@ -139,4 +141,35 @@ test('every recipe references transform or opacity in its Implementation section
       `${name}: Implementation section does not reference transform or opacity`
     );
   }
+});
+
+// ── Licence policy: recipes only depend on free, unrestricted packages ───────
+
+const PERMISSIVE_PACKAGES = new Set(['react', 'react-dom', 'react-router-dom', 'framer-motion', 'motion', 'lenis', 'three']);
+
+function importedPackages(text: string): string[] {
+  const specifiers = [...text.matchAll(/(?:from\s+|import\(\s*)'([^']+)'/g)].map(match => match[1] ?? '');
+  return specifiers
+    .filter(spec => !spec.startsWith('.') && !spec.startsWith('https://'))
+    .map(spec => spec.startsWith('@') ? spec.split('/').slice(0, 2).join('/') : spec.split('/')[0] ?? spec);
+}
+
+test('motion and graphics recipes import only packages with free, unrestricted licences', () => {
+  const graphicsDir = join(root, 'core', 'graphics');
+  const files = [
+    ...readdirSync(recipesDir).filter(name => name.endsWith('.md')).map(name => join(recipesDir, name)),
+    ...readdirSync(graphicsDir).filter(name => name.endsWith('.md')).map(name => join(graphicsDir, name)),
+  ];
+  for (const file of files) {
+    for (const name of importedPackages(readFileSync(file, 'utf8'))) {
+      assert.ok(PERMISSIVE_PACKAGES.has(name), `${file} imports ${name}, which is not on the verified permissive list`);
+    }
+  }
+});
+
+test('the licence check flags a restricted animation package and ignores relative and CDN imports', () => {
+  assert.deepEqual(importedPackages("import { gsap } from 'gsap';\nimport { ScrollTrigger } from 'gsap/ScrollTrigger';"), ['gsap', 'gsap']);
+  assert.equal(PERMISSIVE_PACKAGES.has('gsap'), false);
+  assert.deepEqual(importedPackages("import { LOOK } from './look.js';\nimport { animate } from 'https://cdn.jsdelivr.net/npm/motion@13.5.1/+esm';"), []);
+  assert.deepEqual(importedPackages("import { motion } from 'motion/react';"), ['motion']);
 });

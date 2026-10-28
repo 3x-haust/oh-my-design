@@ -212,21 +212,43 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
             return Boolean(parent.compareDocumentPosition(candidate.element) & Node.DOCUMENT_POSITION_FOLLOWING);
           });
           if (pointerlessCover) return false;
+          // z-index of the text's own stacking layer below this owner: a pseudo-element painted under it cannot cover it.
+          let innerZ = Number.NaN;
           for (let owner: HTMLElement | null = parent; owner && owner !== body; owner = owner.parentElement) {
             const ownerBox = owner.getBoundingClientRect();
             const pseudoCovered = ['::before', '::after'].some(pseudo => {
               const style = getComputedStyle(owner, pseudo); const z = Number.parseInt(style.zIndex, 10);
               const horizontal = (style.left !== 'auto' && style.right !== 'auto') || Number.parseFloat(style.width) >= ownerBox.width;
               const vertical = (style.top !== 'auto' && style.bottom !== 'auto') || Number.parseFloat(style.height) >= ownerBox.height;
-              const aboveText = pseudo === '::after' ? !Number.isFinite(z) || z >= 0 : Number.isFinite(z) && z > 0;
+              const aboveText = (pseudo === '::after' ? !Number.isFinite(z) || z >= 0 : Number.isFinite(z) && z > 0)
+                && !(Number.isFinite(innerZ) && (Number.isFinite(z) ? z : 0) < innerZ);
               const colour = style.backgroundColor; const parts = colour.match(/[\d.]+/g)?.map(Number) ?? [];
               const alpha = parts.length >= 4 ? parts[3] ?? 0 : colour === 'transparent' ? 0 : 1;
-              return !['none', 'normal'].includes(style.content) && ['absolute', 'fixed', 'sticky'].includes(style.position)
-                && aboveText && horizontal && vertical && Number(style.opacity) >= .05
-                && x >= ownerBox.left && x <= ownerBox.right && y >= ownerBox.top && y <= ownerBox.bottom
-                && (alpha >= .05 || style.backgroundImage !== 'none');
+              if (['none', 'normal'].includes(style.content) || !['absolute', 'fixed', 'sticky'].includes(style.position)
+                || !aboveText || !horizontal || !vertical || Number(style.opacity) < .05
+                || (alpha < .05 && style.backgroundImage === 'none')) return false;
+              // The pseudo-element's own box, not its owner's: a decoration placed beside the text covers nothing.
+              let block: DOMRect | { left: number; top: number; right: number; bottom: number } = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+              if (style.position !== 'fixed') {
+                let container: HTMLElement | null = owner;
+                while (container && getComputedStyle(container).position === 'static' && getComputedStyle(container).transform === 'none') container = container.parentElement;
+                if (container) {
+                  const box = container.getBoundingClientRect();
+                  block = { left: box.left + container.clientLeft, top: box.top + container.clientTop,
+                    right: box.left + container.clientLeft + container.clientWidth, bottom: box.top + container.clientTop + container.clientHeight };
+                } else block = { left: -scrollX, top: -scrollY, right: innerWidth - scrollX, bottom: innerHeight - scrollY };
+              }
+              const width = Number.parseFloat(style.width); const height = Number.parseFloat(style.height);
+              const left = style.left !== 'auto' ? block.left + Number.parseFloat(style.left) : block.right - Number.parseFloat(style.right) - width;
+              const top = style.top !== 'auto' ? block.top + Number.parseFloat(style.top) : block.bottom - Number.parseFloat(style.bottom) - height;
+              const known = [width, height, left, top].every(Number.isFinite);
+              return known ? x >= left && x <= left + width && y >= top && y <= top + height
+                : x >= ownerBox.left && x <= ownerBox.right && y >= ownerBox.top && y <= ownerBox.bottom;
             });
             if (pseudoCovered) return false;
+            if (!Number.isFinite(innerZ) && getComputedStyle(owner).position !== 'static') {
+              const z = Number.parseInt(getComputedStyle(owner).zIndex, 10); if (Number.isFinite(z)) innerZ = z;
+            }
           }
           return true;
         });
@@ -261,7 +283,8 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       }).slice(0, 2000),
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
     });
-  }), purpose);
+  // A whole-document pass on a busy WebGL page can outlast the browse default of 5s; allow it to finish.
+  }), purpose, { timeout: 20_000 });
   const rendered: Pick<RawSearchRenderedState, 'anchors' | 'visibleText' | 'uncertain' | 'viewport'> = JSON.parse(serialized);
   return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
 }

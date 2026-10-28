@@ -52,7 +52,10 @@ function role(value: unknown): ReferenceRole {
 function component(value: unknown): string {
   const name = piText(value, 'consulted-reference-component');
   if (name.length > 160 || name.trim() !== name
-    || !/^[\p{L}\p{N}][\p{L}\p{N} _.()-]*$/u.test(name)) fail('component');
+    || !/^[\p{L}\p{N}][\p{L}\p{N} _.()-]*$/u.test(name)) {
+    fail('component must be a short element name (letters, digits, spaces and _ . ( ) -, up to 160), '
+      + 'for example "feature card" or "hero"; say what was taken and why in the browse keep reason, not here');
+  }
   return name;
 }
 
@@ -82,7 +85,10 @@ function imageInput(value: unknown, legacy: boolean): ParsedImage {
 function validateImageSet(images: readonly ParsedImage[]): void {
   if (images.length === 0 || images.length > 8) fail('images');
   if (images.filter(image => image.role === 'primary').length !== 1) fail('exactly one primary');
-  if (new Set(images.map(image => image.sha256)).size !== images.length) fail('duplicate image');
+  if (new Set(images.map(image => image.sha256)).size !== images.length) {
+    fail('duplicate image: each image is cited once. A section that has no reference of its own needs a new one: search the galleries '
+      + 'for what that section shows, keep it with omd ref browse keep, and cite that image under the section\'s name');
+  }
 }
 
 function parseInput(value: unknown) {
@@ -156,7 +162,7 @@ export function publishConsultedReferences(
   return { path, sha256: digest, authority: 'none' as const };
 }
 
-export function consultedReferenceProjection(root: string, requestSha256?: string) {
+function readConsultedRecord(root: string, requestSha256?: string) {
   if (!existsSync(join(root, POINTER))) return null;
   const pointerBytes = bytesAt(root, POINTER);
   let pointerValue: unknown;
@@ -232,7 +238,18 @@ export function consultedReferenceProjection(root: string, requestSha256?: strin
     };
   });
   validateImageSet(parsedImages);
+  return { digest, images: parsedImages };
+}
 
+/** Maker-side provenance of the current consulted set; reviewer packets never receive these URLs. */
+export function consultedReferenceSources(root: string, requestSha256?: string) {
+  return readConsultedRecord(root, requestSha256)?.images.map(({ role, component, sourceUrl }) => ({ role, component, sourceUrl })) ?? [];
+}
+
+export function consultedReferenceProjection(root: string, requestSha256?: string) {
+  const record = readConsultedRecord(root, requestSha256);
+  if (record === null) return null;
+  const { digest, images: parsedImages } = record;
   const renders = parsedImages.map(image => {
     if (image.path !== `${DIRECTORY}/images/${image.sha256}.png`) fail('image path');
     const bytes = bytesAt(root, image.path);

@@ -6,6 +6,10 @@ import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts
 import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
+import { COMPONENT_REFERENCE_GUIDANCE, referenceBreadth } from '../ref/component-references.ts';
+import { componentReferencesPending, designBriefPending, directionReviewPending, graphicDecisionPending, GRAPHIC_COMPARISON_GUIDANCE } from '../design/new-surface-advisories.ts';
+import { DESIGN_BRIEF_GUIDANCE } from '../design/design-brief.ts';
+import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import {
   firstRenderLoopState,
   firstRenderReviewMatchesCurrentRoute,
@@ -67,6 +71,56 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       instruction: 'Repair the current authority, scope, design-language, or unresolved reframe blocker, then rerun the production guard.',
     };
   }
+  // New products and landings start from a written brief, then look for references in its words.
+  if (designBriefPending(root, route)) {
+    return {
+      ...base(routeSha256),
+      stage: 'brief',
+      action: 'write-design-brief',
+      next: 'omd schema design-brief',
+      instruction: DESIGN_BRIEF_GUIDANCE,
+    };
+  }
+  // New products and landings point to component references once.
+  if (componentReferencesPending(root, route)) {
+    return {
+      ...base(routeSha256),
+      stage: 'references',
+      action: 'gather-component-references',
+      next: 'omd ref browse start --lane design --json',
+      instruction: `${referenceBreadth(root)} ${COMPONENT_REFERENCE_GUIDANCE}`,
+    };
+  }
+  if (directionReviewPending(root, route)) {
+    return {
+      ...base(routeSha256),
+      stage: 'references',
+      action: 'review-reference-directions',
+      next: 'omd ref direction-review --json',
+      instruction: 'An isolated reviewer judges every kept page for craft and fit: direction, support or reject. Choose the primary '
+        + 'from the pages it marks direction and give support pages one named part each; if none is direction, keep better finished sites and review again.',
+    };
+  }
+  // The section graphics are designed before the page around them, as the brief's "shows" plans them.
+  if (graphicDecisionPending(root, route, invocation.current.briefSha256)) {
+    return {
+      ...base(routeSha256),
+      stage: 'graphics',
+      action: 'compare-section-graphics',
+      next: 'omd pack theory/imagegen.md',
+      instruction: GRAPHIC_COMPARISON_GUIDANCE,
+    };
+  }
+  // Until the first render exists, the work is composing the page; name the knowledge for that.
+  if (!existsSync(resolve(root, '.omd/first-render'))) {
+    return {
+      ...base(routeSha256),
+      stage: 'production',
+      action: 'compose-first-render',
+      next: 'omd guard production --json',
+      instruction: composeGuidance(route),
+    };
+  }
   if (!existsSync(resolve(root, '.omd/.cache/trusted-lifecycle-manifest.json'))) {
     return {
       ...base(routeSha256),
@@ -102,7 +156,7 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
         problems: ['FIRST_RENDER_REGRESSED'],
         next: loop.bestRestoreApplied ? null : 'omd first-render restore --json',
         instruction: loop.bestRestoreApplied
-          ? 'The best first-render source is restored. Try a materially different approach before recapturing; do not patch forward from the regressed attempt.'
+          ? `The best first-render source is restored. Try a materially different approach before recapturing; do not patch forward from the regressed attempt. ${REPAIR_KNOWLEDGE}`
           : 'Restore the best first-render checkpoint before trying a materially different approach.',
       };
     }

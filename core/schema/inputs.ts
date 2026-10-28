@@ -1,4 +1,5 @@
 import { closestNames } from './suggestions.ts';
+import { DESIGN_BRIEF_KEYS, DESIGN_BRIEF_SKELETON } from '../design/design-brief.ts';
 import { ADAPTIVE_ROUTE_INPUT_KEYS, ADAPTIVE_ROUTE_INPUT_SCHEMA } from '../route/adaptive-flow-domain.ts';
 import {
   REFERENCE_RESEARCH_KEYS,
@@ -66,7 +67,7 @@ const routeSkeleton = (projectMode: 'greenfield' | 'existing', allowedPaths: rea
   },
   referenceDiscovery: {
     schema: 'reference-discovery-input-v1',
-    taskNeed: projectMode === 'greenfield' ? 'new-product' : 'copy-only-edit',
+    taskNeed: projectMode === 'greenfield' ? 'new-product' : '<existing-product-change | copy-only-edit | new-marketing | new-product>',
     uncertainty: 'unresolved',
     existingEvidence: 'none',
     intendedUse: '<how references will inform the result>',
@@ -116,6 +117,8 @@ const route = (name: 'route-input' | 'product-route-input', projectMode: 'existi
     'The host owns process policy, review purpose, and the canonical production/browser-evidence/independent-review strategy. Do not add workflow roles, stages, methods, skips, delivery mode, or approval fields.',
     'Preserve the exact request, outcome, permission, scope, locale, reference-discovery, and evidence-claim facts.',
     'Reference research may be selected and executed directly without adding a structured Scout or candidate stage.',
+    'projectMode is greenfield, with product-route-input, when no destination product source exists yet. Folders to read (docs, a README, a brand kit, another repository) are material, not the product being changed.',
+    'referenceDiscovery.taskNeed describes this request: new-product (a new app or workflow), new-marketing (a new landing, launch or promotional surface), existing-product-change (a change to an existing product UI), copy-only-edit (wording only; it skips reference and concept work).',
   ],
   skeleton: routeSkeleton(projectMode, projectMode === 'greenfield'
     ? ['src/**', 'public/**', 'dist/**', 'package.json', 'package-lock.json', 'index.html', 'vite.config.*', 'tsconfig*.json']
@@ -165,6 +168,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = Object.freeze([
       'press-start must be the final action and is released only after the settled state capture',
       'captureState binds retained product pixels to one stable component identity and one state: default, hover, focus, pressed, or open',
       'element-state assertions may prove hovered, focused, focus-visible, pressed, or expanded on the exact target',
+      'visible-text proves text that appears after the actions (it must not be visible before them); preserved-text proves text visible both before and after; absent-text proves text that is not visible; every assertion, text kinds included, names the selector whose region it reads; matching ignores spacing and line breaks',
       'each script has nonempty assertions; execution-only requirements remain host gates and must not be rewritten as browser text',
     ],
     skeleton: {
@@ -217,11 +221,12 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = Object.freeze([
     path: '.omd/.cache/reference-search.json',
     command: 'omd ref search --input .omd/.cache/reference-search.json --json',
     keys: ['lane', 'query', 'url', 'queryParam'],
+    // One component at a time on a design gallery, the way designers search; Google often answers with a challenge.
     skeleton: {
       lane: 'design',
-      query: 'dashboard interface design',
-      url: 'https://www.google.com/search?q=dashboard%20interface%20design',
-      queryParam: 'q',
+      query: 'filter ui design',
+      url: 'https://dribbble.com/search/filter-ui-design',
+      queryParam: 'path',
     },
   },
   {
@@ -251,6 +256,18 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = Object.freeze([
   },
   language('intake'),
   language('feedback'),
+  {
+    name: 'design-brief',
+    path: '.omd/.cache/design-brief.json',
+    command: 'omd brief --input .omd/.cache/design-brief.json --json',
+    keys: DESIGN_BRIEF_KEYS,
+    constraints: [
+      'each sections[].question repeats one of visitorQuestions exactly; a section that answers no visitor question is cut',
+      'cut lists what the page deliberately leaves out and why',
+      'concept.source names the product\'s own material (its name, mark, artifact or output), not a reference site',
+    ],
+    skeleton: DESIGN_BRIEF_SKELETON,
+  },
   {
     name: 'locale-contract',
     path: '.omd/locale.json',

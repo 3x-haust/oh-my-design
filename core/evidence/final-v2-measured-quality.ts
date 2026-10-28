@@ -30,10 +30,42 @@ export function assertMeasuredDesignQualityGreen(input: unknown, context: Measur
   if (!(context.index instanceof MeasurementIndex) || !context.requiredViewIds.length) v.fail('trusted measured quality context required');
   for (const a of c.axes) {
     if (a.verdict !== 'GREEN') v.fail(`DESIGN_QUALITY_AXIS_RED:${a.axis}`);
-    const required = new Set(context.requiredViewIds);
+    assertAxisCitations(a, context);
+  }
+  const uncited = uncitedViews(c.axes, context);
+  if (uncited.length) v.fail(`required view/state not cited by any axis: ${uncited.join(', ')}`);
+  return c;
+}
+
+/** Every required view/state is looked at: each must be cited by at least one axis. */
+function uncitedViews(axes: MeasuredDesignQuality['axes'], context: MeasuredQualityContext): string[] {
+  const required = new Set(context.requiredViewIds);
+  for (const a of axes) for (const e of a.evidence) for (const view of context.index.packet(e.packetSha256).scope) required.add(view.id);
+  return [...required].filter(id => !axes.some(a => a.evidence.some(e => e.viewId === id)));
+}
+
+/**
+ * The citation half of a GREEN axis: the at-rest desktop and mobile views and any other view it bears on, cited with
+ * authenticated captures and the measured inventories its axis needs; every required view is covered across axes. Checked while the reviewer can still correct an omission; RED axes are judgments, not
+ * formats, and are left to publication.
+ */
+export function assertMeasuredCitations(input: unknown, context: MeasuredQualityContext): void {
+  const axes = parseMeasuredDesignQuality(input).axes, green = axes.filter(a => a.verdict === 'GREEN');
+  // Every gap at once, short enough to act on.
+  const short = (id: string) => `${id.startsWith('mobile') ? 'mobile' : 'desktop'} ${id.includes(':outcome-') ? id.split(':outcome-')[1]!.slice(0, 8) : 'at rest'}`;
+  const uncited = uncitedViews(axes, context);
+  if (uncited.length) {
+    v.fail(`every required view/state is cited by at least one axis. Not cited by any axis: ${uncited.map(short).join(', ')}. Add a `
+      + 'row for each under the axis it bears on (its viewId, state, captureSha256, observationSha256 and packetSha256 come from the supplied '
+      + 'observation bindings for that view)');
+  }
+  for (const a of green) assertAxisCitations(a, context);
+}
+
+function assertAxisCitations(a: MeasuredDesignQuality['axes'][number], context: MeasuredQualityContext): void {
+  {
     for (const e of a.evidence) {
       const packet = context.index.packet(e.packetSha256), view = packet.scope.find(s => s.id === e.viewId), capture = packet.captures.find(s => s.viewId === e.viewId);
-      for (const v of packet.scope) required.add(v.id);
       if (packet.summary.deterministicVerdict !== 'PASS') v.fail('deterministic RED/incomplete scope cannot be overruled by GREEN');
       if (context.advisoryDispositionPolicy !== 'integrated-final-review'
         && packet.findings.some(f => f.severity === 'advisory' && f.viewIds.includes(e.viewId) && f.axes.includes(a.axis)
@@ -41,11 +73,9 @@ export function assertMeasuredDesignQualityGreen(input: unknown, context: Measur
       if (!view || view.state !== e.state || capture?.capture.sha256 !== e.captureSha256 || !context.bindings.some(b => b.observationSha256 === e.observationSha256 && b.captureSha256 === e.captureSha256 && b.packetSha256 === e.packetSha256 && b.viewId === e.viewId && b.state === e.state && b.browserZoom === view.browserZoom)) v.fail('measurement citation does not join the authenticated observation capture/state/zoom');
       context.index.assertAxis(a.axis, e.viewId, e.measurementIds.map(measurementId => ({ packetSha256: e.packetSha256, measurementId })), e.regionSubjectIds);
     }
-    if ([...required].some(id => !a.evidence.some(e => e.viewId === id))) v.fail(`axis ${a.axis} omitted a required view/state`);
     const dimensions = a.evidence.map(e => context.index.packet(e.packetSha256).scope.find(v => v.id === e.viewId)!);
     if (!dimensions.some(v => v.state === 'initial' && v.viewport.width === 1280 && v.viewport.height === 900 && v.browserZoom === 1) || !dimensions.some(v => v.state === 'initial' && v.viewport.width === 390 && v.viewport.height === 844 && v.browserZoom === 1)) v.fail('baseline initial desktop/mobile evidence required');
   }
-  return c;
 }
 export function aggregateMeasuredDesignQuality(contracts: readonly MeasuredDesignQuality[], context: MeasuredQualityContext): MeasuredDesignQuality {
   if (!contracts.length) v.fail('reviewer quorum is empty');

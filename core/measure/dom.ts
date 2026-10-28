@@ -109,7 +109,14 @@ export function extractMeasurementInPage(input: { selectors: string[]; tokens: s
       backgrounds.push(rgba(cs.backgroundColor));
       if (Number(cs.opacity) !== 1) unsupported.push('ancestor-opacity');
       if (cs.backgroundImage !== 'none' || cs.mixBlendMode !== 'normal' || cs.filter !== 'none' || cs.backdropFilter !== 'none' || cs.backgroundClip === 'text') unsupported.push('complex-backdrop');
-      if (cs.transform !== 'none') unsupported.push('transformed-geometry');
+      // A pure translation (or the identity a settled reveal leaves behind) moves glyphs without distorting them, and the
+      // measured box already includes it; only rotation, scale or skew changes what is measured.
+      const matrix = /^matrix(3d)?\(([^)]+)\)$/.exec(cs.transform);
+      const values = matrix ? matrix[2]!.split(',').map(Number) : [];
+      const translateOnly = matrix !== null && (matrix[1] === '3d'
+        ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 15].every(index => Math.abs(values[index]! - (index % 5 === 0 ? 1 : 0)) < 1e-6)
+        : Math.abs(values[0]! - 1) < 1e-6 && Math.abs(values[1]!) < 1e-6 && Math.abs(values[2]!) < 1e-6 && Math.abs(values[3]! - 1) < 1e-6);
+      if (cs.transform !== 'none' && !translateOnly) unsupported.push('transformed-geometry');
       if (!/^rgba?\(/.test(cs.backgroundColor) || !/^rgba?\(/.test(cs.color)) unsupported.push('unsupported-color');
       if (p === document.documentElement || p === document.body) continue;
       const clipsX = /hidden|clip|auto|scroll/.test(cs.overflowX), clipsY = /hidden|clip|auto|scroll/.test(cs.overflowY);
@@ -128,7 +135,14 @@ export function extractMeasurementInPage(input: { selectors: string[]; tokens: s
     if (el.matches('iframe,canvas,svg')) unsupported.push('opaque-content');
     if (el.matches('input,select,textarea')) unsupported.push('native-control-text');
     if (el.matches('option') && el.closest('select')) unsupported.push('native-option-text');
-    for (const l of ownLines) { const b = intersection(l.box, viewport); if (!b) continue; const hit = document.elementFromPoint(b.x + b.w / 2, b.y + b.h / 2); if (hit && hit !== el && !el.contains(hit) && !hit.contains(el)) unsupported.push('occluded-text'); }
+    // The focused element drawn over other text (a skip link revealed on Tab, an opened menu) is the
+    // state being shown, not an accidental overlap, so it does not make the text underneath unmeasured.
+    const focused = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    // Once the page is scrolled, content passing under a sticky or fixed header is ordinary scrolling, not text hidden
+    // by the design (at the top of the page a header covering text is still a defect); an anchor target landing under
+    // the header is its own page-basics lead.
+    const pinned = (node: Element | null): boolean => { for (let p = node; p; p = p.parentElement) { const position = getComputedStyle(p).position; if (position === 'fixed' || position === 'sticky') return true; } return false; };
+    for (const l of ownLines) { const b = intersection(l.box, viewport); if (!b) continue; const hit = document.elementFromPoint(b.x + b.w / 2, b.y + b.h / 2); if (hit && hit !== el && !el.contains(hit) && !hit.contains(el) && !(focused && focused.contains(hit)) && !(scrollY > 0 && pinned(hit) && !pinned(el))) unsupported.push('occluded-text'); }
     const tokens: MeasureNode['tokens'] = [];
     let token: Glyph[] = [];
     const finish = () => { if (!token.length) return; const tops: number[] = []; const assignments = token.map(g => { let i = tops.findIndex(y => Math.abs(g.box.y - y) < 2); if (i < 0) { i = tops.length; tops.push(g.box.y); } return i; }); const text = token.map(g => g.text).join(''); tokens.push({ text, lines: assignments, split: /[가-힣]/.test(text) && tops.length > 1, oneSyllableTail: tops.length > 1 && assignments.filter(i => i === tops.length - 1).length === 1 }); token = []; };
@@ -179,9 +193,16 @@ export function extractMeasurementInPage(input: { selectors: string[]; tokens: s
   const html = rgba(getComputedStyle(document.documentElement).backgroundColor), body = rgba(getComputedStyle(document.body).backgroundColor);
   const rootCanvas = composite(html[3] > 0 ? html : body, [255, 255, 255, 1]);
   const gridStep = 16, paintSamples: MeasurementDom['paintSamples'] = [];
-  for (let y = gridStep / 2; y < innerHeight; y += gridStep) for (let x = gridStep / 2; x < innerWidth; x += gridStep) {
-    const hit = document.elementFromPoint(x, y); paintSamples.push({ x, y, subjectId: hit ? ids.get(hit) ?? null : null });
-  }
+  // Hit testing skips pointer-events:none, but a decorative image that lets clicks through is still
+  // painted; sample what is drawn, then restore the page's own setting.
+  const paintedHits = document.createElement('style');
+  paintedHits.textContent = '*, *::before, *::after { pointer-events: auto !important; }';
+  document.head.append(paintedHits);
+  try {
+    for (let y = gridStep / 2; y < innerHeight; y += gridStep) for (let x = gridStep / 2; x < innerWidth; x += gridStep) {
+      const hit = document.elementFromPoint(x, y); paintSamples.push({ x, y, subjectId: hit ? ids.get(hit) ?? null : null });
+    }
+  } finally { paintedHits.remove(); }
   return { nodes, viewport: { innerWidth, innerHeight, clientWidth: document.documentElement.clientWidth, clientHeight: document.documentElement.clientHeight, devicePixelRatio, visualViewportScale: visualViewport?.scale ?? 1, scrollX, scrollY }, rootCanvas, overflowX: Math.max(0, document.documentElement.scrollWidth - innerWidth), eligibleNodes: eligible.length, excluded,
     fonts: { ready: document.fonts.status === 'loaded', failedFamilies: Array.from(document.fonts).filter(f => f.status === 'error').map(f => f.family) }, accessibility: [], paintSamples, gridStep };
 }

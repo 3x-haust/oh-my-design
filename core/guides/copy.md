@@ -13,3 +13,7 @@ Compare every proposition with the facts. Preserve numbers, names, uncertainty a
 UI action and status text must describe what actually happens (for example a demo does not
 "send" anything). Korean variable input is data, not a sentence stem with guessed particles.
 Changed visible copy needs fresh renders.
+
+Go deeper by surface: marketing and landing copy → `omd pack theory/web-copy.md` (start with the reader's
+decision); register, speech level and sentence rhythm → `theory/voice.md`; labels, states and errors →
+`theory/microcopy.md`; a page's kickers, captions and tag rows → `guides/landing-basics.md`.

@@ -26,12 +26,16 @@ async function main(): Promise<never> {
   if (['feedback', 'language', 'ai-judgment', 'locale'].includes(command)) {
     return (await import('./commands/context.ts')).runContext(args);
   }
-  if (['first-render', 'render', 'check', 'probe', 'slop', 'lighthouse', 'measure'].includes(command)) {
+  if (['first-render', 'render', 'record', 'check', 'probe', 'slop', 'lighthouse', 'measure'].includes(command)) {
     return (await import('./commands/inspection.ts')).runInspection(args);
   }
   if (command === 'figma' || command === 'target') {
     return (await import('./commands/figma.ts')).runFigma(args);
   }
+  if (command === 'taste') return (await import('./commands/taste.ts')).runTaste(args);
+  if (command === 'scaffold') return (await import('./commands/scaffold.ts')).runScaffold(args);
+  if (command === 'brief') return (await import('./commands/scaffold.ts')).runBrief(args);
+  if (command === 'imagegen') return (await import('./commands/scaffold.ts')).runImagegen(args);
   if (['pack', 'doctor', 'browser', 'coach', 'learn', 'usage', 'hash'].includes(command)) {
     return (await import('./commands/tooling.ts')).runTooling(args);
   }

@@ -13,9 +13,9 @@ experience. The magnet makes the element feel alive and responsive in a way that
 beyond hover states. Portfolio sites, agency landing pages, campaign microsites where
 the cursor is a live instrument.
 
-Condition against: any context with more than two or three magnetic elements on screen
-simultaneously — multiple magnets competing for the cursor's attention cancel each other
-out and the effect reads as chaotic rather than deliberate. Also: buttons in utility UI
+Condition against: contexts where several magnetic elements compete for the cursor's
+attention and testing shows that the interaction becomes chaotic rather than deliberate.
+The appropriate count depends on density, spacing, and task. Also: buttons in utility UI
 where click precision matters (the magnet shifts the perceived centre of the target and
 can cause misclicks). Also: mobile devices — there is no pointer to attract.
 
@@ -56,9 +56,6 @@ be scoped with `@media (pointer: fine)` so it never activates on touch devices.
 .cta-button {
   transition:
     transform var(--magnetic-follow-duration, 120ms) var(--magnetic-follow-ease, ease-out);
-  /* will-change is appropriate here: this element is tracked every pointermove
-     while the cursor is in the field. Limit to one or two elements. */
-  will-change: transform;
 }
 
 .cta-button.is-returning {
@@ -144,7 +141,8 @@ function MagneticButton({
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
-  // Spring physics give the magnet a more physical feel than a CSS transition.
+  // This example uses a spring for a momentum-like return; a CSS transition is
+  // equally valid when it matches the intended interaction.
   const springConfig = { stiffness: 300, damping: 20, mass: 0.5 };
   const x = useSpring(0, springConfig);
   const y = useSpring(0, springConfig);
@@ -212,18 +210,12 @@ if (pointerFine && !prefersReduced) {
 
 ## Performance note
 
-The pointer-move handler updates `transform: translate()` — a compositor-only property.
-The `will-change: transform` on the magnetic element is justified here: the element
-is actively animating on every pointer-move event while the cursor is within the field.
-This is not speculative `will-change`; it is applied to an element that is known to
-animate continuously during a user interaction.
+The pointer-move handler updates `transform: translate()`, which avoids changing document
+layout but does not guarantee a compositor-only path or a particular frame rate. Measure
+the real page with the intended number and size of targets. If profiling shows that a
+`will-change: transform` hint helps, scope it to fine-pointer interaction and remove it
+when tracking ends rather than promoting every target for the lifetime of the page.
 
-Limit magnetic elements to one or two per page. Each active magnetic element with
-`will-change: transform` occupies a compositor layer; more than three simultaneous
-layers on this pattern consumes measurable GPU memory on mobile hardware — even though
-the magnet never activates on mobile, the CSS `will-change` still promotes the layer
-on all breakpoints unless scoped with `@media (pointer: fine)`.
-
-The `{ passive: true }` flag on `pointermove` is critical — without it, the browser
-cannot optimise scroll performance because it must wait for the handler to confirm it
-will not call `preventDefault()`.
+`{ passive: true }` communicates that this handler will not call `preventDefault()`. It
+is a useful input-handling hint, not a substitute for profiling handler cost and frame
+delivery.

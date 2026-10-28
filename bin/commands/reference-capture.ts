@@ -41,6 +41,7 @@ export async function cmdRefAdd(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target || !opts.as) {
     console.error('usage: omd ref add <url|file> --as <component> --lane domain|design [--slot <surface>] [--selector "css"] [--image] [--from-user]; selected discovery requires an explicit lane and free-gallery/original-link provenance for design');
+    console.error('ref add records a reference you already chose, for example: omd ref add https://example.com --as "hero" --lane domain. To look around a site first, use omd ref browse goto <url> --reason "why".');
     process.exit(1);
   }
   const component = opts.as;
@@ -52,10 +53,7 @@ export async function cmdRefAdd(opts: Opts): Promise<never> {
     console.error('--blueprint requires --selector: a blueprint measures one component, not a whole page.');
     process.exit(1);
   }
-  if (opts.shot && !opts.selector) {
-    console.error('--shot requires --selector: a scoped screenshot captures one component, not a whole page. Omit --shot to capture the page, or pass --selector.');
-    process.exit(1);
-  }
+  // Every reference keeps its image by default; --shot without --selector simply asks for the whole page's.
   if (opts.noShot && opts.noShotReason === undefined) {
     console.error('--no-shot requires --no-shot-reason: a reference without its image cannot be re-examined later, so the omission is recorded rather than silent.');
     process.exit(1);
@@ -206,6 +204,8 @@ export async function cmdRefAdd(opts: Opts): Promise<never> {
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
   console.error(`slop findings: ${slopCount}${slopCount > 0 ? `  [${slopIds.join(', ')}]` : ''}`);
+  // Each capture takes minutes; several sites go faster together.
+  console.error('next: capture further sites together with omd ref add-batch <manifest.json> (four at a time)');
 
   const signal = designSignal(invariants, blueprint);
   if (!imageReference && signal.score < LOW_SIGNAL) {

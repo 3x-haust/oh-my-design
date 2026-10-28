@@ -245,3 +245,8 @@ test('malformed shapes and contradictory high-risk UX states fail closed', () =>
     }), 'CONTRADICTORY_DESIGN_AXIS_STATE');
   }
 });
+
+test('an invalid axis value names the field, the value given and the allowed values', () => {
+  assert.throws(() => routeDesignAxes(fixtureWith('admin', 'expressiveDesignNeed', 'dominant')),
+    /INVALID_EXPRESSIVE_DESIGN_NEED: designAxes\.expressiveDesignNeed is "dominant"; use one of restrained, balanced, showpiece/);
+});

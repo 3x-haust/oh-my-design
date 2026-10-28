@@ -4,7 +4,7 @@ A stagger orchestrator drives a group of sibling elements — cards, list items,
 feature blocks — so each child enters slightly after the previous, reading the group as a
 sequence rather than a simultaneous burst. The recipe handles both static lists (CSS
 nth-child delay cascade) and dynamic lists (JS-computed delays) and centralises the
-stagger math so it is filled from the board's motion invariants rather than hardcoded
+stagger math so it is filled from the project's motion tokens rather than hardcoded
 per-component.
 
 ## When it earns its place / When it does not
@@ -17,22 +17,21 @@ group as a sequence — semantically correct when the elements have an implied o
 
 Condition against: elements with no meaningful order — a tag cloud, a random mosaic, a
 grid of equally-weighted items. Staggering unordered items implies a sequence that does
-not exist, which is misleading choreography. Also: long lists. A 30-item list staggered
-at 60ms arrives over 1.8 seconds — the last card enters nearly two seconds after the
-first, by which point the user has scrolled past it. Cap staggered groups at eight to
-ten items; beyond that, consider grouping (reveal the first row together, then the second)
-or collapsing the stagger to 20ms so the total remains under 600ms.
+not exist, which is misleading choreography. Also inspect long lists: a 30-item list
+staggered at 60ms spans 1.74 seconds from first start to last start. Grouping rows or
+reducing/capping later delays can keep important content from waiting behind ceremony.
 
-The stagger budget calculation: `--stagger-base × (n - 1)` must stay under 600ms.
-For a group of eight at 55ms, the total span is 385ms — within budget. For fifteen items
-at 55ms, the span is 770ms — over budget. Either reduce the group or reduce the delay.
+Use `--stagger-base × (n - 1)` to calculate the start-time span and choose a budget from
+the task. A 600ms cap is one house-style example, not a perceptual boundary. Equal-role
+siblings can legitimately share one duration and easing; the stagger changes their start
+times, not their semantic role.
 
 ## Parameters
 
 ```css
 :root {
-  /* Delay between each successive element. 40–80ms from core/theory/motion.md.
-     Below 40ms: imperceptible, wasted. Above 80ms: waterfall. */
+  /* Example delay between successive elements. 40–80ms is an exploration range,
+     not a perception threshold; tune it with the actual count and composition. */
   --stagger-base: 55ms;
 
   /* Duration for each element's entrance animation. Independent of stagger;
@@ -80,7 +79,7 @@ at 55ms, the span is 770ms — over budget. Either reduce the group or reduce th
 
 ```js
 // ── JS version for dynamic lists or when scroll-triggered stagger is needed ──
-// Reads the custom property from :root so the board-wired token is respected.
+// Reads the custom property from :root so the project's motion token is respected.
 
 function applyStagger(container) {
   const base = parseFloat(
@@ -213,15 +212,14 @@ if (!prefersReduced) {
 
 ## Performance note
 
-Each child animates only `opacity` and `transform: translateY()` — compositor-only
-properties. At 60fps on mid-range hardware, ten simultaneous opacity + transform
-animations present no measurable cost. The browser composites them independently on
-the GPU.
+Each child animates `opacity` and `transform: translateY()`, which usually avoids layout
+changes but does not guarantee 60fps, GPU execution, or unmeasurable cost. Profile the
+real item count and visual complexity.
 
-The CSS nth-child approach requires no JavaScript and is therefore zero-overhead at
-runtime. Prefer it for static lists. The JS approach adds one IntersectionObserver
-callback per group; the callback fires once and is immediately disconnected.
+The CSS nth-child approach avoids author JavaScript for static lists, but CSS animation
+still has runtime cost. The JS approach adds one IntersectionObserver callback per group;
+the callback fires once and is immediately disconnected.
 
-Do not generate more than ten nth-child rules in CSS for staggered groups — beyond ten
-items, the total stagger duration at 55ms/item (550ms+) exceeds the perceivable range
-and the JS approach with a capped delay is preferable.
+Generate as many nth-child rules as the known static group requires, then review the
+calculated start-time span. For long or dynamic groups, JS with grouped or capped delays
+is often easier to maintain; ten items is an example breakpoint, not a perceptual limit.

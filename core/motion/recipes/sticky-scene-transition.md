@@ -18,9 +18,9 @@ scroll advances the timeline inside the scene."
 Condition against: sites where the user is goal-oriented and scrolling to find specific
 content. Any product with return visits — a sticky stage the user has already watched
 becomes pure friction; they must scroll through the entire scene again to reach content
-below it. If there is any chance of return visits, a skip control is required. Also:
-sites with more than three or four scenes — beyond that, the user's sense of scroll
-distance breaks down and they feel trapped rather than guided. `expressive.md`: "Sticky
+below it. Provide a skip or bypass when repeat use makes replaying the scene friction. Also:
+review long sequences directly; scene count, scroll distance, and repeat visits determine
+when the experience feels trapped rather than guided. `expressive.md`: "Sticky
 stages are navigation debt — the user cannot scroll past to scan; they must watch the
 scene play."
 
@@ -231,14 +231,15 @@ if (!prefersReduced) {
 
 ## Performance note
 
-The CSS scroll-driven approach runs off the main thread in Chromium — zero JavaScript
-per frame. The JS controller uses `{ passive: true }` on the scroll listener and updates
-only `opacity` and `transform`, both compositor properties. Neither path touches layout
-on scroll.
+The CSS scroll-driven approach removes author JavaScript from each animation frame, but
+does not guarantee an off-main-thread pipeline. The JS controller uses `{ passive: true }`
+and writes `opacity` and `transform`, which usually avoid layout changes. Profile both
+paths with the real panels and media.
 
-`will-change: transform` on pinned panels is appropriate here because these elements are
-actively animated for the duration of the scene. Apply it at most to two or three panels
-simultaneously; panels that have exited can have `will-change` removed.
+`will-change: transform` may help pinned panels when profiling shows promotion work is a
+bottleneck. The number of hinted panels is a memory and rendering trade-off rather than
+a universal quota; add the hint only when measured, and remove it from panels that have
+exited.
 
 The scroll track height (`--scene-height: 250vh`) determines how much scroll travel
 each scene consumes. Longer tracks feel smoother on high-resolution trackpads; shorter

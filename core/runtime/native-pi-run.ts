@@ -34,7 +34,7 @@ export function ensureNativePiRun(input: NativePiRunInput): NativePiRun {
   issuedRuns.add(run);
   return run;
 }
-export function stageNativePiCommand(input: Readonly<{ run: NativePiRun; runtimeRoot: string; argv: readonly string[] }>): Readonly<{ path: string; argv: readonly string[]; dispose(): void }> {
+export function stageNativePiCommand(input: Readonly<{ run: NativePiRun; runtimeRoot: string; argv: readonly string[]; ttlMs?: number }>): Readonly<{ path: string; argv: readonly string[]; dispose(): void }> {
   if (!issuedRuns.has(input.run)) throw new NativePiAuthorityError('only a native Pi host may issue a command');
   if (input.argv.includes('--pi-command') || input.argv.includes('--activation')) throw new NativePiAuthorityError('conflicting activation transport');
   const directory = mkdtempSync(join(tmpdir(), 'omd-pi-command-'));
@@ -42,7 +42,8 @@ export function stageNativePiCommand(input: Readonly<{ run: NativePiRun; runtime
   const argv = [...input.argv, '--pi-command', path];
   try {
     const receipt = mintSelfSignedReceipt({
-      argv: [input.run.host.nodePath, realpathSync(join(input.runtimeRoot, 'bin/omd.ts')), ...argv], ...input.run, payloadAuthorizations: [] });
+      argv: [input.run.host.nodePath, realpathSync(join(input.runtimeRoot, 'bin/omd.ts')), ...argv], ...input.run, payloadAuthorizations: [],
+      ...(input.ttlMs === undefined ? {} : { ttlMs: input.ttlMs }) });
     const payload = { schema: 'native-pi-command-v1', run: input.run, parentPid: process.pid,
       fixture: testRuns.has(input.run), receipt: receipt.receipt, receiptSignature: receipt.signature.toString('base64') };
     const signature = signNativeObservation(input.run.projectRoot, 'pi-command', nativePiDigest(canonicalRouteJson(payload)));

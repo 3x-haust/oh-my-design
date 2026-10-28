@@ -16,7 +16,7 @@ test('native form pixels are scoped limitations while unsupported paint and sele
       const fixture = measurementFixture('clean');
       t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
       const controls = kind === 'transformed'
-        ? nativeControls.replace('<input ', '<input style="transform:translateX(1px)" ')
+        ? nativeControls.replace('<input ', '<input style="transform:rotate(1deg)" ')
         : kind === 'selected-target' ? nativeControls.replace('<input ', '<input style="width:12px;height:12px;padding:0" ') : nativeControls;
       const html = fixture.html.toString().replace('<h1>', `${controls}<h1>`);
       for (const path of ['src/index.html', 'dist/index.html']) writeFileSync(join(fixture.root, path), html);

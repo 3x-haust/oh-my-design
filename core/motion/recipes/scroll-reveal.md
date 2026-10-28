@@ -28,12 +28,11 @@ Scroll-triggered reveal belongs on presentation pages, not on tools.
 
 ```css
 :root {
-  /* How far the element travels upward on entrance. 20–32px is the legible range;
-     larger values read as falling rather than arriving. */
+  /* Illustrative travel distance. Test 20–32px as a restrained starting range;
+     larger values create a more pronounced movement. */
   --reveal-y: 28px;
 
-  /* Duration of the reveal animation. Slightly longer than a load entrance because
-     scroll-triggered context gives the user more time to process. 280–380ms. */
+  /* Illustrative duration for this reveal; tune it to distance and content. */
   --duration-reveal: 340ms;
 
   /* Easing from core/motion/easing.md. ease-out-quint for graceful arrival;
@@ -193,18 +192,17 @@ if (!prefersReduced && !CSS.supports('animation-timeline', 'view()')) {
 
 ## Performance note
 
-`animation-timeline: view()` runs off the main thread in Chromium — the browser's
-compositor advances the animation as scroll position changes, with no JavaScript
-involvement per frame. This is why it is preferred over IntersectionObserver: IO fires
-a JS callback, which schedules a style change, which runs on the main thread. Both are
-acceptable; the scroll-driven path is measurably lighter.
+`animation-timeline: view()` removes the author-side per-frame callback. That does not
+guarantee an off-main-thread pipeline or lower total cost: the animated properties,
+layering, page size, and browser still determine rendering work. IntersectionObserver
+fires a callback at threshold changes rather than on every animation frame; compare the
+two paths in the target browsers when performance is material.
 
-Animate only `opacity` and `transform`. The `translateY` in `--reveal-y` is a
-composited property; it does not trigger layout. If you are tempted to reveal by changing
-`height`, `padding`, or `margin`, the answer is no — use `transform: scaleY()` from a
-`transform-origin: top` if a size change is genuinely required.
+Prefer `opacity` and `transform`; they usually avoid layout changes, though paint and
+compositing work can remain. Avoid animating `height`, `padding`, or `margin` when a
+visual transform such as `scaleY()` expresses the same result. When layout itself must
+change, implement and profile that behavior rather than hiding it behind a rule.
 
-Do not apply `will-change: transform` to every `.reveal` element on the page. On a page
-with twenty reveal elements, this promotes twenty compositor layers simultaneously and
-consumes GPU memory on mobile hardware. The browser promotes elements as needed during
-the animation; pre-promoting them does not help and costs memory.
+Do not apply `will-change: transform` to every `.reveal` by default. Layer decisions and
+memory cost vary by browser; use the hint only when profiling shows an improvement and
+scope it to the period just before and during the reveal.

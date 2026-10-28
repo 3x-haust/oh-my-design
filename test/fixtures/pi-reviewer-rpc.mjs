@@ -4,6 +4,8 @@ import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
 const mode = process.env.PI_REVIEWER_FIXTURE_MODE ?? 'success';
+// Orthogonal to the mode: 'repair' mistypes one digest and fixes it when asked; 'persist' never does.
+const bindingTypo = process.env.PI_REVIEWER_FIXTURE_BINDING_TYPO;
 const args = process.argv.slice(2);
 const option = name => args[args.indexOf(name) + 1];
 const provider = option('--provider');
@@ -164,6 +166,16 @@ function handback(packet) {
           .map(render => ({ viewport: render.viewport, captureSha256: render.captureSha256,
             observation: 'The current action label is readable without wrapping.' })),
       })),
+      ...(packet.evidence.designerJudgments === undefined || mode === 'early-missing-judgments' ? {} : {
+        judgmentChecks: packet.evidence.designerJudgments.judgments.map((judgment, index) => {
+          const violated = index === 0 && (findings.length > 0 || mode === 'early-judgment-unbound');
+          return {
+            judgmentId: judgment.id, verdict: violated ? 'violated' : 'not-applicable', viewport: 'both',
+            observation: 'Offline fixture answers each supplied judgment.',
+            findingIds: violated && mode !== 'early-judgment-unbound' ? [findings[0].id] : [],
+          };
+        }),
+      }),
       ...(packet.evidence.previousIterationRenders === undefined ? {} : {
         progress: {
           verdict: progressVerdict,
@@ -177,6 +189,16 @@ function handback(packet) {
           findingIds: progressVerdict === 'regressed' ? findings.map(finding => finding.id) : [],
         },
       }),
+    };
+  }
+  if (contract.lane === 'tasteComparison') {
+    const human = mode === 'taste-picks-b' ? 'B' : mode === 'taste-malformed-human' ? 'C' : 'A';
+    const other = human === 'A' ? 'B' : 'A';
+    return {
+      schema: contract.schema, fixedBindings: contract.fixedBindings, human,
+      confidence: mode === 'taste-malformed-confidence' ? 2 : 0.8,
+      aiTells: [`Offline fixture tell in ${other}: the top-left headline stack looks assembled from defaults.`],
+      humanSignals: [`Offline fixture signal in ${human}: the centre composition looks specific.`],
     };
   }
   if (contract.lane === 'figmaFidelity') {
@@ -346,11 +368,37 @@ function handback(packet) {
   };
 }
 
+let repairValue;
+let answeredValue;
+// A mistyped digest echo, like a reviewer that repeats three characters while copying a hash.
+const typo = (value) => `${value.slice(0, 20)}${value.slice(17, 20)}${value.slice(20)}`;
+function mistype(value) {
+  if (bindingTypo === 'contract' || bindingTypo === 'contract-persist') {
+    // A digest copied wrongly inside the answer body, outside fixedBindings.
+    const [first, ...rest] = value.qualityAssessments ?? [];
+    return first === undefined ? value : { ...value, qualityAssessments: [{ ...first, captureSha256: typo(first.captureSha256) }, ...rest] };
+  }
+  const key = Object.keys(value.fixedBindings ?? {}).find(name => /Sha256$/.test(name) && typeof value.fixedBindings[name] === 'string');
+  return key === undefined ? value : { ...value, fixedBindings: { ...value.fixedBindings, [key]: typo(value.fixedBindings[key]) } };
+}
+
 async function prompt(request) {
   trace('prompt');
   response(request);
   messages.push({ role: 'user', content: [{ type: 'text', text: request.message }], timestamp: Date.now() });
   emit({ type: 'agent_start' });
+  if (answeredValue !== undefined) {
+    // The correction turn: no tool call. A fixture that was not asked to mistype repeats its answer unchanged.
+    trace('binding-repair');
+    const repaired = repairValue === undefined ? answeredValue
+      : bindingTypo === 'persist' || bindingTypo === 'contract-persist' ? mistype(repairValue) : repairValue;
+    const repairMessage = { role: 'assistant', content: [{ type: 'text', text: JSON.stringify(repaired) }], provider, model, stopReason: 'stop' };
+    messages.push(repairMessage);
+    emit({ type: 'message_end', message: repairMessage });
+    emit({ type: 'agent_end', messages });
+    emit({ type: 'agent_settled' });
+    return;
+  }
   trace('active');
   if (mode === 'hang') return;
   let finalValue = { schema: 'adaptive-final-render-reviewer-handback-v1', lane: 'blindLane' };
@@ -373,6 +421,11 @@ async function prompt(request) {
     const toolResult = { role: 'toolResult', toolCallId, toolName: 'read_reviewer_evidence', content: result.content, isError: false, timestamp: Date.now() };
     messages.push(toolResult);
     emit({ type: 'message_end', message: toolResult });
+    if (process.env.PI_REVIEWER_FIXTURE_EVIDENCE_TEXT) {
+      // Everything textual the reviewer is shown, so a test can prove what it could and could not read.
+      appendFileSync(process.env.PI_REVIEWER_FIXTURE_EVIDENCE_TEXT, `${JSON.stringify({ task: request.message,
+        text: result.content.filter(item => item.type === 'text').map(item => item.text) })}\n`);
+    }
     const text = result.content.find(item => item.type === 'text');
     if (!text) throw new Error('Evidence bridge supplied no packet text');
     trace(`evidence-packet:${createHash('sha256').update(text.text).digest('hex')}`);
@@ -380,6 +433,10 @@ async function prompt(request) {
       trace(`evidence-image:${createHash('sha256').update(Buffer.from(image.data, 'base64')).digest('hex')}`);
     }
     finalValue = handback(JSON.parse(text.text));
+    if (['repair', 'persist', 'contract', 'contract-persist'].includes(bindingTypo)) {
+      repairValue = finalValue;
+      finalValue = mistype(finalValue);
+    }
     emit({ type: 'omd_reviewer_provider_request', imageCount: mode === 'images-blocked' ? 0 : result.content.filter(item => item.type === 'image').length });
     if (mode === 'extension-error') emit({ type: 'extension_error', event: 'before_provider_request', error: 'Offline fixture extension failure' });
     if (mode === 'auto-compaction') emit({ type: 'compaction_start', reason: 'threshold' });
@@ -389,6 +446,7 @@ async function prompt(request) {
     trace('evidence-skipped');
     messages.push({ role: 'assistant', provider, model, stopReason: 'stop', content: [{ type: 'text', text: 'The offline fixture skipped evidence.' }] });
   }
+  answeredValue = finalValue;
   const finalMessage = {
     role: 'assistant', content: [{ type: 'text', text: JSON.stringify(finalValue) }],
     provider, model, stopReason: mode === 'failed-final' ? 'error' : 'stop',

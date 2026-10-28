@@ -24,13 +24,20 @@ export type FirstRenderLoopState = Readonly<{
   bestRestoreApplied: boolean;
 }>;
 
-function loopReasons(iterations: readonly FirstRenderIteration[]): FirstRenderLoopState['reasons'] {
+/** Reviews after which an unresolved finding is reported even while each round still improves. */
+const PERSISTENT_REVIEW_CEILING = 6;
+
+export function loopReasons(iterations: readonly FirstRenderIteration[]): FirstRenderLoopState['reasons'] {
   const reviewed = iterations.filter(iteration => iteration.reviewSha256 !== null);
   const four = reviewed.slice(-4);
   const nonImproving = four.length === 4 && four.every(iteration =>
     iteration.decision !== 'retain' && iteration.progress !== null && iteration.progress !== 'improved');
   const three = reviewed.slice(-3);
-  const persistent = three.length === 3 && three.every(iteration => iteration.decision !== 'retain')
+  // A finding still open while each review says improved is a large repair in progress, not a stall; past six
+  // reviews it is reported either way.
+  const improving = three.length === 3 && three.slice(1).every(iteration => iteration.progress === 'improved');
+  const persistent = three.length === 3 && (!improving || reviewed.length >= PERSISTENT_REVIEW_CEILING)
+    && three.every(iteration => iteration.decision !== 'retain')
     && three.reduce<Set<string> | null>((shared, iteration) => {
       const ids = new Set(iteration.findingIds);
       return shared === null ? ids : new Set([...shared].filter(id => ids.has(id)));

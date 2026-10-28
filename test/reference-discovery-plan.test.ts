@@ -82,7 +82,7 @@ test('URL-free showpiece requests receive automatic domain and design lanes with
   assert.equal(plan.userUrlsRequired, false);
   assert.equal(plan.request, input.request);
   assert.deepEqual(plan.lanes.map(lane => lane.id), ['domain-reference', 'design-reference']);
-  assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Pinterest']);
+  assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Nook', 'Pinterest', 'Dribbble', 'Behance', 'Notefolio', 'Cosmos', 'Component Gallery', 'Refero']);
   assert.equal(plan.designSourcePolicy.access, 'free-only-verify-at-inspection');
   assert.ok(plan.designSourcePolicy.searchQueries.some(query => query.startsWith('site:pinterest.com/pin/')));
   assert.equal(plan.motionEvidenceRequired, false);
@@ -203,7 +203,7 @@ test('restrained discovery and sufficient existing evidence do not manufacture a
   restrainedRoute.designAxes.expressiveDesignNeed = 'restrained';
   const restrainedPlan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(restrainedRoute));
   assert.equal(restrainedPlan.lanes.some(lane => lane.id === 'design-reference'), true, 'design reference is the second required lane');
-  assert.deepEqual(restrainedPlan.galleryDirectories, ['Siteinspire', 'Mobbin', 'Page Flows', 'Pinterest', 'Behance']);
+  assert.deepEqual(restrainedPlan.galleryDirectories, ['Siteinspire', 'Mobbin', 'Page Flows', 'Pinterest', 'Behance', 'Dribbble', 'Notefolio', 'Cosmos', 'Component Gallery', 'Refero']);
   const firstDesignSearch = restrainedPlan.designSourcePolicy.nativeSearchInputs[0];
   assert.equal(new URL(firstDesignSearch!.url).hostname, 'www.google.com',
     'finished-product candidates are searched before gallery listings');

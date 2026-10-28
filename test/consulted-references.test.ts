@@ -181,7 +181,7 @@ test('publisher rejects closed-schema, provenance, image, role, and path violati
   reject({
     ...value.input,
     images: [{ ...value.input.images[0], component: 'https://source.example/private' }],
-  }, /component/);
+  }, /component must be a short element name .*browse keep reason/);
   reject({
     ...value.input,
     images: [{ ...value.input.images[0], sha256: '0'.repeat(64) }],

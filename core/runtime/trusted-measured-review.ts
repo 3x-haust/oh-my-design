@@ -12,9 +12,20 @@ import type { ProjectRunInvocation } from './invocation.ts';
 import { reviewProfileBinding } from './trusted-review-profile.ts';
 import { loadTerminalProcess } from '../evidence/final-v2-process.ts';
 import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
+import { sourceFreeTemporalRenders } from './native-temporal-evidence.ts';
+import { NATIVE_TEMPORAL_EVIDENCE_LIMITS } from './native-outcome-review.ts';
 
 export const MEASURED_REVIEW_TRANSPORT = 'measured-final-reviewer-transport-v1';
 export const MEASURED_REVIEW_HANDBACK = 'measured-final-reviewer-handback-v1';
+/** Value formats for the measured handback; the key lists alone left reviewers guessing PASS or score objects. */
+export const MEASURED_VALUE_RULES = Object.freeze({ verdicts: 'each verdict is the string GREEN or RED', criticalFloors: 'each floor is one integer score from 0 to 4' });
+/** The blind lane's designQuality row shape; the axis list alone left reviewers inventing an object keyed by axis. */
+export const MEASURED_DESIGN_QUALITY_SHAPE = Object.freeze({
+  designQuality: '{ schema: "design-quality-contract-v2", axes: [one row per axis, in the listed axis order] } and nothing else',
+  axisRow: '{ axis, verdict: "GREEN" | "RED", score: integer 0-4, crossViewport: "preserved" | "weakened" | "contradicted", criticalFailure: null or text, evidence: [evidence rows] }',
+  coverage: 'every axis cites the at-rest desktop and mobile views and any other view it bears on (a view where it found something must be cited under that axis); across all axes, every supplied required view/state is cited at least once',
+  evidenceRow: '{ observationSha256, captureSha256, viewId, state, regionSubjectIds: [subject ids], packetSha256, measurementIds: ["vm1:..."], visibleCondition, userConsequence }',
+});
 export function measuredAdvisoryDispositionContract(context: MeasuredQualityContext, measurements: readonly { path: string; sha256: string }[]) {
   return {
     policy: context.advisoryDispositionPolicy,
@@ -41,19 +52,27 @@ export function measuredFinalRenderPacket(root: string, invocation: ProjectRunIn
       width: capture.image.width, height: capture.image.height, pngBase64: readArtifact(root, capture.capture.path).toString('base64') };
   });
   const benchmark = route.gates.includes('greenfield-task-flow-benchmark');
+  const terminal = observationSha256s.at(-1);
+  const temporalRenders = terminal === undefined ? [] : sourceFreeTemporalRenders(root, invocation, terminal);
   const evidence = { schema: 'measured-final-reviewer-evidence-v1', candidateAlias: `candidate-${digest(observationSha256s).slice(0, 16)}`,
     context: { projectMode: route.projectMode, taskOutcome: browserTaskOutcomeContract(route.sourceContract.taskOutcome), designAxes: route.sourceContract.designAxes,
       requiredOutcomes: route.requiredOutcomes, prohibitedOutcomes: route.prohibitedOutcomes,
       developerCalibration: currentDeveloperCalibration(root, invocation) },
     measurementProjection: measurements.map(r => measurementProjection(context.index.packet(r.sha256), r.sha256)),
-    observationProjection: renders.map(({ pngBase64: _, ...row }) => row), renders };
+    observationProjection: renders.map(({ pngBase64: _, ...row }) => row), renders,
+    ...(temporalRenders.length === 0 ? {} : {
+      temporalRenders,
+      temporalEvidenceLimits: [...NATIVE_TEMPORAL_EVIDENCE_LIMITS,
+        'whole-progression-unmeasured', 'static-quality-from-settled-measured-renders-only'],
+    }),
+  };
   const evidenceSha256 = sha256(canonicalBytes(evidence));
   const fixedBindings = { observationSha256s, routeSha256: policy.routeSha256,
     buildSha256: invocation.current.buildSha256, briefSha256: invocation.current.briefSha256,
     browserSha256: sha256(readArtifact(root, '.omd/decision-graph.json')), evidenceSha256, measurements, reviewPolicySha256: digest(policy), reviewProfile: reviewProfileBinding('blindLane'),
     processBindingSha256: digest(process.binding) };
   return canonicalBytes({ schema: MEASURED_REVIEW_TRANSPORT, evidenceSha256, evidence, outputContract: {
-    schema: MEASURED_REVIEW_HANDBACK, lane: 'blindLane', laneSchema: 'measured-blind-review-v1',
+    schema: MEASURED_REVIEW_HANDBACK, lane: 'blindLane', laneSchema: 'measured-blind-review-v1', valueRules: { ...MEASURED_VALUE_RULES, ...MEASURED_DESIGN_QUALITY_SHAPE },
     verdictKeys: ['blindVisual', 'blindNarrative', ...(benchmark ? ['interactionBenchmarkFit', 'domainSpecificity'] : []), ...(route.projectMode === 'greenfield' ? ['realityFit'] : [])],
     criticalFloorKeys: ['composition', 'copy', ...(benchmark ? ['interactionQuality'] : [])],
     designQuality: { schema: 'design-quality-contract-v2', axes: MEASURED_DESIGN_QUALITY_AXES, floors: MEASURED_DESIGN_QUALITY_FLOORS, requiredMetricKinds: AXIS_METRICS,

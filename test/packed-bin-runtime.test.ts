@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { loadRefs } from '../core/ref/store.ts';
 import { packOfflineWorkspaceDependencies } from './helpers/packed-install.ts';
+import { createPrivateDesignerCaseFixture } from './helpers/designer-cases.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -58,6 +59,7 @@ function stagedPackageSource(temporary: string): string {
   const sentinel = join(packageSource, 'core', '.omc', 'package-leak-sentinel.txt');
   mkdirSync(join(sentinel, '..'), { recursive: true });
   writeFileSync(sentinel, 'must not ship');
+  createPrivateDesignerCaseFixture(join(packageSource, 'core', 'cases'));
   return packageSource;
 }
 
@@ -95,6 +97,12 @@ test('Given a real offline installed tarball When each public command starts The
     const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
     assert.equal(installed.status, 0, installed.stderr);
     assert.equal(existsSync(join(consumer, PACKAGE, 'core', '.omc')), false, 'packed runtime must exclude local agent/session state');
+    assert.equal(existsSync(join(consumer, PACKAGE, 'core', 'cases', 'fixture-hierarchy.json')), false,
+      'private caption records must not ship');
+    assert.equal(existsSync(join(consumer, PACKAGE, 'core', 'cases', 'media')), false,
+      'private video frames must not ship');
+    assert.equal(existsSync(join(consumer, PACKAGE, 'core', 'cases', 'index.ts')), true,
+      'the public loader must remain available without redistributing source material');
 
     for (const command of COMMANDS) {
       const executable = installedCommand(consumer, command.name);

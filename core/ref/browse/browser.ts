@@ -1,10 +1,11 @@
+import { browserCallback } from '../browser-evaluation.ts';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page, type Route } from 'playwright';
 import { createPublicNetworkProxy } from '../public-network.ts';
 import { disableUnproxiedRealtimeTransports } from '../browser-security.ts';
 import { observeDocumentResponses, type DocumentObserver } from '../document-observation.ts';
-import { authorizeBrowseDestination, browseUrl, cdpEndpoint } from './safety.ts';
+import { authorizeBrowseDestination, browseUrl, cdpEndpoint, isBrowserIntegrityCheck } from './safety.ts';
 import { browseFail, type Binding } from './contract.ts';
 import { canonicalJson, sha256 } from './json.ts';
 
@@ -21,6 +22,11 @@ async function cdpWebsocket(endpoint: string): Promise<string> {
   const target = new URL(ws);
   if (target.hostname !== url.hostname || target.port !== url.port || target.protocol !== 'ws:') browseFail('BROWSE_CDP_CAPABILITY', 'Chrome websocket left approved loopback endpoint');
   return ws;
+}
+async function browserUserAgent(browser: Browser): Promise<string> {
+  const probe = await browser.newContext();
+  try { return await (await probe.newPage()).evaluate(browserCallback(() => navigator.userAgent)); }
+  finally { await probe.close(); }
 }
 export async function openBrowseBrowser(binding: Binding, dependencies: BrowseBrowserDependencies = {}): Promise<BrowseBrowser> {
   const { start, consent } = binding;
@@ -42,7 +48,11 @@ export async function openBrowseBrowser(binding: Binding, dependencies: BrowseBr
       browser = start.mode === 'cdp' ? await chromium.connectOverCDP(await cdpWebsocket(start.cdpUrl!))
         : await chromium.launch({ headless: true, args: ['--proxy-bypass-list=<-loopback>'] });
       const original = start.mode === 'cdp' ? browser.contexts()[0] : undefined;
-      context = await browser.newContext(options);
+      // Some galleries refuse the "HeadlessChrome" product token outright (Behance answers 403).
+      // Present the same browser and version under its ordinary name; nothing else changes.
+      const headlessAgent = start.mode === 'headless' ? await browserUserAgent(browser) : null;
+      context = await browser.newContext({ ...options,
+        ...(headlessAgent ? { userAgent: headlessAgent.replace('HeadlessChrome/', 'Chrome/') } : {}) });
       if (original && start.allowAuthOrigins.length) {
         // Cookie import is in memory, origin-scoped; no tab enumeration or storage export.
         const cookies = await original.cookies([...start.allowAuthOrigins]);
@@ -55,6 +65,10 @@ export async function openBrowseBrowser(binding: Binding, dependencies: BrowseBr
       const request = route.request();
       try {
         browseUrl(request.url());
+        if (isBrowserIntegrityCheck(request.method(), request.url(), request.isNavigationRequest())) {
+          if (dependencies.transport) await dependencies.transport(route); else await route.continue();
+          return;
+        }
         if (!['GET', 'HEAD'].includes(request.method())) browseFail('BROWSE_METHOD', 'only GET/HEAD allowed; manual credential submission is not recorded');
         authorizeBrowseDestination(request.url(), start);
       } catch (error) { violations.push(error instanceof Error ? error.message.split(':')[0]! : 'BROWSE_REQUEST'); await route.abort('blockedbyclient'); return; }
@@ -71,7 +85,9 @@ export async function openBrowseBrowser(binding: Binding, dependencies: BrowseBr
         const until = value && /^\d+$/.test(value) ? now + Number(value) * 1000 : value ? Date.parse(value) : now;
         if (Number.isFinite(until) && until > now) retryAfter.set(new URL(response.url()).origin, until);
       }
-      if (response.request().resourceType() !== 'image') return;
+      // An original opened directly (https://i.pinimg.com/originals/...) arrives as the document itself.
+      const type = response.request().resourceType();
+      if (type !== 'image' && !(type === 'document' && /^image\//.test(response.headers()['content-type'] ?? ''))) return;
       media.set(response.url(), (async () => {
         if (!response.ok() || Number(response.headers()['content-length'] ?? 0) > 50 * 1024 * 1024) return null;
         const bytes = await response.body();

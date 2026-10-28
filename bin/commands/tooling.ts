@@ -1,6 +1,7 @@
 import { accessSync, constants, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { extractPackSections, PackSectionError } from '../../core/pack-sections.ts';
+import { designerCasePack, designerJudgmentPack } from './designer-cases.ts';
 import { analyse } from '../../core/coach/index.ts';
 import { readHistory } from '../../core/history/index.ts';
 import {
@@ -268,6 +269,8 @@ async function cmdDoctor(): Promise<never> {
 }
 
 function cmdPack(sub: string | undefined, ...rest: string[]): never {
+  designerCasePack(sub, rest);
+  designerJudgmentPack(sub, rest);
   const packsRoot = join(ROOT, 'core');
   // `--section "<heading>"` prints one ##–###### section with descendants, in requested order. A
   // role that needs the framing rules should not pay for the whole protocol: the loop file alone
@@ -311,6 +314,8 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
     const target = join(packsRoot, sub, ...parts);
     if (!existsSync(target)) {
       console.error(`pack file not found: ${target}`);
+      const suggestions = suggestPackFiles(packsRoot, [sub, ...parts].join('/'));
+      if (suggestions.length) console.error(`files that cover it: ${suggestions.join(', ')} (omd pack list shows every file)`);
       process.exit(1);
     }
     const body = readFileSync(target, 'utf8');
@@ -334,6 +339,29 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
 
 function unknown(command: string, sub?: string): never {
   throw new Error(`unknown command ${command}${sub ? ` ${sub}` : ''}; run omd help`);
+}
+
+/** A guessed pack name ("protocol/trusted-lifecycle.md") is matched by its words against file names and text. */
+function suggestPackFiles(root: string, requested: string): string[] {
+  const words = requested.replace(/\.md$/, '').split(/[\/_.-]+/).filter(word => word.length > 2).map(word => word.toLowerCase());
+  if (!words.length || !existsSync(root)) return [];
+  const scored: [string, number][] = [];
+  const walk = (dir: string, rel: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) { walk(join(dir, entry.name), entryRel); continue; }
+      if (!entry.name.endsWith('.md')) continue;
+      const text = readFileSync(join(dir, entry.name), 'utf8').toLowerCase();
+      const phrase = words.join(' ');
+      const score = (text.includes(phrase) ? 4 : 0) + words.filter(word => entryRel.toLowerCase().includes(word)).length * 2
+        + words.filter(word => text.includes(word)).length;
+      // Ties break toward the file that talks about the words most, not the one listed first.
+      const mentions = words.reduce((sum, word) => sum + text.split(word).length - 1, 0);
+      if (score >= words.length + 2) scored.push([entryRel, score + Math.min(mentions, 40) / 100]);
+    }
+  };
+  walk(root, '');
+  return scored.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([rel]) => rel);
 }
 
 export async function runTooling(args: string[]): Promise<never> {

@@ -9,6 +9,7 @@ import { toVisualVector } from '../../visual-vector.ts';
 import { canonicalJson, sha256 } from './json.ts';
 import type { DocumentObserver } from '../document-observation.ts';
 import { cropBrowsePng } from './pixels.ts';
+import { decodePng } from '../../motion/energy.ts';
 import { renderWholeBrowseImage } from './whole-image.ts';
 import type { BrowseBrowser } from './browser.ts';
 import { browseUrl } from './safety.ts';
@@ -96,11 +97,97 @@ export async function inspectVisible(page: Page) {
     catch { return { ...control, href: null }; }
   }) };
 }
+/**
+ * Galleries answer the first request with a bot check or an empty shell and fill results by script a
+ * few seconds later. Without a ready selector, wait until the page has content and its text and image
+ * counts stop changing, bounded so a page that never settles is still observed as it is.
+ */
+async function waitForContent(page: Page, budgetMs: number): Promise<void> {
+  const deadline = Date.now() + budgetMs;
+  let last = '', stableSince = Date.now();
+  while (Date.now() < deadline) {
+    const now = await page.evaluate(browserCallback(() =>
+      `${document.body?.innerText?.length ?? 0}:${document.images.length}`)).catch(() => '');
+    if (now !== last) { last = now; stableSince = Date.now(); }
+    else if (!now.startsWith('0:') && Date.now() - stableSince >= 750) return;
+    await page.waitForTimeout(250);
+  }
+}
+
+type CaptureOptions = { selector?: string; wholeImageSelector?: string; media?: BrowseBrowser['media']; search: boolean; readySelector?: string | null; timeout: number;
+  /** Design references need one honest frame; a page whose script keeps changing it is kept as its last frame. */
+  oneFrame?: boolean };
+type CaptureResult = { observation: BrowseObservation; receipt: Receipt; assets: PublishedAsset[] };
+
+/**
+ * Landings with a looping hero (WebGL, canvas, an infinite CSS loop, an autoplay video) never give two
+ * identical snapshots. Hold the frame that is on screen — pause infinite animations where they are,
+ * queue animation-frame callbacks and pause playing videos — for the capture, then let it run again.
+ * Finite transitions are still awaited, so content that is genuinely changing is not frozen mid-way.
+ */
+async function holdBrowseFrame(page: Page): Promise<void> {
+  await page.evaluate(browserCallback(() => {
+    const held = window as unknown as { __omdBrowseFrame?: typeof requestAnimationFrame; __omdBrowseQueue?: FrameRequestCallback[];
+      __omdBrowsePaused?: Animation[]; __omdBrowseVideos?: HTMLVideoElement[] };
+    if (held.__omdBrowseFrame !== undefined) return;
+    held.__omdBrowseFrame = window.requestAnimationFrame.bind(window);
+    held.__omdBrowseQueue = [];
+    window.requestAnimationFrame = (callback: FrameRequestCallback) => { held.__omdBrowseQueue!.push(callback); return 0; };
+    held.__omdBrowsePaused = document.getAnimations().filter(animation => animation.playState === 'running'
+      && animation.effect?.getComputedTiming().iterations === Infinity);
+    for (const animation of held.__omdBrowsePaused) animation.pause();
+    held.__omdBrowseVideos = Array.from(document.querySelectorAll('video')).filter(video => !video.paused);
+    for (const video of held.__omdBrowseVideos) video.pause();
+  }));
+}
+
+async function releaseBrowseFrame(page: Page): Promise<void> {
+  await page.evaluate(browserCallback(() => {
+    const held = window as unknown as { __omdBrowseFrame?: typeof requestAnimationFrame; __omdBrowseQueue?: FrameRequestCallback[];
+      __omdBrowsePaused?: Animation[]; __omdBrowseVideos?: HTMLVideoElement[] };
+    if (held.__omdBrowseFrame === undefined) return;
+    window.requestAnimationFrame = held.__omdBrowseFrame;
+    for (const callback of held.__omdBrowseQueue ?? []) held.__omdBrowseFrame(callback);
+    for (const animation of held.__omdBrowsePaused ?? []) animation.play();
+    for (const video of held.__omdBrowseVideos ?? []) void video.play().catch(() => undefined);
+    delete held.__omdBrowseFrame; delete held.__omdBrowseQueue; delete held.__omdBrowsePaused; delete held.__omdBrowseVideos;
+  }));
+}
+
+/** Visible loaded images large enough to be a work, as selectors the maker can pass straight back to shot. */
+async function wholeImageCandidates(page: Page): Promise<string> {
+  const candidates = await page.evaluate(browserCallback(() => Array.from(document.images).flatMap((image, index) => {
+    const box = image.getBoundingClientRect();
+    if (!image.complete || !image.naturalWidth || box.width < 120 || box.height < 120 || box.bottom <= 0 || box.top >= innerHeight
+      || !image.checkVisibility({ checkVisibilityCSS: true })) return [];
+    const hit = document.elementFromPoint(box.x + box.width / 2, Math.min(innerHeight - 1, box.y + box.height / 2));
+    return [{ selector: `img >> nth=${index}`, alt: (image.alt || '').trim().slice(0, 50), covered: hit !== image }];
+  }).slice(0, 6))).catch(() => []);
+  if (!candidates.length) return '; no large loaded image is in view: scroll to the work first';
+  return `; visible candidates: ${candidates.map(item => `${item.selector}${item.alt ? ` ("${item.alt}")` : ''}${item.covered ? ' [covered: open its page]' : ''}`).join(', ')}`;
+}
+
 export async function captureBrowseObservation(page: Page, observer: DocumentObserver, sessionId: string,
-  options: { selector?: string; wholeImageSelector?: string; media?: BrowseBrowser['media']; search: boolean; readySelector?: string | null; timeout: number }): Promise<{ observation: BrowseObservation; receipt: Receipt; assets: PublishedAsset[] }> {
+  options: CaptureOptions): Promise<CaptureResult> {
   if (options.readySelector) await page.locator(options.readySelector).waitFor({ state: 'visible', timeout: options.timeout });
+  else await waitForContent(page, Math.min(6_000, options.timeout));
   await page.waitForFunction(() => document.fonts.status === 'loaded', undefined, { timeout: options.timeout });
-  for (let attempt = 0; attempt < 2; attempt++) {
+  await holdBrowseFrame(page);
+  try { return await captureHeldObservation(page, observer, sessionId, options); }
+  finally { await releaseBrowseFrame(page).catch(() => undefined); }
+}
+
+async function captureHeldObservation(page: Page, observer: DocumentObserver, sessionId: string,
+  options: CaptureOptions): Promise<CaptureResult> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // A landing page whose entry sequence outlasts the wait would never be capturable; after the first
+    // try, freeze every running animation where it stands and keep that frame (released after capture).
+    if (attempt > 0) await page.evaluate(browserCallback(() => {
+      const held = window as unknown as { __omdBrowsePaused?: Animation[] };
+      const running = document.getAnimations().filter(animation => animation.playState === 'running' || animation.pending);
+      for (const animation of running) animation.pause();
+      held.__omdBrowsePaused = [...(held.__omdBrowsePaused ?? []), ...running];
+    }));
     const settled = await page.evaluate(browserCallback(async (timeout: number) => {
       const visible = (element: Element) => {
         const box = element.getBoundingClientRect();
@@ -143,8 +230,13 @@ export async function captureBrowseObservation(page: Page, observer: DocumentObs
         if (!animation.pending && animation.playState !== 'running') finish();
       })));
       return finished.every(Boolean);
-    }), options.timeout);
-    if (!settled) browseFail('BROWSE_UNSTABLE_RENDER', 'visible images or finite transitions did not settle; no capture evidence was accepted');
+      // Later attempts follow a freeze of every running animation, so a short wait is enough; three full waits
+      // on a page that keeps starting animations would outlast the client's request.
+    }), attempt === 0 ? options.timeout : Math.min(options.timeout, 3_000));
+    if (!settled) {
+      if (attempt < 2) continue;
+      if (!options.oneFrame) browseFail('BROWSE_UNSTABLE_RENDER', 'visible images or finite transitions did not settle; no capture evidence was accepted');
+    }
     const url = browseUrl(page.url()), binding = await observer.current(), before = await inspectVisible(page);
     let crop: Box | null = null, mediaUrl: string | null = null, kind: BrowseObservation['kind'] = 'page';
     let invariants: BrowseObservation['invariants'] = null, blueprint: BrowseObservation['blueprint'] = null;
@@ -184,33 +276,42 @@ export async function captureBrowseObservation(page: Page, observer: DocumentObs
     let wholeImage: BrowseObservation['wholeImage'] = null, originalPng: Buffer | null = null;
     if (options.wholeImageSelector) {
       const image = page.locator(options.wholeImageSelector);
-      if (await image.count() !== 1 || !await image.isVisible()) browseFail('BROWSE_WHOLE_IMAGE', 'choose one visible loaded item image');
+      const matches = await image.count();
+      if (matches !== 1 || !await image.isVisible()) browseFail('BROWSE_WHOLE_IMAGE', (matches > 1
+        ? `choose one visible loaded item image: the selector matched ${matches} images; add >> nth=<index> (0-based) or a more specific selector`
+        : matches === 0 ? 'choose one visible loaded item image: the selector matched no image (on many galleries the card link sits beside its image, not around it)'
+        : 'choose one visible loaded item image: the matched image is not visible; scroll it into view first') + await wholeImageCandidates(page));
       const info = await image.evaluate(node => {
         if (!(node instanceof HTMLImageElement) || !node.complete || !node.naturalWidth) return null;
         const b = node.getBoundingClientRect(), x = Math.max(0, b.x), y = Math.max(0, b.y);
         const hit = document.elementFromPoint((x + Math.min(innerWidth, b.right)) / 2, (y + Math.min(innerHeight, b.bottom)) / 2);
         return hit === node ? { url: node.currentSrc, width: node.naturalWidth, height: node.naturalHeight } : null;
       });
-      if (!info) browseFail('BROWSE_WHOLE_IMAGE', 'item image is unloaded, offscreen or obscured');
+      if (!info) browseFail('BROWSE_WHOLE_IMAGE', 'item image is unloaded, offscreen or covered by an overlay (a result card\'s link layer); '
+        + 'open the work\'s own page with click or goto and shot its main image there');
       mediaUrl = browseUrl(info.url);
       const response = await options.media?.get(mediaUrl);
       if (!response) browseFail('BROWSE_WHOLE_IMAGE_RESPONSE', 'original loaded image response was not observed; revisit the item');
       originalPng = await renderWholeBrowseImage(response.bytes, response.mime, info);
-      wholeImage = { width: info.width, height: info.height, originalSha256: sha256(response.bytes) }; kind = 'image';
+      // A srcset density file decodes larger than the element's natural size; record the pixels actually kept.
+      const kept = decodePng(originalPng);
+      wholeImage = { width: kept.width, height: kept.height, originalSha256: sha256(response.bytes) }; kind = 'image';
     }
     const png = await page.screenshot({ timeout: options.timeout, mask: before.masks.map(selector => page.locator(selector)) });
     const after = await inspectVisible(page), afterBinding = await observer.current();
-    if (page.url() !== url || binding.identity !== afterBinding.identity || canonicalJson(before) !== canonicalJson(after)) continue;
+    if (page.url() !== url || binding.identity !== afterBinding.identity) continue;
+    const changing = canonicalJson(before) !== canonicalJson(after);
+    if (changing && (!options.oneFrame || attempt < 2)) continue;
     const parent = asset(sessionId, 'assets', png, 'png'), assets = [parent];
     const screenshot = originalPng ? asset(sessionId, 'assets', originalPng, 'png') : crop ? asset(sessionId, 'assets', cropBrowsePng(png, crop), 'png') : parent;
     if (crop || originalPng) assets.push(screenshot);
     const challenge = /captcha|access denied|verify you are human|just a moment|sign in|log in/iu.test(before.title);
-    const retainable = binding.httpStatus >= 200 && binding.httpStatus < 300 && !challenge && !before.masks.length && !before.obstructions.length && !options.search && (before.text.trim().length > 0 || wholeImage !== null);
+    const retainable = binding.httpStatus >= 200 && binding.httpStatus < 300 && !challenge && !before.masks.length && !before.obstructions.length && (!options.search || wholeImage !== null) && (before.text.trim().length > 0 || wholeImage !== null);
     const observation: BrowseObservation = { schema: 'reference-browse-observation-v1', url, documentId: binding.identity, httpStatus: binding.httpStatus,
       ...before, screenshot: parent.receipt, crop, selector: options.wholeImageSelector ?? options.selector ?? null, mediaUrl, kind, invariants, blueprint,
       wholeImage, measurement: kind === 'image' ? 'image-only' : invariants ? 'scoped-dom' : 'not-measured',
       vector: invariants ? { ...toVisualVector({ invariants }), motionVoice: null, easingVoice: null, materialDensity: null, interactionCoverage: null, motionLoad: null, energyLoad: null } : null,
-      retainable, limitation: retainable ? null : 'Search wrapper, obscuring consent, failed/challenged/authentication page, sensitive fields or empty visible content cannot be retained.' };
+      retainable, limitation: retainable ? (changing || !settled ? 'The page kept changing between snapshots; this is one frame of it.' : null) : 'Search wrapper (keep a result with shot --selector <its img>), obscuring consent, failed/challenged/authentication page, sensitive fields or empty visible content cannot be retained.' };
     const metadata = asset(sessionId, 'observations', Buffer.from(`${canonicalJson(observation)}\n`), 'json'); assets.push(metadata);
     return { observation, receipt: metadata.receipt, assets };
   }

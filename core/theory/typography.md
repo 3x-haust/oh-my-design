@@ -8,7 +8,7 @@ wrapping, loading, and fallback.
 
 Work in this order:
 
-1. Read the target-language copy deck and identify productive and expressive roles.
+1. Read the page's target-language copy and identify productive and expressive roles.
 2. Name the task and register: dense scanning, long reading, transactional UI, editorial
    authority, playful showpiece, or another evidenced need.
 3. Study cited typography references for visible anatomy and behavior, not brand prestige.
@@ -22,7 +22,7 @@ copy, language coverage, voice, or production constraints.
 
 ## Native Pi maker handoff
 
-When native Pi will use the selected type proof, Typesetter writes exactly one
+When native Pi will use the selected type proof, write exactly one
 `## Approved type contract` section in `.omd/type-proof.md`. Include only committed
 role/family/size/weight/measure/wrapping and responsive constraints. Keep rejected
 alternatives and source rationale outside that section. This exports the existing type
@@ -57,7 +57,7 @@ convention, not a standard: it asks whether local exceptions have replaced seman
 
 **[type-composition-boundary]** Keep a tested treatment distinct from its composed role assignment. A neutral specimen proves the supplied string at its recorded family, weight, size, measure, and viewport; it does not prove that this treatment should dominate the finished page. A semantic heading level does not select the largest rung. When the intended focal anchor is another content object, prove any needed alternative for the competing heading from real copy and record its scope, rather than prescribing two dominant treatments. This is not permission to shrink every heading: a heading may itself be the intended anchor, and an explicit user size or emphasis lock remains binding. If no competing assignment is unresolved, one proved treatment is enough.
 
-The proof handoff distinguishes exact selected assignments, tested treatment options, and unresolved assignments. An option is usable only for the exact text and conditions actually proved; a size somewhere in the token ladder is not proof for a different string or measure. Composer selects only within that evidence, then records the content-to-treatment mapping and attention relationship in its existing Focal hierarchy section. A missing option returns to typography proof before dependent candidates are made. No new type value or approval is inferred from a passing specimen, token check, or composition fingerprint. Final dominance is judged on the composed fixed-viewport renders, not the specimen alone.
+The proof handoff distinguishes exact selected assignments, tested treatment options, and unresolved assignments. An option is usable only for the exact text and conditions actually proved; a size somewhere in the token ladder is not proof for a different string or measure. Select only within that evidence, and know which content gets which treatment and which object is meant to hold attention first. A missing option goes back to a typography specimen before anything that depends on it is built. No new type value or approval is inferred from a passing specimen, token check, or composition fingerprint. Final dominance is judged on the composed fixed-viewport renders, not the specimen alone.
 
 ## Hierarchy is a content decision, not a filled template
 

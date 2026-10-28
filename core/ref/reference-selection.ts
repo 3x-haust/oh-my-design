@@ -1,6 +1,6 @@
-import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
-import type { Stats } from 'node:fs';
-import { join, relative, resolve, sep } from 'node:path';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { readContainedRegularFile as readContainedFile } from './contained-file.ts';
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from './board-artifacts.ts';
 import type { ReferenceAxis, ReferenceRights, ReferenceSignal } from './board-projection.ts';
 import { requireApprovedMotionRecipeAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -169,46 +169,9 @@ const consumeIssuedMotionSettlementAuthority = (invocation: ProjectRunInvocation
   if (issued === undefined || !issued.delete(key)) fail('current settlement read requires an unconsumed host-issued evaluator settlement authority');
 };
 const preSelectionRecordPath = (digest: string): string => `pre-reference-selections/sha256-${digest}.json`;
-const sameFile = (left: Stats, right: Stats): boolean => left.dev === right.dev && left.ino === right.ino && left.size === right.size;
-const rejectSymlinkAncestors = (root: string, path: string, label: string): void => {
-  const canonicalRoot = resolve(root);
-  const rootStat = lstatSync(canonicalRoot);
-  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail(`${label} project root must be a non-symlink directory`);
-  const relativePath = relative(canonicalRoot, resolve(path));
-  if (relativePath === '' || relativePath === '..' || relativePath.startsWith(`..${sep}`)) fail(`${label} escapes project root`);
-  let ancestor = canonicalRoot;
-  for (const part of relativePath.split(sep).slice(0, -1)) {
-    ancestor = join(ancestor, part);
-    const stat = lstatSync(ancestor);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) fail(`${label} has a symbolic-link or non-directory ancestor`);
-  }
-};
 export function readContainedRegularFile(root: string, relativePath: string, label: string): Buffer {
-  const path = resolve(root, relativePath);
   try {
-    const sample = (): { readonly bytes: Buffer; readonly stat: Stats } => {
-      rejectSymlinkAncestors(root, path, label);
-      const before = lstatSync(path);
-      if (!before.isFile() || before.isSymbolicLink()) return fail(`${label} must be a regular non-symlink file`);
-      const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
-      try {
-        const opened = fstatSync(descriptor);
-        if (!opened.isFile() || !sameFile(before, opened)) return fail(`${label} changed before it was opened`);
-        const bytes = readFileSync(descriptor);
-        const after = fstatSync(descriptor);
-        if (!after.isFile() || !sameFile(opened, after) || bytes.length !== after.size) return fail(`${label} changed while it was read`);
-        rejectSymlinkAncestors(root, path, label);
-        const final = lstatSync(path);
-        if (!final.isFile() || final.isSymbolicLink() || !sameFile(after, final)) return fail(`${label} changed while it was read`);
-        return { bytes, stat: final };
-      } finally {
-        closeSync(descriptor);
-      }
-    };
-    const first = sample();
-    const second = sample();
-    if (!sameFile(first.stat, second.stat) || !first.bytes.equals(second.bytes)) return fail(`${label} changed during final resampling`);
-    return first.bytes;
+    return readContainedFile(root, relativePath, label, fail);
   } catch (error) {
     if (error instanceof ReferenceSelectionValidationError) throw error;
     return fail(`${label} is missing or unreadable`);

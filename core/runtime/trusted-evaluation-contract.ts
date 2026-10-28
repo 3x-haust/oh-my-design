@@ -21,8 +21,9 @@ export type TrustedEvaluationContractErrorCode =
 export class TrustedEvaluationContractError extends Error {
   readonly code: TrustedEvaluationContractErrorCode;
 
-  constructor(code: TrustedEvaluationContractErrorCode) {
-    super(code);
+  constructor(code: TrustedEvaluationContractErrorCode, detail?: string) {
+    // The detail names the field to repair; the code alone sent authors round the same schema again.
+    super(detail === undefined ? code : `${code}: ${detail}`);
     this.name = 'TrustedEvaluationContractError';
     this.code = code;
   }
@@ -156,39 +157,39 @@ function evaluationState(value: unknown): value is TrustedEvaluationState {
     || value === 'pressed' || value === 'open';
 }
 
-function fail(code: TrustedEvaluationContractErrorCode): never {
-  throw new TrustedEvaluationContractError(code);
+function fail(code: TrustedEvaluationContractErrorCode, detail?: string): never {
+  throw new TrustedEvaluationContractError(code, detail);
 }
+const malformed = (detail: string): never => fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST', detail);
 
-function record(value: unknown): Record<string, unknown> {
+function record(value: unknown, where = 'manifest'): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    return malformed(`${where} must be an object`);
   }
   return value as Record<string, unknown>;
 }
 
-function exact(value: Record<string, unknown>, keys: ReadonlySet<string>): void {
+function exact(value: Record<string, unknown>, keys: ReadonlySet<string>, where = 'manifest'): void {
   const own = Reflect.ownKeys(value);
-  if (own.some((key) => typeof key !== 'string' || key === 'authority')
-    || [...keys].some((key) => !Object.hasOwn(value, key))) {
-    return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
-  }
+  if (own.some((key) => typeof key !== 'string' || key === 'authority')) return malformed(`${where} has a forbidden field`);
+  const missing = [...keys].filter((key) => !Object.hasOwn(value, key));
+  if (missing.length > 0) return malformed(`${where} is missing ${missing.join(', ')}`);
   for (const key of own) {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    if (descriptor === undefined || !descriptor.enumerable || !('value' in descriptor)) return malformed(`${where}.${String(key)} must be a plain value`);
     if (!keys.has(key as string)) process.emitWarning(`ignored unknown lifecycle manifest field: ${String(key)}`);
   }
 }
 
-function text(value: unknown): string {
+function text(value: unknown, where = 'field'): string {
   if (typeof value !== 'string' || value.trim() === '') {
-    return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    return malformed(`${where} must be non-empty text`);
   }
   return value.trim();
 }
 
-function array(value: unknown): readonly unknown[] {
-  if (!Array.isArray(value)) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+function array(value: unknown, where = 'field'): readonly unknown[] {
+  if (!Array.isArray(value)) return malformed(`${where} must be an array`);
   return value;
 }
 
@@ -214,28 +215,28 @@ function safeScopedPath(path: string, allowedPaths: readonly string[]): boolean 
 }
 
 function parseEntrySurface(value: unknown): TrustedEntrySurface {
-  const entry = record(value);
+  const entry = record(value, 'entrySurface');
   const hasNextAction = Object.hasOwn(entry, 'nextAction');
-  exact(entry, hasNextAction ? ENTRY_SURFACE_KEYS : ENTRY_SURFACE_WITHOUT_NEXT_ACTION_KEYS);
-  const benchmarkProjectionSha256 = text(entry.benchmarkProjectionSha256);
+  exact(entry, hasNextAction ? ENTRY_SURFACE_KEYS : ENTRY_SURFACE_WITHOUT_NEXT_ACTION_KEYS, 'entrySurface');
+  const benchmarkProjectionSha256 = text(entry.benchmarkProjectionSha256, 'entrySurface.benchmarkProjectionSha256');
   if (!SHA256.test(benchmarkProjectionSha256)) {
-    return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    return malformed('entrySurface.benchmarkProjectionSha256 must be a sha256 digest');
   }
-  const purpose = record(entry.purpose);
-  exact(purpose, ENTRY_PURPOSE_KEYS);
-  const workObject = record(entry.workObject);
-  exact(workObject, ENTRY_WORK_OBJECT_KEYS);
-  const nextAction = hasNextAction ? record(entry.nextAction) : undefined;
-  if (nextAction !== undefined) exact(nextAction, ENTRY_NEXT_ACTION_KEYS);
-  const trigger = record(entry.trigger);
-  if (trigger.kind === 'click') exact(trigger, CLICK_ACTION_KEYS);
-  else if (trigger.kind === 'fill') exact(trigger, FILL_ACTION_KEYS);
-  else return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
-  const consequence = record(entry.consequence);
-  exact(consequence, ENTRY_CONSEQUENCE_KEYS);
-  const beforeText = text(consequence.beforeText);
-  const afterText = text(consequence.afterText);
-  if (beforeText === afterText) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+  const purpose = record(entry.purpose, 'entrySurface.purpose');
+  exact(purpose, ENTRY_PURPOSE_KEYS, 'entrySurface.purpose');
+  const workObject = record(entry.workObject, 'entrySurface.workObject');
+  exact(workObject, ENTRY_WORK_OBJECT_KEYS, 'entrySurface.workObject');
+  const nextAction = hasNextAction ? record(entry.nextAction, 'entrySurface.nextAction') : undefined;
+  if (nextAction !== undefined) exact(nextAction, ENTRY_NEXT_ACTION_KEYS, 'entrySurface.nextAction');
+  const trigger = record(entry.trigger, 'entrySurface.trigger');
+  if (trigger.kind === 'click') exact(trigger, CLICK_ACTION_KEYS, 'entrySurface.trigger');
+  else if (trigger.kind === 'fill') exact(trigger, FILL_ACTION_KEYS, 'entrySurface.trigger');
+  else return malformed('entrySurface.trigger.kind must be click or fill');
+  const consequence = record(entry.consequence, 'entrySurface.consequence');
+  exact(consequence, ENTRY_CONSEQUENCE_KEYS, 'entrySurface.consequence');
+  const beforeText = text(consequence.beforeText, 'entrySurface.consequence.beforeText');
+  const afterText = text(consequence.afterText, 'entrySurface.consequence.afterText');
+  if (beforeText === afterText) return malformed('entrySurface.consequence beforeText and afterText must differ');
   return Object.freeze({
     benchmarkProjectionSha256,
     prerequisiteTaskId: text(entry.prerequisiteTaskId),
@@ -278,36 +279,38 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
   const measured = value.schema === MEASURED_LIFECYCLE_MANIFEST_SCHEMA;
   exact(value, new Set([...(Object.hasOwn(value, 'entrySurface') ? ENTRY_MANIFEST_KEYS : MANIFEST_KEYS), ...(measured ? ['measurementViews'] : [])]));
   if (value.schema !== TRUSTED_LIFECYCLE_MANIFEST_SCHEMA && !measured) {
-    return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+    return malformed(`schema must be ${TRUSTED_LIFECYCLE_MANIFEST_SCHEMA} or ${MEASURED_LIFECYCLE_MANIFEST_SCHEMA}`);
   }
-  const scripts = array(value.scripts).map((candidate) => {
-    const script = record(candidate);
-    exact(script, Object.hasOwn(script, 'captureState') ? CAPTURED_SCRIPT_KEYS : SCRIPT_KEYS);
-    const actions = array(script.actions).map((candidateAction) => {
-      const action = record(candidateAction);
+  const scripts = array(value.scripts, 'scripts').map((candidate, scriptIndex) => {
+    const at = `scripts[${scriptIndex}]`;
+    const script = record(candidate, at);
+    exact(script, Object.hasOwn(script, 'captureState') ? CAPTURED_SCRIPT_KEYS : SCRIPT_KEYS, at);
+    const actions = array(script.actions, `${at}.actions`).map((candidateAction, actionIndex) => {
+      const where = `${at}.actions[${actionIndex}]`;
+      const action = record(candidateAction, where);
       const scoped = Object.hasOwn(action, 'viewports');
-      if (action.kind === 'click') exact(action, scoped ? SCOPED_CLICK_ACTION_KEYS : CLICK_ACTION_KEYS);
-      else if (action.kind === 'fill') exact(action, scoped ? SCOPED_FILL_ACTION_KEYS : FILL_ACTION_KEYS);
-      else if (action.kind === 'press') exact(action, scoped ? SCOPED_PRESS_ACTION_KEYS : PRESS_ACTION_KEYS);
+      if (action.kind === 'click') exact(action, scoped ? SCOPED_CLICK_ACTION_KEYS : CLICK_ACTION_KEYS, where);
+      else if (action.kind === 'fill') exact(action, scoped ? SCOPED_FILL_ACTION_KEYS : FILL_ACTION_KEYS, where);
+      else if (action.kind === 'press') exact(action, scoped ? SCOPED_PRESS_ACTION_KEYS : PRESS_ACTION_KEYS, where);
       else if (action.kind === 'reload') {
         const keys = scoped ? SCOPED_RELOAD_ACTION_KEYS : RELOAD_ACTION_KEYS;
-        exact(action, keys);
-        if (Object.keys(action).some(key => !keys.has(key))) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+        exact(action, keys, where);
+        if (Object.keys(action).some(key => !keys.has(key))) return malformed(`${where} reload takes only kind and viewports`);
       }
       else if (action.kind === 'hover' || action.kind === 'focus' || action.kind === 'press-start') {
-        exact(action, scoped ? SCOPED_STATE_ACTION_KEYS : STATE_ACTION_KEYS);
+        exact(action, scoped ? SCOPED_STATE_ACTION_KEYS : STATE_ACTION_KEYS, where);
       }
-      else return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      else return malformed(`${where}.kind must be click, fill, press, reload, hover, focus or press-start`);
       const viewports = action.viewports === undefined
         ? undefined
-        : array(action.viewports).map((viewport) => {
+        : array(action.viewports, `${where}.viewports`).map((viewport) => {
           if (!evaluationViewport(viewport) || !EVALUATION_VIEWPORTS.has(viewport)) {
-            return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+            return malformed(`${where}.viewports entries must be 1280x900 or 390x844`);
           }
           return viewport;
         });
       if (viewports !== undefined && (viewports.length === 0 || new Set(viewports).size !== viewports.length)) {
-        return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+        return malformed(`${where}.viewports must be non-empty and unique`);
       }
       if (action.kind === 'reload') {
         return Object.freeze({
@@ -315,10 +318,10 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
           ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }),
         });
       }
-      const selector = text(action.selector);
+      const selector = text(action.selector, `${where}.selector`);
       if (action.kind === 'press') {
         const key = TRUSTED_EVALUATION_KEYS.find(candidate => candidate === action.key);
-        if (key === undefined) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+        if (key === undefined) return malformed(`${where}.key must be one of ${TRUSTED_EVALUATION_KEYS.join(', ')}`);
         return Object.freeze({ kind: 'press' as const, selector, key,
           ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }) });
       }
@@ -339,45 +342,46 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
       return Object.freeze({
         kind: 'fill' as const,
         selector,
-        value: text(action.value),
+        value: text(action.value, `${where}.value`),
         ...(viewports === undefined ? {} : { viewports: Object.freeze(viewports) }),
       });
     });
     const pressStarts = actions.flatMap((action, index) =>
       action.kind === 'press-start' ? [index] : []);
     if (pressStarts.length > 1 || (pressStarts.length === 1 && pressStarts[0] !== actions.length - 1)) {
-      return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      return malformed(`${at}.actions may hold one press-start, and only as the last action`);
     }
-    const assertions = array(script.assertions).map((candidateAssertion) => {
-      const assertion = record(candidateAssertion);
+    const assertions = array(script.assertions, `${at}.assertions`).map((candidateAssertion, assertionIndex) => {
+      const where = `${at}.assertions[${assertionIndex}]`;
+      const assertion = record(candidateAssertion, where);
       if (assertion.kind === 'element-state') {
-        exact(assertion, STATE_ASSERTION_KEYS);
+        exact(assertion, STATE_ASSERTION_KEYS, where);
         if (assertion.state !== 'hovered' && assertion.state !== 'focused'
           && assertion.state !== 'focus-visible' && assertion.state !== 'pressed'
           && assertion.state !== 'expanded') {
-          return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+          return malformed(`${where}.state must be hovered, focused, focus-visible, pressed or expanded`);
         }
         return Object.freeze({
           kind: 'element-state' as const,
-          selector: text(assertion.selector),
+          selector: text(assertion.selector, `${where}.selector`),
           state: assertion.state,
         });
       }
-      exact(assertion, ASSERTION_KEYS);
+      exact(assertion, ASSERTION_KEYS, where);
       if (assertion.kind !== 'visible-text' && assertion.kind !== 'preserved-text' && assertion.kind !== 'absent-text') {
-        return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+        return malformed(`${where}.kind must be visible-text, preserved-text, absent-text or element-state`);
       }
       return Object.freeze({
         kind: assertion.kind,
-        selector: text(assertion.selector),
-        text: text(assertion.text),
+        selector: text(assertion.selector, `${where}.selector`),
+        text: text(assertion.text, `${where}.text`),
       });
     });
     const captureState = script.captureState === undefined ? undefined : (() => {
-      const capture = record(script.captureState);
-      exact(capture, CAPTURE_STATE_KEYS);
-      if (!evaluationState(capture.state)) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
-      return Object.freeze({ component: text(capture.component), state: capture.state });
+      const capture = record(script.captureState, `${at}.captureState`);
+      exact(capture, CAPTURE_STATE_KEYS, `${at}.captureState`);
+      if (!evaluationState(capture.state)) return malformed(`${at}.captureState.state must be default, hover, focus, pressed or open`);
+      return Object.freeze({ component: text(capture.component, `${at}.captureState.component`), state: capture.state });
     })();
     if (captureState !== undefined) {
       const finalAction = actions.at(-1);
@@ -401,10 +405,19 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
               ? assertions.some(assertion => assertion.kind === 'element-state'
                 && assertion.state === 'expanded' && assertion.selector === finalSelector)
               : true;
-      if (!matchingAction || !matchingAssertion) return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      if (!matchingAction || !matchingAssertion) {
+        // Say exactly what this state needs, so the plan is corrected in one edit.
+        const needs = captureState.state === 'default' ? 'no actions, or a final reload action'
+          : captureState.state === 'hover' ? 'a final hover action on S and an element-state assertion { "selector": S, "state": "hovered" }'
+          : captureState.state === 'focus' ? 'a final focus action on S and an element-state assertion { "selector": S, "state": "focused" }'
+          : captureState.state === 'pressed' ? 'a final press-start action on S and an element-state assertion { "selector": S, "state": "pressed" }'
+          : 'a final click or press action on S and an element-state assertion { "selector": S, "state": "expanded" }';
+        return malformed(`${at}.captureState ${captureState.state} needs a matching final action and element-state assertion on the same selector: `
+          + `${needs}. Found final action ${finalAction === undefined ? 'none' : `${finalAction.kind}${finalSelector ? ` on ${finalSelector}` : ''}`}`);
+      }
     }
     return Object.freeze({
-      outcomeRef: text(script.outcomeRef),
+      outcomeRef: text(script.outcomeRef, `${at}.outcomeRef`),
       actions: Object.freeze(actions),
       assertions: Object.freeze(assertions),
       ...(captureState === undefined ? {} : { captureState }),
@@ -413,7 +426,7 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
   return Object.freeze({
     schema: measured ? MEASURED_LIFECYCLE_MANIFEST_SCHEMA : TRUSTED_LIFECYCLE_MANIFEST_SCHEMA,
     ...(measured ? { measurementViews: parseMeasureScope({ schema: 'visual-measurement-scope-v1', views: value.measurementViews }) } : {}),
-    entryPath: text(value.entryPath),
+    entryPath: text(value.entryPath, 'entryPath'),
     scripts: Object.freeze(scripts),
     ...(value.entrySurface === undefined ? {} : { entrySurface: parseEntrySurface(value.entrySurface) }),
   });

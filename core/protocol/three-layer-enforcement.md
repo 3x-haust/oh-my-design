@@ -66,7 +66,7 @@ application source.
 After the first usable build, run:
 
 ```text
-omd first-render check --page <actual-build-entry> --json
+omd first-render check --page <built file, e.g. dist/index.html — not the preview URL> --json
 ```
 
 This captures fixed desktop/mobile evidence and launches the isolated early reviewer. Repair

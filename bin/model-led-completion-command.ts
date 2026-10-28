@@ -15,9 +15,11 @@ import { modelLedCompletionFingerprint } from '../core/runtime/model-led-executi
 import { browserFailureDiagnostic, completionErrorDiagnostic, type CompletionDiagnostic, type CompletionPhase } from '../core/runtime/model-led-diagnostics.ts';
 import { parseTrustedLifecycleManifest } from '../core/runtime/trusted-evaluation-contract.ts';
 import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
+import { captureFirstRenderMotion, firstRenderMotionProjection } from '../core/design/first-render-motion.ts';
 import {
   FIRST_RENDER_REVIEW_PATH,
   readFirstRenderReview,
+  requireRetainedFirstRenderReview,
   runFirstRenderReview,
 } from '../core/design/first-render-review.ts';
 import {
@@ -25,6 +27,10 @@ import {
   firstRenderReviewMatchesCurrentRoute,
 } from '../core/design/first-render-checkpoint.ts';
 import { requireConsultedPrimaryOriginal } from '../core/design/consulted-references.ts';
+import { requireConsultedReferences, requireDesignBrief, requireGraphicDecision, requireGraphicsStarted, requireNoticeableMotion } from '../core/design/new-surface-advisories.ts';
+import { REPAIR_KNOWLEDGE } from '../core/design/compose-guidance.ts';
+import { capturePageBasics } from '../core/design/page-basics.ts';
+import { requireReviewableSource } from '../core/design/source-readability.ts';
 import { figmaCompletionIssues, figmaTargetsInRequest } from '../core/figma/completion.ts';
 import { createProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { runNativeVerification } from './native-verification-command.ts';
@@ -87,6 +93,7 @@ export async function runModelLedCompletion(input: Readonly<{
       }
     } else {
       requireConsultedPrimaryOriginal(input.root, route);
+      requireGraphicDecision(input.root, route, input.invocation.current.briefSha256);
     }
     const readiness = checkProductionReadiness(input.root, input.invocation, input.packRoot);
     if (!readiness.ok) throw new CompletionStepError('NATIVE_PRODUCTION_NOT_READY', readiness.blockers.join('; '));
@@ -116,6 +123,11 @@ export async function runModelLedCompletion(input: Readonly<{
       }
     }
     cancelled();
+    requireReviewableSource(input.root, route);
+    requireDesignBrief(input.root, route);
+    // The same entry conditions as omd first-render check: finish captures a first render too.
+    requireConsultedReferences(input.root, route);
+    requireGraphicsStarted(input.root, route);
     inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
     phase = 'review';
     const existingFirstRender = readFirstRenderReview(input.root);
@@ -139,7 +151,7 @@ export async function runModelLedCompletion(input: Readonly<{
           ? 'The first-render repair loop is stalled. Restore the best iteration and report the remaining findings with both captures to the user instead of continuing.'
           : loop.bestRestoreApplied
             ? 'The best first-render iteration is restored. Try a materially different approach before recapturing.'
-            : 'The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach.';
+            : `The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach. ${REPAIR_KNOWLEDGE}`;
         return { ...result(false, phase), diagnostic: {
           ...completionErrorDiagnostic(phase, new CompletionStepError(code, message)),
           next: loop.bestRestoreApplied ? null : 'omd first-render restore --json',
@@ -148,10 +160,38 @@ export async function runModelLedCompletion(input: Readonly<{
         } };
       }
     }
-    await publishFirstRenderCheck(input.root, manifest.entryPath, undefined,
-      createProjectWriteAdapter(input.root, input.invocation), input.invocation);
+    const writer = createProjectWriteAdapter(input.root, input.invocation);
+    const checked = await publishFirstRenderCheck(input.root, manifest.entryPath, undefined, writer, input.invocation);
+    // Without the scroll sections the reviewer cannot resolve or credit anything below the entry; an
+    // existing observation of this same report is kept so unchanged pixels keep their evidence.
+    if (firstRenderMotionProjection(input.root, checked.reportSha256) === null) {
+      await captureFirstRenderMotion(input.root, resolve(input.root, manifest.entryPath), checked.reportSha256, writer).catch(() => undefined);
+    }
+    await capturePageBasics(input.root, resolve(input.root, manifest.entryPath), checked.reportSha256, writer).catch(() => undefined);
+    const motion = firstRenderMotionProjection(input.root, checked.reportSha256);
+    if (motion !== null) await requireNoticeableMotion(input.root, route, motion.context.timeline, input.invocation.current.briefSha256);
     cancelled();
-    const early = await runFirstRenderReview(input.root, input.invocation, input.signal);
+    // Deterministic behavior and measurement take about a minute; the isolated visual review takes several.
+    // Run the cheap checks first so a failing assertion or measurement never waits behind a review of
+    // pixels that are about to change anyway.
+    phase = 'browser';
+    const observed = await runNativeEvaluation({ ...input, manifest });
+    evaluation = { executionStatus: observed.executionStatus, acceptanceStatus: observed.acceptanceStatus,
+      observationPath: observed.observationPath, receiptPath: observed.receiptPath };
+    inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
+    if (!observed.ok) return { ...result(false, phase), diagnostic: browserFailureDiagnostic(observed) };
+    cancelled();
+    checkNativeBrowserEvidence(input.root, input.invocation);
+    phase = 'review';
+    // A retain already given to these exact pixels and evidence stands; asking again only re-rolls the verdict.
+    const retained = (() => {
+      try { return requireRetainedFirstRenderReview(input.root, input.invocation); } catch { return null; }
+    })();
+    const early = retained !== null
+      ? { decision: retained.decision, findings: retained.findings, qualityAssessments: retained.qualityAssessments,
+        path: FIRST_RENDER_REVIEW_PATH, sha256: retained.sha256, progress: retained.progress, captures: retained.captures,
+        diagnostic: undefined }
+      : await runFirstRenderReview(input.root, input.invocation, input.signal);
     firstRender = { decision: early.decision, findings: early.findings,
       qualityAssessments: early.qualityAssessments, path: early.path, sha256: early.sha256,
       progress: early.progress, captures: early.captures };
@@ -163,8 +203,8 @@ export async function runModelLedCompletion(input: Readonly<{
       const message = stalled
         ? 'The first-render repair loop stalled. Restore the best iteration and report the remaining findings with both captures to the user instead of continuing.'
         : regressed
-          ? 'The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach.'
-          : 'The isolated first-render reviewer requested visual repair. Inspect its current capture-bound findings before full behavior execution; do not replace a whole-system finding with an icon-library swap.';
+          ? `The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach. ${REPAIR_KNOWLEDGE}`
+          : `The isolated first-render reviewer requested visual repair. Inspect its current capture-bound findings before full behavior execution; do not replace a whole-system finding with an icon-library swap. ${REPAIR_KNOWLEDGE}`;
       return { ...result(false, phase), diagnostic: {
         ...completionErrorDiagnostic(phase, new CompletionStepError(code, message)),
         next: stalled || regressed ? 'omd first-render restore --json'
@@ -175,16 +215,8 @@ export async function runModelLedCompletion(input: Readonly<{
     }
     cancelled();
     if (modelLedCompletionFingerprint(input.root, manifest) !== inputFingerprint) {
-      throw new CompletionStepError('NATIVE_COMPLETION_INPUT_CHANGED', 'Production or browser proposal changed during early visual review.');
+      throw new CompletionStepError('NATIVE_COMPLETION_INPUT_CHANGED', 'Production or browser proposal changed during the first-render review.');
     }
-    phase = 'browser';
-    const observed = await runNativeEvaluation({ ...input, manifest });
-    evaluation = { executionStatus: observed.executionStatus, acceptanceStatus: observed.acceptanceStatus,
-      observationPath: observed.observationPath, receiptPath: observed.receiptPath };
-    inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
-    if (!observed.ok) return { ...result(false, phase), diagnostic: browserFailureDiagnostic(observed) };
-    cancelled();
-    checkNativeBrowserEvidence(input.root, input.invocation);
     phase = 'seal';
     writeSourceSeal(input.root, input.invocation);
     cancelled();

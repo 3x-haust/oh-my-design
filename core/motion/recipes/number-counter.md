@@ -16,13 +16,14 @@ before it settles.
 Condition against: tables, data grids, or any context where numbers change due to
 user interaction or live data. Animating numbers that the user is trying to read or
 compare makes reading impossible. Also: very small numbers — `0 → 5` counts through
-all six values visibly; this reads as a spinner rather than an accumulation. Use a
-simple fade-in for numbers under 10. Also: numbers that update repeatedly — a live
+all six values visibly; this can read as a spinner rather than an accumulation. Consider
+a simple fade-in when the count is too small to communicate useful scale. Also: numbers
+that update repeatedly — a live
 dashboard counter that re-animates on each update is a usability failure.
 
-The counter must complete quickly enough that the user does not wait for it: 600–1000ms
-is the legible range. Beyond 1000ms the user has moved on and the animation resolves
-for no one.
+The counter should not delay access to the final value. The `800ms` value below is an
+illustrative starting point, not a universal legibility range; tune it to the magnitude,
+reading context, and whether the number is supplementary or task-critical.
 
 ## Parameters
 
@@ -51,8 +52,8 @@ for no one.
 
 ```css
 /* The counter fades in as counting begins. The value animation is JS-driven
-   (requestAnimationFrame), but the entrance uses opacity — a compositor-only
-   property — so both axes animate without touching layout. */
+   (requestAnimationFrame); opacity usually avoids layout changes, but rendering
+   cost still depends on the page and browser. */
 .counter {
   font-variant-numeric: tabular-nums;
   opacity: 0;
@@ -231,12 +232,12 @@ it aligns updates to the browser's paint schedule and is automatically throttled
 background tabs. Do not use `setInterval` for counter animation; it runs off the paint
 schedule and produces visible frame drops.
 
-The counter updates `textContent` — a DOM write — on every frame. This triggers a
-text-specific paint on the element but not a layout reflow, provided the element's
-dimensions are stable. `font-variant-numeric: tabular-nums` is required for this:
-proportional numerals change width on each digit change, triggering layout reflow on
-every frame. Tabular numerals are fixed-width; the element's width is constant.
+The counter updates `textContent` — a DOM write — on every frame. This can trigger paint
+and layout when the rendered width changes. `font-variant-numeric: tabular-nums` gives
+digits equal advance widths, but digit-count changes, prefixes, suffixes, fonts, and
+container sizing can still change geometry. Reserve sufficient width when layout
+stability matters, then verify it with the actual formatted values.
 
-For multiple counters on one page, each runs its own `requestAnimationFrame` loop.
-The browser batches these into one paint per frame; there is no penalty for multiple
-concurrent loops.
+For multiple counters on one page, each loop still performs work and DOM writes. Browsers
+may batch rendering, but cost scales with the number and size of counters; profile the
+actual group and consolidate updates if it becomes material.

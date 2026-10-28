@@ -122,6 +122,11 @@ test('write classification rejects traversal and symlink escapes and read comman
   for (const path of ['../outside', '.omd/.cache/route-input.json']) assert.equal(classifyPiWrite(root, path).kind, 'blocked');
   for (const command of ['pwd', 'ls -al', 'git status --short']) assert.equal(isPreproductionReadCommand(command), true);
   for (const command of ['pwd > src/x', 'ls; node x', 'python3 x.py', 'ls\nnode x', '$(node x)']) assert.equal(isPreproductionReadCommand(command), false);
+  // Inventory steps may be chained; a find that executes, deletes or leaves the project is not inventory.
+  for (const command of ['pwd; ls -la; find oh-my-design -maxdepth 2 -type f | head -50', 'ls -la && find . -maxdepth 3 -name \'*.svg\'', 'ls oh-my-design/brand'])
+    assert.equal(isPreproductionReadCommand(command), true, command);
+  for (const command of ['find . -exec rm {} ;', 'find . -delete', 'find ../ -type f', 'find /etc -type f', 'ls; find . -type f | sh',
+    'pwd; ls `node x`', 'ls -la && cat > x', 'ls ../outside']) assert.equal(isPreproductionReadCommand(command), false, command);
   rmSync(root, { recursive: true, force: true });
   rmSync(external, { recursive: true, force: true });
 });

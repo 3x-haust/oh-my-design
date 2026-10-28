@@ -32,7 +32,7 @@ requested states.
 Run:
 
 ```text
-omd first-render check --page <actual-build-entry> --json
+omd first-render check --page <built file, e.g. dist/index.html — not the preview URL> --json
 ```
 
 The host captures fixed desktop/mobile pixels and launches one isolated early Eye. `revise` returns

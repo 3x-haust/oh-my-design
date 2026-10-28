@@ -3,8 +3,9 @@
 An image hover distortion applies a CSS filter shift, clip-path animation, or both when
 the user hovers an image — desaturating it toward monochrome, applying a blur that
 clears on hover, or using a clip-path polygon that contracts to reveal the image at full
-quality. No WebGL, no canvas: the entire effect is CSS, which means it degrades cleanly
-and runs at composited speed.
+quality. No WebGL or canvas is required. CSS keeps the implementation progressively
+enhanceable, but `filter` and `clip-path` still need profiling on the target browsers and
+devices.
 
 ## When it earns its place / When it does not
 
@@ -18,12 +19,12 @@ Condition against: product images where accuracy matters — e-commerce, documen
 any context where the image is evidence rather than atmosphere. Distorting a product
 photo misleads the user about what they are buying or reading. Also: navigation
 thumbnails where the user needs to read text overlaid on the image — the distortion
-degrades the legibility of the label. Also: images that are already small (below ~200px
-in either dimension); clip-path animation at small sizes produces visible aliasing.
+degrades the legibility of the label. Also inspect small rendered images directly;
+clip-path animation can expose aliasing depending on size, scale, and browser.
 
-The effect must complete within 150ms for hover onset and 200ms to settle, per
-`core/theory/motion.md`: "The distortion must complete in under 150ms for hover onset
-and under 200ms to settle. Anything slower reads as broken."
+The values below use a quick filter response and a slightly longer clip reveal as an
+illustrative pairing. They are not perception thresholds: tune the transition to the
+visual distance and preserve immediate feedback that the hover or focus state changed.
 
 ## Parameters
 
@@ -36,7 +37,7 @@ and under 200ms to settle. Anything slower reads as broken."
   /* Filter in the hover state. Identity = no filter effect. */
   --distort-filter-hover: grayscale(0) brightness(1);
 
-  /* Duration for filter transitions. Under 150ms for immediate hover onset. */
+  /* Example duration for a quick filter response. */
   --distort-filter-duration: 120ms;
   --distort-filter-ease: var(--ease-out-circ);
 
@@ -44,7 +45,7 @@ and under 200ms to settle. Anything slower reads as broken."
   --distort-clip-rest:  inset(8% round 4px);
   --distort-clip-hover: inset(0%  round 0px);
 
-  /* Duration for clip-path transition. Can be slightly longer than filter. */
+  /* Example clip-path duration; it may be slightly longer than the filter. */
   --distort-clip-duration: 200ms;
   --distort-clip-ease: var(--ease-out-expo);
 }
@@ -82,8 +83,6 @@ and under 200ms to settle. Anything slower reads as broken."
     filter   var(--distort-filter-duration) var(--distort-filter-ease),
     clip-path var(--distort-clip-duration)  var(--distort-clip-ease);
 
-  /* Both filter and clip-path are composited via the GPU; no layout is triggered. */
-  will-change: filter, clip-path;
 }
 
 /* Hover state: full reveal. */
@@ -181,18 +180,20 @@ The image is always fully visible; no distortion is applied.
 
 ## Performance note
 
-`filter` and `clip-path` are both GPU-composited when the element has a CSS transform
-or `will-change` applied. The `will-change: filter, clip-path` declaration here is
-justified because these properties actively animate on hover. Unlike `will-change:
-transform` applied broadly, hover-scoped `will-change` promotes the layer only for the
-duration of the interaction — the browser manages this correctly.
+`filter` and `clip-path` do not change document geometry, but they can still require
+painting, rasterization, memory, or compositor work. A transform or `will-change` hint
+does not guarantee GPU execution or smooth frame delivery. Profile the real image size
+and effect; add `will-change` only when a measured problem improves, and remove it when
+the interaction ends.
 
 Do not animate `border-radius` on the image itself — this causes the browser to
-recalculate the clip geometry on every frame. Use `clip-path: inset(... round ...)` to
-achieve rounded corners within a clip-path animation; this stays off-thread. Wrap the
-image in `overflow: hidden` on the parent to handle the visual boundary.
+recalculate the clip geometry on every frame. `clip-path: inset(... round ...)` can
+express the same visual shape without changing layout, but its paint/compositing path is
+browser-dependent. Wrap the image in `overflow: hidden` on the parent to handle the
+visual boundary.
 
-`clip-path` animation between two `inset()` values is well-supported and smooth. Avoid
+`clip-path` animation between two `inset()` values is broadly supported and interpolable.
+Verify smoothness on the target content and browsers. Avoid
 animating between two `polygon()` clip-paths unless the polygon point count is identical
-in both states — mismatched polygon point counts cause the browser to interpolate via a
-cross-fade rather than a smooth morph, which defeats the purpose of the animation.
+in both states. Mismatched vertex counts do not meet polygon interpolation requirements;
+do not promise an automatic cross-fade fallback.

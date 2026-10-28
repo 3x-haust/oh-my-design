@@ -19,7 +19,7 @@ const REQUIRED_HEADINGS = [
   '## Do not combine with',
 ];
 
-// ── Six parameterized recipe files; protocol notes may live beside them ─────────────────────────
+// ── Parameterized recipe files; protocol notes may live beside them ─────────────────────────
 const EXPECTED_RECIPES = [
   'gradient-mesh.md',
   'noise-grain-texture.md',
@@ -33,14 +33,14 @@ test('core/graphics/ directory exists', () => {
   assert.ok(existsSync(recipesDir), `graphics directory not found at ${recipesDir}`);
 });
 
-test('all 6 expected graphics recipe files exist', () => {
+test('all expected graphics recipe files exist', () => {
   for (const name of EXPECTED_RECIPES) {
     const path = join(recipesDir, name);
     assert.ok(existsSync(path), `missing graphics recipe: ${name}`);
   }
 });
 
-test('graphics directory contains exactly the six parameterized recipe files', () => {
+test('graphics directory contains exactly the parameterized recipe files', () => {
   const files = readdirSync(recipesDir)
     .filter((file) => file.endsWith('.md') && file !== 'photo-sourcing.md')
     .sort();
