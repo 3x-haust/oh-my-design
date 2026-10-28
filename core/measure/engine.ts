@@ -39,9 +39,12 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     const limits = (n: (typeof dom.nodes)[number]): string[] => n.lines.length === 0 ? n.unsupported.filter(r => r !== 'complex-backdrop') : [...n.unsupported];
     const svgPixels = new Set(dom.nodes.filter(n => n.visibleBox && n.tag === 'svg'
       && limits(n).length === 1 && limits(n)[0] === 'opaque-content').map(n => n.id));
-    const nativeText = new Set(dom.nodes.filter(n => n.visibleBox && n.unsupported.length === 1
-      && (['input', 'select', 'textarea'].includes(n.tag) && n.unsupported[0] === 'native-control-text'
-        || n.tag === 'option' && n.unsupported[0] === 'native-option-text')).map(n => n.id));
+    // A native control's own glyphs are unmeasured whatever it is drawn on, so a chevron or icon painted as its
+    // background image (a select's arrow) adds no further gap.
+    const nativeText = new Set(dom.nodes.filter(n => n.visibleBox
+      && (['input', 'select', 'textarea'].includes(n.tag) && n.unsupported.includes('native-control-text')
+        && n.unsupported.every(reason => reason === 'native-control-text' || reason === 'complex-backdrop')
+        || n.tag === 'option' && n.unsupported.length === 1 && n.unsupported[0] === 'native-option-text')).map(n => n.id));
     const excluded = [...dom.excluded, ...dom.nodes.filter(n => n.visibleBox && n.unsupported.length && !svgPixels.has(n.id) && !nativeText.has(n.id)).map(n => ({ subjectId: n.id, reason: n.unsupported.join(',') }))];
     if (!dom.fonts.ready || dom.fonts.failedFamilies.length) excluded.push({ subjectId: c.view.id, reason: 'fonts-not-ready-or-failed' });
     if (c.binding.stability.status !== 'stable') excluded.push({ subjectId: c.view.id, reason: 'unstable-capture' });
@@ -68,6 +71,11 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
       const entry = excluded[index]!;
       if (entry.reason === 'complex-backdrop' && (sampled.resolved.has(entry.subjectId) || ownTextless.has(entry.subjectId))) excluded.splice(index, 1);
     }
+    // In an interaction state (an open menu, a dialog) text under the layer the interaction opened is covered on
+    // purpose: none of it shows, so it has no contrast to read, and the same text is measured at rest. At rest an
+    // unexplained cover still blocks.
+    const underOpenLayer = c.view.id.includes(':outcome-') ? excluded.filter(e => e.reason === 'occluded-text') : [];
+    for (const entry of underOpenLayer) excluded.splice(excluded.indexOf(entry), 1);
     const values: Omit<MetricValues, 'cross-viewport-order'> = { ...typography(dom.nodes, area), 'control-accessibility': controlAccessibility(dom), ...spacing(dom.nodes), 'contrast-pair': { pairs: sampled.pairs }, ...layout(dom, contracts, p.canvasPaintShare, p.mediaContrast), 'canvas-color': p['canvas-color'], 'accent-distribution': p['accent-distribution'], 'contract-conformance': conforms.value };
     const metrics = new Map<MetricKind, Measurement>();
     for (const kind of Object.keys(values) as (keyof typeof values)[]) metrics.set(kind, add(kind, [c.view.id], ids, values[kind], excluded));
@@ -122,6 +130,8 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     const unmeasured = excluded.filter(e => !decorative.includes(e));
     if (unmeasured.length) finding('MEASUREMENT_INCOMPLETE', quality, [], null, canonicalJson(unmeasured), 'coverage', []);
     if (decorative.length) finding('MEASUREMENT_INCOMPLETE', quality, decorative.map(e => e.subjectId), null, canonicalJson(decorative), 'coverage', [], 'advisory');
+    if (underOpenLayer.length) finding('MEASUREMENT_INCOMPLETE', quality, underOpenLayer.map(e => e.subjectId), null,
+      canonicalJson(underOpenLayer), 'coverage', ['composition'], 'advisory');
     return { view: c.view, dom };
   });
   add('cross-viewport-order', scope.map(s => s.id), subjects.map(s => s.id), responsive(doms));
