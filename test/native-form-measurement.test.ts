@@ -11,12 +11,13 @@ import { measurementFixture } from './helpers/visual-measurement.ts';
 const nativeControls = '<input aria-label="검색" placeholder="글 검색"><select aria-label="정렬"><option>최신순</option></select><textarea aria-label="메모">원래 메모</textarea>';
 
 test('native form pixels are scoped limitations while unsupported paint and selected text stay refused', async t => {
-  for (const kind of ['ordinary', 'transformed', 'selected-text', 'selected-type', 'selected-target'] as const) {
+  for (const kind of ['ordinary', 'chevron', 'transformed', 'selected-text', 'selected-type', 'selected-target'] as const) {
     await t.test(kind, async t => {
       const fixture = measurementFixture('clean');
       t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
       const controls = kind === 'transformed'
         ? nativeControls.replace('<input ', '<input style="transform:rotate(1deg)" ')
+        : kind === 'chevron' ? nativeControls.replace('<select ', '<select style="appearance:none;padding-right:32px;background:#fff url(&quot;data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2712%27 height=%278%27%3E%3Cpath d=%27M1 1l5 5 5-5%27 stroke=%27%23555%27 fill=%27none%27/%3E%3C/svg%3E&quot;) no-repeat right 12px center" ')
         : kind === 'selected-target' ? nativeControls.replace('<input ', '<input style="width:12px;height:12px;padding:0" ') : nativeControls;
       const html = fixture.html.toString().replace('<h1>', `${controls}<h1>`);
       for (const path of ['src/index.html', 'dist/index.html']) writeFileSync(join(fixture.root, path), html);
@@ -40,7 +41,7 @@ test('native form pixels are scoped limitations while unsupported paint and sele
       const result = await measureProject({ ...fixture, entry: 'dist/index.html' });
       const packet = loadMeasurement(fixture.root, result.packet);
       assert.equal(readFileSync(join(fixture.root, 'dist/index.html'), 'utf8'), html);
-      if (kind !== 'ordinary') {
+      if (kind !== 'ordinary' && kind !== 'chevron') {
         assert.equal(packet.summary.deterministicVerdict, 'RED');
         const code = kind === 'selected-text' || kind === 'selected-type' ? 'CONTRACT_UNMEASURABLE'
           : kind === 'selected-target' ? 'REQUIRED_TARGET_TOO_SMALL' : 'MEASUREMENT_INCOMPLETE';
@@ -90,4 +91,32 @@ test('native fallback text does not consume painted glyph budget or change the l
   assert.deepEqual(dom.excluded, []);
   assert.equal(await page.locator('textarea').inputValue(), value);
   assert.ok(dom.nodes.find(n => n.tag === 'textarea')?.unsupported.includes('native-control-text'));
+});
+
+test('text under a menu opened in an interaction state is a limitation; the same cover at rest still blocks', async t => {
+  for (const kind of ['opened', 'at-rest'] as const) {
+    await t.test(kind, async t => {
+      const fixture = measurementFixture('clean');
+      t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+      const menu = '<div style="position:relative"><button id="menu-toggle" aria-expanded="false" onclick="document.getElementById(\'menu\').hidden=false;this.setAttribute(\'aria-expanded\',\'true\')">메뉴</button>'
+        + `<div id="menu" ${kind === 'opened' ? 'hidden ' : ''}style="position:absolute;top:24px;left:0;width:320px;height:120px;background:white;z-index:5">메뉴 항목</div>`
+        + '<p>메뉴 아래 본문</p><p>두 번째 줄</p><p>세 번째 줄</p></div>';
+      const html = fixture.html.toString().replace('<h1>', `${menu}<h1>`);
+      for (const path of ['src/index.html', 'dist/index.html']) writeFileSync(join(fixture.root, path), html);
+      const state = { name: 'menu-open', route: '/index.html', startRoute: '/index.html', actions: [{ kind: 'click', selector: '#menu-toggle' }], assertions: [{ selector: '#menu', state: 'visible' }] };
+      const scope = kind === 'opened'
+        ? { schema: 'visual-measurement-scope-v1', views: [{ id: 'desktop-1280x900@1:outcome-0123456789abcdef', viewport: { width: 1280, height: 900 }, browserZoom: 1, state }] }
+        : undefined;
+      const result = await measureProject({ ...fixture, entry: 'dist/index.html', ...(scope ? { scope } : {}) });
+      const packet = loadMeasurement(fixture.root, result.packet);
+      const covered = packet.findings.filter(f => f.code === 'MEASUREMENT_INCOMPLETE' && JSON.stringify(f.observed).includes('occluded-text'));
+      if (kind === 'opened') {
+        assert.equal(packet.summary.deterministicVerdict, 'PASS', JSON.stringify(packet.findings));
+        assert.ok(covered.length > 0 && covered.every(f => f.severity === 'advisory' && f.viewIds.every(id => id.includes(':outcome-'))));
+      } else {
+        assert.equal(packet.summary.deterministicVerdict, 'RED');
+        assert.ok(covered.some(f => f.severity === 'blocking'), JSON.stringify(packet.findings));
+      }
+    });
+  }
 });
