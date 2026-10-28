@@ -1,10 +1,12 @@
 import { canonicalJson, sha256 } from '../../core/ref/board-artifacts.ts';
 import { parseDeveloperEvaluationSnapshot, type DeveloperEvaluationScope } from '../../core/coach/developer-evaluation-contract.ts';
 
-export function calibrationFixture(scope: DeveloperEvaluationScope) {
+export function calibrationFixture(scope: DeveloperEvaluationScope,
+  advisory: readonly string[] = ['Keep related details in the same reading context.']) {
   const core = {
-    schema: 'developer-evaluation-snapshot-v1',
-    requestRunId: 'synthetic-test-only',
+    schema: 'developer-evaluation-snapshot-v2',
+    mode: 'validated',
+    pinIdentity: 'e'.repeat(64),
     pinnedAt: '2026-10-11T09:15:00.000Z',
     cases: [{
       caseId: 'a'.repeat(64), sourceRecordSha256: 'b'.repeat(64),
@@ -12,10 +14,11 @@ export function calibrationFixture(scope: DeveloperEvaluationScope) {
       developerSignal: { comparisonChoice: 'b', satisfaction: 'satisfied' },
       designRelations: ['Keep the selected record visible beside its details.'],
       changeSummary: { attempted: ['Grouped related fields'], preserved: ['Kept the primary task visible'] },
-      advisory: ['Keep related details in the same reading context.'],
+      advisory,
       advisorySource: 'model-interpretation', applicability: 'advisory',
       authority: 'none', currentRequestPrecedence: 'always',
     }],
+    experiment: null,
   };
   const digest = sha256(canonicalJson(core));
   return parseDeveloperEvaluationSnapshot({ ...core, digest, snapshotId: digest });

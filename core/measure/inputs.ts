@@ -12,7 +12,6 @@ import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { validateTokenCommit, minimalTokenScales } from '../tokens/contract.ts';
 import { parseRouteRecord } from '../route/adaptive-route-record.ts';
-import { currentSelectedSystem } from './selected-system.ts';
 export const readArtifact = (root: string, path: string): Buffer => readStableProjectFile({ root: realpathSync(root), path: resolve(realpathSync(root), path), label: path, fs: nodeStableProjectFileSystem() });
 export const sourceDigest = (root: string): string => digest(listProductionSourceFiles(root).map(path => ({ path, sha256: sha256(readArtifact(root, path)) })));
 export const MEASUREMENT_POLICY = Object.freeze({ version: 'visual-metrics-v1', fontSizeTolerance: 0.25, spacingTolerance: 0.5, tinyTextBoundary: 12, contrastLargePx: 24, contrastBoldPx: 18.6666667, contrastBoldWeight: 700, contrastSmall: 4.5, contrastLarge: 3, hueSaturation: 0.30, hueLightness: [0.15, 0.90], hueDistance: 25, gridStep: 16, maxNodes: 4000, maxGraphemes: 100000, physicalGlyphIdentity: 'unmeasured' });
@@ -23,7 +22,6 @@ export function methodIdentity(browserVersion: string): VisualMeasurement['metho
 }
 export function loadContracts(root: string): { contracts: Contracts; inputs: VisualMeasurement['binding']['inputs'] } {
   const contracts: Contracts = { type: null, composition: null, tokens: null, errors: [] }, inputs: VisualMeasurement['binding']['inputs'] = [];
-  const selected = currentSelectedSystem(root);
   for (const [path, kind] of [['.omd/type-proof.md', 'type-proof'], ['.omd/composition.md', 'composition'], ['.omd/tokens.json', 'tokens'], ['.omd/frame.md', 'frame'], ['.omd/design-judgment.json', 'hypothesis']] as const) {
     if (!existsSync(resolve(root, path))) continue;
     const bytes = readArtifact(root, path), hash = sha256(bytes);
@@ -32,20 +30,13 @@ export function loadContracts(root: string): { contracts: Contracts; inputs: Vis
       if (kind === 'type-proof') contracts.type = parseTypeContract(measurementBlock(bytes.toString('utf8')));
       if (kind === 'composition') contracts.composition = parseCompositionContract(measurementBlock(bytes.toString('utf8')));
       if (kind === 'tokens') {
-        const token = selected?.tokens.effective ?? validateTokenCommit(JSON.parse(bytes.toString('utf8')));
+        const token = validateTokenCommit(JSON.parse(bytes.toString('utf8')));
         contracts.tokens = token;
         const scales = token.schema === 'token-commit-v3' ? minimalTokenScales(token) : token;
         if (contracts.composition?.spacing && contracts.composition.spacing.scale.some(s => !scales.spacingScale.includes(s))) contracts.errors.push('CONTRACT_INPUT_CONFLICT: composition and committed spacing scales disagree');
         if (contracts.composition && !contracts.composition.spacing) contracts.composition.spacing = { scale: [...scales.spacingScale], tolerance: 0.5, opticalExceptions: [] };
       }
     } catch (error) { contracts.errors.push(`${kind}: ${error instanceof Error ? error.message : String(error)}`); }
-  }
-  if (selected) {
-    contracts.tokens = selected.tokens.effective;
-    contracts.selectedAssignments = selected.assignments;
-    const tokenInput = inputs.find(i => i.kind === 'tokens');
-    if (tokenInput) tokenInput.consumedContractSha256 = selected.tokens.effectiveTokensSha256;
-    for (const receipt of selected.receipts.filter(r => r.path !== '.omd/tokens.json')) inputs.push({ kind: 'selected-system', receipt, consumedContractSha256: selected.tokens.effectiveTokensSha256 });
   }
   if ((!contracts.type || !contracts.composition) && existsSync(resolve(root, '.omd/route.json'))) {
     const pointer = JSON.parse(readArtifact(root, '.omd/route.json').toString('utf8')) as { record: string; sha256: string };
@@ -55,7 +46,9 @@ export function loadContracts(root: string): { contracts: Contracts; inputs: Vis
     const skipped: NonNullable<Contracts['routeSkipped']> = {};
     for (const [kind, id] of [['type', 'type-proof'], ['composition', 'composition']] as const) {
       const skip = route.strategy.skips.find(s => s.id === id);
-      if (contracts[kind] === null && !existsSync(resolve(root, `.omd/${id}.md`)) && skip && !route.strategy.stages.includes(id)) skipped[kind] = skip.reason;
+      const reason = skip?.reason ?? (route.sourceContract.processPolicy?.schema === 'model-led-design-process-v1'
+        ? `Standalone ${id} was not selected; judge the actual rendered result in final review.` : undefined);
+      if (contracts[kind] === null && !existsSync(resolve(root, `.omd/${id}.md`)) && reason && !route.strategy.stages.includes(id)) skipped[kind] = reason;
     }
     if (Object.keys(skipped).length) {
       contracts.routeSkipped = skipped;

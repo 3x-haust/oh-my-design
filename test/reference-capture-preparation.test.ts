@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -7,7 +8,7 @@ import { basename, dirname, join } from 'node:path';
 import { chromium } from 'playwright';
 import test from 'node:test';
 import { addRefsBatch, type RefSpec } from '../core/ref/batch.ts';
-import { observeCapturePreparation, parseCapturePreparation, type CapturePreparation } from '../core/ref/capture-preparation.ts';
+import { observeCapturePreparation, parseCapturePreparation, prepareReferenceCapture, type CapturePreparation } from '../core/ref/capture-preparation.ts';
 import { loadRefs, refImagePath } from '../core/ref/store.ts';
 import { capturePageForRef, onPage, withBrowser } from '../core/render/index.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
@@ -35,14 +36,22 @@ async function fixture(run: (url: string, requests: string[]) => Promise<void>):
     requests.push(`${request.method} ${request.url}`);
     response.setHeader('content-type', 'text/html');
     response.end(`<!doctype html><title>Disclosure capture test fixture</title>
-      <style>body{font:18px system-ui;padding:36px;background:#f3f5f7}#fixture{width:420px;padding:24px;background:white}button{padding:12px}#menu{margin-top:16px;padding:20px;background:#173b4d;color:white}li{padding:8px}</style>
+      <style>body{font:18px system-ui;padding:36px;background:#f3f5f7}#fixture{width:420px;padding:24px;background:white}button{padding:12px}#menu{margin-top:16px;padding:20px;background:#173b4d;color:white}li{padding:8px}
+      #hover-target,#press-target{background:red;color:white}#hover-target:hover,#press-target:active{background:blue}#focus-target{border:8px solid gray}#focus-target:focus{border-color:blue}</style>
       <section id="fixture"><h1>Capture test fixture</h1><p>A local menu used only to verify capture behavior.</p>
       <button type="button" id="menu-toggle" aria-expanded="false" aria-controls="menu">Open menu</button>
+      <button type="button" id="hover-target">Hover target</button>
+      <button type="button" id="focus-target">Focus target</button>
+      <button type="button" id="press-target">Press target</button>
+      <button type="button" id="delete-target" aria-expanded="false" aria-controls="menu">Delete account</button>
+      <a id="unsafe-link" href="/navigated">Unsafe link</a>
       <div id="menu" hidden><strong>Visible after explicit click</strong><ul><li>Overview</li><li>Saved items</li><li>Preferences</li></ul></div>
       <form action="/submitted"><button id="submit" aria-expanded="false" aria-controls="menu">Submit</button></form></section>
       <script>const button=document.querySelector('#menu-toggle'); const menu=document.querySelector('#menu');
       button.addEventListener('click',()=>{menu.hidden=!menu.hidden;button.setAttribute('aria-expanded',String(!menu.hidden));});
-      button.addEventListener('blur',()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');});</script>`);
+      button.addEventListener('blur',()=>{menu.hidden=true;button.setAttribute('aria-expanded','false');});
+      document.querySelector('#press-target').addEventListener('click',event=>event.currentTarget.dataset.clicked='true');
+      document.querySelector('#delete-target').addEventListener('click',event=>event.currentTarget.dataset.clicked='true');</script>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
@@ -61,8 +70,13 @@ function runCli(root: string, args: string[]): Promise<{ code: number | null; st
   });
 }
 
-test('capture preparation schema permits only explicit disclosure clicks and visibility assertions', () => {
-  assert.deepEqual(parseCapturePreparation(inputSkeleton('reference-capture-preparation').skeleton), preparation());
+test('capture preparation schema permits only explicit safe state actions and closed assertions', () => {
+  assert.deepEqual(parseCapturePreparation(inputSkeleton('reference-capture-preparation').skeleton), {
+    schema: 'reference-capture-preparation-v1',
+    actions: [{ kind: 'hover', selector: '<one safe visible component selector>' }],
+    assertions: [{ selector: '<same component selector>', state: 'hovered' }],
+  });
+  assert.deepEqual(parseCapturePreparation(preparation()), preparation());
   for (const value of [
     { ...preparation(), script: 'menu.open()' },
     { ...preparation(), assertions: [] }, { ...preparation(), actions: Array(9).fill(preparation().actions[0]) },
@@ -159,6 +173,9 @@ test('real disclosure preparation captures the opened menu on the same page and 
     assert.deepEqual(ref.capturePreparation?.executedActions, preparation().actions);
     assert.deepEqual(ref.capturePreparation?.observations, [{ selector: '#menu', state: 'visible', passed: true }]);
     assert.deepEqual(ref.capturePreparation?.viewport, ref.viewport);
+    assert.equal(ref.capturePreparation?.captureSha256, createHash('sha256').update(readFileSync(
+      refImagePath(root, { source, component: 'opened-menu' }),
+    )).digest('hex'));
     assert.deepEqual(ref.capturePreparation?.notMeasured, ['interaction-probe', 'motion-probe', 'energy-curve']);
     assert.deepEqual(ref.invariants?.measurementCoverage, { interactionProbe: 'not-measured', motionProbe: 'not-measured', energyCurve: 'not-measured' });
     assert.equal(ref.energyCurve, undefined);
@@ -174,6 +191,87 @@ test('real disclosure preparation captures the opened menu on the same page and 
     assert.deepEqual(closed.capturePreparation?.observations, [{ selector: '#menu', state: 'hidden', passed: true }]);
     const initial = await withBrowser(browser => capturePageForRef(browser, url, { width: 1280, height: 900 }, { selector: '#fixture' }));
     assert.equal(initial.capturePreparation, undefined); assert.ok(initial.raw.meta?.interaction);
+  });
+});
+
+test('hover focus and press-start capture real named states and release pressed input', async () => {
+  await fixture(async url => {
+    const cases = [
+      { kind: 'hover' as const, selector: '#hover-target', assertion: 'hovered' as const },
+      { kind: 'focus' as const, selector: '#focus-target', assertion: 'focused' as const },
+      { kind: 'press-start' as const, selector: '#press-target', assertion: 'pressed' as const },
+    ];
+    await withBrowser(async browser => {
+      for (const [index, state] of cases.entries()) {
+        const root = project();
+        const shotOut = join(root, `${state.kind}.png`);
+        const preparation = {
+          schema: 'reference-capture-preparation-v1' as const,
+          actions: [{ kind: state.kind, selector: state.selector }],
+          assertions: [{ selector: state.selector, state: state.assertion }],
+        };
+        if (index === 0) {
+          const captured = await capturePageForRef(browser, url, { width: 390, height: 844 }, {
+            selector: '#fixture',
+            shotOut,
+            adapter: createTestProjectWriteAdapter(root),
+            preparation,
+          });
+          assert.equal(captured.shotSaved, true);
+          assert.deepEqual(captured.capturePreparation?.executedActions, preparation.actions);
+          assert.deepEqual(captured.capturePreparation?.observations,
+            preparation.assertions.map(assertion => ({ ...assertion, passed: true as const })));
+          assert.equal(captured.capturePreparation?.captureSha256,
+            createHash('sha256').update(readFileSync(shotOut)).digest('hex'));
+        } else {
+          const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+          try {
+            await page.goto(url);
+            const prepared = await prepareReferenceCapture(page, preparation);
+            assert.deepEqual(await observeCapturePreparation(page, preparation),
+              preparation.assertions.map(assertion => ({ ...assertion, passed: true as const })));
+            writeFileSync(shotOut, await page.screenshot());
+            await prepared.release();
+            if (state.kind === 'press-start') {
+              assert.equal(await page.locator(state.selector).getAttribute('data-clicked'), null);
+            }
+          } finally {
+            await page.close();
+          }
+        }
+        assert.ok(bluePixels(shotOut) > 100, `${state.kind} pixels must show the active CSS state`);
+      }
+    });
+  });
+});
+
+test('reference state actions refuse links and submit controls without publishing pixels', async () => {
+  await fixture(async (url, requests) => {
+    await withBrowser(async browser => {
+      const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await page.goto(url);
+      for (const kind of ['hover', 'focus', 'press-start'] as const) {
+        for (const selector of ['#unsafe-link', '#submit']) {
+          await assert.rejects(prepareReferenceCapture(page, {
+            schema: 'reference-capture-preparation-v1',
+            actions: [{ kind, selector }],
+            assertions: [{
+              selector,
+              state: kind === 'hover' ? 'hovered' : kind === 'focus' ? 'focused' : 'pressed',
+            }],
+          }), /BROWSE_(?:CONTROL|SENSITIVE_ACTION)/);
+        }
+      }
+      await assert.rejects(prepareReferenceCapture(page, {
+        schema: 'reference-capture-preparation-v1',
+        actions: [{ kind: 'click', selector: '#delete-target' }],
+        assertions: [{ selector: '#menu', state: 'visible' }],
+      }), /BROWSE_SENSITIVE_ACTION/);
+      assert.equal(await page.locator('#delete-target').getAttribute('aria-expanded'), 'false');
+      assert.equal(await page.locator('#delete-target').getAttribute('data-clicked'), null);
+      await page.close();
+    });
+    assert.ok(requests.every(request => !request.includes('/navigated') && !request.includes('/submitted')));
   });
 });
 

@@ -4,6 +4,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { chromium } from 'playwright';
 import { measureProject } from '../core/measure/index.ts';
 import { serveProjectEntry } from '../core/render/serve.ts';
 import { loadMeasurement } from '../core/measure/files.ts';
@@ -23,7 +24,7 @@ function quality(packet: VisualMeasurement, sha: string) {
     evidence: packet.scope.map(view => ({ observationSha256: 'a'.repeat(64), captureSha256: packet.captures.find(c => c.viewId === view.id)!.capture.sha256, viewId: view.id, state: view.state, regionSubjectIds: [], packetSha256: sha, measurementIds: packet.measurements.filter(m => m.viewIds.includes(view.id) && (AXIS_METRICS[axis] as readonly string[]).includes(m.kind)).map(m => m.id), visibleCondition: 'The measured content and controls were inspected.', userConsequence: 'Task context remains available.' })) })) };
 }
 function context(root: string, packet: VisualMeasurement, receipt: { path: string; sha256: string }): MeasuredQualityContext {
-  return { index: new MeasurementIndex(root, [receipt]), requiredViewIds: packet.scope.map(v => v.id), policySha256: 'b'.repeat(64), advisoryDispositionIds: [], bindings: packet.scope.map(v => ({ observationSha256: 'a'.repeat(64), captureSha256: packet.captures.find(c => c.viewId === v.id)!.capture.sha256, packetSha256: receipt.sha256, viewId: v.id, state: v.state, browserZoom: v.browserZoom })) };
+  return { index: new MeasurementIndex(root, [receipt]), requiredViewIds: packet.scope.map(v => v.id), policySha256: 'b'.repeat(64), advisoryDispositionIds: [], advisoryDispositionPolicy: 'separate-slop-review', bindings: packet.scope.map(v => ({ observationSha256: 'a'.repeat(64), captureSha256: packet.captures.find(c => c.viewId === v.id)!.capture.sha256, packetSha256: receipt.sha256, viewId: v.id, state: v.state, browserZoom: v.browserZoom })) };
 }
 test('test-016 replay is natively RED and all-4 reviews/generic slop dismissals cannot override it', async t => {
   const fixture = measurementFixture('test-016'); t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
@@ -61,7 +62,16 @@ test('clean true-white product has complete native metrics, strict citations, re
   assert.throws(() => validateSlopMeasurementDecision(disposition, ctx.index, { ...finding, behavioral: true }, absence), /behavioral/);
   const bad = structuredClone(green); bad.axes[0]!.evidence[0]!.measurementIds = [packet.measurements.find(m => m.kind === 'canvas-color')!.id];
   assert.throws(() => assertMeasuredDesignQualityGreen(bad, ctx), /unrelated/);
-  const missing = structuredClone(green); missing.axes[0]!.evidence.pop(); assert.throws(() => assertMeasuredDesignQualityGreen(missing, ctx), /omitted/);
+  // Each view must be cited by some axis; dropping a view from every axis leaves it unseen.
+  const lastView = green.axes[0]!.evidence.at(-1)!.viewId;
+  const unseen = structuredClone(green); for (const axis of unseen.axes) axis.evidence = axis.evidence.filter(row => row.viewId !== lastView);
+  assert.throws(() => assertMeasuredDesignQualityGreen(unseen, ctx), /not cited by any axis/);
+  const typography = green.axes.find(a => a.axis === 'typography')!, ladder = packet.measurements.find(m => m.kind === 'type-ladder')!;
+  const thin = structuredClone(green); const thinAxis = thin.axes.find(a => a.axis === 'typography')!;
+  for (const row of thinAxis.evidence) row.measurementIds = row.measurementIds.filter((id: string) => id !== ladder.id);
+  assert.ok(typography.evidence.some(row => row.measurementIds.includes(ladder.id)));
+  // The view is the reviewer's judgment; its other complete, passing inventories are taken from the native packet.
+  assert.equal(assertMeasuredDesignQualityGreen(thin, ctx).axes.length, 11);
   const lower = structuredClone(green); lower.axes.find(a => a.axis === 'hierarchy')!.score = 3; assert.throws(() => assertMeasuredDesignQualityGreen(lower, ctx), /AXIS_RED/);
   const malformed = structuredClone(packet); Reflect.set(malformed.measurements[0]!.value, 'invented', 4); assert.throws(() => parseVisualMeasurement(malformed), /exact fields/);
   const duplicate = structuredClone(packet); duplicate.measurements.push(duplicate.measurements[0]!); assert.throws(() => parseVisualMeasurement(duplicate), /duplicate/);
@@ -85,6 +95,168 @@ test('scope and writer boundary refuse replacement/import without changing proje
   assert.throws(() => parseMeasureScope({ schema: 'visual-measurement-scope-v1', views: [], values: [] }), /exact fields/);
   assert.equal(existsSync(join(fixture.root, '.omd/visual-measurement.json')), false);
   assert.deepEqual(readFileSync(join(fixture.root, 'src/index.html')), fixture.html);
+});
+test('control tokens separate block labels but preserve words across inline descendants', async t => {
+  const fixture = measurementFixture('clean'); t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const html = `<!doctype html><html><head><style>
+    button { display:block; width:280px; padding:0; border:0; margin:8px; font:16px/24px sans-serif; text-align:left }
+    .block > span { display:block }
+    .flex { display:flex; flex-direction:column }
+    .split { width:16px; white-space:normal; word-break:break-all }
+  </style></head><body>
+    <button class="block"><span>답장을 보내지 않아요</span><span>윤도현</span></button>
+    <button><span style="display:block"><em>답장을 보내지 않아요</em></span><span style="display:block"><em>윤도현</em></span></button>
+    <button class="flex"><span>답장을 보내지 않아요</span><span>윤도현</span></button>
+    <button class="split"><span>되돌</span><strong>리기</strong></button>
+    <button class="split"><span style="display:inline-block">되돌</span><strong style="display:inline-block">리기</strong></button>
+    <button class="split">저장하기</button>
+    <button>저장<br>하기</button>
+  </body></html>`;
+  for (const path of ['src/index.html', 'dist/index.html']) writeFileSync(join(fixture.root, path), html);
+  const result = await measureProject({ ...fixture, entry: 'dist/index.html' });
+  const packet = loadMeasurement(fixture.root, result.packet);
+  for (const wrap of packet.measurements.filter(m => m.kind === 'control-word-wrap')) {
+    const tokens = wrap.value.controls.flatMap(control => control.tokens);
+    assert.equal(tokens.some(token => token.text === '않아요윤도현'), false);
+    assert.equal(tokens.filter(token => token.text === '않아요' && !token.split).length, 3);
+    assert.equal(tokens.filter(token => token.text === '윤도현' && !token.split).length, 3);
+    assert.deepEqual(tokens.filter(token => token.split).map(token => token.text).sort(), ['되돌리기', '되돌리기', '저장하기', '저장하기']);
+  }
+  assert.ok(packet.findings.some(finding => finding.code === 'REQUIRED_CONTROL_WORD_SPLIT'));
+  assert.equal(readFileSync(join(fixture.root, 'src/index.html'), 'utf8'), html);
+  assert.equal(readFileSync(join(fixture.root, 'dist/index.html'), 'utf8'), html);
+});
+test('native clipped-control findings survive canonical IR persistence without laundering their RED verdict', async t => {
+  const fixture = measurementFixture('clean'); t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const html = fixture.html.toString('utf8').replace('</main>',
+    '<div style="height:32px;overflow:hidden"><button style="height:64px" type="button">Clipped action</button></div></main>');
+  for (const path of ['src/index.html', 'dist/index.html']) writeFileSync(join(fixture.root, path), html);
+  const result = await measureProject({ ...fixture, entry: 'dist/index.html' });
+  const packet = loadMeasurement(fixture.root, result.packet);
+  const clipped = packet.findings.find(finding => finding.code === 'REQUIRED_CONTROL_CLIPPED');
+  assert.ok(clipped);
+  assert.equal(clipped.severity, 'blocking');
+  assert.equal(packet.summary.deterministicVerdict, 'RED');
+  assert.equal(result.completionEligible, false);
+  assert.ok(clipped.observed);
+  assert.ok(JSON.parse(clipped.observed.value).some((value: { clipped: { scrollEscape: boolean }[] }) =>
+    value.clipped.some(clip => !clip.scrollEscape)));
+  const pointer = readFileSync(join(fixture.root, '.omd/visual-measurement.json'));
+  const forged = structuredClone(packet);
+  const forgedClipping = forged.findings.find(finding => finding.id === clipped.id);
+  assert.ok(forgedClipping);
+  assert.ok(forgedClipping.observed);
+  forgedClipping.observed.value = '[]';
+  const bytes = canonicalBytes(forged), hash = sha256(bytes), path = `.omd/visual-measurements/sha256-${hash}.json`;
+  writeFileSync(join(fixture.root, path), bytes);
+  assert.throws(() => loadMeasurement(fixture.root, { path, sha256: hash }), /payload mismatch/);
+  assert.deepEqual(readFileSync(join(fixture.root, '.omd/visual-measurement.json')), pointer);
+  assert.equal(readFileSync(join(fixture.root, 'src/index.html'), 'utf8'), html);
+  assert.equal(readFileSync(join(fixture.root, 'dist/index.html'), 'utf8'), html);
+});
+test('nested keyboard-scroll exposure clears only the false outer clipping verdict', async t => {
+  const fixture = measurementFixture('clean'); t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const buttons = Array.from({ length: 8 }, (_, index) =>
+    `<button id="row-${index}" type="button" style="display:block;width:200px;height:44px">Row ${index}</button>`).join('');
+  const html = `<!doctype html><html><body style="margin:20px"><div id="outer" style="width:200px;height:120px;overflow:hidden"><div id="inner" style="width:200px;height:120px;overflow:auto">${buttons}</div></div></body></html>`;
+  for (const path of ['src/index.html', 'dist/index.html']) writeFileSync(join(fixture.root, path), html);
+
+  const served = await serveProjectEntry(fixture.root, 'dist/index.html');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(served.url, { waitUntil: 'load' });
+    await page.keyboard.press('Tab');
+    assert.equal(await page.locator('#row-0').evaluate(element => element === document.activeElement), true);
+    await page.evaluate(() => {
+      const inner = document.querySelector('#inner');
+      if (!inner) throw new Error('Missing nested scroll fixture');
+      Reflect.set(window, '__measurementScrollSignal', new Promise<number>((resolve, reject) => {
+        const controller = new AbortController();
+        const deadline = AbortSignal.timeout(3000);
+        deadline.addEventListener('abort', () => {
+          controller.abort();
+          reject(new Error('Keyboard scroll event did not reach the last row'));
+        }, { once: true, signal: controller.signal });
+        inner.addEventListener('scroll', (event: Event) => {
+          const target = event.currentTarget as HTMLElement;
+          if (target.scrollTop !== target.scrollHeight - target.clientHeight) return;
+          resolve(target.scrollTop);
+          controller.abort();
+        }, { signal: controller.signal });
+      }));
+    });
+    for (let index = 0; index < 7; index++) await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => Reflect.get(window, '__measurementScrollSignal') as Promise<number>), 232);
+    assert.deepEqual(await page.locator('#row-7').evaluate(element => {
+      const box = element.getBoundingClientRect();
+      const inner = element.parentElement!.getBoundingClientRect();
+      const outer = element.parentElement!.parentElement!.getBoundingClientRect();
+      const visible = {
+        x: Math.max(box.x, inner.x, outer.x),
+        y: Math.max(box.y, inner.y, outer.y),
+        right: Math.min(box.right, inner.right, outer.right),
+        bottom: Math.min(box.bottom, inner.bottom, outer.bottom),
+      };
+      return {
+        focused: element === document.activeElement,
+        box: { x: box.x, y: box.y, w: box.width, h: box.height },
+        visibleBox: { x: visible.x, y: visible.y, w: visible.right - visible.x, h: visible.bottom - visible.y },
+      };
+    }), {
+      focused: true,
+      box: { x: 20, y: 96, w: 200, h: 44 },
+      visibleBox: { x: 20, y: 96, w: 200, h: 44 },
+    });
+  } finally {
+    await browser.close();
+    await served.close();
+  }
+
+  const result = await measureProject({ ...fixture, entry: 'dist/index.html' });
+  const packet = loadMeasurement(fixture.root, result.packet);
+  const raw = JSON.parse(readFileSync(join(fixture.root, packet.captures[0]!.ir.path), 'utf8'));
+  const rowSeven = raw.measurement.nodes.find((node: { text: string }) => node.text === 'Row 7');
+  assert.ok(rowSeven);
+  assert.equal(rowSeven.visibleBox, null);
+  assert.deepEqual(rowSeven.clipped.map((clip: { scrollEscape: boolean }) => clip.scrollEscape), [true, true]);
+  assert.equal(packet.findings.some(finding => finding.code === 'REQUIRED_CONTROL_CLIPPED'), false);
+  assert.equal(readFileSync(join(fixture.root, 'src/index.html'), 'utf8'), html);
+  assert.equal(readFileSync(join(fixture.root, 'dist/index.html'), 'utf8'), html);
+});
+test('nested scroll recovery stays refused for intrinsic, oversized, transformed, sticky and horizontal clipping', async t => {
+  const fixture = measurementFixture('clean'); t.after(() => rmSync(fixture.root, { recursive: true, force: true }));
+  const rows = (prefix: string) => Array.from({ length: 8 }, (_, index) =>
+    `<button type="button" style="display:block;width:200px;height:44px">${prefix} ${index}</button>`).join('');
+  const html = `<!doctype html><html><body>
+    <div style="width:200px;height:32px;overflow:hidden"><button type="button" style="width:200px;height:64px">Intrinsic hidden label</button></div>
+    <div style="width:200px;height:120px;overflow:hidden"><div style="width:200px;height:120px;overflow:auto"><button type="button" style="width:200px;height:176px;padding:0"><span style="display:block;height:44px;line-height:44px">Oversized line 1</span><span style="display:block;height:44px;line-height:44px">Oversized line 2</span><span style="display:block;height:44px;line-height:44px">Oversized line 3</span><span style="display:block;height:44px;line-height:44px">Oversized line 4</span></button></div></div>
+    <div style="width:200px;height:120px;overflow:hidden"><div style="width:200px;height:120px;overflow:auto;transform:translateZ(0)">${rows('Transformed row')}</div></div>
+    <div style="width:200px;height:120px;overflow:hidden"><div style="width:200px;height:120px;overflow:auto"><div style="position:sticky">${rows('Sticky row')}</div></div></div>
+    <div style="width:120px;height:44px;overflow:hidden"><div style="width:120px;height:44px;overflow:auto"><button type="button" style="display:block;width:300px;height:44px;white-space:nowrap">Horizontally clipped control label</button></div></div>
+  </body></html>`;
+  for (const path of ['src/index.html', 'dist/index.html']) writeFileSync(join(fixture.root, path), html);
+  const result = await measureProject({ ...fixture, entry: 'dist/index.html' });
+  const packet = loadMeasurement(fixture.root, result.packet);
+  const clipped = packet.findings.find(finding => finding.code === 'REQUIRED_CONTROL_CLIPPED');
+  assert.ok(clipped);
+  assert.equal(clipped.severity, 'blocking');
+  assert.equal(packet.summary.deterministicVerdict, 'RED');
+  const excerpts = clipped.subjectIds.map(subjectId =>
+    packet.subjects.find(subject => subject.id === subjectId)?.textExcerpt ?? '');
+  for (const expected of ['Intrinsic hidden label', 'Transformed row 7', 'Sticky row 7', 'Horizontally clipped control label']) {
+    assert.ok(excerpts.some(excerpt => excerpt.includes(expected)), `${expected}: ${JSON.stringify(excerpts)}`);
+  }
+  const raw = JSON.parse(readFileSync(join(fixture.root, packet.captures[0]!.ir.path), 'utf8'));
+  const oversized = raw.measurement.nodes.find((node: { interactive: boolean; box: { h: number } }) =>
+    node.interactive && node.box.h === 176);
+  assert.ok(oversized);
+  assert.ok(clipped.subjectIds.includes(`${packet.captures[0]!.viewId}:${oversized.id}`));
+  const pointer = readFileSync(join(fixture.root, '.omd/visual-measurement.json'));
+  assert.doesNotThrow(() => loadMeasurement(fixture.root, result.packet));
+  assert.deepEqual(readFileSync(join(fixture.root, '.omd/visual-measurement.json')), pointer);
+  assert.equal(readFileSync(join(fixture.root, 'src/index.html'), 'utf8'), html);
+  assert.equal(readFileSync(join(fixture.root, 'dist/index.html'), 'utf8'), html);
 });
 test('existing localhost is diagnostic-only even when its pixels match the project build', async t => {
   const fixture = measurementFixture('clean'); t.after(() => rmSync(fixture.root, { recursive: true, force: true }));

@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { PNG } from 'pngjs';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
@@ -20,6 +21,28 @@ for (let offset = 0; offset < originalPixels.data.length; offset += 4) {
 const original = PNG.sync.write(originalPixels);
 const thumbnail = PNG.sync.write(new PNG({ width: 319, height: 309 }));
 const lookup = async () => [{ address: '93.184.215.14', family: 4 }];
+
+test('a supplied local image document retains its original without granting arbitrary local image reads', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-supplied-image-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const path = join(root, 'supplied.png');
+  writeFileSync(path, original);
+  const adapter = createTestProjectWriteAdapter(root);
+  await withBrowser(async browser => {
+    const captured = await capturePageForRef(browser, path, { width: 1440, height: 900 }, {
+      shotOut: join(root, '.omd/refs/design/original.png'), adapter, deferShotWrite: true, viewportShot: true,
+    });
+    assert.deepEqual(captured.shotBytes, original);
+    assert.equal(captured.acquisition.sourceImage, pathToFileURL(path).href);
+    assert.equal(captured.acquisition.httpStatus, null);
+    assert.deepEqual(captured.acquisition.imageDimensions, { width: 1600, height: 1280 });
+    const page = await browser.newPage();
+    try {
+      await page.setContent(`<img id="outside" src="${pathToFileURL(path).href}">`);
+      await assert.rejects(captureOriginalImage(page, '#outside'));
+    } finally { await page.close(); }
+  });
+});
 
 for (const contentType of ['application/octet-stream', 'binary/octet-stream']) {
   test(`native original PNG retains exact pixels and digest when served as ${contentType}`, async () => {

@@ -1,7 +1,9 @@
 import type { PortablePiContext } from './omd-runtime.ts';
 import type { InterviewAnswer, InterviewQuestion, ComparisonChoice, Satisfaction } from '../core/coach/developer-evaluation-contract.ts';
 
-export async function collectDeveloperInterview(context: PortablePiContext, repair = false) {
+export async function collectDeveloperInterview(
+  context: PortablePiContext, repair = false, hasReferences = false, satisfactionTarget?: 'a' | 'b',
+) {
   const questions: InterviewQuestion[] = [];
   const answers: InterviewAnswer[] = [];
   const select = context.ui?.select;
@@ -15,17 +17,44 @@ export async function collectDeveloperInterview(context: PortablePiContext, repa
     answers.push({ questionId: id, optionIds: [option.id], text: selected });
     return option.id;
   };
+  const referencePreference = hasReferences ? await ask<ComparisonChoice>('reference-preference', '표시된 레퍼런스 자체는 어느 쪽이 더 좋은가요?', [
+    { id: 'a', label: '레퍼런스 A가 더 좋다' }, { id: 'b', label: '레퍼런스 B가 더 좋다' },
+    { id: 'tie', label: '비슷하다' }, { id: 'neither', label: '둘 다 만족스럽지 않다' },
+    { id: 'uncertain', label: '판단하기 어렵다' },
+  ]) : null;
+  if (hasReferences && referencePreference === null) return null;
   const choice = await ask<ComparisonChoice>('comparison', '어느 결과가 더 좋은가요?', [
     { id: 'a', label: 'A가 더 좋다' }, { id: 'b', label: 'B가 더 좋다' },
     { id: 'tie', label: '비슷하다' }, { id: 'neither', label: '둘 다 만족스럽지 않다' },
     { id: 'uncertain', label: '판단하기 어렵다' },
   ]);
   if (choice === null) return null;
-  const satisfaction = await ask<Satisfaction>('satisfaction', '상대적 비교와 별개로, 현재 결과가 만족스러운가요?', [
+  let satisfactionCandidate: 'a' | 'b' = satisfactionTarget ?? (repair ? 'b' : choice === 'a' || choice === 'b' ? choice : 'a');
+  if (satisfactionTarget === undefined && !repair && choice !== 'a' && choice !== 'b') {
+    const target = await ask<'a' | 'b'>('satisfaction-target', '어느 후보의 실제 적용 만족도를 평가할까요?', [
+      { id: 'a', label: '후보 A' }, { id: 'b', label: '후보 B' },
+    ]);
+    if (target === null) return null;
+    satisfactionCandidate = target;
+  }
+  const satisfaction = await ask<Satisfaction>(
+    `application-satisfaction-${satisfactionCandidate}`,
+    `레퍼런스 선호와 별개로, 실제 적용 후보 ${satisfactionCandidate.toUpperCase()}가 만족스러운가요?`,
+    [
     { id: 'satisfied', label: '만족한다' }, { id: 'mixed', label: '일부는 좋지만 더 수정해야 한다' },
     { id: 'unsatisfied', label: '만족스럽지 않다' }, { id: 'uncertain', label: '판단하기 어렵다' },
-  ]);
+    ],
+  );
   if (satisfaction === null) return null;
+  if (hasReferences) {
+    const fit = await ask('reference-application-fit', '레퍼런스에서 좋았던 점이 실제 적용 결과에도 맞나요?', [
+      { id: 'fits', label: '우리 콘텐츠에도 잘 맞는다' },
+      { id: 'source-only', label: '원본에서는 좋지만 우리 콘텐츠에는 맞지 않는다' },
+      { id: 'partial', label: '일부만 가져오고 싶다' },
+      { id: 'uncertain', label: '판단하기 어렵다' },
+    ]);
+    if (fit === null) return null;
+  }
   const preserve = await ask('preserve', '좋아서 유지하고 싶은 부분은?', [
     { id: 'hierarchy', label: '정보 배치' }, { id: 'color', label: '색 조합' },
     { id: 'type', label: '글자 스타일' }, { id: 'spacing', label: '여백' },
@@ -67,9 +96,12 @@ export async function collectDeveloperInterview(context: PortablePiContext, repa
     { id: 'allow', label: '이 작업 맥락에서만 재사용 허용' },
     { id: 'deny', label: '이번 비교 기록만 보관' },
   ]);
+  if (reuse === null) return null;
   return {
     humanResponse: {
       interview: { questions, answers }, comparisonChoice: choice, satisfaction,
+      satisfactionCandidate,
+      referencePreference,
       postChange,
     },
     reuse: reuse === 'allow' ? 'allow-private-advisory-reuse' as const : 'deny' as const,

@@ -8,6 +8,7 @@ import {
   trustedBrowserReceiptSha256,
   type TrustedBrowserCapture,
   type TrustedBrowserReceipt,
+  type TrustedBrowserTemporalCapture,
 } from '../core/runtime/trusted-browser-receipt.ts';
 import type {
   TrustedEntrySurface,
@@ -26,6 +27,11 @@ import { sealNativeMeasurement } from '../core/measure/files.ts';
 import type { ViewRequest, ViewSpec, VisualMeasurement } from '../core/measure/types.ts';
 import { parseMeasureScope } from '../core/measure/schema.ts';
 import { BASELINE_VIEWS } from '../core/measure/types.ts';
+import {
+  captureObservedTransition,
+  clearPreActionAnimations,
+  markPreActionAnimations,
+} from './trusted-transition-capture.ts';
 
 type Binding = Readonly<{
   runId: string;
@@ -61,7 +67,7 @@ export type TrustedBrowserArtifactSink = Readonly<{
   write(relativePath: string, bytes: Uint8Array): void;
 }>;
 
-export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v7-measured' as const;
+export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v8-state-actions' as const;
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
@@ -110,8 +116,17 @@ async function settleTrustedRender(page: Page): Promise<boolean> {
   } catch { return false; }
 }
 
+/**
+ * Text as a visitor reads it: a line break (<br>) or wrapped markup shows as a gap between words, but the
+ * DOM text joins them with no space. Any whitespace in the expected text therefore also matches none,
+ * so "다음 요청부터, 디자인의 과정까지." matches a heading broken after the comma. Case-insensitive, like hasText.
+ */
+export function visibleTextPattern(text: string): RegExp {
+  return new RegExp(text.trim().split(/\s+/u).map(word => word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('\\s*'), 'iu');
+}
+
 async function resultIsRendered(page: Page, selector: string, text: string): Promise<boolean> {
-  return page.locator(selector).filter({ hasText: text }).evaluateAll((elements) => {
+  return page.locator(selector).filter({ hasText: visibleTextPattern(text) }).evaluateAll((elements) => {
     const element = elements.length === 1 ? elements[0] : undefined;
     if (element === undefined) return false;
     const box = element.getBoundingClientRect();
@@ -129,13 +144,29 @@ async function resultIsRendered(page: Page, selector: string, text: string): Pro
 async function waitForRenderedResult(page: Page, selector: string, text: string): Promise<boolean> {
   const deadline = performance.now() + 2_000;
   try {
-    await page.locator(selector).filter({ hasText: text }).waitFor({ state: 'visible', timeout: 2_000 });
+    await page.locator(selector).filter({ hasText: visibleTextPattern(text) }).waitFor({ state: 'visible', timeout: 2_000 });
     do {
       if (await resultIsRendered(page, selector, text)) return true;
       await page.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame())));
     } while (performance.now() < deadline);
   } catch { /* A missing or replaced state is a measured failed signal. */ }
   return false;
+}
+
+async function elementStateObserved(
+  page: Page,
+  selector: string,
+  state: 'hovered' | 'focused' | 'focus-visible' | 'pressed' | 'expanded',
+): Promise<boolean> {
+  const locator = page.locator(selector);
+  if (await locator.count() !== 1) return false;
+  return locator.evaluate((element, expected) => {
+    if (expected === 'hovered') return element.matches(':hover');
+    if (expected === 'focused') return element === document.activeElement;
+    if (expected === 'focus-visible') return element.matches(':focus-visible');
+    if (expected === 'pressed') return element.matches(':active') || element.getAttribute('aria-pressed') === 'true';
+    return element.getAttribute('aria-expanded') === 'true';
+  }, state).catch(() => false);
 }
 
 async function collectInteractiveLabelFindings(
@@ -164,6 +195,28 @@ async function collectInteractiveLabelFindings(
         && box.top < innerHeight
         && box.left < innerWidth;
       if (!visible) return [];
+      // Layout boxes can intersect the viewport while the entire control is outside
+      // a nested scroll port. Such a control is not painted; it is not a clipped label.
+      // Partially visible and out-of-flow controls retain the existing label checks.
+      let left = Math.max(box.left, 0), right = Math.min(box.right, innerWidth);
+      let top = Math.max(box.top, 0), bottom = Math.min(box.bottom, innerHeight);
+      let outOfFlow = style.position === 'fixed' || style.position === 'absolute';
+      let visibilityAncestor = element.parentElement;
+      while (visibilityAncestor !== null) {
+        const ancestorStyle = getComputedStyle(visibilityAncestor);
+        outOfFlow ||= ancestorStyle.position === 'fixed' || ancestorStyle.position === 'absolute';
+        const ancestorBox = visibilityAncestor.getBoundingClientRect();
+        if (['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowX)) {
+          left = Math.max(left, ancestorBox.left);
+          right = Math.min(right, ancestorBox.right);
+        }
+        if (['hidden', 'clip', 'auto', 'scroll'].includes(ancestorStyle.overflowY)) {
+          top = Math.max(top, ancestorBox.top);
+          bottom = Math.min(bottom, ancestorBox.bottom);
+        }
+        visibilityAncestor = visibilityAncestor.parentElement;
+      }
+      if (!outOfFlow && (right <= left || bottom <= top)) return [];
       const textBoxes: DOMRect[] = [];
       let tokenSplit = false;
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -184,6 +237,41 @@ async function collectInteractiveLabelFindings(
       let clipped = element instanceof HTMLElement
         && (element.scrollWidth > element.clientWidth + 1
           || element.scrollHeight > element.clientHeight + 1);
+      const labelTop = Math.min(...textBoxes.map(textBox => textBox.top));
+      const labelBottom = Math.max(...textBoxes.map(textBox => textBox.bottom));
+      let recoverableY = false;
+      let scrollPort: Element | null = element;
+      while (textBoxes.length > 0 && scrollPort !== null) {
+        const portStyle = getComputedStyle(scrollPort);
+        const portBox = scrollPort.getBoundingClientRect();
+        if (portStyle.transform !== 'none') break;
+        if (scrollPort !== element && ['auto', 'scroll'].includes(portStyle.overflowY)
+          && scrollPort.scrollHeight > scrollPort.clientHeight + 1) {
+          let visibleTop = Math.max(0, portBox.top + scrollPort.clientTop);
+          let visibleBottom = Math.min(innerHeight, portBox.top + scrollPort.clientTop + scrollPort.clientHeight);
+          let outer = scrollPort.parentElement;
+          let transformed = false;
+          while (outer !== null) {
+            const outerStyle = getComputedStyle(outer);
+            transformed ||= outerStyle.transform !== 'none';
+            if (['hidden', 'clip', 'auto', 'scroll'].includes(outerStyle.overflowY)) {
+              const outerBox = outer.getBoundingClientRect();
+              visibleTop = Math.max(visibleTop, outerBox.top + outer.clientTop);
+              visibleBottom = Math.min(visibleBottom, outerBox.top + outer.clientTop + outer.clientHeight);
+            }
+            outer = outer.parentElement;
+          }
+          const minimum = Math.max(-scrollPort.scrollTop, labelBottom - visibleBottom);
+          const maximum = Math.min(scrollPort.scrollHeight - scrollPort.clientHeight - scrollPort.scrollTop,
+            labelTop - visibleTop);
+          recoverableY = !transformed && visibleBottom > visibleTop && minimum <= maximum + 1;
+          break;
+        }
+        if (['absolute', 'fixed', 'sticky'].includes(portStyle.position)
+          || (['hidden', 'clip'].includes(portStyle.overflowY)
+            && (labelTop < portBox.top - 1 || labelBottom > portBox.bottom + 1))) break;
+        scrollPort = scrollPort.parentElement;
+      }
       let viewportFixed = false;
       let ancestor: Element | null = element;
       while (ancestor !== null && ancestor !== document.documentElement) {
@@ -196,7 +284,7 @@ async function collectInteractiveLabelFindings(
           clipped ||= textBoxes.some((textBox) =>
             (clipsX && (textBox.left < ancestorBox.left - 1
               || textBox.right > ancestorBox.right + 1))
-            || (clipsY && (textBox.top < ancestorBox.top - 1
+            || (clipsY && !recoverableY && (textBox.top < ancestorBox.top - 1
               || textBox.bottom > ancestorBox.bottom + 1)));
         }
         ancestor = ancestor.parentElement;
@@ -209,11 +297,18 @@ async function collectInteractiveLabelFindings(
         ['hidden', 'clip'].includes(getComputedStyle(root).overflowY));
       clipped ||= textBoxes.some((textBox) =>
         textBox.left < -1 || textBox.right > innerWidth + 1
-        || ((textBox.top < -1 || textBox.bottom > innerHeight + 1)
+        || (!recoverableY && (textBox.top < -1 || textBox.bottom > innerHeight + 1)
           && (viewportFixed || documentClipsY
             || textBox.top + scrollY < -1
             || textBox.bottom + scrollY > scrollRoot.scrollHeight + 1)));
-      return [Object.freeze({ tokenSplit, clipped })];
+      const diagnosticBox = tokenSplit || clipped ? element.getBoundingClientRect() : null;
+      const target = diagnosticBox === null ? null : {
+        selector: element.id && document.querySelectorAll(`#${CSS.escape(element.id)}`).length === 1 ? `#${CSS.escape(element.id)}` : null,
+        tag: element.tagName.toLowerCase(), text: (element.textContent ?? '').slice(0, 240),
+        viewport: { width: innerWidth, height: innerHeight },
+        bounds: { x: diagnosticBox.x, y: diagnosticBox.y, width: diagnosticBox.width, height: diagnosticBox.height },
+      };
+      return [Object.freeze({ tokenSplit, clipped, target })];
     });
   });
   if (observed.some((item) => item.tokenSplit)) {
@@ -221,6 +316,11 @@ async function collectInteractiveLabelFindings(
   }
   if (observed.some((item) => item.clipped)) {
     findings.add(`interactive-label-clipped:${viewport.width}x${viewport.height}`);
+  }
+  for (const item of observed) if (item.target !== null) {
+    findings.add(`interactive-label-detail:${JSON.stringify({
+      view: `${viewport.width}x${viewport.height}`, ...item.target, tokenSplit: item.tokenSplit, clipped: item.clipped,
+    })}`);
   }
 }
 
@@ -313,9 +413,9 @@ async function collectEntrySurfaceFindings(
   if (screens > 1) code('route-not-exclusive');
 
   const consequence = page.locator(entry.consequence.selector);
-  const beforeVisible = await consequence.filter({ hasText: entry.consequence.beforeText })
+  const beforeVisible = await consequence.filter({ hasText: visibleTextPattern(entry.consequence.beforeText) })
     .isVisible().catch(() => false);
-  const afterSignal = consequence.filter({ hasText: entry.consequence.afterText })
+  const afterSignal = consequence.filter({ hasText: visibleTextPattern(entry.consequence.afterText) })
     .waitFor({ state: 'visible', timeout: 2_000 })
     .then(() => true, () => false);
   try {
@@ -383,23 +483,32 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   const actionLog: string[] = [];
   const captures: TrustedBrowserCapture[] = [];
   const measured: RetainedCapture[] = [];
+  const pendingCaptures: { path: string; bytes: Uint8Array }[] = [];
   const measurementMethod = measuredMode ? methodIdentity(browser.version()) : undefined;
-  const capture = async (page: Page, view: ViewSpec, outcomeRef?: string): Promise<void> => {
+  const temporalCaptures: TrustedBrowserTemporalCapture[] = [];
+  const capture = async (
+    page: Page,
+    view: ViewSpec,
+    outcomeRef?: string,
+  ): Promise<TrustedBrowserCapture> => {
     if (!measuredMode) {
       const url = page.url(), bytes = await page.screenshot({ fullPage: false });
       if (page.url() !== url) throw new Error('TRUSTED_BROWSER_CAPTURE_STATE_CHANGED');
       const hash = sha256(bytes), path = join(output, `${String(captures.length).padStart(3, '0')}-sha256-${hash}.png`);
-      input.artifacts.write(path, bytes);
-      captures.push({ path, sha256: hash, ...view.viewport, ...(outcomeRef ? { outcomeRef } : {}), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
-      return;
+      pendingCaptures.push({ path, bytes });
+      const capture = { path, sha256: hash, ...view.viewport, ...(outcomeRef ? { outcomeRef } : {}), testedUrl: new URL(view.route, 'http://127.0.0.1').href };
+      captures.push(capture);
+      return capture;
     }
     const retained = await captureMeasuredView(page, view, loadedContracts.contracts, captureContext);
     measured.push(retained);
     const path = join(output, `${String(measured.length).padStart(3, '0')}-sha256-${retained.binding.capture.sha256}.png`);
     // This is the exact buffer whose pixels and DOM facts form the immutable measurement packet.
-    input.artifacts.write(path, retained.png);
-    captures.push({ path, sha256: retained.binding.capture.sha256, width: retained.binding.image.width, height: retained.binding.image.height,
-      ...(outcomeRef === undefined ? {} : { outcomeRef }), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
+    pendingCaptures.push({ path, bytes: retained.png });
+    const capture = { path, sha256: retained.binding.capture.sha256, width: retained.binding.image.width, height: retained.binding.image.height,
+      ...(outcomeRef === undefined ? {} : { outcomeRef }), testedUrl: new URL(view.route, 'http://127.0.0.1').href };
+    captures.push(capture);
+    return capture;
   };
   const behaviorByOutcome = new Map(
     input.binding.requiredOutcomeRefs.map((outcomeRef) => [outcomeRef, new Set<string>()]),
@@ -463,25 +572,54 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           }
           const actions = script.actions.filter((action) =>
             action.viewports === undefined || action.viewports.includes(viewport.id));
-          const transitionActions = actions.filter((action) => action.kind === 'click');
+          const transitionActions = actions.filter((action) =>
+            action.kind === 'click' || action.kind === 'press'
+            || action.kind === 'hover' || action.kind === 'focus' || action.kind === 'press-start');
           // Attach each visible-state waiter before triggering actions, but convert rejection to a
           // measured boolean immediately so a fast timeout can never become an unhandled rejection.
           const initiallyVisible = await Promise.all(script.assertions.map((assertion) =>
-            assertion.kind !== 'absent-text'
+            assertion.kind !== 'absent-text' && assertion.kind !== 'element-state'
               ? resultIsRendered(page, assertion.selector, assertion.text)
               : false));
           const visibleSignals = () => script.assertions.map((assertion) =>
-            assertion.kind !== 'absent-text'
+            assertion.kind !== 'absent-text' && assertion.kind !== 'element-state'
               ? waitForRenderedResult(page, assertion.selector, assertion.text)
               : undefined);
           let signals = actions.length === 0 ? visibleSignals() : [];
+          let releasePress: (() => Promise<void>) | undefined;
+          let temporalSample: Readonly<{
+            before: Buffer;
+            mid: Buffer;
+            animationCount: number;
+          }> | undefined;
           for (const [actionIndex, action] of actions.entries()) {
             // Prerequisite actions may legitimately consume the whole assertion timeout. Subscribe
             // immediately before the final triggering/barrier action so the bounded waiter measures
             // the resulting state rather than expiring while the script is still preparing it.
             if (actionIndex === actions.length - 1) signals = visibleSignals();
-            actionLog.push(`${action.kind === 'reload' ? 'reload' : `${action.kind} ${action.selector}`} @ ${viewport.width}x${viewport.height}`);
-            transcript.push(action.kind === 'reload' ? 'action-reload' : `action-${action.kind}:${sha256(Buffer.from(action.selector))}`);
+            const temporalAction = actionIndex === actions.length - 1
+              && script.captureState !== undefined
+              && script.captureState.state !== 'default'
+              && request.browserZoom === 1
+              && ((request.viewport.width === 1280 && request.viewport.height === 900)
+                || (request.viewport.width === 390 && request.viewport.height === 844))
+              && (action.kind === 'click' || action.kind === 'press'
+                || action.kind === 'hover' || action.kind === 'focus'
+                || action.kind === 'press-start')
+              ? action
+              : undefined;
+            const temporalBefore = temporalAction !== undefined
+              ? await page.screenshot({ fullPage: false })
+              : undefined;
+            if (temporalBefore !== undefined && temporalAction !== undefined) {
+              await markPreActionAnimations(page, [
+                temporalAction.selector,
+                ...script.assertions.map(assertion => assertion.selector),
+              ]);
+            }
+            actionLog.push(`${action.kind === 'reload' ? 'reload' : `${action.kind} ${action.selector}${action.kind === 'press' ? ` ${action.key}` : ''}`} @ ${viewport.width}x${viewport.height}`);
+            transcript.push(action.kind === 'reload' ? 'action-reload' : `action-${action.kind}:${action.kind === 'press' ? `${action.key}:` : ''}${sha256(Buffer.from(action.selector))}`);
+            let actionSucceeded = false;
             try {
               if (action.kind === 'reload') {
                 const response = await page.reload({ waitUntil: 'load' });
@@ -490,45 +628,162 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
                   safetyFindings.add('browser-navigation-failed');
                 }
               } else if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
-              else await page.locator(action.selector).fill(action.value, { timeout: 2_000 });
+              else if (action.kind === 'hover') await page.locator(action.selector).hover({ timeout: 2_000 });
+              else if (action.kind === 'focus') await page.locator(action.selector).focus({ timeout: 2_000 });
+              else if (action.kind === 'press-start') {
+                const target = page.locator(action.selector);
+                await target.waitFor({ state: 'visible', timeout: 2_000 });
+                const box = await target.boundingBox();
+                if (box === null) throw new Error('press target is not visible');
+                await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+                await page.mouse.down();
+                releasePress = async () => {
+                  await page.mouse.move(0, 0);
+                  await page.mouse.up();
+                };
+              }
+              else if (action.kind === 'press') {
+                const focus = () => ({ tagName: document.activeElement?.tagName ?? null,
+                  id: document.activeElement?.id ?? null });
+                const before = await page.evaluate(focus);
+                await page.locator(action.selector).press(action.key, { timeout: 2_000 });
+                const after = await page.evaluate(focus);
+                transcript.push(`keyboard-focus:${JSON.stringify({ key: action.key,
+                  viewport: { width: viewport.width, height: viewport.height },
+                  before: { tagName: before.tagName,
+                    idSha256: before.id ? sha256(Buffer.from(before.id)) : null },
+                  after: { tagName: after.tagName,
+                    idSha256: after.id ? sha256(Buffer.from(after.id)) : null } })}`);
+              }
+              else if (action.kind === 'fill') {
+                const control = page.locator(action.selector);
+                const isSelect = await control.evaluate(element => element.tagName === 'SELECT',
+                  undefined, { timeout: 2_000 });
+                if (isSelect) await control.selectOption(action.value, { timeout: 2_000 });
+                else await control.fill(action.value, { timeout: 2_000 });
+              }
               if (request.browserZoom === 2) await ensureMeasuredLayoutZoom(page, request.viewport);
+              actionSucceeded = true;
             } catch {
               findings.add('required-action-unavailable');
             }
-          }
-          const observedSignals = await Promise.all(signals.map((signal) => signal ?? false));
-          if (!await settleTrustedRender(page)) findings.add('required-render-not-settled');
-          for (const [index, assertion] of script.assertions.entries()) {
-            const rendered = assertion.kind === 'absent-text'
-              || await resultIsRendered(page, assertion.selector, assertion.text);
-            if (assertion.kind !== 'absent-text' && !rendered) {
-              findings.add('required-result-not-rendered');
-            }
-            const passed = assertion.kind === 'preserved-text'
-              ? initiallyVisible[index] && observedSignals[index] && rendered
-              : assertion.kind === 'visible-text'
-              ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
-              : !await page.locator(assertion.selector).filter({ hasText: assertion.text })
-                .isVisible().catch(() => false);
-            if (passed) {
-              transcript.push(`assertion-pass:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
-            } else {
-              findings.add(assertion.kind === 'preserved-text'
-                ? 'required-preserved-state-missing'
-                : assertion.kind === 'visible-text' && initiallyVisible[index]
-                && transitionActions.length > 0
-                ? 'required-state-transition-missing'
-                : 'required-visible-result-missing');
-              transcript.push(`assertion-fail:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
+            if (temporalBefore !== undefined && actionSucceeded) {
+              const midpoint = await captureObservedTransition(page);
+              if (midpoint.kind === 'sample') {
+                temporalSample = {
+                  before: temporalBefore,
+                  mid: midpoint.png,
+                  animationCount: midpoint.animationCount,
+                };
+              } else {
+                transcript.push(`temporal-evidence-unavailable:${midpoint.reason}:${sha256(Buffer.from(script.outcomeRef))}:${request.viewport.width}x${request.viewport.height}`);
+              }
+            } else if (temporalBefore !== undefined) {
+              await clearPreActionAnimations(page);
             }
           }
-          await collectInteractiveLabelFindings(page, viewport, accessFindings);
-          await recordRenderedCopyForReview(page, viewport, transcript);
-          const observedUrl = new URL(page.url());
-          if (observedUrl.origin !== new URL(initialUrl).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
-          const state = `outcome-${sha256(Buffer.from(script.outcomeRef)).slice(0, 16)}`;
-          await capture(page, { id: `${request.id}:${state}`, viewport: request.viewport, browserZoom: request.browserZoom,
-            route: pageRoute(page), state, stateRecipeSha256: digest({ focusProbe: 'Tab', scripts: input.manifest.scripts.slice(0, scriptIndex + 1).map(s => ({ ...s, actions: s.actions.filter(a => a.viewports === undefined || a.viewports.includes(viewport.id)) })) }) }, script.outcomeRef);
+          try {
+            const observedSignals = await Promise.all(signals.map((signal) => signal ?? false));
+            if (!await settleTrustedRender(page)) findings.add('required-render-not-settled');
+            for (const [index, assertion] of script.assertions.entries()) {
+              if (assertion.kind === 'element-state') {
+                const passed = await elementStateObserved(page, assertion.selector, assertion.state);
+                transcript.push(`assertion-${passed ? 'pass' : 'fail'}:${sha256(Buffer.from(`${assertion.selector}\0${assertion.state}`))}`);
+                if (!passed) findings.add('required-element-state-missing');
+                continue;
+              }
+              const rendered = assertion.kind === 'absent-text'
+                || await resultIsRendered(page, assertion.selector, assertion.text);
+              if (assertion.kind !== 'absent-text' && !rendered) {
+                findings.add('required-result-not-rendered');
+              }
+              const passed = assertion.kind === 'preserved-text'
+                ? initiallyVisible[index] && observedSignals[index] && rendered
+                : assertion.kind === 'visible-text'
+                ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
+                : !await page.locator(assertion.selector).filter({ hasText: visibleTextPattern(assertion.text) })
+                  .isVisible().catch(() => false);
+              if (passed) {
+                transcript.push(`assertion-pass:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
+              } else {
+                findings.add(assertion.kind === 'preserved-text'
+                  ? 'required-preserved-state-missing'
+                  : assertion.kind === 'visible-text' && initiallyVisible[index]
+                  && transitionActions.length > 0
+                  ? 'required-state-transition-missing'
+                  : 'required-visible-result-missing');
+                transcript.push(`assertion-fail:${sha256(Buffer.from(`${assertion.selector}\0${assertion.text}`))}`);
+              }
+            }
+            await collectInteractiveLabelFindings(page, viewport, accessFindings);
+            await recordRenderedCopyForReview(page, viewport, transcript);
+            const observedUrl = new URL(page.url());
+            if (observedUrl.origin !== new URL(initialUrl).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
+            const state = `outcome-${sha256(Buffer.from(script.outcomeRef)).slice(0, 16)}`;
+            const settled = await capture(page, { id: `${request.id}:${state}`, viewport: request.viewport, browserZoom: request.browserZoom,
+              route: pageRoute(page), state, stateRecipeSha256: digest({ focusProbe: 'Tab', scripts: input.manifest.scripts.slice(0, scriptIndex + 1).map(s => ({ ...s, actions: s.actions.filter(a => a.viewports === undefined || a.viewports.includes(viewport.id)) })) }) }, script.outcomeRef);
+            if (temporalSample !== undefined && script.captureState !== undefined
+              && script.captureState.state !== 'default') {
+              const beforeSha256 = sha256(temporalSample.before);
+              const midSha256 = sha256(temporalSample.mid);
+              if (new Set([beforeSha256, midSha256, settled.sha256]).size > 1) {
+                const temporalPath = (phase: 'before' | 'observed-intermediate', digest: string): string =>
+                  join(output, `temporal-${String(temporalCaptures.length).padStart(3, '0')}-${phase}-sha256-${digest}.png`);
+                const beforePath = temporalPath('before', beforeSha256);
+                const midPath = temporalPath('observed-intermediate', midSha256);
+                pendingCaptures.push(
+                  { path: beforePath, bytes: temporalSample.before },
+                  { path: midPath, bytes: temporalSample.mid },
+                );
+                const shared = {
+                  outcomeRef: script.outcomeRef,
+                  component: script.captureState.component,
+                  state: script.captureState.state,
+                  viewport: request.viewport,
+                } as const;
+                temporalCaptures.push(
+                  {
+                    ...shared,
+                    path: beforePath,
+                    sha256: beforeSha256,
+                    width: request.viewport.width,
+                    height: request.viewport.height,
+                    phase: 'before',
+                    captureMoment: 'pre-action/pre-actionability',
+                    playbackSampling: null,
+                  },
+                  {
+                    ...shared,
+                    path: midPath,
+                    sha256: midSha256,
+                    width: request.viewport.width,
+                    height: request.viewport.height,
+                    phase: 'observed-intermediate',
+                    captureMoment: 'natural-playback',
+                    playbackSampling: {
+                      kind: 'natural-playback',
+                      source: 'css-transition-or-waapi',
+                      timeline: 'document',
+                      timelineFraction: null,
+                      animationCount: temporalSample.animationCount,
+                    },
+                  },
+                  {
+                    ...shared,
+                    path: settled.path,
+                    sha256: settled.sha256,
+                    width: settled.width,
+                    height: settled.height,
+                    phase: 'settled',
+                    captureMoment: 'post-action-settled',
+                    playbackSampling: null,
+                  },
+                );
+              }
+            }
+          } finally {
+            if (releasePress !== undefined) await releasePress();
+          }
         }
         const overflow = await page.evaluate(() =>
           document.documentElement.scrollWidth > document.documentElement.clientWidth);
@@ -548,6 +803,11 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
       else await withLocalView(browser, input.root, { page: input.binding.productionPath, viewport: request.viewport, state }, inspect);
     }
     try {
+      served.assertSourceCurrent();
+      // Durable authenticated publication is not browser observation. Keep its
+      // validation/fsync cost outside every viewport's inspection deadline, and
+      // publish nothing if any viewport or pre-publication freshness check fails.
+      for (const capture of pendingCaptures) input.artifacts.write(capture.path, capture.bytes);
       served.assertSourceCurrent();
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown source mutation';
@@ -614,6 +874,9 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
         state: retained.view.state, stateRecipeSha256: retained.view.stateRecipeSha256, viewport: retained.view.viewport,
         layoutViewport: { width: retained.binding.observedViewport.innerWidth, height: retained.binding.observedViewport.innerHeight } } });
     })),
+    ...(temporalCaptures.length === 0
+      ? {}
+      : { temporalCaptures: Object.freeze(temporalCaptures.map(item => Object.freeze(item))) }),
     transcript: Object.freeze(transcript),
     ...(input.manifest.entrySurface === undefined
       ? {}

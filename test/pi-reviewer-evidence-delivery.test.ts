@@ -97,6 +97,19 @@ test('bounded tool marker delivers the complete retained text and all images', (
   assert.equal(output.output.length, 3);
 });
 
+test('a later reviewer turn gets the exact evidence again after the marker', () => {
+  const text = JSON.stringify({ source: 'complete '.repeat(2_000) });
+  const { payload, evidence } = fixture(text);
+  const first = deliverPiReviewerProviderEvidence(payload, evidence) as typeof payload;
+  // The session stores only the marker output; the next request carries the reviewer's own turn after it.
+  const reply = { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'draft' }] };
+  const nudge = { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Return the contract.' }] };
+  const later = { ...payload, input: [first.input[0]!, first.input[1]!, first.input[2]!, reply, nudge] };
+  const delivered = deliverPiReviewerProviderEvidence(later, evidence) as typeof payload;
+  assert.deepEqual(delivered.input.slice(3), [{ role: 'user', content: [{ type: 'input_text', text }] }, reply, nudge]);
+  assert.equal(JSON.stringify(delivered).split('complete complete').length > 1, true);
+});
+
 for (const drift of ['packet', 'image', 'following'] as const) {
   test(`bounded marker refuses ${drift} drift`, () => {
     const { payload, evidence } = fixture(JSON.stringify({ source: 'complete' }));

@@ -4,6 +4,8 @@ import { createInterface } from 'node:readline';
 import { pathToFileURL } from 'node:url';
 
 const mode = process.env.PI_REVIEWER_FIXTURE_MODE ?? 'success';
+// Orthogonal to the mode: 'repair' mistypes one digest and fixes it when asked; 'persist' never does.
+const bindingTypo = process.env.PI_REVIEWER_FIXTURE_BINDING_TYPO;
 const args = process.argv.slice(2);
 const option = name => args[args.indexOf(name) + 1];
 const provider = option('--provider');
@@ -54,6 +56,35 @@ function emitReady() {
 
 function handback(packet) {
   const contract = packet.outputContract;
+  if (contract.lane === 'candidateChoice') {
+    return {
+      schema: contract.schema, fixedBindings: contract.fixedBindings,
+      observations: packet.evidence.candidates.map(candidate => ({
+        alias: candidate.alias, feasibility: mode === 'candidate-choice-none' ? 'fail' : 'pass',
+        structureRelationship: 'The work object and primary action remain clear.',
+        densityTypeFit: 'The supplied content fits the measured views.',
+        responsiveFit: 'The task context remains visible at both widths.',
+        ...(mode === 'candidate-choice-no-quality' ? {} : {
+          qualityAssessments: candidate.viewIds.flatMap(viewId => contract.qualityAxes.map(axis => ({
+            axis, viewId,
+            verdict: mode === 'candidate-choice-none' || mode === 'candidate-choice-quality-fail'
+              ? 'fail' : mode === 'candidate-choice-quality-unassessed' ? 'unassessed' : 'pass',
+            observation: 'The offline fixture binds a pixel-grounded judgment to this exact candidate view.',
+            consequence: mode === 'candidate-choice-none' || mode === 'candidate-choice-quality-fail'
+              ? 'This direction requires visible craft repair before selection.'
+              : 'The supplied view independently qualifies for candidate selection.',
+          }))),
+        }),
+        findings: mode === 'candidate-choice-none' ? [{
+          viewId: candidate.viewIds[0], region: 'primary work object',
+          consequence: 'Visible composition and control craft require repair before selection.', blocking: false,
+        }] : [],
+      })),
+      winner: mode === 'candidate-choice-none' ? null : mode === 'candidate-choice-wrong-alias'
+        ? 'unknown-option' : packet.evidence.candidates.at(-1).alias,
+      limitations: ['Synthetic reviewer fixture, not human design approval.'],
+    };
+  }
   if (contract.lane === 'candidateFidelity') {
     const revise = mode === 'candidate-revise' || mode === 'candidate-source-payload';
     const counterparts = contract.responseTemplate.referenceFidelityAssessments.map(row => {
@@ -91,11 +122,34 @@ function handback(packet) {
     };
   }
   if (contract.lane === 'firstRender') {
-    const revise = mode === 'early-revise' || mode === 'early-reframe';
+    const findingId = process.env.PI_REVIEWER_FIXTURE_FINDING_ID || 'primary-action';
+    const progressVerdict = mode === 'early-progress-improved' ? 'improved'
+      : mode === 'early-progress-same' ? 'same'
+      : mode === 'early-progress-regressed' ? 'regressed'
+      : mode === 'early-progress-different' ? 'different-not-better'
+      : 'improved';
+    const revise = mode === 'early-revise' || mode === 'early-reframe'
+      || mode.startsWith('early-progress-');
     const reframe = mode === 'early-reframe';
+    const findings = reframe ? ['beautyDesirability', 'hierarchyComposition'].map(axis => ({
+      id: axis, viewport: 'both', axis, repairScope: 'composition',
+      observation: 'The current grouping loses the intended work-object hierarchy.',
+      consequence: 'The surface does not convey the approved relationship.',
+      repairCriterion: 'Make the work-object hierarchy legible in the intended visual direction.',
+    })) : revise ? [{
+      id: findingId, viewport: 'mobile', axis: 'usability', repairScope: mode === 'early-reframe' ? 'composition' : 'surface',
+      observation: 'Primary action label wraps.',
+      consequence: 'The action is hard to read.', repairCriterion: 'Keep the complete action label readable.',
+    }] : [];
     return {
       schema: contract.schema, fixedBindings: contract.fixedBindings,
       decision: mode === 'early-reframe' ? 'reframe' : revise ? 'revise' : 'retain',
+      ...(contract.fixedBindings.consultedReferencesSha256 === undefined || mode === 'early-missing-comparison' ? {} : {
+        referenceComparisons: contract.referenceComparisons.map(binding => ({
+          ...binding, verdict: 'pass', sourceIdentity: 'Inset work area with readable groups.',
+          preservedTraits: ['Inset grouping and relative proportions'], departures: [], findingIds: [],
+        })),
+      }),
       qualityAssessments: mode === 'early-missing-quality' ? [] : contract.qualityAxes.flatMap(axis => packet.evidence.renders.map(render => ({
         axis, viewport: render.viewport, captureSha256: render.captureSha256,
         verdict: reframe ? ['beautyDesirability', 'hierarchyComposition'].includes(axis) ? 'fail' : 'pass'
@@ -103,21 +157,76 @@ function handback(packet) {
         observation: 'Offline fixture tests the capture-bound contract, not aesthetic quality.',
         consequence: 'The fixture checks complete axis coverage.',
       }))),
-      findings: reframe ? ['beautyDesirability', 'hierarchyComposition'].map(axis => ({
-        id: axis, viewport: 'both', axis, repairScope: 'composition',
-        observation: 'The current grouping loses the intended work-object hierarchy.',
-        consequence: 'The surface does not convey the approved relationship.',
-        repairCriterion: 'Make the work-object hierarchy legible in the intended visual direction.',
-      })) : revise ? [{
-        id: 'primary-action', viewport: 'mobile', axis: 'usability', repairScope: mode === 'early-reframe' ? 'composition' : 'surface',
-        observation: 'Primary action label wraps.',
-        consequence: 'The action is hard to read.', repairCriterion: 'Keep the complete action label readable.',
-      }] : [],
-      resolvedFindings: revise ? [] : packet.evidence.priorCriteria.map(finding => ({
+      findings,
+      resolvedFindings: packet.evidence.priorCriteria
+        .filter(finding => !revise || !findings.some(current => current.id === finding.id))
+        .map(finding => ({
         id: finding.id, evidence: packet.evidence.renders
           .filter(render => finding.viewport === 'both' || finding.viewport === render.viewport)
           .map(render => ({ viewport: render.viewport, captureSha256: render.captureSha256,
             observation: 'The current action label is readable without wrapping.' })),
+      })),
+      ...(packet.evidence.designerJudgments === undefined || mode === 'early-missing-judgments' ? {} : {
+        judgmentChecks: packet.evidence.designerJudgments.judgments.map((judgment, index) => {
+          const violated = index === 0 && (findings.length > 0 || mode === 'early-judgment-unbound');
+          return {
+            judgmentId: judgment.id, verdict: violated ? 'violated' : 'not-applicable', viewport: 'both',
+            observation: 'Offline fixture answers each supplied judgment.',
+            findingIds: violated && mode !== 'early-judgment-unbound' ? [findings[0].id] : [],
+          };
+        }),
+      }),
+      ...(packet.evidence.previousIterationRenders === undefined ? {} : {
+        progress: {
+          verdict: progressVerdict,
+          comparisons: packet.evidence.renders.map(render => ({
+            viewport: render.viewport,
+            previousCaptureSha256: packet.evidence.previousIterationRenders
+              .find(previous => previous.viewport === render.viewport).captureSha256,
+            currentCaptureSha256: render.captureSha256,
+            observation: 'The current and immediately previous captures were compared at the same viewport.',
+          })),
+          findingIds: progressVerdict === 'regressed' ? findings.map(finding => finding.id) : [],
+        },
+      }),
+    };
+  }
+  if (contract.lane === 'tasteComparison') {
+    const human = mode === 'taste-picks-b' ? 'B' : mode === 'taste-malformed-human' ? 'C' : 'A';
+    const other = human === 'A' ? 'B' : 'A';
+    return {
+      schema: contract.schema, fixedBindings: contract.fixedBindings, human,
+      confidence: mode === 'taste-malformed-confidence' ? 2 : 0.8,
+      aiTells: [`Offline fixture tell in ${other}: the top-left headline stack looks assembled from defaults.`],
+      humanSignals: [`Offline fixture signal in ${human}: the centre composition looks specific.`],
+    };
+  }
+  if (contract.lane === 'figmaFidelity') {
+    const mismatch = mode === 'figma-mismatch' || mode === 'figma-unknown-element';
+    const region = packet.evidence.regions[0];
+    const figmaNode = region?.figmaNodes[0];
+    const rendered = region?.renderedElements[0];
+    const priorFixes = packet.evidence.previousReview?.fixes ?? [];
+    return {
+      schema: contract.schema,
+      fixedBindings: contract.fixedBindings,
+      verdict: mismatch ? 'mismatch' : 'match',
+      fixes: mismatch ? [{
+        id: priorFixes[0]?.id ?? 'card-background',
+        regionIndex: region.index,
+        element: {
+          figmaNodeId: figmaNode?.id ?? null,
+          figmaNodeName: figmaNode?.name ?? null,
+          renderedSelector: mode === 'figma-unknown-element' ? '#invented' : rendered?.selector ?? null,
+        },
+        property: 'background-color',
+        figmaValue: '#ffffff',
+        renderValue: 'rgb(0, 0, 0)',
+        instruction: 'Set the rendered card background to the exact Figma fill value.',
+      }] : [],
+      priorFixes: priorFixes.map(fix => ({
+        id: fix.id,
+        status: mismatch ? 'unresolved' : 'resolved',
       })),
     };
   }
@@ -183,7 +292,12 @@ function handback(packet) {
       })),
     };
   }
-  const observations = (packet.evidence?.observationProjection ?? packet.observationProjection)?.observations ?? [];
+  const projection = packet.evidence?.observationProjection ?? packet.observationProjection;
+  const measuredEvidence = packet.evidence ?? packet;
+  const measured = contract.designQuality?.schema === 'design-quality-contract-v2';
+  const observations = Array.isArray(projection)
+    ? [...new Map(projection.map(row => [`${row.packetSha256}:${row.viewId}:${row.state}`, row])).values()]
+    : projection?.observations ?? [];
   return {
     schema: contract.schema,
     lane: contract.lane,
@@ -193,7 +307,16 @@ function handback(packet) {
       schema: contract.designQuality.schema,
       axes: contract.designQuality.axes.map(axis => ({
         axis, verdict: 'GREEN', score: 4, crossViewport: 'preserved', criticalFailure: null,
-        evidence: observations.map(observation => ({
+        evidence: observations.map(observation => measured ? ({
+          observationSha256: observation.observationSha256, captureSha256: observation.captureSha256,
+          packetSha256: observation.packetSha256, viewId: observation.viewId, state: observation.state,
+          regionSubjectIds: [],
+          measurementIds: measuredEvidence.measurementProjection.find(item => item.packetSha256 === observation.packetSha256)
+            .measurements.filter(item => item.viewIds.includes(observation.viewId) && item.coverage.status === 'complete'
+              && contract.designQuality.requiredMetricKinds[axis].includes(item.kind)).map(item => item.id),
+          visibleCondition: 'Offline fixture cites the actual supplied measured view.',
+          userConsequence: 'This verifies measured review transport, not human aesthetic quality.',
+        }) : ({
           observationSha256: observation.observationSha256,
           viewport: observation.viewport, state: observation.state,
           region: 'Fixture screenshot', visibleCondition: 'Offline transport fixture evidence.',
@@ -217,6 +340,20 @@ function handback(packet) {
           rationale: 'The fixture tests exact complete visual-assessment transport and authorization only.',
         })),
     }),
+    ...(!contract.reviewerFields?.includes('consultedReferenceComparisons') || mode === 'missing-consulted-comparisons' ? {} : {
+      consultedReferenceComparisons: packet.evidence.consultedReferenceComparisonExpectations
+        .filter((_, index) => mode !== 'incomplete-consulted-comparisons' || index !== 0)
+        .map((binding, index) => ({
+        ...binding,
+        ...(mode === 'wrong-consulted-target' && index === 0
+          ? { targetCaptureSha256: '0'.repeat(64) } : {}),
+        verdict: mode === 'failed-consulted-comparison' && index === 0 ? 'fail' : 'pass',
+        sourceIdentity: 'Offline fixture consulted original; this tests exact comparison transport.',
+        preservedTraits: ['The fixture binds the supplied original and corresponding product state pixels.'],
+        departures: [],
+        findings: [],
+      })),
+    }),
     ...(contract.lane !== 'protocolLane' || !packet.evidence?.outcomeExecution || mode === 'missing-outcome-assessments' ? {} : {
       outcomeAssessments: packet.evidence.outcomeExecution.outcomes.map((outcome, index) => ({
         outcomeRef: outcome.outcomeRef,
@@ -231,11 +368,37 @@ function handback(packet) {
   };
 }
 
+let repairValue;
+let answeredValue;
+// A mistyped digest echo, like a reviewer that repeats three characters while copying a hash.
+const typo = (value) => `${value.slice(0, 20)}${value.slice(17, 20)}${value.slice(20)}`;
+function mistype(value) {
+  if (bindingTypo === 'contract' || bindingTypo === 'contract-persist') {
+    // A digest copied wrongly inside the answer body, outside fixedBindings.
+    const [first, ...rest] = value.qualityAssessments ?? [];
+    return first === undefined ? value : { ...value, qualityAssessments: [{ ...first, captureSha256: typo(first.captureSha256) }, ...rest] };
+  }
+  const key = Object.keys(value.fixedBindings ?? {}).find(name => /Sha256$/.test(name) && typeof value.fixedBindings[name] === 'string');
+  return key === undefined ? value : { ...value, fixedBindings: { ...value.fixedBindings, [key]: typo(value.fixedBindings[key]) } };
+}
+
 async function prompt(request) {
   trace('prompt');
   response(request);
   messages.push({ role: 'user', content: [{ type: 'text', text: request.message }], timestamp: Date.now() });
   emit({ type: 'agent_start' });
+  if (answeredValue !== undefined) {
+    // The correction turn: no tool call. A fixture that was not asked to mistype repeats its answer unchanged.
+    trace('binding-repair');
+    const repaired = repairValue === undefined ? answeredValue
+      : bindingTypo === 'persist' || bindingTypo === 'contract-persist' ? mistype(repairValue) : repairValue;
+    const repairMessage = { role: 'assistant', content: [{ type: 'text', text: JSON.stringify(repaired) }], provider, model, stopReason: 'stop' };
+    messages.push(repairMessage);
+    emit({ type: 'message_end', message: repairMessage });
+    emit({ type: 'agent_end', messages });
+    emit({ type: 'agent_settled' });
+    return;
+  }
   trace('active');
   if (mode === 'hang') return;
   let finalValue = { schema: 'adaptive-final-render-reviewer-handback-v1', lane: 'blindLane' };
@@ -258,9 +421,22 @@ async function prompt(request) {
     const toolResult = { role: 'toolResult', toolCallId, toolName: 'read_reviewer_evidence', content: result.content, isError: false, timestamp: Date.now() };
     messages.push(toolResult);
     emit({ type: 'message_end', message: toolResult });
+    if (process.env.PI_REVIEWER_FIXTURE_EVIDENCE_TEXT) {
+      // Everything textual the reviewer is shown, so a test can prove what it could and could not read.
+      appendFileSync(process.env.PI_REVIEWER_FIXTURE_EVIDENCE_TEXT, `${JSON.stringify({ task: request.message,
+        text: result.content.filter(item => item.type === 'text').map(item => item.text) })}\n`);
+    }
     const text = result.content.find(item => item.type === 'text');
     if (!text) throw new Error('Evidence bridge supplied no packet text');
+    trace(`evidence-packet:${createHash('sha256').update(text.text).digest('hex')}`);
+    for (const image of result.content.filter(item => item.type === 'image')) {
+      trace(`evidence-image:${createHash('sha256').update(Buffer.from(image.data, 'base64')).digest('hex')}`);
+    }
     finalValue = handback(JSON.parse(text.text));
+    if (['repair', 'persist', 'contract', 'contract-persist'].includes(bindingTypo)) {
+      repairValue = finalValue;
+      finalValue = mistype(finalValue);
+    }
     emit({ type: 'omd_reviewer_provider_request', imageCount: mode === 'images-blocked' ? 0 : result.content.filter(item => item.type === 'image').length });
     if (mode === 'extension-error') emit({ type: 'extension_error', event: 'before_provider_request', error: 'Offline fixture extension failure' });
     if (mode === 'auto-compaction') emit({ type: 'compaction_start', reason: 'threshold' });
@@ -270,6 +446,7 @@ async function prompt(request) {
     trace('evidence-skipped');
     messages.push({ role: 'assistant', provider, model, stopReason: 'stop', content: [{ type: 'text', text: 'The offline fixture skipped evidence.' }] });
   }
+  answeredValue = finalValue;
   const finalMessage = {
     role: 'assistant', content: [{ type: 'text', text: JSON.stringify(finalValue) }],
     provider, model, stopReason: mode === 'failed-final' ? 'error' : 'stop',

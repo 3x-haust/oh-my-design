@@ -8,6 +8,7 @@ import { canonicalJson, sha256 } from '../ref/board-artifacts.ts';
 import {
   DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA,
   DeveloperEvaluationError,
+  parseHistoricalDeveloperEvaluationSnapshot,
   parseDeveloperEvaluationScope,
   parseDeveloperEvaluationSnapshot,
   type DeveloperEvaluationCase,
@@ -18,11 +19,15 @@ import {
   type DeveloperEvaluationRevocation,
   type DeveloperEvaluationScope,
   type DeveloperEvaluationSnapshot,
+  type HistoricalDeveloperEvaluationSnapshot,
+  type HistoricalDeveloperEvaluationRecord,
 } from './developer-evaluation-contract.ts';
 import {
   parseDeveloperEvaluationInput,
   parseStoredDeveloperEvaluationInput,
 } from './developer-evaluation-input.ts';
+import { nativePiRunId, parseNativePiRun, type NativePiRun } from '../runtime/native-pi-run-record.ts';
+import { parseDeveloperExperimentImages, verifyDeveloperExperimentImages } from './developer-evaluation-native.ts';
 
 export * from './developer-evaluation-contract.ts';
 export { parseDeveloperEvaluationInput, parseEvaluationInput } from './developer-evaluation-input.ts';
@@ -48,9 +53,36 @@ export type DeveloperEvaluationPromotionInput = Readonly<{
   promotedAt: string;
 }>;
 export type DeveloperEvaluationPinInput = Readonly<{
-  requestRunId: string;
+  pinIdentity: string;
   caseIds: readonly string[];
   pinnedAt: string;
+}>;
+export type DeveloperEvaluationExperimentInput = Readonly<{
+  recordId: string;
+  runtimeSourceSha256: string;
+  plannedHeldOutRequestSha256s: readonly string[];
+  criteriaIds: readonly string[];
+  pinIdentity: string;
+  pinnedAt: string;
+}>;
+export type DeveloperEvaluationExperimentRunEvidenceInput = Readonly<{
+  snapshotId: string;
+  nativeRun: NativePiRun;
+  requestSha256: string;
+  resultImageSha256s: Readonly<{ a: string; b: string }>;
+  resultProjects?: Readonly<{ a: string; b: string }>;
+  capturedAt: string;
+}>;
+export type DeveloperEvaluationExperimentRunEvidence = Readonly<{
+  schema: 'developer-evaluation-experiment-run-v1';
+  evidenceSha256: string;
+  experimentId: string;
+  snapshotId: string;
+  nativeRunId: string;
+  requestSha256: string;
+  resultImageSha256s: Readonly<{ a: string; b: string }>;
+  nativeResults: ReturnType<typeof parseDeveloperExperimentImages>;
+  capturedAt: string;
 }>;
 
 const HASH = /^[a-f0-9]{64}$/;
@@ -179,11 +211,16 @@ export function openDeveloperEvaluationStore(input: Readonly<{
   if (overlaps(projectRoot, directory)) return fail('developer evaluation storage must be outside the project tree');
   const namespaces = ensureSubdirectory(directory, 'namespaces');
   const namespace = ensureSubdirectory(namespaces, input.namespace);
-  for (const name of ['records', 'revocations', 'cases', 'snapshots']) ensureSubdirectory(namespace, name);
+  for (const name of ['records', 'revocations', 'cases', 'snapshots', 'images', 'experiment-runs']) {
+    ensureSubdirectory(namespace, name);
+  }
   return Object.freeze({ directory, projectRoot, namespace: input.namespace });
 }
 
-function directoryFor(store: DeveloperEvaluationStore, kind: 'records' | 'revocations' | 'cases' | 'snapshots'): string {
+function directoryFor(
+  store: DeveloperEvaluationStore,
+  kind: 'records' | 'revocations' | 'cases' | 'snapshots' | 'images' | 'experiment-runs',
+): string {
   return join(store.directory, 'namespaces', store.namespace, kind);
 }
 function readStablePrivateFile(path: string): Buffer {
@@ -213,6 +250,15 @@ function writeImmutable(directory: string, digest: string, value: unknown): void
     if (errorCode(error) !== 'EEXIST' || readStablePrivateFile(path).toString('utf8') !== bytes) throw error;
   }
 }
+function writeImmutableBytes(directory: string, digest: string, bytes: Buffer, extension: string): string {
+  const path = join(directory, `sha256-${digest}.${extension}`);
+  try {
+    writeFileSync(path, bytes, { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if (errorCode(error) !== 'EEXIST' || !readStablePrivateFile(path).equals(bytes)) throw error;
+  }
+  return path;
+}
 function readJsonDirectory(directory: string): readonly unknown[] {
   return readdirSync(directory).sort().flatMap((name): readonly unknown[] => {
     if (!/^sha256-[a-f0-9]{64}\.json$/.test(name)) return [];
@@ -226,9 +272,9 @@ function parseStoredRecord(value: unknown): DeveloperEvaluationRecord {
   const item = own(value, [
     'schema', 'namespace', 'revision', 'revisesSha256', 'revisionReason', 'revisedAt', 'recordSha256', 'recordId', 'requestId',
     'taskId', 'capturedAt', 'scope', 'role', 'images', 'humanResponse', 'relations', 'changes',
-    'modelInterpretation', 'experiment', 'reuse',
+    'modelInterpretation', 'experiment', 'reuse', 'imageUse',
   ], 'stored record');
-  if (item.schema !== 'developer-evaluation-record-v1' || (item.namespace !== 'real' && item.namespace !== 'fixture')
+  if (item.schema !== 'developer-evaluation-record-v2' || (item.namespace !== 'real' && item.namespace !== 'fixture')
     || !Number.isSafeInteger(item.revision) || (item.revision as number) < 1
     || (item.revisesSha256 !== null && (typeof item.revisesSha256 !== 'string' || !HASH.test(item.revisesSha256)))
     || (item.revisionReason !== null && typeof item.revisionReason !== 'string')
@@ -239,7 +285,7 @@ function parseStoredRecord(value: unknown): DeveloperEvaluationRecord {
     'schema', 'namespace', 'revision', 'revisesSha256', 'revisionReason', 'revisedAt', 'recordSha256',
   ].includes(key))));
   const unsigned = {
-    schema: 'developer-evaluation-record-v1' as const,
+    schema: 'developer-evaluation-record-v2' as const,
     namespace: item.namespace as DeveloperEvaluationNamespace,
     revision: item.revision as number,
     revisesSha256: item.revisesSha256 as string | null,
@@ -257,8 +303,42 @@ function parseStoredRecord(value: unknown): DeveloperEvaluationRecord {
   }
   return deepFreeze({ ...unsigned, recordSha256: item.recordSha256 });
 }
+
+function retainRecordImages(
+  store: DeveloperEvaluationStore,
+  input: DeveloperEvaluationRecordInput,
+): DeveloperEvaluationRecordInput {
+  const retain = (image: DeveloperEvaluationRecordInput['images']['a']) => {
+    const bytes = readFileSync(image.path);
+    if (sha256(bytes) !== image.sha256) return fail('developer evaluation image changed before private retention');
+    return Object.freeze({
+      path: writeImmutableBytes(directoryFor(store, 'images'), image.sha256, bytes, 'png'),
+      sha256: image.sha256,
+    });
+  };
+  return parseDeveloperEvaluationInput({
+    ...input,
+    images: { a: retain(input.images.a), b: retain(input.images.b),
+      ...(input.images.references === undefined ? {} : { references: {
+        a: retain(input.images.references.a), b: retain(input.images.references.b),
+      } }) },
+  });
+}
 function records(store: DeveloperEvaluationStore): readonly DeveloperEvaluationRecord[] {
-  return readJsonDirectory(directoryFor(store, 'records')).map(parseStoredRecord);
+  return readJsonDirectory(directoryFor(store, 'records')).flatMap((entry): readonly DeveloperEvaluationRecord[] => {
+    if (entry !== null && typeof entry === 'object' && Reflect.get(entry, 'schema') === 'developer-evaluation-record-v1') {
+      return [];
+    }
+    return [parseStoredRecord(entry)];
+  });
+}
+function historicalRecordDigests(store: DeveloperEvaluationStore): ReadonlySet<string> {
+  return new Set(readJsonDirectory(directoryFor(store, 'records')).flatMap((entry): readonly string[] =>
+    entry !== null && typeof entry === 'object'
+      && Reflect.get(entry, 'schema') === 'developer-evaluation-record-v1'
+      && typeof Reflect.get(entry, 'recordSha256') === 'string'
+      ? [Reflect.get(entry, 'recordSha256') as string]
+      : []));
 }
 function recordState(store: DeveloperEvaluationStore): ReadonlyMap<string, DeveloperEvaluationRecord> {
   const result = new Map<string, DeveloperEvaluationRecord>();
@@ -297,8 +377,10 @@ function revocations(store: DeveloperEvaluationStore): readonly DeveloperEvaluat
 }
 function activeRecords(store: DeveloperEvaluationStore): ReadonlyMap<string, DeveloperEvaluationRecord> {
   const state = new Map(recordState(store));
+  const historical = historicalRecordDigests(store);
   for (const revocation of revocations(store)) {
     const record = state.get(revocation.recordId);
+    if (record === undefined && historical.has(revocation.recordSha256)) continue;
     if (record === undefined || record.recordSha256 !== revocation.recordSha256) {
       return fail('developer evaluation revocation does not bind the active record');
     }
@@ -325,7 +407,7 @@ function persistRecord(
   revisedAt: string | null,
 ): DeveloperEvaluationRecord {
   const unsigned = {
-    schema: 'developer-evaluation-record-v1' as const,
+    schema: 'developer-evaluation-record-v2' as const,
     namespace: store.namespace,
     revision,
     revisesSha256,
@@ -341,7 +423,7 @@ export function appendDeveloperEvaluation(
   store: DeveloperEvaluationStore,
   value: DeveloperEvaluationRecordInput,
 ): DeveloperEvaluationRecord {
-  const input = parseDeveloperEvaluationInput(value);
+  const input = retainRecordImages(store, parseDeveloperEvaluationInput(value));
   if (recordState(store).has(input.recordId)) return fail(`developer evaluation record already exists: ${input.recordId}`);
   return persistRecord(store, input, 1, null, null, null);
 }
@@ -352,10 +434,16 @@ export function reviseDeveloperEvaluation(
   const item = own(value, ['reason', 'revisedAt', 'record'], 'revision');
   const reason = text(item.reason, 'revision.reason');
   const revisedAt = timestamp(item.revisedAt, 'revision.revisedAt');
-  const input = parseDeveloperEvaluationInput(item.record);
+  const input = retainRecordImages(store, parseDeveloperEvaluationInput(item.record));
   const previous = activeRecords(store).get(input.recordId);
   if (previous === undefined) return fail(`developer evaluation record is not active: ${input.recordId}`);
-  if (previous.requestId !== input.requestId || previous.taskId !== input.taskId || !same(previous.role, input.role)) {
+  const roleIdentity = (role: DeveloperEvaluationRecordInput['role']) => {
+    if (role.kind === 'development') return role;
+    const { caseDecision: _decision, criteria, ...identity } = role;
+    return { ...identity, criteria: criteria.map(criterion => criterion.id).sort() };
+  };
+  if (previous.requestId !== input.requestId || previous.taskId !== input.taskId
+    || !same(roleIdentity(previous.role), roleIdentity(input.role))) {
     return fail('developer evaluation revision cannot change request, task, or evaluation role identity');
   }
   return persistRecord(store, input, previous.revision + 1, previous.recordSha256, reason, revisedAt);
@@ -433,6 +521,181 @@ function parseCase(store: DeveloperEvaluationStore, value: unknown): DeveloperEv
 function cases(store: DeveloperEvaluationStore): readonly DeveloperEvaluationCase[] {
   return readJsonDirectory(directoryFor(store, 'cases')).map((entry) => parseCase(store, entry));
 }
+function storedSnapshots(store: DeveloperEvaluationStore): readonly DeveloperEvaluationSnapshot[] {
+  return readJsonDirectory(directoryFor(store, 'snapshots')).map(entry => parseDeveloperEvaluationSnapshot(entry));
+}
+function experimentalProjection(
+  source: DeveloperEvaluationRecord,
+  experimentId: string,
+): DeveloperEvaluationCaseProjection {
+  return deepFreeze({
+    caseId: sha256(canonicalJson({ sourceRecordSha256: source.recordSha256, experimentId })),
+    sourceRecordSha256: source.recordSha256,
+    heldOutRecordSha256s: [],
+    scope: source.scope,
+    developerSignal: {
+      comparisonChoice: source.humanResponse.comparisonChoice,
+      satisfaction: source.humanResponse.satisfaction,
+    },
+    designRelations: roleSafeSummaries(source.relations.design, 'experiment design relations'),
+    changeSummary: {
+      attempted: roleSafeSummaries(source.changes.attempted, 'experiment attempted changes'),
+      preserved: roleSafeSummaries(source.changes.preserved, 'experiment preserved changes'),
+    },
+    advisory: roleSafeSummaries(source.modelInterpretation.advisory, 'experiment model advisory', 1),
+    advisorySource: 'model-interpretation',
+    applicability: 'advisory',
+    authority: 'none',
+    currentRequestPrecedence: 'always',
+  });
+}
+export function createDeveloperEvaluationExperiment(
+  store: DeveloperEvaluationStore,
+  value: DeveloperEvaluationExperimentInput,
+): DeveloperEvaluationSnapshot {
+  if (store.namespace !== 'real') return fail('fixture developer evaluations cannot create real experiments');
+  const item = own(value, [
+    'recordId', 'runtimeSourceSha256', 'plannedHeldOutRequestSha256s', 'criteriaIds', 'pinIdentity', 'pinnedAt',
+  ], 'experiment');
+  const source = activeRecords(store).get(id(item.recordId, 'experiment.recordId'));
+  if (source === undefined || source.role.kind !== 'development') {
+    return fail('experiment source must be an active development record');
+  }
+  if (source.reuse.consent !== 'allow-private-advisory-reuse'
+    || source.modelInterpretation.advisory.length === 0) {
+    return fail('experiment source needs reuse authority and a separate advisory interpretation');
+  }
+  const planned = stringArray(item.plannedHeldOutRequestSha256s, 'experiment.plannedHeldOutRequestSha256s', 2, 8);
+  if (planned.some(entry => !HASH.test(entry))) return fail('experiment held-out request digest is invalid');
+  const criteriaIds = stringArray(item.criteriaIds, 'experiment.criteriaIds', 1, 16).map((entry) =>
+    id(entry, 'experiment criterion id'));
+  const runtimeSourceSha256 = text(item.runtimeSourceSha256, 'experiment.runtimeSourceSha256', 64);
+  const pinIdentity = text(item.pinIdentity, 'experiment.pinIdentity', 64);
+  if (!HASH.test(runtimeSourceSha256) || !HASH.test(pinIdentity)) return fail('experiment source or pin identity is invalid');
+  const experimentCore = {
+    sourceRecordSha256: source.recordSha256,
+    sourceRevision: source.revision,
+    runtimeSourceSha256,
+    plannedHeldOutRequestSha256s: Object.freeze(planned),
+    criteriaIds: Object.freeze(criteriaIds),
+    model: source.experiment.model,
+    settings: source.experiment.settings,
+    budget: source.experiment.budget,
+    criteriaVersion: source.experiment.criteriaVersion,
+  };
+  const experimentId = sha256(canonicalJson(experimentCore));
+  const core = {
+    schema: DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA,
+    mode: 'experimental' as const,
+    pinIdentity,
+    pinnedAt: timestamp(item.pinnedAt, 'experiment.pinnedAt'),
+    cases: Object.freeze([experimentalProjection(source, experimentId)]),
+    experiment: Object.freeze({
+      experimentId,
+      sourceRecordSha256: source.recordSha256,
+      sourceRevision: source.revision,
+      runtimeSourceSha256,
+      plannedHeldOutRequestSha256s: Object.freeze(planned),
+      criteriaIds: Object.freeze(criteriaIds),
+    }),
+  };
+  const digest = sha256(canonicalJson(core));
+  const snapshot = parseDeveloperEvaluationSnapshot({ ...core, snapshotId: digest, digest });
+  if (storedSnapshots(store).some(existing => existing.pinIdentity === pinIdentity)) {
+    return fail('developer evaluation pin identity already has a frozen snapshot');
+  }
+  writeImmutable(directoryFor(store, 'snapshots'), snapshot.digest, snapshot);
+  return snapshot;
+}
+function parseExperimentRunEvidence(value: unknown): DeveloperEvaluationExperimentRunEvidence {
+  const item = own(value, [
+    'schema', 'evidenceSha256', 'experimentId', 'snapshotId', 'nativeRunId', 'requestSha256',
+    'resultImageSha256s', 'nativeResults', 'capturedAt',
+  ], 'experiment run evidence');
+  if (item.schema !== 'developer-evaluation-experiment-run-v1') {
+    return fail('experiment run evidence schema is invalid');
+  }
+  const result = own(item.resultImageSha256s, ['a', 'b'], 'experiment run evidence.resultImageSha256s');
+  const unsigned = {
+    schema: 'developer-evaluation-experiment-run-v1' as const,
+    experimentId: text(item.experimentId, 'experiment run evidence.experimentId', 64),
+    snapshotId: text(item.snapshotId, 'experiment run evidence.snapshotId', 64),
+    nativeRunId: text(item.nativeRunId, 'experiment run evidence.nativeRunId', 64),
+    requestSha256: text(item.requestSha256, 'experiment run evidence.requestSha256', 64),
+    resultImageSha256s: Object.freeze({
+      a: text(result.a, 'experiment run evidence.resultImageSha256s.a', 64),
+      b: text(result.b, 'experiment run evidence.resultImageSha256s.b', 64),
+    }),
+    nativeResults: parseDeveloperExperimentImages(item.nativeResults),
+    capturedAt: timestamp(item.capturedAt, 'experiment run evidence.capturedAt'),
+  };
+  if (unsigned.nativeResults.a.imageSha256 !== unsigned.resultImageSha256s.a
+    || unsigned.nativeResults.b.imageSha256 !== unsigned.resultImageSha256s.b
+    || (unsigned.nativeResults.a.nativeRunId !== unsigned.nativeRunId
+      && unsigned.nativeResults.b.nativeRunId !== unsigned.nativeRunId)) {
+    return fail('experiment result provenance differs from the compared images or run');
+  }
+  if ([unsigned.experimentId, unsigned.snapshotId, unsigned.nativeRunId, unsigned.requestSha256,
+    unsigned.resultImageSha256s.a, unsigned.resultImageSha256s.b].some(entry => !HASH.test(entry))) {
+    return fail('experiment run evidence digest is invalid');
+  }
+  const evidenceSha256 = text(item.evidenceSha256, 'experiment run evidence.evidenceSha256', 64);
+  if (evidenceSha256 !== sha256(canonicalJson(unsigned))) return fail('experiment run evidence content digest is invalid');
+  return deepFreeze({ ...unsigned, evidenceSha256 });
+}
+function experimentRunEvidence(store: DeveloperEvaluationStore): readonly DeveloperEvaluationExperimentRunEvidence[] {
+  return readJsonDirectory(directoryFor(store, 'experiment-runs')).map(parseExperimentRunEvidence);
+}
+export function recordDeveloperEvaluationExperimentRun(
+  store: DeveloperEvaluationStore,
+  value: DeveloperEvaluationExperimentRunEvidenceInput,
+): DeveloperEvaluationExperimentRunEvidence {
+  if (store.namespace !== 'real') return fail('fixture developer evaluations cannot publish real experiment runs');
+  const item = own(value, [
+    'snapshotId', 'nativeRun', 'requestSha256', 'resultImageSha256s', 'capturedAt',
+    ...(Object.hasOwn(value, 'resultProjects') ? ['resultProjects'] : []),
+  ], 'experiment run');
+  const snapshotId = text(item.snapshotId, 'experiment run.snapshotId', 64);
+  const snapshot = readDeveloperEvaluationSnapshot(store, snapshotId);
+  if (snapshot.mode !== 'experimental' || snapshot.experiment === null) {
+    return fail('experiment run needs an experimental snapshot');
+  }
+  const nativeRun = parseNativePiRun(item.nativeRun);
+  if (nativePiRunId(nativeRun) !== nativeRun.runId || nativeRun.calibration?.snapshotId !== snapshotId
+    || nativeRun.designPolicy?.mode !== 'developer-evaluation') {
+    return fail('experiment run must bind an actual developer-mode native run');
+  }
+  const requestSha256 = text(item.requestSha256, 'experiment run.requestSha256', 64);
+  if (!HASH.test(requestSha256) || requestSha256 !== nativeRun.briefSha256
+    || !snapshot.experiment.plannedHeldOutRequestSha256s.includes(requestSha256)) {
+    return fail('experiment run request was not predeclared');
+  }
+  const images = own(item.resultImageSha256s, ['a', 'b'], 'experiment run.resultImageSha256s');
+  const resultImageSha256s = Object.freeze({
+    a: text(images.a, 'experiment run.resultImageSha256s.a', 64),
+    b: text(images.b, 'experiment run.resultImageSha256s.b', 64),
+  });
+  if (!HASH.test(resultImageSha256s.a) || !HASH.test(resultImageSha256s.b)) {
+    return fail('experiment run result image digest is invalid');
+  }
+  const projects = item.resultProjects === undefined ? undefined : own(item.resultProjects, ['a', 'b'], 'experiment result projects');
+  const nativeResults = verifyDeveloperExperimentImages(nativeRun, resultImageSha256s, projects === undefined ? undefined : {
+    a: text(projects.a, 'experiment result project A'), b: text(projects.b, 'experiment result project B'),
+  });
+  const unsigned = {
+    schema: 'developer-evaluation-experiment-run-v1' as const,
+    experimentId: snapshot.experiment.experimentId,
+    snapshotId,
+    nativeRunId: nativeRun.runId,
+    requestSha256,
+    resultImageSha256s,
+    nativeResults,
+    capturedAt: timestamp(item.capturedAt, 'experiment run.capturedAt'),
+  };
+  const evidence = deepFreeze({ ...unsigned, evidenceSha256: sha256(canonicalJson(unsigned)) });
+  writeImmutable(directoryFor(store, 'experiment-runs'), evidence.evidenceSha256, evidence);
+  return evidence;
+}
 export function promoteDeveloperEvaluationCase(
   store: DeveloperEvaluationStore,
   value: DeveloperEvaluationPromotionInput,
@@ -446,31 +709,62 @@ export function promoteDeveloperEvaluationCase(
   if (source === undefined || source.role.kind !== 'development') return fail('promotion source must be an active development record');
   if (source.reuse.consent !== 'allow-private-advisory-reuse') return fail('promotion source has no private advisory reuse consent');
   if (source.modelInterpretation.advisory.length === 0) return fail('promotion source needs a separately recorded model advisory');
-  if (source.experiment.budget.unit === 'unmeasured' || source.experiment.budget.limit <= 0) {
-    return fail('promotion requires measured experiment metadata');
-  }
   const heldOut = heldOutIds.map((heldOutId) => {
     const record = active.get(heldOutId);
     if (record === undefined || record.role.kind !== 'held-out'
-      || record.role.candidateRecordId !== source.recordId || record.role.caseDecision !== 'approve') {
+      || record.role.candidateRecordId !== source.recordId
+      || record.role.candidateRecordSha256 !== source.recordSha256
+      || record.role.caseDecision !== 'approve') {
       return fail('promotion requires explicit approving held-out evaluation records');
     }
-    if (record.humanResponse.comparisonChoice !== record.role.candidateImage
-      || record.humanResponse.satisfaction !== 'satisfied') {
+    const heldOutRole = record.role;
+    if (record.humanResponse.comparisonChoice !== heldOutRole.candidateImage
+      || record.humanResponse.satisfaction !== 'satisfied'
+      || record.humanResponse.satisfactionCandidate !== heldOutRole.candidateImage
+      || record.requestId !== heldOutRole.requestSha256) {
       return fail('promotion held-out responses must favor the declared candidate and be satisfied');
     }
     if (!same(record.scope, source.scope) || !same(record.reuse.scope, source.scope)
       || record.reuse.consent !== 'allow-private-advisory-reuse') {
       return fail('promotion held-out records must have exact matching scope and consent');
     }
-    if (!same(record.experiment, source.experiment)) {
-      return fail('promotion records must share the same measured experiment contract');
+    const snapshot = storedSnapshots(store).find(entry =>
+      entry.snapshotId === heldOutRole.experimentalSnapshotId);
+    if (snapshot?.mode !== 'experimental' || snapshot.experiment === null
+      || snapshot.experiment.experimentId !== heldOutRole.experimentId
+      || snapshot.experiment.sourceRecordSha256 !== source.recordSha256
+      || snapshot.experiment.sourceRevision !== source.revision
+      || !snapshot.experiment.plannedHeldOutRequestSha256s.includes(heldOutRole.requestSha256)) {
+      return fail('promotion held-out record does not bind the active predeclared experiment');
+    }
+    const evidence = experimentRunEvidence(store).find(entry =>
+      entry.evidenceSha256 === heldOutRole.experimentRunEvidenceSha256);
+    if (evidence === undefined || evidence.experimentId !== heldOutRole.experimentId
+      || evidence.snapshotId !== heldOutRole.experimentalSnapshotId
+      || evidence.nativeRunId !== heldOutRole.nativeRunId
+      || evidence.nativeResults[heldOutRole.candidateImage].nativeRunId !== heldOutRole.nativeRunId
+      || evidence.requestSha256 !== heldOutRole.requestSha256
+      || !same(evidence.resultImageSha256s, heldOutRole.resultImageSha256s)
+      || !same(heldOutRole.resultImageSha256s, {
+        a: record.images.a.sha256,
+        b: record.images.b.sha256,
+      })) {
+      return fail('promotion requires immutable native experiment run and result image evidence');
+    }
+    if (heldOutRole.criteria.length !== snapshot.experiment.criteriaIds.length
+      || heldOutRole.criteria.some(entry => entry.outcome !== 'pass'
+        || !snapshot.experiment?.criteriaIds.includes(entry.id))) {
+      return fail('promotion requires every predeclared criterion to pass');
     }
     return record;
   });
-  const requestIds = [source.requestId, ...heldOut.map((record) => record.requestId)];
+  const requestIds = [source.requestId, ...heldOut.map(record =>
+    record.role.kind === 'held-out' ? record.role.requestSha256 : record.requestId)];
   if (new Set(requestIds).size !== requestIds.length) {
     return fail('promotion requires held-out evaluations from different requests');
+  }
+  if (new Set(heldOut.map(record => record.role.kind === 'held-out' ? record.role.nativeRunId : '')).size !== heldOut.length) {
+    return fail('promotion requires distinct actual native held-out runs');
   }
   const core = {
     sourceRecordSha256: source.recordSha256,
@@ -530,7 +824,7 @@ export function pinDeveloperEvaluationSnapshot(
   value: DeveloperEvaluationPinInput,
 ): DeveloperEvaluationSnapshot {
   if (store.namespace !== 'real') return fail('fixture developer evaluations cannot produce real snapshots');
-  const item = own(value, ['requestRunId', 'caseIds', 'pinnedAt'], 'snapshot pin');
+  const item = own(value, ['pinIdentity', 'caseIds', 'pinnedAt'], 'snapshot pin');
   const caseIds = stringArray(item.caseIds, 'snapshot pin.caseIds', 0, 128);
   if (caseIds.some((caseId) => !HASH.test(caseId))) return fail('snapshot pin case id is invalid');
   const available = new Map(cases(store).map((entry) => [entry.caseId, entry]));
@@ -541,15 +835,33 @@ export function pinDeveloperEvaluationSnapshot(
   });
   const core = {
     schema: DEVELOPER_EVALUATION_SNAPSHOT_SCHEMA,
-    requestRunId: id(item.requestRunId, 'snapshot pin.requestRunId'),
+    mode: 'validated' as const,
+    pinIdentity: text(item.pinIdentity, 'snapshot pin.pinIdentity', 64),
     pinnedAt: timestamp(item.pinnedAt, 'snapshot pin.pinnedAt'),
     cases: Object.freeze(selected),
+    experiment: null,
   } as const;
+  if (!HASH.test(core.pinIdentity)) return fail('snapshot pin.pinIdentity is invalid');
   const digest = sha256(canonicalJson(core));
   const snapshotId = digest;
   const snapshot = parseDeveloperEvaluationSnapshot({ ...core, snapshotId, digest });
+  const existing = storedSnapshots(store).filter(entry => entry.pinIdentity === snapshot.pinIdentity);
+  if (existing.length > 0) {
+    if (existing.length === 1 && same(existing[0], snapshot)) return existing[0] as DeveloperEvaluationSnapshot;
+    return fail('developer evaluation pin identity already has a frozen snapshot');
+  }
   writeImmutable(directoryFor(store, 'snapshots'), snapshot.digest, snapshot);
   return snapshot;
+}
+export function pinEligibleDeveloperEvaluationSnapshot(
+  store: DeveloperEvaluationStore,
+  value: Readonly<{ pinIdentity: string; pinnedAt: string }>,
+): DeveloperEvaluationSnapshot {
+  const existing = storedSnapshots(store).filter(entry => entry.pinIdentity === value.pinIdentity);
+  if (existing.length > 1) return fail('developer evaluation pin identity is ambiguous');
+  if (existing[0] !== undefined) return existing[0];
+  const caseIds = cases(store).filter(entry => activeCase(store, entry)).map(entry => entry.caseId).sort();
+  return pinDeveloperEvaluationSnapshot(store, { ...value, caseIds });
 }
 export function readDeveloperEvaluationSnapshot(
   store: DeveloperEvaluationStore,
@@ -560,8 +872,23 @@ export function readDeveloperEvaluationSnapshot(
   if (!existsSync(path)) return fail(`developer evaluation snapshot does not exist: ${snapshotId}`);
   const bytes = readStablePrivateFile(path).toString('utf8');
   try {
-    const snapshot = parseDeveloperEvaluationSnapshot(JSON.parse(bytes));
-    const available = new Map(cases(store).map((entry) => [entry.caseId, entry]));
+    return parseDeveloperEvaluationSnapshot(JSON.parse(bytes));
+  } catch (error) {
+    if (error instanceof DeveloperEvaluationError) throw error;
+    return fail('developer evaluation snapshot is not JSON');
+  }
+}
+export function readDeveloperEvaluationSnapshotForPublication(
+  store: DeveloperEvaluationStore,
+  snapshotId: string,
+  mode: 'autonomous' | 'developer-evaluation',
+): DeveloperEvaluationSnapshot {
+  const snapshot = readDeveloperEvaluationSnapshot(store, snapshotId);
+  if (snapshot.mode === 'experimental' && mode !== 'developer-evaluation') {
+    return fail('experimental developer evaluation snapshots require explicit host developer mode');
+  }
+  if (snapshot.mode === 'validated') {
+    const available = new Map(cases(store).map(entry => [entry.caseId, entry]));
     for (const selected of snapshot.cases) {
       const evaluationCase = available.get(selected.caseId);
       if (evaluationCase === undefined || !activeCase(store, evaluationCase)
@@ -569,9 +896,50 @@ export function readDeveloperEvaluationSnapshot(
         return fail(`developer evaluation snapshot references an inactive case: ${selected.caseId}`);
       }
     }
-    return snapshot;
+  } else {
+    const experiment = snapshot.experiment;
+    const source = experiment === null ? undefined
+      : [...activeRecords(store).values()].find(record => record.recordSha256 === experiment.sourceRecordSha256);
+    if (source === undefined || source.revision !== experiment?.sourceRevision
+      || snapshot.cases.length !== 1
+      || !same(snapshot.cases[0], experimentalProjection(source, experiment.experimentId))) {
+      return fail('experimental developer evaluation snapshot source is no longer active');
+    }
+  }
+  return snapshot;
+}
+export function readHistoricalDeveloperEvaluationSnapshot(
+  store: DeveloperEvaluationStore,
+  snapshotId: string,
+): HistoricalDeveloperEvaluationSnapshot {
+  if (!HASH.test(snapshotId)) return fail('historical developer evaluation snapshot id is invalid');
+  const path = join(directoryFor(store, 'snapshots'), `sha256-${snapshotId}.json`);
+  if (!existsSync(path)) return fail(`historical developer evaluation snapshot does not exist: ${snapshotId}`);
+  try {
+    return parseHistoricalDeveloperEvaluationSnapshot(JSON.parse(readStablePrivateFile(path).toString('utf8')));
   } catch (error) {
     if (error instanceof DeveloperEvaluationError) throw error;
-    return fail('developer evaluation snapshot is not JSON');
+    return fail('historical developer evaluation snapshot is not JSON');
   }
+}
+export function readHistoricalDeveloperEvaluationRecord(
+  store: DeveloperEvaluationStore,
+  recordSha256: string,
+): HistoricalDeveloperEvaluationRecord {
+  if (!HASH.test(recordSha256)) return fail('historical developer evaluation record digest is invalid');
+  const path = join(directoryFor(store, 'records'), `sha256-${recordSha256}.json`);
+  if (!existsSync(path)) return fail(`historical developer evaluation record does not exist: ${recordSha256}`);
+  let value: unknown;
+  try { value = JSON.parse(readStablePrivateFile(path).toString('utf8')); }
+  catch { return fail('historical developer evaluation record is not JSON'); }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)
+    || Reflect.get(value, 'schema') !== 'developer-evaluation-record-v1'
+    || Reflect.get(value, 'recordSha256') !== recordSha256) {
+    return fail('historical developer evaluation record discriminator is invalid');
+  }
+  const unsigned = Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'recordSha256'));
+  if (sha256(canonicalJson(unsigned)) !== recordSha256) {
+    return fail('historical developer evaluation record content digest is invalid');
+  }
+  return deepFreeze(value as HistoricalDeveloperEvaluationRecord);
 }

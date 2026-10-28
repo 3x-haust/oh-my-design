@@ -45,6 +45,11 @@ reference was found.
 `.omd/decision-graph.json` is `decision-graph-v1`. It is a shared, mechanically merged ledger of
 owner-authored entries. The coordinator may preserve and merge returned JSON entries byte-for-byte;
 it must not invent a question, alternative, selection, evidence item, rejection, or trade-off.
+The stage owner obtains the individual input shape with `omd schema decision-entry`.
+The coordinator saves that unchanged returned entry as `.omd/.cache/decision-entry.json`,
+then publishes it with `omd deliberate append --input .omd/.cache/decision-entry.json --json`
+and checks the joined ledger with `omd deliberate check --json`. The whole
+`decision-graph` skeleton is for inspection, not permission to patch the final ledger.
 Ownership is enforced by stage:
 
 | Stage | Entry owner |

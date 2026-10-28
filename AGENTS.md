@@ -44,7 +44,9 @@ the broker. A coordinator, role task, or installed agent profile must not invent
   Retain complementary observations without inflating independent evidence; a probe metric never
   substitutes for the state visible in the saved capture.
 - The outcome, risk, uncertainty, and available evidence select the route. Optional stages and
-  methods require either selection or a written skip; the full capability catalog is not a
+  methods require either selection or a written skip in structured routes. The signed ordinary
+  model-led default lets the model choose methods without unselected-method paperwork; selected
+  contracts and actual outcome/permission/evidence boundaries remain binding. The full capability catalog is not a
   universal sequence.
 - Concept exploration records its candidate count and evidence-based reason before generation.
   Distinct concepts need different content-to-form relationships and macro composition, not different
@@ -77,7 +79,9 @@ the broker. A coordinator, role task, or installed agent profile must not invent
 - Locale-grounded design keeps conversation language, surface locale, explicit market region,
   audience/task, domain, surface, desired fit, and brand invariants separate in the sole writable
   `.omd/locale-design-context.json`. A locale or likely script may select mechanics; it never infers
-  cultural fit, register, or country aesthetic. Missing market/audience authority yields one question.
+  cultural fit, register, or country aesthetic. In ordinary native Pi execution, missing
+  market/audience authority remains unknown and selects mechanics-only work rather than a
+  design question. Developer interviews require explicit host evaluation mode.
   A Korean-language user brief may default reference discovery to Korean services in both lanes;
   that research preference does not populate locale-design authority or dictate visual style.
 - `mechanics-only` proves real target-language type without a cultural-fit claim. `research` binds

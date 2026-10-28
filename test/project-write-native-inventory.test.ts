@@ -14,8 +14,6 @@ const writers = [
   { path: 'core/runtime/native-pi-run-record.ts', guard: 'previous.runId !== run.runId', target: "nativePiDirectory(run.projectRoot, '.omd/native-pi')" },
   { path: 'core/runtime/native-pi-run.ts', guard: '!issuedRuns.has(input.run)', target: "join(directory, 'command.json')" },
   { path: 'adapters/pi-reviewer-runtime.ts', guard: 'const run = getNativePiRun(input.invocation, input.root);', target: "join(directory, 'system.txt')" },
-  { path: 'adapters/pi-study-runtime.ts', guard: 'const run = getNativePiRun(input.invocation, input.root);', target: "join(directory, 'system.txt')" },
-  { path: 'adapters/pi-maker-runtime.ts', guard: 'const run = getNativePiRun(input.invocation, input.root);', target: "join(directory, 'system.txt')" },
 ] as const;
 
 function inventory(t: TestContext, path: string, source: string) {
@@ -67,7 +65,6 @@ for (const boundary of [
   { path: 'core/runtime/native-pi-run-record.ts',
     expression: "return name === '@earendil-works/pi-coding-agent' || name === '@mariozechner/pi-coding-agent' || name === '@code-yeongyu/senpi';",
     replacement: 'return true;' },
-  { path: 'adapters/pi-study-runtime.ts', expression: 'requirePiStudyExecutable(run.host);', replacement: 'void run.host;' },
   { path: 'extensions/omd-request-source.ts', expression: 'signNativeObservation(projectRoot, KIND, requestDigest(canonicalRouteJson(payload)))', replacement: "'unsigned'" },
 ]) {
   test(`inventory requires the native writer boundary ${boundary.expression}`, t => {

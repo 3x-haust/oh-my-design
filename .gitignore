@@ -17,3 +17,7 @@ image.png
 image-1.png
 ux writing.md
 /docs/
+
+# Private designer-source originals (YouTube captions and frames) stay local, never in Git.
+core/cases/*.json
+core/cases/media/

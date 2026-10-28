@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authorizeDerivedPayload, hasHostBoundLocalProjectWriteAuthority, requireHostPayloadAuthorization, validateActivationContext } from '../core/runtime/activation.ts';
-import { requireProjectWriteInvocation } from '../core/runtime/invocation.ts';
+import { requireFinalEvidenceManifestAuthorization, requireProjectWriteInvocation } from '../core/runtime/invocation.ts';
 import { authorizeNativePiPayload, createNativePiInvocation, createTestNativePiInvocation, getNativePiRun, stageNativePiCommand, type NativePiHost } from '../core/runtime/native-pi-run.ts';
 import { isNativePiHostPackage, nativePiDirectory, parseNativePiRun, publishNativePiRun } from '../core/runtime/native-pi-run-record.ts';
 import { mintSelfSignedReceipt } from '../core/runtime/self-signed-activation.ts';
@@ -103,6 +103,16 @@ test('durable derived payload approval survives a fresh invocation while rejecti
   assert.doesNotThrow(() => requireHostPayloadAuthorization(next, root, 'evaluator-result', bytes));
   assert.throws(() => requireHostPayloadAuthorization(next, root, 'final-evidence-manifest', bytes), /exact/);
   assert.throws(() => requireHostPayloadAuthorization(next, root, 'evaluator-result', Buffer.from('edited')), /exact/);
+});
+
+test('a final manifest approval binds the exact published bytes and a refusal names its cause', t => {
+  const root = fixture(t);
+  const invocation = createTestNativePiInvocation({ root, host });
+  const published = Buffer.from('{"schema":"final-evidence-v2"}\n');
+  authorizeNativePiPayload(invocation, root, 'final-evidence-manifest', published);
+  assert.doesNotThrow(() => requireFinalEvidenceManifestAuthorization(invocation, root, published));
+  assert.throws(() => requireFinalEvidenceManifestAuthorization(invocation, root, published.subarray(0, -1)),
+    /missing host payload authorization: .*missing exact final-evidence-manifest approval/);
 });
 
 test('changed run identities cannot reuse a previous payload approval', t => {

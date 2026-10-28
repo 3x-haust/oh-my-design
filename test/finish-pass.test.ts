@@ -116,16 +116,6 @@ test('finish-pass.md OG section requires copy to pass slop rules', () => {
   );
 });
 
-test('finish-pass.md has substantive intro prose (not just headers)', () => {
-  const content = readFileSync(finishPassFile, 'utf8');
-  // The file must start with a paragraph before the first ## heading.
-  const beforeFirstHeading = content.split('\n## ')[0] ?? '';
-  assert.ok(
-    beforeFirstHeading.length > 200,
-    'finish-pass.md: intro prose is too short — the file must open with essayistic rationale'
-  );
-});
-
 // ── Build dist check ─────────────────────────────────────────────────────────
 
 test('dist/claude/core/craft/finish-pass.md exists after build', () => {

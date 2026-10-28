@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
+import { lstatSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { request, type Page } from 'playwright';
 import { PNG } from 'pngjs';
 import { browserCallback } from './browser-evaluation.ts';
 import { assertPublicNetworkUrl, createPublicNetworkProxy, type PublicHostLookup } from './public-network.ts';
+import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 
 /** Keep the image pixels at their native size instead of screenshotting its rendered thumbnail. */
 export async function captureOriginalImage(page: Page, selector: string, lookup?: PublicHostLookup,
@@ -17,8 +21,21 @@ export async function captureOriginalImage(page: Page, selector: string, lookup?
     }).filter(item => item.url).sort((a, b) => b.size - a.size);
     return new URL(candidates[0]?.url ?? (element.currentSrc || element.src), document.baseURI).href;
   }));
-  await assertPublicNetworkUrl(source, lookup);
-  const fetched = fetchImage ? await fetchImage(source) : await (async () => {
+  const localDocument = source.startsWith('file:') && source === page.url();
+  // Only the exact image document explicitly opened by the capture owner is local input.
+  // A page image pointing at another file never grants filesystem access.
+  if (!localDocument) await assertPublicNetworkUrl(source, lookup);
+  const fetched = localDocument ? await (async () => {
+    const path = fileURLToPath(source);
+    const contentType = await page.evaluate(browserCallback(() => document.contentType));
+    if (!contentType.startsWith('image/') || lstatSync(path).size > 32_000_000) {
+      throw new Error('DESIGN_IMAGE_DOWNLOAD: supplied document is not a bounded image');
+    }
+    const bytes = readStableProjectFile({
+      root: dirname(path), path, label: 'supplied original image', fs: nodeStableProjectFileSystem(),
+    });
+    return { status: null, contentType, bytes };
+  })() : fetchImage ? await fetchImage(source) : await (async () => {
     const proxy = await createPublicNetworkProxy();
     try {
       const context = await request.newContext({ proxy: { server: proxy.server } });
@@ -29,7 +46,7 @@ export async function captureOriginalImage(page: Page, selector: string, lookup?
       } finally { await context.dispose(); }
     } finally { await proxy.close(); }
   })();
-  if (fetched.status < 200 || fetched.status >= 300) throw new Error(`DESIGN_IMAGE_DOWNLOAD: HTTP ${fetched.status}`);
+  if (fetched.status !== null && (fetched.status < 200 || fetched.status >= 300)) throw new Error(`DESIGN_IMAGE_DOWNLOAD: HTTP ${fetched.status}`);
   const original = fetched.bytes;
   const png = original.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   const mime = fetched.contentType.split(';')[0]?.trim().toLowerCase();

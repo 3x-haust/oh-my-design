@@ -7,6 +7,8 @@ import {
 } from '../core/runtime/trusted-evaluation-contract.ts';
 import { parseEvidenceClaimPublication } from '../core/brief/evidence-claims.ts';
 import { parseTaskOutcomeContract } from '../core/brief/task-outcome.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
+import { routeAdaptiveFlow } from '../core/route/index.ts';
 
 const sha = (value: string): string => value.repeat(64);
 
@@ -86,6 +88,26 @@ test('evaluation identity rejects an entry path outside route scope', () => {
   );
 });
 
+test('product route starter admits its compiled Vite entry without changing the route', () => {
+  const route = routeAdaptiveFlow(inputSkeleton('product-route-input').skeleton);
+  const identity = deriveTrustedEvaluationIdentity({
+    sourceContractSha256: route.sourceContractSha256,
+    taskOutcome: route.sourceContract.taskOutcome,
+    evidenceClaims: route.sourceContract.evidenceClaims,
+    allowedPaths: route.allowedPaths,
+    entryPath: 'dist/index.html',
+  });
+  assert.equal(identity.entryPath, 'dist/index.html');
+  assert.equal(identity.sourceContractSha256, route.sourceContractSha256);
+  assert.throws(() => deriveTrustedEvaluationIdentity({
+    sourceContractSha256: route.sourceContractSha256,
+    taskOutcome: route.sourceContract.taskOutcome,
+    evidenceClaims: route.sourceContract.evidenceClaims,
+    allowedPaths: route.allowedPaths,
+    entryPath: '.omd/private.json',
+  }), /TRUSTED_EVALUATION_ENTRY_OUTSIDE_ROUTE/);
+});
+
 test('lifecycle manifest forbids caller-authored authority and ignores ordinary extra fields', () => {
   assert.throws(
     () => parseTrustedLifecycleManifest({
@@ -141,6 +163,13 @@ test('lifecycle manifest accepts one closed benchmark-bound entry surface', () =
   } as const;
 
   assert.deepEqual(parseTrustedLifecycleManifest(manifest).entrySurface, manifest.entrySurface);
+  assert.throws(
+    () => parseTrustedLifecycleManifest({ ...manifest, entrySurface: {
+      ...manifest.entrySurface,
+      trigger: { kind: 'press', selector: '#inspect-temperature', key: 'Enter' },
+    } }),
+    /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/,
+  );
   const { nextAction: _nextAction, ...consequenceOnlyEntry } = manifest.entrySurface;
   assert.deepEqual(
     parseTrustedLifecycleManifest({ ...manifest, entrySurface: consequenceOnlyEntry }).entrySurface,
@@ -160,4 +189,73 @@ test('lifecycle manifest accepts one closed benchmark-bound entry surface', () =
     (error: unknown) => error instanceof TrustedEvaluationContractError
       && error.code === 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST',
   );
+});
+
+test('lifecycle manifest binds explicit interaction actions, state assertions and capture identity', () => {
+  for (const [kind, state, assertion] of [
+    ['hover', 'hover', 'hovered'],
+    ['focus', 'focus', 'focus-visible'],
+    ['press-start', 'pressed', 'pressed'],
+  ] as const) {
+    const manifest = parseTrustedLifecycleManifest({
+      schema: 'trusted-lifecycle-manifest-v1',
+      entryPath: 'index.html',
+      scripts: [{
+        outcomeRef: 'mustHave:0',
+        actions: [{ kind, selector: '#primary', viewports: ['1280x900', '390x844'] }],
+        assertions: [{ kind: 'element-state', selector: '#primary', state: assertion }],
+        captureState: { component: 'primary-action', state },
+      }],
+    });
+    assert.deepEqual(manifest.scripts[0]?.captureState, {
+      component: 'primary-action',
+      state,
+    });
+    assert.equal(manifest.scripts[0]?.actions[0]?.kind, kind);
+  }
+  assert.throws(() => parseTrustedLifecycleManifest({
+    schema: 'trusted-lifecycle-manifest-v1',
+    entryPath: 'index.html',
+    scripts: [{
+      outcomeRef: 'mustHave:0',
+      actions: [
+        { kind: 'press-start', selector: '#primary' },
+        { kind: 'click', selector: '#other' },
+      ],
+      assertions: [{ kind: 'element-state', selector: '#primary', state: 'pressed' }],
+      captureState: { component: 'primary-action', state: 'pressed' },
+    }],
+  }), /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/);
+  assert.throws(() => parseTrustedLifecycleManifest({
+    schema: 'trusted-lifecycle-manifest-v1',
+    entryPath: 'index.html',
+    scripts: [{
+      outcomeRef: 'mustHave:0',
+      actions: [{ kind: 'hover', selector: '#primary' }],
+      assertions: [{ kind: 'element-state', selector: '#other', state: 'hovered' }],
+      captureState: { component: 'primary-action', state: 'hover' },
+    }],
+  }), /MALFORMED_TRUSTED_LIFECYCLE_MANIFEST/);
+});
+
+test('a malformed lifecycle manifest names the field to repair', () => {
+  const manifest = (actions: unknown[], assertions: unknown[] = []) => ({
+    schema: 'trusted-lifecycle-manifest-v1', entryPath: 'dist/index.html',
+    scripts: [{ outcomeRef: 'outcome:copy', actions, assertions }],
+  });
+  const reason = (input: unknown) => {
+    try { parseTrustedLifecycleManifest(input); } catch (error) {
+      assert.ok(error instanceof TrustedEvaluationContractError);
+      assert.equal(error.code, 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
+      return error.message;
+    }
+    return assert.fail('expected a malformed manifest');
+  };
+  assert.match(reason(manifest([{ kind: 'click' }])), /scripts\[0\]\.actions\[0\] is missing selector/);
+  assert.match(reason(manifest([{ kind: 'swipe', selector: '#a' }])), /scripts\[0\]\.actions\[0\]\.kind must be/);
+  assert.match(reason(manifest([], [{ kind: 'visible-text', selector: '#a', text: ' ' }])), /scripts\[0\]\.assertions\[0\]\.text must be non-empty text/);
+  assert.match(reason({ ...manifest([]), schema: 'v0' }), /schema must be trusted-lifecycle-manifest-v1/);
+  // A well-formed manifest still parses unchanged.
+  assert.equal(parseTrustedLifecycleManifest(manifest([{ kind: 'click', selector: '#copy' }],
+    [{ kind: 'visible-text', selector: '#status', text: 'Copied' }])).scripts.length, 1);
 });

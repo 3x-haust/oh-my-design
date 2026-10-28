@@ -5,11 +5,6 @@ import { browserTaskOutcomeContract } from '../brief/task-outcome.ts';
 import { finalReviewResponseContract } from './final-review-response-contract.ts';
 import { currentDeveloperCalibration } from '../coach/developer-calibration.ts';
 
-import {
-  artDirectionSha256,
-  validateArtDirectionPointer,
-  validateArtDirectionRecord,
-} from '../art-direction/schema.ts';
 import { validateFinalBrowserObservations } from '../evidence/final-v2-browser-observations.ts';
 import { adaptiveBlindLaneContract } from '../evidence/final-v2-adaptive-files.ts';
 import { validateTrustedOutcomeEvidence } from '../evidence/final-v2-outcome-gate.ts';
@@ -31,8 +26,10 @@ import {
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
 import { measuredFinalRenderPacket } from './trusted-measured-review.ts';
 import { requiresMeasuredTerminal } from '../measure/review-policy.ts';
-import { readSelectedArtDirection } from '../art-direction/selected.ts';
-import { readFrame } from '../frame/index.ts';
+import {
+  REVIEWER_ITERATION_DISCIPLINE_CHECKLIST,
+  WORDS_TYPE_FLOW_REVIEW_CHECKLIST,
+} from './reviewer-task-checklist.ts';
 
 export const FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA =
   'adaptive-final-render-reviewer-packet-input-v1' as const;
@@ -50,8 +47,9 @@ export const FINAL_RENDER_REVIEWER_TASK = [
   'Copy outputContract.responseIdentity into your response unchanged, then copy fixedBindings and add the required judgments. laneSchema describes a downstream record, not your response schema.',
   'Fill responseTemplate according to responseSchema: verdicts use GREEN or RED, criticalFloors use numeric scores, findings are strings, and designQuality is the schema-tagged six-axis object with evidence from both viewports. Null template values are unanswered, never approval.',
   'Blind narrative concerns visible task purpose, information hierarchy and recovery guidance. Behavioral execution belongs to the protocol lane and source comparison belongs to the fidelity lane; their intentionally excluded evidence is not a blind-lane defect. Content below the fold is not itself failure: judge access, grouping and task fit for the actual content.',
+  'For a task whose meaning spans a whole page, inspect the supplied content sequence and relationships, not just its entry screen or an attractive isolated region. Apply this only to that task scope. A still image can establish static appearance, not the meaning or operation of an entire video, loop or time-based demonstration; temporal outcome acceptance belongs to the protocol lane.',
   'Return exactly the embedded output contract.',
-].join(' ');
+].join(' ') + ` ${WORDS_TYPE_FLOW_REVIEW_CHECKLIST} ${REVIEWER_ITERATION_DISCIPLINE_CHECKLIST}`;
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const INPUT_KEYS = ['schema', 'observationSha256s'] as const;
@@ -67,7 +65,6 @@ export type FinalRenderReviewerPacketInput = Readonly<{
 
 export type FinalRenderReviewerLaneSchema =
   | 'measured-blind-review-v1'
-  | 'blind-review-v2'
   | 'adaptive-blind-review-v2'
   | 'adaptive-blind-review-v3';
 
@@ -144,24 +141,6 @@ function fixedViewport(width: number, height: number): typeof DESKTOP | typeof M
   return undefined;
 }
 
-function currentArtDirectionSha256(root: string): string {
-  let pointer;
-  try {
-    pointer = validateArtDirectionPointer(JSON.parse(
-      stableRead(root, '.omd/art-direction.json', 'art-direction-pointer').toString('utf8'),
-    ) as unknown);
-  } catch { return fail('art-direction-pointer'); }
-  let record;
-  try {
-    record = validateArtDirectionRecord(JSON.parse(
-      stableRead(root, `.omd/${pointer.record}`, 'art-direction-record').toString('utf8'),
-    ) as unknown);
-  } catch { return fail('art-direction-record'); }
-  const sha256 = artDirectionSha256(record);
-  if (sha256 !== pointer.sha256) fail('art-direction-binding');
-  return sha256;
-}
-
 function packetPath(sha256: string): string {
   return `.omd/final-review/reviewer-packets/sha256-${sha256}.json`;
 }
@@ -190,19 +169,11 @@ export function finalRenderReviewerPacket(input: Readonly<{
   });
   const terminalSha256 = parsed.observationSha256s.at(-1) ?? fail('terminal-observation');
   requireCurrentObservationTail(root, terminalSha256);
-  const artSelected = route.strategy.stages.includes('art-direction')
-    && !route.strategy.skips.some(({ id }) => id === 'art-direction');
-  const artDirectionBinding = artSelected
-    ? route.sourceContract.processPolicy ? (() => {
-      readSelectedArtDirection(root, route.sourceContractSha256);
-      return (JSON.parse(stableRead(root, '.omd/art-direction.json', 'selected-art-pointer').toString('utf8')) as { record: { sha256: string } }).record.sha256;
-    })() : currentArtDirectionSha256(root)
-    : undefined;
   const benchmarkRequired = route.gates.includes('greenfield-task-flow-benchmark')
     && hasPublishedTaskFlowBenchmark(root, route.sourceContractSha256);
   validateTrustedOutcomeEvidence({
     root,
-    branch: artSelected ? 'art-selected' : 'adaptive-omission',
+    branch: 'adaptive-omission',
     required: true,
     invocation: input.invocation,
     expected: {
@@ -232,12 +203,8 @@ export function finalRenderReviewerPacket(input: Readonly<{
     parsed.observationSha256s,
   );
   const developerCalibration = currentDeveloperCalibration(root, input.invocation);
-  const measuredProcessReady = !route.strategy.stages.includes('frame') || readFrame(root)?.surfacePlan !== undefined;
-  if (requiresMeasuredTerminal(route) && measuredProcessReady) {
-    return measuredFinalRenderPacket(root, input.invocation, parsed.observationSha256s, artDirectionBinding);
-  }
-  if (requiresMeasuredTerminal(route) && developerCalibration === null) {
-    return measuredFinalRenderPacket(root, input.invocation, parsed.observationSha256s, artDirectionBinding);
+  if (requiresMeasuredTerminal(route)) {
+    return measuredFinalRenderPacket(root, input.invocation, parsed.observationSha256s);
   }
   const rows = browser.observations.flatMap((item) => {
     const viewport = fixedViewport(item.viewport.width, item.viewport.height);
@@ -266,15 +233,11 @@ export function finalRenderReviewerPacket(input: Readonly<{
   if (!rows.some(({ viewport }) => viewport === 'desktop')
     || !rows.some(({ viewport }) => viewport === 'mobile')) fail('fixed-viewports');
   const adaptiveContract = adaptiveBlindLaneContract(route, benchmarkRequired);
-  const laneSchema: FinalRenderReviewerLaneSchema = artSelected
-    ? 'blind-review-v2'
-    : adaptiveContract.schema === 'adaptive-blind-review-v3'
-      ? adaptiveContract.schema
-      : 'adaptive-blind-review-v2';
-  const verdictKeys = artSelected
-    ? ['blindVisual', 'blindNarrative', ...(route.projectMode === 'greenfield' ? ['realityFit'] : [])]
-    : [...adaptiveContract.verdicts];
-  const floorKeys = artSelected ? ['composition', 'copy'] : [...adaptiveContract.floors];
+  const laneSchema: FinalRenderReviewerLaneSchema = adaptiveContract.schema === 'adaptive-blind-review-v3'
+    ? adaptiveContract.schema
+    : 'adaptive-blind-review-v2';
+  const verdictKeys = [...adaptiveContract.verdicts];
+  const floorKeys = [...adaptiveContract.floors];
   const evidence = Object.freeze({
     schema: 'adaptive-final-render-reviewer-evidence-v1' as const,
     candidateAlias: `candidate-${hash(`final-render\0${terminalSha256}`).slice(0, 16)}`,
@@ -303,7 +266,6 @@ export function finalRenderReviewerPacket(input: Readonly<{
   const fixedBindings = Object.freeze({
     observationSha256s: parsed.observationSha256s,
     routeSha256,
-    ...(artDirectionBinding === undefined ? {} : { artDirectionSha256: artDirectionBinding }),
     buildSha256: input.invocation.current.buildSha256,
     briefSha256: input.invocation.current.briefSha256,
     browserSha256: hash(decisionGraphBytes),
@@ -324,7 +286,6 @@ export function finalRenderReviewerPacket(input: Readonly<{
     reviewerFields: Object.freeze([
       'schema', 'lane', 'verdicts', 'criticalFloors', 'designQuality',
       'observationSha256s', 'routeSha256',
-      ...(artDirectionBinding === undefined ? [] : ['artDirectionSha256']),
       'buildSha256', 'briefSha256',
       'browserSha256', 'evidenceSha256', 'findings',
     ]),

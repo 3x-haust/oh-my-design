@@ -13,7 +13,7 @@ import type { ProjectRunInvocation } from './invocation.ts';
 import { buildNativeFinalManifest, buildNativeMeasuredFinalDraft, currentNativeFinalObservations } from './native-final-manifest.ts';
 import { loadReviewPolicy, requiresMeasuredTerminal } from '../measure/review-policy.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
-import { policyLane } from '../../adapters/measured-reviewer-publication.ts';
+import { checkMeasuredHandbackCitations, checkMeasuredHandbackShape, policyLane } from '../../adapters/measured-reviewer-publication.ts';
 import { publishDeterministicProtocol, validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
 import { measuredReviewerTask } from './trusted-review-profile.ts';
 import { nativeFinalLanePacket, nativeFinalLaneTask } from './native-final-packet.ts';
@@ -31,6 +31,34 @@ type ReviewInput = Readonly<{
   onProgress?: (event: Readonly<{ lane: Lane; state: 'started' | 'received' }>) => void;
 }>;
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+/**
+ * The reviewer's own reasons for a red verdict, said back with the refusal so the maker repairs what was seen instead of
+ * digging them out of the attempt record.
+ */
+export function redAxes(roleResults: readonly unknown[]): string {
+  const reasons = roleResults.flatMap(result => {
+    try {
+      const message = (result as { authority?: { receipt?: { finalMessage?: unknown } } }).authority?.receipt?.finalMessage;
+      const handback = JSON.parse(String(message)) as {
+        designQuality?: { axes?: { axis?: string; verdict?: string; criticalFailure?: unknown }[] };
+        findings?: { axes?: unknown; visibleCondition?: unknown; observedCondition?: unknown; repairCriterion?: unknown }[];
+      };
+      const red = (handback.designQuality?.axes ?? []).filter(axis => axis.verdict === 'RED');
+      const stated = red.filter(axis => typeof axis.criticalFailure === 'string' && axis.criticalFailure.trim())
+        .map(axis => `${axis.axis}: ${String(axis.criticalFailure).slice(0, 240)}`);
+      // A reviewer may put the reason in its findings instead: the condition it saw and what would repair it.
+      const redNames = new Set(red.map(axis => axis.axis));
+      const found = (Array.isArray(handback.findings) ? handback.findings : [])
+        .map(finding => ({ ...finding, condition: finding.visibleCondition ?? finding.observedCondition }))
+        .filter(finding => Array.isArray(finding.axes) && finding.axes.some(axis => redNames.has(String(axis))) && typeof finding.condition === 'string')
+        .map(finding => `${(finding.axes as unknown[]).filter(axis => redNames.has(String(axis))).join('/')}: ${String(finding.condition).slice(0, 200)}`
+          + (typeof finding.repairCriterion === 'string' ? ` Repair: ${finding.repairCriterion.slice(0, 160)}` : ''));
+      return [...stated, ...found];
+    } catch { return []; }
+  });
+  return reasons.length ? `. The reviewer marked red: ${[...new Set(reasons)].slice(0, 4).join('; ')}` : '';
+}
+
 export class NativeFinalPublicationError extends Error {
   override readonly name = 'NativeFinalPublicationError';
   constructor(reason: string) { super(`NATIVE_FINAL_PUBLICATION_FAILED:${reason}`); }
@@ -72,6 +100,10 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
   const outcomes = await Promise.allSettled(work.map(async (item) => {
     input.onProgress?.({ lane: item.lane, state: 'started' });
     const roleResults = await runPiReviewerLane({ root, invocation: input.invocation, ...item,
+      ...(measured ? { validateHandback: (final: string) => {
+        checkMeasuredHandbackShape(final, item.packet);
+        checkMeasuredHandbackCitations(final, item.packet, root, input.invocation);
+      } } : {}),
       ...(input.signal === undefined ? {} : { signal: input.signal }) });
     input.onProgress?.({ lane: item.lane, state: 'received' });
     return { ...item, roleResults };
@@ -117,7 +149,7 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
           laneSchema: packetLaneSchema(packet), roleResults }, { projectRoot: root, invocation: input.invocation,
           buildSha256: run.buildSha256, briefSha256: run.briefSha256 }) };
       } catch (error) {
-        if (error instanceof Error) return reject(`${lane}: ${error.message}`);
+        if (error instanceof Error) return reject(`${lane}: ${error.message}${redAxes(roleResults)}`);
         throw error;
       }
     });
@@ -133,10 +165,11 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
       return { path: item.path, sha256: item.sha256 };
     };
     const lanes = Object.fromEntries(work.map(({ lane }) => [lane, descriptor(lane)]));
-    const measuredTerminal = draft?.graph.measuredTerminal && protocol ? { ...draft.graph.measuredTerminal, deterministicProtocol: protocol, lanes } : undefined;
-    if (draft && measuredTerminal) validateMeasuredTerminal(root, { ...draft.graph, measuredTerminal }, input.invocation);
-    const bytes = Buffer.from(canonicalJson({ schema: measuredTerminal ? 'native-pi-final-review-v2' : 'native-pi-final-review-v1', runId: run.runId,
-      buildSha256: run.buildSha256, briefSha256: run.briefSha256, ...(measuredTerminal ? { measuredTerminal } : { lanes }),
+    if (!draft?.graph.measuredTerminal || !protocol) return reject('measured terminal review state is required');
+    const measuredTerminal = { ...draft.graph.measuredTerminal, deterministicProtocol: protocol, lanes };
+    validateMeasuredTerminal(root, { ...draft.graph, measuredTerminal }, input.invocation);
+    const bytes = Buffer.from(canonicalJson({ schema: 'native-pi-final-review-v2', runId: run.runId,
+      buildSha256: run.buildSha256, briefSha256: run.briefSha256, measuredTerminal,
       attempt: { path: attemptPath, sha256: hash(attempt) } }));
     authorizeNativePiPayload(input.invocation, root, 'final-reviewer-lane', bytes);
     replaceProjectFileAtomically({ projectRoot: root, invocation: input.invocation, relativePath: pointer, content: bytes });
@@ -154,7 +187,7 @@ export function finalizeNativeEvidence(input: Readonly<{ root: string; invocatio
   createProjectWriteAdapter(root, input.invocation).writeContentAddressed(activationPath, activation);
   const manifest = buildNativeFinalManifest(root, input.invocation, activationPath);
   const fs = nodeStableProjectFileSystem();
-  const validated = preflightFinalEvidenceGraph({ root, graph: manifest.graph, fs, invocation: input.invocation });
+  preflightFinalEvidenceGraph({ root, graph: manifest.graph, fs, invocation: input.invocation });
   checkCompletionPublicationPrerequisites(root, manifest, input.invocation);
   // A published slop ledger can inform repair, but its inventory/dispositions are
   // advisory. The independent browser-bound final-v2 visual floors remain hard.
@@ -162,9 +195,8 @@ export function finalizeNativeEvidence(input: Readonly<{ root: string; invocatio
     try { checkSlopFinalGraph(root, manifest.graph); }
     catch (error) { process.emitWarning(`optional slop review needs attention: ${error instanceof Error ? error.message : String(error)}`); }
   }
-  const bytes = Buffer.from(canonicalJson({ ...manifest, graphRootHash: validated.rootHash }));
-  authorizeNativePiPayload(input.invocation, root, 'final-evidence-manifest', bytes);
-  const path = publishFinalEvidenceV2(root, manifest, input.invocation);
+  const path = publishFinalEvidenceV2(root, manifest, input.invocation,
+    bytes => authorizeNativePiPayload(input.invocation, root, 'final-evidence-manifest', bytes));
   const pointer = readStableProjectFile({ root, path: resolve(root, path), label: 'published final pointer', fs });
   authorizeNativePiPayload(input.invocation, root, 'final-reviewer-lane', pointer);
   return { path };

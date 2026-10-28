@@ -17,12 +17,13 @@ the user needs to skim or operate. Split-text on body copy converts reading into
 — the user must watch the paragraph assemble itself before they can begin. It is the most
 common technique deployed too broadly. The `expressive.md` technique catalogue states
 this directly: "Split-text on body copy turns reading into waiting." The stagger budget
-is consumed by the entrance; there is nothing left for the content. Apply this technique
-to one element per page — the one element whose arrival is the event.
+is consumed by the entrance; there is nothing left for the content. One hero element per
+page is a useful house-style starting point, not a universal effect quota.
 
-Character-level stagger is more dramatic than word-level; use character-level only when
-the display type is large enough (roughly 60px+) that individual characters read as
-distinct forms. At smaller sizes, word-level stagger is the correct granularity.
+Character-level stagger is more dramatic than word-level. It is often clearer at large
+display sizes where characters read as distinct forms; word-level stagger is usually
+less noisy at smaller sizes. Choose from the actual typeface, phrase, and reading task
+rather than a fixed pixel threshold.
 
 ## Parameters
 
@@ -35,9 +36,8 @@ distinct forms. At smaller sizes, word-level stagger is the correct granularity.
      slightly softer. Both from core/motion/easing.md. */
   --ease-split: var(--ease-out-expo);
 
-  /* Delay between each successive span. 40ms minimum (below this the stagger
-     is imperceptible); 80ms maximum (above this it becomes a waterfall).
-     core/theory/motion.md: "Sibling stagger: 40–80ms offset." */
+  /* Example delay between successive spans. 40–80ms is a commonly useful
+     exploration range, not a perception threshold; test the actual type and phrase. */
   --stagger-split: 55ms;
 
   /* Vertical offset the span travels from on entrance. Keep small — 16–24px.
@@ -183,7 +183,7 @@ import { MotionConfig } from 'framer-motion';
 
 When `prefers-reduced-motion: reduce` is set, the text must be complete and legible —
 not an empty space, not a deferred render. The split spans are not created; the heading
-renders as normal text with a single short opacity fade.
+renders as normal text without the staggered motion.
 
 ```css
 @media (prefers-reduced-motion: reduce) {
@@ -208,14 +208,13 @@ if (!prefersReduced) {
 
 ## Performance note
 
-Each span animates only `opacity` and `transform: translateY()` — both compositor-only
-properties. No layout is triggered on any frame. The GPU handles each span independently;
-the main thread is not involved after the initial DOM construction.
+Each span animates `opacity` and `transform: translateY()`, which usually avoids layout
+changes. It does not guarantee GPU execution or zero main-thread, paint, or memory cost;
+profile the real span count, font, and effects.
 
 `will-change: transform` on every span would promote each to its own compositor layer,
-consuming GPU memory proportional to the number of characters. On a 40-character heading
-at character-level stagger, this is forty compositor layers. Do not apply `will-change`
-here. The browser's compositor schedules the animations correctly without it.
+consuming memory if the browser creates separate layers. Do not apply `will-change` to
+every span by default; add it only if profiling the actual heading shows a benefit.
 
 The JS runs once on `DOMContentLoaded`. It does not run on scroll, on re-render, or
 on visibility change. The spans are DOM elements for the lifetime of the page; there is

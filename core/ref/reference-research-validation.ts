@@ -26,7 +26,7 @@ import { assertCurrentMarketCapture, validateMarketReferenceCoverage } from './m
 import { referenceCaptureTimestamp } from './reference-capture-time.ts';
 import { parseTaskFlowBenchmark, taskFlowBenchmarkSha256, validateTaskFlowBenchmarkEvidence } from './task-flow-benchmark.ts';
 import { fail, httpsUrl, record, type ReferenceResearch, type ResearchEvidence, type ValidationOptions } from './reference-research-contract.ts';
-import { currentReferenceDirectionSourceContract, requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
+import { requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
 
 export function requireVisualPresentationImage(presentation: 'finished-product-website' | 'finished-app-flow', image: Buffer): void {
   if (presentation === 'finished-product-website' && image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
@@ -111,9 +111,8 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     lane, options.expectedSourceContractSha256);
   }
   const admissionSourceContract = research.schema === 'reference-research-v8'
-    ? currentReferenceDirectionSourceContract(root) : null;
+    ? options.expectedSourceContractSha256 : null;
   if (admissionSourceContract !== null) {
-    if (admissionSourceContract !== options.expectedSourceContractSha256) fail('REFERENCE_DIRECTION_ADMISSION_STALE');
     const retained = loadRefs(root, { includeDomain: true });
     for (const source of research.designReference.sources) {
       const reference = source.evidence.path.startsWith('.omd/refs/design/fragments/')

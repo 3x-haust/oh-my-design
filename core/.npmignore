@@ -1,1 +1,4 @@
 .omc/
+# Designer-source captions and frames are private originals: never published in the package.
+cases/*.json
+cases/media/

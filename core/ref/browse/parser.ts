@@ -11,7 +11,10 @@ search <provider-or-url> <query> [--query-param q] [--query-selector <css> --sub
        [--scope target-market|global|unscoped] [--ready-selector <css>]
 scroll [--direction down|up|left|right] [--amount <pixels>] [--selector <css>] [--ready-selector <css>]
 click|similar (--selector <css>|--text <exact-text>) [--ready-selector <css>]
+cookie (--selector <css>|--text <exact-text>)   (the necessary-only/reject button of a cookie notice that covers the page)
 back [--ready-selector <css>]
+challenge checkbox | click --x <px> --y <px> [--submit] | drag --x <px> --y <px> --to-x <px> --to-y <px> | type --text <chars>
+          (only on a captcha page; coordinates are pixels of the last screenshot; two submits, then hand off)
 shot [--selector <whole-item-image>] [--screen-id <id> --state <label>] [--assert-visible <css>]... [--assert-hidden <css>]...
 crop --selector <css> [--reference <whole-screen-keep-id>] [--as <component>] [--slot <zone-id>]
 keep [--source-app <name>] [--capture <whole-screen-shot-hash>] [--lane domain|design] --reason <20..500 characters>
@@ -29,7 +32,8 @@ const FLAGS: Record<string, readonly string[]> = {
   goto: ['reason', 'scope', 'ready-selector', 'source-id', 'flow-id'],
   search: ['query-param', 'query-selector', 'submit-selector', 'scope', 'ready-selector'],
   scroll: ['direction', 'amount', 'selector', 'ready-selector'], click: ['selector', 'text', 'ready-selector'],
-  similar: ['selector', 'text', 'ready-selector'], back: ['ready-selector'],
+  similar: ['selector', 'text', 'ready-selector'], cookie: ['selector', 'text', 'ready-selector'], back: ['ready-selector'],
+  challenge: ['x', 'y', 'to-x', 'to-y', 'text', 'submit'],
   shot: ['selector', 'screen-id', 'state', 'assert-visible', 'assert-hidden'], crop: ['selector', 'reference', 'as', 'slot'],
   keep: ['source-app', 'capture', 'lane', 'reason', 'role', 'direction', 'rights', 'rights-notes'], drop: ['reason'],
   'contact-sheet': ['page', 'columns'], status: [], end: ['reason'],
@@ -38,33 +42,48 @@ export function parseBrowseCommand(argv: readonly string[]): BrowseCommand {
   const verb = argv[0] ?? '';
   if (!Object.hasOwn(FLAGS, verb)) browseFail('BROWSE_USAGE', BROWSE_HELP, 2);
   const options = new Map<string, string[]>(), positionals: string[] = [];
-  const boolean = new Set(['json', 'user-opt-in', 'headed', 'allow-pricing']);
+  const boolean = new Set(['json', 'user-opt-in', 'headed', 'allow-pricing', 'submit']);
   const repeated = new Set(['allow-auth-origin', 'assert-visible', 'assert-hidden']);
   for (let i = 1; i < argv.length; i++) {
     const token = argv[i]!;
     if (!token.startsWith('--')) { positionals.push(token); continue; }
-    const key = token.slice(2);
-    if (![...COMMON, ...FLAGS[verb]!].includes(key) || (options.has(key) && !repeated.has(key))) browseFail('BROWSE_USAGE', `unknown or repeated --${key}`, 2);
+    // Distances guessed under another name (--y 800, --dy 800) mean the scroll amount.
+    const key = verb === 'scroll' && ['y', 'dy', 'by', 'pixels', 'distance'].includes(token.slice(2)) ? 'amount' : token.slice(2);
+    // Name the verb's real usage line, so a guessed flag (--y, --delta) is corrected in one step.
+    const usage = BROWSE_HELP.split('\n').filter(line => line.startsWith(verb) || line.includes(`|${verb} `) || line.startsWith(`${verb}|`)).join(' ');
+    if (key === 'help') browseFail('BROWSE_USAGE', usage || BROWSE_HELP, 2);
+    if (![...COMMON, ...FLAGS[verb]!].includes(key) || (options.has(key) && !repeated.has(key))) {
+      browseFail('BROWSE_USAGE', `unknown or repeated --${key}${usage ? `; usage: ${usage.trim()}` : ''}`, 2);
+    }
     const value = boolean.has(key) ? 'true' : argv[++i];
     if (!value || value.startsWith('--') || value.length > 4096 || /[\u0000-\u0008]/u.test(value)) browseFail('BROWSE_USAGE', `--${key} needs one bounded value`, 2);
     options.set(key, [...options.get(key) ?? [], value]);
   }
   const get = (key: string, fallback: string | null = null): string | null => options.get(key)?.[0] ?? fallback;
-  const required = (key: string): string => get(key) ?? browseFail('BROWSE_USAGE', `--${key} required`, 2);
+  const required = (key: string): string => get(key) ?? browseFail('BROWSE_USAGE', key === 'reason'
+    ? `--reason required: one line of 20..500 characters saying what this ${verb} is for, for example ${verb} <...> --reason "compare how the hero places the install command"`
+    : `--${key} required`, 2);
   const choice = <T extends string>(key: string, choices: readonly T[], fallback?: T): T => {
     const value = get(key, fallback ?? null);
     return choices.includes(value as T) ? value as T : browseFail('BROWSE_USAGE', `--${key}: ${choices.join('|')}`, 2);
   };
   const number = (key: string, fallback: number, low: number, high: number, integer = true) => {
     const value = Number(get(key, String(fallback)));
-    if (!Number.isFinite(value) || value < low || value > high || (integer && !Number.isInteger(value))) browseFail('BROWSE_USAGE', `invalid --${key}`, 2);
+    if (!Number.isFinite(value) || value < low || value > high || (integer && !Number.isInteger(value))) browseFail('BROWSE_USAGE', `invalid --${key}: use ${integer ? 'a whole number' : 'a number'} from ${low} to ${high}`, 2);
     return value;
   };
   const reason = () => { const text = required('reason').trim(); if (text.length < 20 || text.length > 500 || /[\r\n]/u.test(text)) browseFail('BROWSE_USAGE', 'reason must be one line of 20..500 characters', 2); return text; };
   const pair = (a: string, b: string) => { if (options.has(a) !== options.has(b)) browseFail('BROWSE_USAGE', `--${a} and --${b} are a pair`, 2); };
+  // ref context names the same roles primary/supplemental; accept those words here too.
+  const keepRole = () => {
+    const alias: Record<string, string> = { primary: 'visual-direction', supplemental: 'component-support' };
+    const value = get('role')!;
+    if (alias[value]) options.set('role', [alias[value]!]);
+    return choice('role', ['visual-direction', 'component-support', 'task-flow'] as const);
+  };
   const scope = () => choice('scope', ['target-market', 'global', 'unscoped'] as const, 'unscoped');
   const readySelector = get('ready-selector');
-  const count = verb === 'goto' ? 1 : verb === 'search' ? 2 : verb === 'drop' ? positionals.length : 0;
+  const count = verb === 'goto' || verb === 'challenge' ? 1 : verb === 'search' ? 2 : verb === 'drop' ? positionals.length : 0;
   if (positionals.length !== count || (verb === 'drop' && count > 1)) browseFail('BROWSE_USAGE', 'ambiguous positional arguments', 2);
   let action: BrowseAction;
   switch (verb) {
@@ -94,13 +113,26 @@ export function parseBrowseCommand(argv: readonly string[]): BrowseCommand {
       action = { verb, provider, query, queryParam, querySelector: get('query-selector'), submitSelector: get('submit-selector'), scope: scope(), readySelector }; break;
     }
     case 'scroll': action = { verb, direction: choice('direction', ['up', 'down', 'left', 'right'], 'down'), amount: options.has('amount') ? number('amount', 0, 1, 2560) : null, selector: get('selector'), readySelector }; break;
-    case 'click': case 'similar':
+    case 'click': case 'similar': case 'cookie':
       if (options.has('selector') === options.has('text')) browseFail('BROWSE_USAGE', 'choose exactly one --selector or --text', 2);
       action = { verb, selector: get('selector'), text: get('text'), readySelector }; break;
     case 'back': action = { verb, readySelector }; break;
+    case 'challenge': {
+      const method = positionals[0] as 'checkbox' | 'click' | 'drag' | 'type';
+      if (!['checkbox', 'click', 'drag', 'type'].includes(method)) browseFail('BROWSE_USAGE', 'challenge checkbox|click|drag|type', 2);
+      const point = (key: string) => options.has(key) ? number(key, 0, 0, 8192) : null;
+      const needs = { checkbox: [], click: ['x', 'y'], drag: ['x', 'y', 'to-x', 'to-y'], type: ['text'] }[method];
+      const allowed = new Set([...needs, ...(method === 'click' ? ['submit'] : [])]);
+      if (needs.some(key => !options.has(key)) || [...options.keys()].some(key => !COMMON.includes(key) && !allowed.has(key))) {
+        browseFail('BROWSE_USAGE', `challenge ${method} takes ${[...allowed].map(key => `--${key}`).join(' ') || 'no options'}`, 2);
+      }
+      const text = get('text');
+      if (text !== null && (!/^[\p{L}\p{N}]{1,32}$/u.test(text))) browseFail('BROWSE_USAGE', 'challenge text is the 1..32 letters or digits read from the image', 2);
+      action = { verb, method, x: point('x'), y: point('y'), toX: point('to-x'), toY: point('to-y'), text, submit: options.has('submit') }; break;
+    }
     case 'shot': pair('screen-id', 'state'); action = { verb, selector: get('selector'), screenId: get('screen-id'), state: get('state'), assertVisible: options.get('assert-visible') ?? [], assertHidden: options.get('assert-hidden') ?? [] }; break;
     case 'crop': action = { verb, selector: required('selector'), reference: get('reference'), as: get('as'), slot: get('slot') }; break;
-    case 'keep': action = { verb, sourceApp: get('source-app'), capture: get('capture'), lane: options.has('lane') ? choice('lane', ['domain', 'design'] as const) : null, reason: reason(), role: options.has('role') ? choice('role', ['visual-direction', 'component-support', 'task-flow'] as const) : null, direction: get('direction'), rights: choice('rights', ['allowed', 'restricted', 'unknown'], 'unknown'), rightsNotes: get('rights-notes') }; break;
+    case 'keep': action = { verb, sourceApp: get('source-app'), capture: get('capture'), lane: options.has('lane') ? choice('lane', ['domain', 'design'] as const) : null, reason: reason(), role: options.has('role') ? keepRole() : null, direction: get('direction'), rights: choice('rights', ['allowed', 'restricted', 'unknown'], 'unknown'), rightsNotes: get('rights-notes') }; break;
     case 'drop': action = { verb, keep: positionals[0] ?? null, reason: reason() }; break;
     case 'contact-sheet': action = { verb, page: number('page', 1, 1, 128), columns: number('columns', 3, 2, 4) as 2 | 3 | 4 }; break;
     case 'status': action = { verb }; break;

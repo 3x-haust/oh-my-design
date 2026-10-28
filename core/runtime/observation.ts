@@ -20,7 +20,9 @@ const SHA256 = /^[a-f0-9]{64}$/;
 const REPAIR_PREDECESSOR_SCHEMA = 'observation-v2-repair-predecessor-v1';
 const TRUSTED_REFERENCE = /^(?:claim:[a-f0-9]{64}:[a-z0-9][a-z0-9:-]*:[a-f0-9]{64}|decision:[a-f0-9]{64}:(?:\d+|[a-z0-9][a-z0-9:-]*:[a-f0-9]{64})|outcome:[a-f0-9]{64}:(?:mustHave|mustNotHave|completionEvidence):\d+:[a-f0-9]{64})$/;
 const SENSITIVE_KEY = /(?:authorization|cookie|email|password|secret|session|token)/i;
-const SENSITIVE_TEXT = /(?:\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:bearer\s+)?[a-z0-9_=-]{24,}\b)/gi;
+// A credential-like run has digits in it; a long kebab-case word ("required-action-unavailable") is a finding code,
+// and redacting it hid every reason a browser check failed.
+const SENSITIVE_TEXT = /(?:\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:bearer\s+)?(?=[a-z0-9_=-]*\d)[a-z0-9_=-]{24,}\b)/gi;
 const OBSERVATION_STABLE_FILE_SYSTEM = nodeStableProjectFileSystem();
 
 type CurrentArtifact = Readonly<{ path: string; sha256: string }>;

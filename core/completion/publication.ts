@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
@@ -14,18 +13,18 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 import { validateAdaptiveFinalEvidenceV2Graph } from '../evidence/final-v2-adaptive-contract.ts';
-import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
-import { checkAdaptiveWorkflow } from '../design-development/workflow-persistence.ts';
 import { requiresMeasuredTerminal, loadReviewPolicy } from '../measure/review-policy.ts';
 import { validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
 import { validateFinalEvidenceV2Graph } from '../evidence/final-v2-graph.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { projectPathEntryExists } from '../runtime/project-path-entry.ts';
 
 export type CompletionTypographyBinding = Readonly<
   | { id: 'type-proof'; status: 'selected'; path: string; sha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'not-selected'; routeSha256: string; authoritySha256: string; applicability: TypographyApplicabilityEvidence }
   | { id: 'type-proof'; status: 'legacy-unassessed'; reason: string }
+  | { id: 'type-proof'; status: 'measured-review'; routeSha256: string; authoritySha256: string }
 >;
 export type CompletionPublicationResult = Readonly<{
   completeness?: CompletenessRun;
@@ -79,10 +78,10 @@ function dataArray(value: unknown, label: string): readonly unknown[] {
   }
 }
 
-function graphReceipts(value: unknown): Readonly<{ raw: Readonly<Record<string, unknown>>; schema: unknown; productionSchema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown; workflow: unknown; referenceDistance: unknown }> {
+function graphReceipts(value: unknown): Readonly<{ raw: Readonly<Record<string, unknown>>; schema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown }> {
   const manifest = dataObject(value, 'final manifest graph');
   const graph = dataObject(manifest.graph, 'final manifest graph');
-  return { raw: graph, schema: graph.schema, productionSchema: graph.productionSchema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal, workflow: graph.workflow, referenceDistance: graph.referenceDistance };
+  return { raw: graph, schema: graph.schema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal };
 }
 function receiptIdentity(value: unknown): string {
   const item = dataObject(value, 'final graph receipt');
@@ -98,9 +97,9 @@ function typographyBinding(
   applicability: TypographyApplicabilityEvidence,
   continuationRoute?: AdaptiveSourceSealRoute,
 ): CompletionTypographyBinding {
-  if (!existsSync(`${root}/.omd/route.json`)) {
+  if (!projectPathEntryExists(root, '.omd/route.json')) {
     const path = '.omd/type-proof.md';
-    if (!existsSync(resolve(root, path))) return Object.freeze({ id: 'type-proof', status: 'legacy-unassessed', reason: 'optional typography proof was not published' });
+    if (!projectPathEntryExists(root, path)) return Object.freeze({ id: 'type-proof', status: 'legacy-unassessed', reason: 'optional typography proof was not published' });
     let bytes: Buffer;
     try { bytes = readStableProjectFile({ root, path: resolve(root, path), label: 'selected typography proof', fs }); }
     catch { return fail('selected typography proof is not a stable regular file'); }
@@ -125,7 +124,7 @@ export function checkCompletionPublicationPrerequisites(
   invocation: ProjectRunInvocation,
 ): CompletionPublicationResult {
   const graph = graphReceipts(manifest);
-  if (existsSync(resolve(root, '.omd/route.json')) && requiresMeasuredTerminal(readPersistedRoute(root, invocation))) {
+  if (projectPathEntryExists(root, '.omd/route.json') && requiresMeasuredTerminal(readPersistedRoute(root, invocation))) {
     loadReviewPolicy(root, invocation); // Revalidate the signed host/user purpose under every publication lock.
     if (!graph.raw.measuredTerminal) fail('current implemented-UI completion requires immutable measured terminal graph evidence');
     validateMeasuredTerminal(root, validateFinalEvidenceV2Graph(graph.raw), invocation);
@@ -133,30 +132,26 @@ export function checkCompletionPublicationPrerequisites(
   const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
     ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route
     : undefined;
-  const hasWorkflow = existsSync(`${root}/.omd/workflow-plan.json`);
-  if (hasWorkflow) {
-    if (graph.schema !== 'final-evidence-v2-workflow-graph-v1' && graph.schema !== 'final-evidence-v2-selected-direction-graph-v1') fail('current workflow requires the additive workflow final graph');
-    const workflow = checkAdaptiveWorkflow(root, invocation).binding;
-    if (canonicalJson(graph.workflow) !== canonicalJson(workflow)) fail('final graph does not bind the exact current workflow plan, artifacts, and reviews');
-  } else if (graph.schema === 'final-evidence-v2-workflow-graph-v1') {
-    fail('workflow final graph has no current workflow plan');
-  }
-  if (graph.schema === 'final-evidence-v2-graph' || (graph.schema === 'final-evidence-v2-workflow-graph-v1'
-    && graph.productionSchema === 'final-evidence-v2-graph')) {
-    const distance = dataObject(graph.referenceDistance, 'selected reference distance receipt');
-    receiptIdentity(distance);
-    if (distance.path !== '.omd/selected-reference-distance.json'
-      || distance.schema !== 'selected-reference-distance-v1') {
-      fail('selected reference distance receipt is not the current typed gate');
+  if (continuationRoute === undefined) fail('model-led completion requires the adaptive omission graph');
+  if (!projectPathEntryExists(root, '.omd/functional-requirements.json')) {
+    if (continuationRoute?.executionStyle === 'model-led'
+      && !continuationRoute.stages.some(stage => stage.id === 'type-proof' && stage.status === 'selected')
+      && !projectPathEntryExists(root, '.omd/completeness-current.json')
+      && !projectPathEntryExists(root, '.omd/type-proof.md')) {
+      return Object.freeze({ typography: Object.freeze({
+        id: 'type-proof', status: 'measured-review',
+        routeSha256: continuationRoute.record.sha256, authoritySha256: continuationRoute.authority.sha256,
+      }) });
     }
-    const compositionFindings = validateCurrentCompositionContract(root, invocation);
-    if (compositionFindings.length > 0) {
-      fail(`current composition contract is invalid: ${compositionFindings.map((finding) => `${finding.id} ${finding.path}`).join(', ')}`);
-    }
-  }
-  if (!existsSync(`${root}/.omd/functional-requirements.json`)) {
-    if (existsSync(`${root}/.omd/route.json`)) {
+    if (projectPathEntryExists(root, '.omd/route.json')) {
       fail('current routed publication requires functional requirements and a completeness run');
+    }
+    if (projectPathEntryExists(root, '.omd/completeness-current.json')) {
+      fail('optional completeness pointer exists without functional requirements');
+    }
+    if (projectPathEntryExists(root, '.omd/type-proof.md')) {
+      try { readStableProjectFile({ root, path: resolve(root, '.omd/type-proof.md'), label: 'optional typography proof', fs }); }
+      catch { fail('optional typography proof is not a stable regular file'); }
     }
     return Object.freeze({ typography: Object.freeze({
       id: 'type-proof',

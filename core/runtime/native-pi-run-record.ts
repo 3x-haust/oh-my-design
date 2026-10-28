@@ -74,6 +74,11 @@ export function parseNativePiRun(input: unknown): NativePiRun {
     briefSha256: hash(run.briefSha256, 'briefSha256'), runtimeSha256: hash(run.runtimeSha256, 'runtimeSha256'), host: parseNativePiHost(run.host),
     ...(Object.hasOwn(run, 'designPolicy') ? { designPolicy: parseDesignExecutionPolicy(run.designPolicy) } : {}),
     ...(Object.hasOwn(run, 'calibration') ? { calibration: parseDeveloperEvaluationSnapshot(run.calibration) } : {}) });
+  if (result.calibration?.mode === 'experimental'
+    && (result.designPolicy?.mode !== 'developer-evaluation'
+      || result.calibration.experiment?.runtimeSourceSha256 !== result.runtimeSha256)) {
+    throw new NativePiAuthorityError('experimental calibration requires matching developer-mode runtime source');
+  }
   if (nativePiRunId(result) !== result.runId) throw new NativePiAuthorityError('run identity digest mismatch');
   return result;
 }
@@ -115,10 +120,34 @@ export function currentNativePiIdentity(input: NativePiRunInput): Omit<NativePiR
   const skill = readFileSync(input.loadedSkillPath);
   if (!skill.equals(readFileSync(join(input.runtimeRoot, 'src/skills/omd-ultradesign/SKILL.md')))) throw new NativePiAuthorityError('loaded skill differs from runtime snapshot');
   const build = createBuildIdentityFromSource(input.runtimeRoot);
+  const runtimeSha256 = nativePiRuntimeSha256(input.runtimeRoot);
+  const calibration = input.calibration === undefined ? undefined : parseDeveloperEvaluationSnapshot(input.calibration);
+  const designPolicy = input.designPolicy === undefined ? undefined : parseDesignExecutionPolicy(input.designPolicy);
+  if (calibration?.mode === 'experimental'
+    && (designPolicy?.mode !== 'developer-evaluation'
+      || calibration.experiment?.runtimeSourceSha256 !== runtimeSha256)) {
+    throw new NativePiAuthorityError('experimental calibration requires matching developer-mode runtime source');
+  }
   return { projectRoot, buildSha256: build.buildSha256,
-    loadedSkillSha256: build.sourceSkillSha256, briefSha256: request.requestSha256, runtimeSha256: nativePiRuntimeSha256(input.runtimeRoot),
-    ...(input.designPolicy === undefined ? {} : { designPolicy: parseDesignExecutionPolicy(input.designPolicy) }),
-    ...(input.calibration === undefined ? {} : { calibration: parseDeveloperEvaluationSnapshot(input.calibration) }) };
+    loadedSkillSha256: build.sourceSkillSha256, briefSha256: request.requestSha256, runtimeSha256,
+    ...(designPolicy === undefined ? {} : { designPolicy }),
+    ...(calibration === undefined ? {} : { calibration }) };
+}
+export function nativePiCalibrationPinIdentity(input: NativePiRunInput): string {
+  const { calibration: _calibration, ...withoutCalibration } = input;
+  const identity = currentNativePiIdentity(withoutCalibration);
+  return nativePiDigest(canonicalRouteJson({
+    schema: 'native-pi-calibration-pin-v1',
+    projectRoot: identity.projectRoot,
+    buildSha256: identity.buildSha256,
+    loadedSkillSha256: identity.loadedSkillSha256,
+    briefSha256: identity.briefSha256,
+    runtimeSha256: identity.runtimeSha256,
+    provider: input.provider,
+    model: input.model,
+    thinkingLevel: input.thinkingLevel,
+    ...(identity.designPolicy === undefined ? {} : { designPolicy: identity.designPolicy }),
+  }));
 }
 export function isNativePiHostPackage(name: unknown): boolean {
   return name === '@earendil-works/pi-coding-agent' || name === '@mariozechner/pi-coding-agent' || name === '@code-yeongyu/senpi';

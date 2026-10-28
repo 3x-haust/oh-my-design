@@ -1,7 +1,7 @@
 # App shell workbench
 
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
-> against the current composition contract; do not transfer this page recipe unchanged.
+> against this page's content, brief and references; do not transfer this page recipe unchanged.
 
 The default grammar for a `product` work surface: a persistent shell (top bar and/or side
 navigation) framing a dominant work region that owns the viewport. The shell answers

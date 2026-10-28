@@ -7,8 +7,8 @@ export type TypeContract = { schema: 'type-proof-contract-v1'; families: { id: s
 export type CompositionContract = {
   schema: 'composition-measurement-contract-v1';
   frequentAction: string | null;
-  regions: { selector: string; role: 'task' | 'utility' | 'status' | 'evidence'; minimumVisible: number }[];
-  colors: { role: string; selector: string; property: 'background' | 'text'; value: string; token: string | null }[];
+  regions: { selector: string; role: 'task' | 'utility' | 'status' | 'evidence'; minimumVisible: number; minimumTargetPx?: number }[];
+  colors: { role: string; selector: string; property: 'background' | 'text' | 'border' | 'outline'; value: string; token: string | null; contrastKind?: 'non-text'; viewIds?: string[] }[];
   spacing: { scale: number[]; tolerance: number; opticalExceptions: { selector: string; property: string; value: number }[] } | null;
   relationships: { before: string; after: string }[]; requiredViews: ViewRequest[];
 };
@@ -34,12 +34,27 @@ export function parseTypeContract(input: unknown): TypeContract {
   return c;
 }
 export function parseCompositionContract(input: unknown): CompositionContract {
-  v.object({ schema: v.enumeration('composition-measurement-contract-v1'), frequentAction: v.nullable(v.text), regions: v.array(v.object({ selector: v.text, role: v.enumeration('task', 'utility', 'status', 'evidence'), minimumVisible: v.integer })), colors: v.array(v.object({ role: v.text, selector: v.text, property: v.enumeration('background', 'text'), value: v.pattern(/^#[0-9a-fA-F]{6}$/), token: v.nullable(v.pattern(/^--[a-zA-Z0-9_-]+$/)) })), spacing: v.nullable(v.object({ scale: v.array(v.nonnegative), tolerance: v.nonnegative, opticalExceptions: v.array(v.object({ selector: v.text, property: v.text, value: v.nonnegative })) })), relationships: v.array(v.object({ before: v.text, after: v.text })), requiredViews: v.array(view) })(input);
+  const region: v.Validator = row => v.object({ selector: v.text, role: v.enumeration('task', 'utility', 'status', 'evidence'), minimumVisible: v.integer,
+    ...(row && typeof row === 'object' && Object.hasOwn(row, 'minimumTargetPx') ? { minimumTargetPx: positive } : {}) })(row);
+  const color: v.Validator = row => v.object({ role: v.text, selector: v.text, property: v.enumeration('background', 'text', 'border', 'outline'), value: v.pattern(/^#[0-9a-fA-F]{6}$/), token: v.nullable(v.pattern(/^--[a-zA-Z0-9_-]+$/)),
+    ...(row && typeof row === 'object' && Object.hasOwn(row, 'contrastKind') ? { contrastKind: v.enumeration('non-text') } : {}),
+    ...(row && typeof row === 'object' && Object.hasOwn(row, 'viewIds') ? { viewIds: v.array(v.text) } : {}) })(row);
+  v.object({ schema: v.enumeration('composition-measurement-contract-v1'), frequentAction: v.nullable(v.text), regions: v.array(region), colors: v.array(color), spacing: v.nullable(v.object({ scale: v.array(v.nonnegative), tolerance: v.nonnegative, opticalExceptions: v.array(v.object({ selector: v.text, property: v.text, value: v.nonnegative })) })), relationships: v.array(v.object({ before: v.text, after: v.text })), requiredViews: v.array(view) })(input);
   const c = input as CompositionContract;
   v.unique(c.colors.map(r => `${r.selector}:${r.property}`), 'color assignment'); v.unique(c.regions.map(r => r.selector), 'region');
+  for (const color of c.colors) {
+    if (color.contrastKind && color.property === 'text') v.fail('non-text contrast cannot bind text paint');
+    if (color.viewIds) {
+      v.unique(color.viewIds, 'color view scope');
+      if (!color.viewIds.length || color.viewIds.some(id => !c.requiredViews.some(view => view.id === id))) v.fail('color scope names unknown/empty view');
+    }
+  }
   if (c.spacing && (!c.spacing.scale.length || c.spacing.tolerance > 0.5)) v.fail('spacing needs a committed scale and tolerance <=0.5px');
   if (!c.colors.some(r => r.role === 'canvas')) v.fail('composition needs an explicit canvas color');
   return c;
+}
+export function colorsForView(composition: CompositionContract | null, viewId: string): CompositionContract['colors'] {
+  return composition?.colors.filter(color => !color.viewIds || color.viewIds.includes(viewId)) ?? [];
 }
 export function measurementBlock(markdown: string): unknown {
   const sections = [...markdown.matchAll(/^## Measurement contract\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm)];

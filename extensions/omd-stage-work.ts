@@ -10,6 +10,7 @@ const PUBLISHER_STAGES: Readonly<Record<string, string>> = {
   'ref research-set': 'reference-board', 'ref apply-set': 'reference-board',
   'grain set': 'content-grain', 'acquisition set': 'acquisition', 'candidate select': 'candidate-generation',
   'candidate plan': 'candidate-generation', 'candidate packet': 'candidate-generation',
+  'candidate capture': 'candidate-generation', 'candidate review': 'candidate-generation',
 };
 
 export const nativeOwnedStage = (path: string): string | undefined => /^\.omd\/\.cache\/sketches\/[A-Za-z0-9][A-Za-z0-9._-]*\//.test(path) ? 'candidate-generation' : NATIVE_STAGES[path];

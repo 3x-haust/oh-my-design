@@ -87,7 +87,10 @@ export function deliverPiReviewerProviderEvidence(payloadInput: unknown, evidenc
       for (const note of first.text.slice(marker.length + 1).split('\n')) {
         const matched = evidence.imageDimensions?.findIndex((dimensions, index) =>
           index >= nextImage && canonicalResizeHint(note, dimensions)) ?? -1;
-        if (matched < 0) throw new PiReviewerError('provider-evidence-drift');
+        if (matched < 0) {
+          throw new PiReviewerError('provider-evidence-drift', { reason: `unmatched host hint after image ${nextImage}: ${note.slice(0, 200)}; `
+            + `known originals ${JSON.stringify(evidence.imageDimensions ?? [])}` });
+        }
         nextImage = matched + 1;
       }
       first.text = marker;
@@ -123,10 +126,14 @@ export function deliverPiReviewerProviderEvidence(payloadInput: unknown, evidenc
   const currentText = parts === undefined ? piText(output.output, 'provider-output-text')
     : parts.filter(item => item.type === 'input_text').map(item => piText(item.text, 'provider-output-text')).join('\n');
   const images = parts === undefined ? [] : parts.filter(item => item.type === 'input_image');
-  const pendingDelivery = deliveredMarker && following === undefined;
+  // The session keeps only the marker, so every later turn (reasoning, a reply, another call) needs the exact text again.
+  const pendingDelivery = deliveredMarker && (following === undefined || following.role !== 'user');
   if ((currentText !== evidence.text && !pendingDelivery) || images.length !== evidence.imageCount
     || images.some(image => typeof image.image_url !== 'string' || !image.image_url.startsWith('data:image/'))) {
-    throw new PiReviewerError('provider-evidence-drift');
+    // Name the mismatch without echoing evidence content: lengths, counts and the leftover non-evidence text.
+    const extra = currentText.startsWith(evidence.text) ? currentText.slice(evidence.text.length, evidence.text.length + 300) : '';
+    throw new PiReviewerError('provider-evidence-drift', { reason: `text ${currentText === evidence.text ? 'equal' : `${currentText.length} vs ${evidence.text.length}`}`
+      + `, images ${images.length} vs ${evidence.imageCount}, pending ${pendingDelivery}${extra ? `, trailing ${JSON.stringify(extra)}` : ''}` });
   }
   const boundedOutput = parts === undefined ? marker : [{ type: 'input_text', text: marker }, ...images];
   const delivered = { role: 'user', content: [{ type: 'input_text', text: evidence.text }] };
@@ -154,9 +161,23 @@ export async function consumePiReviewerEvidence(configInput: unknown, signal?: A
       if (evidence.priorRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT) {
         throw new PiReviewerError('opaque-prior-renders');
       }
+      if (evidence.previousIterationRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT) {
+        throw new PiReviewerError('opaque-previous-iteration-renders');
+      }
       content = [];
       const projected: Record<string, unknown> = { ...evidence };
-      for (const field of ['renders', 'referenceRenders', 'priorRenders']) {
+      if (evidence.feedbackRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
+        throw new PiReviewerError('opaque-feedback-renders');
+      if (evidence.consultedReferenceRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
+        throw new PiReviewerError('opaque-consulted-reference-renders');
+      if ((evidence.designerCaseRenders !== undefined || evidence.designerCases !== undefined)
+        && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT) throw new PiReviewerError('opaque-designer-case-renders');
+      if (evidence.motionRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
+        throw new PiReviewerError('opaque-motion-renders');
+      if (evidence.pageIdeas !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
+        throw new PiReviewerError('opaque-page-ideas');
+      for (const field of ['renders', 'referenceRenders', 'priorRenders', 'previousIterationRenders',
+        'feedbackRenders', 'consultedReferenceRenders', 'designerCaseRenders', 'motionRenders', 'pageIdeas', 'temporalRenders']) {
         const rows = evidence[field];
         if (rows === undefined) continue;
         if (!Array.isArray(rows)) throw new PiReviewerError('opaque-renders');

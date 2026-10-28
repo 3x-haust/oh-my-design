@@ -8,7 +8,13 @@ export function observedProcessExecutableSha256(pid: number): string | undefined
   switch (process.platform) {
     case 'linux': path = `/proc/${pid}/exe`; break;
     case 'darwin': {
-      const observed = spawnSync('/usr/sbin/lsof', ['-a', '-p', String(pid), '-d', 'txt', '-Fpn'], { encoding: 'utf8', env: { PATH: '' }, timeout: 5000 });
+      // A loaded machine can stall lsof past one timeout; only a failed observation is retried, never a mismatch.
+      const lsof = (timeout: number) => spawnSync('/usr/sbin/lsof', ['-a', '-p', String(pid), '-d', 'txt', '-Fpn'], { encoding: 'utf8', env: { PATH: '' }, timeout });
+      let observed = lsof(5000);
+      for (const timeout of [10_000, 20_000]) {
+        if (observed.signal === null && observed.error === undefined) break;
+        observed = lsof(timeout);
+      }
       if (observed.status !== 0) return;
       const fields = observed.stdout.trim().split('\n');
       if (fields[0] !== `p${pid}`) return;

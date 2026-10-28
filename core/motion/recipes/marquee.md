@@ -20,17 +20,20 @@ Also: a marquee used because the designer ran out of content. If the marquee sto
 the page still makes sense, the marquee was decoration. If the list it contains would
 fit in a single static row, it should be a static row.
 
-The technique has a ceiling: one marquee per page. Two marquees, especially running at
-different speeds or in opposite directions, produce a kinetic noise floor that
-undermines everything around it.
+One marquee per page is a useful house-style starting point, not a universal ceiling.
+Multiple moving regions need stronger concept justification and direct testing because
+they can create a kinetic noise floor.
+
+An automatically moving marquee that lasts more than five seconds while other content
+is present needs a user-operable pause, stop, or hide mechanism under WCAG 2.2.2. Hover
+pause is a convenience, not that mechanism.
 
 ## Parameters
 
 ```css
 :root {
-  /* Time for one full loop at the content's natural width. Longer = slower.
-     A comfortable reading velocity: viewers can parse items at ~80px/s.
-     For a 1200px-wide content block: 1200 / 80 ≈ 15 seconds. */
+  /* Example time for one full loop at the content's natural width. Longer = slower.
+     Measure reading and distraction with the actual content and audience. */
   --marquee-duration: 18s;
 
   /* Gap between each item in the marquee track. */
@@ -51,7 +54,10 @@ immediately after the first copy; when the first copy has scrolled fully off-scr
 duplicate has arrived at the start position and the loop is seamless.
 
 ```html
-<div class="marquee" aria-hidden="true">
+<button type="button" class="marquee-toggle" aria-pressed="false">
+  Pause motion
+</button>
+<div class="marquee">
   <div class="marquee-track">
     <ul class="marquee-content" aria-label="Client roster">
       <li>Acme</li>
@@ -83,8 +89,12 @@ duplicate has arrived at the start position and the loop is seamless.
   animation-play-state: var(--marquee-play-state);
 }
 
-/* Pause on hover (interactive marquees only — remove for ambient ones) */
+/* Hover pause is optional convenience; the persistent button is the control. */
 .marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+.marquee.is-paused .marquee-track {
   animation-play-state: paused;
 }
 
@@ -105,6 +115,17 @@ duplicate has arrived at the start position and the loop is seamless.
   /* -50%: moves the track by exactly one copy's width, bringing the duplicate
      to the start position. The loop is seamless. */
 }
+```
+
+```js
+const marquee = document.querySelector('.marquee');
+const toggle = document.querySelector('.marquee-toggle');
+
+toggle?.addEventListener('click', () => {
+  const paused = marquee?.classList.toggle('is-paused') ?? false;
+  toggle.setAttribute('aria-pressed', String(paused));
+  toggle.textContent = paused ? 'Resume motion' : 'Pause motion';
+});
 ```
 
 ## React
@@ -158,6 +179,10 @@ function Marquee({
 }
 ```
 
+The React excerpt demonstrates the loop mechanics only. If it auto-runs for more than
+five seconds alongside other content, expose persistent pause/stop state in the rendered
+UI rather than relying on `whileHover`.
+
 ## Reduced-motion variant
 
 In reduced-motion context, the marquee must stop. A moving marquee for users with
@@ -186,9 +211,9 @@ static, wrapped list — the information is preserved, the motion is removed.
 
 ## Performance note
 
-`transform: translateX()` is a compositor-only property — the browser moves the layer
-on the GPU without touching layout. The animation runs at 60fps on all reasonable
-hardware with no main-thread involvement.
+`transform: translateX()` avoids layout changes and is usually cheaper to animate than
+layout properties, but it does not guarantee GPU execution, 60fps, or zero main-thread
+work. Profile the duplicated content at its real dimensions.
 
 The `animation-duration` drives perceived velocity, not the actual pixel distance per
 frame. As items are added to the marquee, the content becomes wider; the same duration

@@ -6,9 +6,8 @@ import { capturePiRequest, PiRequestBindingError, readPiRequest, requestDigest, 
 import { extractOmdWorkflowRequest, parseOmdWorkflowPrompt } from './omd-request-prompt.ts';
 import { routeValidationArgs } from './omd-route-bootstrap.ts';
 import type { PortablePiEvent } from './omd-runtime.ts';
-import { PiDirectionInputs } from './omd-direction.ts';
 import { observePiReviewPurpose, readPiReviewPurpose } from './omd-review-purpose.ts';
-import { isWorkflowResumePrompt, isExplicitWorkflowResumePrompt } from './omd-workflow-resume.ts';
+import { isWorkflowResumePrompt } from './omd-workflow-resume.ts';
 
 export type PiRequestBindingInfo = Readonly<{ source: 'pi-user-input'; sha256: string; characters: number; authoredRequestReplaced: boolean }>;
 export type PiBoundRouteInput = Readonly<{ args: readonly string[]; info?: PiRequestBindingInfo; dispose(): void }>;
@@ -16,13 +15,12 @@ const fs = nodeStableProjectFileSystem();
 
 /** User input is pending until Pi starts that exact prompt; queued and repair text cannot replace it. */
 export class PiRequestBindings {
-  readonly directions = new PiDirectionInputs();
-  private readonly pending = new Map<string, Array<{ text: string; source: 'pi-interactive' | 'pi-rpc'; request?: string; direction?: boolean }>>();
+  private readonly pending = new Map<string, Array<{ text: string; source: 'pi-interactive' | 'pi-rpc'; request?: string }>>();
   private readonly active = new Map<string, PiRequestSource>();
   private readonly suspended = new Set<string>();
   private readonly failures = new Map<string, PiRequestBindingError>();
   private readonly fullWorkflows = new Set<string>();
-  clear(): void { this.directions.clear(); this.pending.clear(); this.active.clear(); this.suspended.clear(); this.failures.clear(); this.fullWorkflows.clear(); }
+  clear(): void { this.pending.clear(); this.active.clear(); this.suspended.clear(); this.failures.clear(); this.fullWorkflows.clear(); }
   classificationGranted(cwd: string): boolean {
     return this.fullWorkflows.has(cwd) && this.active.has(cwd) && !this.suspended.has(cwd) && !this.failures.has(cwd);
   }
@@ -43,11 +41,9 @@ export class PiRequestBindings {
   receive(cwd: string, event: PortablePiEvent): void {
     if ((event.source !== 'interactive' && event.source !== 'rpc') || typeof event.text !== 'string') return;
     const mechanicalRequest = extractOmdWorkflowRequest(event.text);
-    if (typeof mechanicalRequest === 'string' || isExplicitWorkflowResumePrompt(event.text)) this.directions.renew(cwd);
-    const direction = mechanicalRequest === undefined && this.directions.receive(cwd, event);
     const pending = this.pending.get(cwd) ?? [];
     pending.push({ text: event.text, source: event.source === 'rpc' ? 'pi-rpc' : 'pi-interactive',
-      ...(typeof mechanicalRequest === 'string' ? { request: mechanicalRequest } : {}), ...(direction ? { direction: true } : {}) });
+      ...(typeof mechanicalRequest === 'string' ? { request: mechanicalRequest } : {}) });
     this.pending.set(cwd, pending);
   }
   activate(cwd: string, prompt: string): boolean {
@@ -61,11 +57,6 @@ export class PiRequestBindings {
     const candidate = pending[index];
     if (candidate === undefined) return false;
     pending.splice(index, 1);
-    if (candidate.direction) {
-      const valid = this.directions.activate(cwd, prompt);
-      if (valid) { const source = readPiRequest(cwd); if (source) this.active.set(cwd, source); this.suspended.delete(cwd); }
-      return valid;
-    }
     if (candidate.request !== undefined) {
       try {
         this.active.set(cwd, capturePiRequest(cwd, candidate.request));
@@ -111,19 +102,17 @@ export class PiRequestBindings {
     this.active.set(cwd, source);
   }
   materialize(cwd: string, args: readonly string[], source: PiRequestSource | undefined): PiBoundRouteInput {
-    const direction = args[0] === 'candidate' && args[1] === 'select' && this.directions.isPending(cwd);
-    if (source === undefined && !direction) return { args, dispose() {} };
+    if (source === undefined) return { args, dispose() {} };
     if (source && readPiRequest(cwd)?.recordSha256 !== source.recordSha256) throw new PiRequestBindingError('queued command belongs to a stale request');
-    const command = direction ? routeValidationArgs(['route', 'validate', ...args.slice(2)]) : routeValidationArgs(args);
+    const command = routeValidationArgs(args);
     if (command === undefined) throw new PiRequestBindingError('bound route input command changed');
     const bytes = readStableProjectFile({ root: cwd, path: resolve(cwd, command.inputPath), label: 'authored route input', fs });
     const input: unknown = JSON.parse(bytes.toString('utf8'));
     if (typeof input !== 'object' || input === null || Array.isArray(input)) throw new PiRequestBindingError('authored route input must be an object');
     const authoredRequestReplaced = source !== undefined && (!('request' in input) || input.request !== source.request);
-    const currentProcess = 'processPolicy' in input && input.processPolicy !== undefined;
-    const purpose = !direction && currentProcess ? readPiReviewPurpose(cwd, source!.request) : undefined;
+    const purpose = readPiReviewPurpose(cwd, source.request);
     if (purpose && 'reviewPurpose' in input && input.reviewPurpose !== 'ordinary' && input.reviewPurpose !== purpose.reviewPurpose) throw new PiRequestBindingError('authored review purpose differs from the genuine user/host origin');
-    const boundInput = direction ? this.directions.bind(cwd, input) : { ...input, request: source!.request, ...purpose };
+    const boundInput = { ...input, request: source.request, ...purpose };
     const directory = mkdtempSync(join(tmpdir(), 'omd-bound-route-'));
     const path = join(directory, 'input.json');
     try { writeFileSync(path, JSON.stringify(boundInput), { flag: 'wx', mode: 0o600 }); }

@@ -19,3 +19,11 @@ test('physical executable authentication survives a Node child renamed to pi', a
 test('invalid process identifiers never produce executable authority', () => {
   for (const pid of [-1, 0, Number.NaN, 1.5]) assert.equal(observedProcessExecutableSha256(pid), undefined);
 });
+
+test('a process that is gone answers at once instead of being retried as a stalled observation', async () => {
+  const child = spawn(process.execPath, ['-e', '']);
+  await new Promise(resolve => child.once('close', resolve));
+  const started = Date.now();
+  assert.equal(observedProcessExecutableSha256(child.pid!), undefined);
+  assert.ok(Date.now() - started < 5000);
+});

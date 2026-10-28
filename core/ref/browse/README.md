@@ -23,6 +23,7 @@ omd ref browse scroll [--direction down|up|left|right]
   [--amount <pixels>] [--selector <container-css>] [--ready-selector <css>]
 omd ref browse click (--selector <css>|--text <exact-label>) [--ready-selector <css>]
 omd ref browse similar (--selector <css>|--text <exact-label>) [--ready-selector <css>]
+omd ref browse cookie (--selector <css>|--text <exact-label>)
 omd ref browse back [--ready-selector <css>]
 omd ref browse shot [--selector <whole-item-img>]
   [--screen-id <id> --state <label>]
@@ -37,6 +38,8 @@ omd ref browse drop [<keep-id>] --reason <one-line-20..500-characters>
 omd ref browse contact-sheet [--page <positive-integer>] [--columns 2|3|4]
 omd ref browse status
 omd ref browse end [--reason complete|budget|saturated|interrupted]
+omd ref advance --json
+omd ref direction-review --json
 
 omd schema reference-analysis
 omd ref browse analysis-set --input <reference-analysis.json>
@@ -64,7 +67,7 @@ The profile is OMD-owned (`~/.omd/browser-profile`). CDP creates a separate prox
 
 Every owned reference context uses the DNS-pinned public HTTPS proxy, blocks service workers, WebSockets and unproxied realtime transports, and accepts only read-only requests. Purchases, checkout, trials, destructive controls, downloads and arbitrary form submission are excluded. A narrowly guarded GET search is the only automated fill/submit exception. Pricing requires additional consent. Stateful actions are serialized and paced; server Retry-After and transition-rate limits cause a refusal, never an internal retry loop.
 
-Cookie/consent overlays are recorded, not visually removed. Sensitive entry controls are masked, and obstructed/authentication/error/search-wrapper observations are not retained. Ambiguous text contrast is conservatively excluded from market claims without freezing, recolouring or suppressing the live page.
+Cookie/consent overlays are recorded, not visually removed. `cookie` clicks the notice's own necessary-only button: the model reads the label and judges the choice; the browser accepts only a form-free button inside the dialog or fixed layer, refuses purchase/account/pricing labels and any navigation. Sensitive entry controls are masked, and obstructed/authentication/error/search-wrapper observations are not retained; a search result's original image taken with `shot --selector` is the item, not the wrapper. Ambiguous text contrast is conservatively excluded from market claims without freezing, recolouring or suppressing the live page.
 
 Authenticated pixels are private, study-only material. No automatic commit, export or asset shipping occurs. `rights=allowed` is an accountable supplied rights judgment, not native license attestation.
 
@@ -110,11 +113,21 @@ discovery:  {kind:"recorded-browse", url, access:"public"|"user-session",
              qualityReason, session:{path,sha256}, entry:{seq,hash}}
 ```
 
-Native browse evidence does not pass a provider regex or endpoint whitelist. Independent families, distinct pixels, currentness, market claims, board use and strict completion remain required. Mixed legacy/browse lanes are supported. V5/v6/v7 keep their old parsing and artifact projections. Whole screenshots can enter the existing image-fragment board path without cropping; trace-backed fragments must preserve the entire parent image.
+Native browse evidence does not pass a provider regex or endpoint whitelist. Independent families,
+distinct pixels, currentness, market claims, direction admission, and strict completion remain
+required. Whole screenshots remain the comparison unit; trace-backed details preserve the entire
+parent image.
 
-Reference analysis is authored after inspecting the images. It binds native reference ids, exact image/capture receipts, observations of screen type/task/hierarchy/density/type/components, selected ids, and patterns `{pattern,referenceIds,decision:"apply"|"do-not-apply",reason}`. Its `screens` reuse the existing `ref apply-set` v2 type and parser. Every current domain surface must have direct/partial/brief-derived coverage; non-direct coverage requires a gap and decision. Unknown or wrong-lane ids refuse publication without replacing existing analysis.
+Reference analysis is authored after inspecting the images. It binds native reference ids, exact
+image/capture receipts, observations of screen type/task/hierarchy/density/type/components, selected
+ids, and patterns `{pattern,referenceIds,decision:"apply"|"do-not-apply",reason}`. Its `screens` use
+the retained v2 reference-analysis type and parser. Every current domain surface must have
+direct/partial/brief-derived coverage; non-direct coverage requires a gap and decision. Unknown or
+wrong-lane ids refuse publication without replacing existing analysis.
 
-`readWholeScreenReferenceHandoff` returns selected rights-allowed whole-screen image paths/digests plus analysis for Composer, Hand and the concept step. Unknown/restricted rights withhold pixels. Eye/Glance/fidelity or `--blind` get only source-free coverage metadata, without pixels, ids, URLs or maker rationale. Legacy selected-assembly APIs remain available; hosts should prefer this new surface when reference analysis exists.
+The public browse handoff is limited to `eye` and `fidelity`. It returns source-free coverage
+metadata without pixels, ids, URLs, or maker rationale. Unknown or restricted rights withhold
+pixels from every downstream transport.
 
 ## Debt and work integration
 
@@ -131,10 +144,16 @@ Visual saturation is conservative and advisory: two inspected directions, five n
 
 ## Deliberate current boundaries
 
-- No model credential entry, CAPTCHA/MFA handling, or manual-auth POST phase. Existing cookie-backed opted-in viewing works; storage-only/new-login requirements remain an access/capability gap.
+- Captchas: `challenge checkbox|click|drag|type` acts only on a recognised challenge page (Google's sorry page, a reCAPTCHA/hCaptcha/Turnstile frame or a challenge title), in pixels of the last screenshot. Read the challenge from that screenshot; tile clicks are free, but each challenge allows two submissions (checkbox, drag, typed answer, or a click with `--submit`), after which it refuses with `BROWSE_CHALLENGE_HANDOFF`: hand it to the person in profile/cdp mode or record the source as blocked and move on. Never a solving service, never a reload for an easier puzzle.
+- No model credential entry, MFA handling, or manual-auth POST phase. Existing cookie-backed opted-in viewing works; storage-only/new-login requirements remain an access/capability gap.
 - Popups are excluded rather than adopted as a second page; use an explicit public root where appropriate. No arbitrary existing CDP tab takeover.
 - Selector zoom details must match the kept viewport exactly. Image-coordinate zoom of original gallery media is not a separate command yet.
 - A driver loss before any authenticated checkpoint cannot be invented into browser continuity. Proven-prefix recovery is supported; ambiguous ownership requires diagnosis rather than killing/reusing a process.
 - The initial cycle is bounded and cannot be extended by restarting. A dedicated same-contract user budget-extension grant is not implemented.
-- Analysis/maker whole-screen admission is native-browse-first. Old component crops are not silently relabelled whole screens. Existing legacy/user-image APIs remain historical/explicit paths.
-- Host continuation, role allowlists, brief routing and prompt/protocol wording are outside this module's ownership. They must recognize the new work/debt outcomes and call the new maker/analysis surface; strict completion must not be weakened.
+- Whole-screen admission requires independent Eye classification for design browse keeps and retained
+  original images. A seal authenticates acquisition, not visual quality; follow `ref advance` to
+  `ref direction-review` after design collection. Support cannot authorize selection as direction.
+  Non-browse originals retain explicit image-use context, source-image digest and native dimensions;
+  they never acquire invented browse/DOM evidence. Old component crops are not relabelled whole screens.
+- Host continuation must recognize the retained work/debt outcomes and dispatch the public
+  `ref direction-review` admission command; strict completion must not be weakened.

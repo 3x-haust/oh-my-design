@@ -1,10 +1,11 @@
 # Human design loop protocol
 
-This is the durable contract for an OMD run. The adaptive route consumes the current task outcome,
-UX policy, evidence claims, reference-discovery decision, design axes, selected-model capability
-profile, decision-linked browser context, and validated-learning context. The user-selected model
-owns role, stage, and optional-method order within their actual dependencies; this protocol does not
-supply a universal sequence.
+This is the design-method reference pack. Ordinary execution is the single model-led `/ultradesign`
+path: the user-selected model chooses useful methods and bounded delegation, implements within the
+classified route, checks the first render, then finishes through `omd lifecycle finish`. It does not
+require a role relay, candidate tournament, written skip, or intermediate artifact for an unselected
+method. Owner and stage names later in this document describe specialized or historical method
+contracts, not the default execution sequence.
 
 `protocol/design-language.md` defines coordinator-owned translation of casual requests into scoped measurable targets and reference-search mechanisms. A picture-backed question clarifies meaning only; it is not routine candidate approval. Current translation is a prerequisite to affected design commitment, and a current feedback translation requires measured movement before refinement closure.
 
@@ -13,17 +14,55 @@ like a human": uncertainty-led tests, evidence-aware framing, independent altern
 critique, and scoped learning. It is a source-free method contract, not an additional stage gate.
 
 Scope lock, required outcomes, hard safety rails, project-write authority, activation, source sealing,
-final-v2 evidence, independent review, and user-selected-model ownership are mandatory. Optional work
-such as domain analysis, framing, discovery, copy isolation, typography proof, composition,
-divergence, art direction, reflection-in-action, reference-distance work, and refinement is present
-only when selected by the typed route. Every
-optional omission has a written reason. When a method is selected, its owner, artifact boundary,
-validation, browser fallback, and stop conditions in this protocol and its specialized protocol apply
-without weakening.
+final-v2 evidence, independent review, and user-selected-model ownership are mandatory. Optional
+methods are used only when they answer the current uncertainty. An unselected method needs no
+paperwork; a selected evidence contract keeps its artifact boundary, validation, browser fallback,
+and stop conditions without weakening.
 
 Reference discovery is selected from task need, uncertainty, and existing evidence. Selected
 discovery researches the named unresolved decision and stops at coverage. A justified skip uses and
 records sufficient existing evidence. No route has a universal capture or candidate quota.
+
+For ordinary model-led work, consulted external originals can be preserved without selecting
+the structured board workflow. Before contextual review, publish exact whole PNGs and reported
+source URLs with `omd ref context --input <json> --json` (`consulted-references-input-v2`).
+Every present record has exactly one primary. Each v2 image names a destination `component` and may
+name `state` as `default`, `hover`, `focus`, `pressed`, or `open`; omitted state defaults to
+`default`. Historical v1 inputs remain readable as `page/default`, but a current record still must
+contain exactly one primary.
+The owner checks request scope, contained original bytes, dimensions and digests before publishing
+a signed comparison-only record. This records reported consultation, not acquisition authentication,
+reference admission, selection, approval or human satisfaction. Missing context supplies no
+external-fidelity evidence; malformed or changed present context refuses rather than disappearing.
+Contextual early and final fidelity review receive the original pixels and opaque role/hash labels,
+not source locators or maker rationale. Blind final visual-quality review remains source-free.
+First-party candidate targets and rejected output baselines retain their separate evidence roles.
+Compare the original's whole visual identity, not only the few qualities implemented in production.
+For a primary consulted original, contextual early review must return a separate
+`referenceComparisons` assessment for each current production viewport, binding the
+exact original digest and current capture digest. Describe the original identity,
+preserved traits and material departures before issuing a comparison verdict.
+Typography character/weight/scale, proportions, grouping, density and control anatomy
+are visual evidence; a generic list/detail relationship is insufficient. Destination
+constraints justify only the departures they actually require. Supplemental material
+does not become an additional primary system, and a desktop original does not prove
+source mobile behavior. The model judges fidelity; code verifies coverage, hashes,
+closed verdicts and finding bindings, never natural-language keywords.
+Missing comparison refuses publication; failed or insufficient comparison requires
+viewport-matching unresolved findings and prevents retain. Signed rejected handbacks
+remain preserved without publishing the current review pointer. Historical v3 records
+remain readable under their original handback/task contract but cannot satisfy the
+current packet or unchanged-review reuse path. This is fidelity evidence, not
+source admission, absolute beauty or human satisfaction.
+
+For model-led completion, every non-Figma task other than the typed `copy-only-edit` route must have
+one request-scoped consulted primary before first-render publication. Figma exemption is based only
+on a structurally valid `figma.com/file/...` or `figma.com/design/...` URL in the authenticated
+request; malformed, stale, foreign-request, or changed consulted records still refuse even when
+such a URL exists. Final fidelity pairs consulted and product pixels only when component, named
+state, and fixed viewport correspond. Missing desktop or mobile product state coverage refuses
+before review. The fidelity handback returns exact digest-bound `consultedReferenceComparisons`;
+non-pass rows bind top-level findings and cannot coexist with GREEN reference fidelity.
 
 When `parallel-reference-acquisition` is selected, its Scout/Writer wave contract applies.
 Otherwise, parallelize independent searches, captures and lookups where useful, while preserving
@@ -58,7 +97,7 @@ classification in a fresh authorized route, then reissue all affected contracts 
 ## Domain analysis
 
 When the route selects domain analysis, it records `.omd/domain-brief.json`
-(`domain-brief-v1`, validated by `omd domain check`). A selected domain stage keeps its owner and
+(`domain-brief-v1`, validated where it is read, for example by `omd ref discover-plan`). A selected domain stage keeps its owner and
 checks; an unselected optional stage does not become mandatory by omission. This step
 identifies the domain, its canonical surfaces, its core objects, and its audience, and emits the
 scout's two-role reference queries (component design and top-tier craft). Every surface, object, and
@@ -69,10 +108,15 @@ code. The full contract is `protocol/domain-analysis.md`.
 
 ## Stack routing
 
-Default new web source to HTML/CSS and strict TypeScript, without a framework when a landing,
-marketing, or content page does not need one. Compile browser TypeScript to JavaScript; do not ship
-uncompiled TypeScript. Reach for a framework (React + Vite + TypeScript, or another) only when the user explicitly
-asks for one or the surface is a genuinely stateful application (dashboard, console, CRUD, editor).
+Default new web source to React + Vite + strict TypeScript, landings and marketing pages included,
+unless the user names another stack. Start it with `omd scaffold`, which copies the official Vite template
+into the route scope without touching material folders; hand-written `index.html`, Vite and TypeScript config
+drift apart and break the build. `core/guides/code.md` owns its folder layout and conventions. Write it the way a product team would review it: one component per
+section or reusable part in its own file, styles beside the components that own them, constants and copy
+kept out of markup logic, a package manifest whose `dev`, `build`, `typecheck` and `test` scripts call the
+real toolchain (Vite, `tsc`, Vitest with Testing Library rendering the components) rather than hand-rolled build scripts or a
+syntax check, and every file formatted the way the project's formatter would leave it — never packed onto
+long lines. `omd lifecycle finish` refuses packed hand-authored source (`SOURCE_NOT_READABLE`) and, in a new project, a file carrying several components or tests that never render them (`SOURCE_NOT_REVIEWABLE`).
 Always build in an existing repository's stack instead of replacing it — a package manifest, a build
 config, or files the user points at. A bare `index.html`/`.css`/`.js` with no manifest, next to an
 `.omd/` from a prior OMD run, is OMD's own leftover output, not a user stack, and never pins the
@@ -235,7 +279,8 @@ motion state through the native workflow. A locale supplies language mechanics, 
 same-language references can establish line density and wrapping without a cultural-fit claim.
 
 When imagery, crop, subject treatment, or spatial visual direction is the unresolved marketing
-decision, Codex checks its native image-generation tool before choosing a study method. Capability
+decision — as it is for a new landing's composition — Codex checks its native image-generation tool
+before choosing a study method. Capability
 alone does not select image-first exploration. Follow `theory/imagegen.md` for qualified early drafts,
 later reference-grounded selection, and code translation. Image generation is a native design tool,
 not an external harness, and a no-shipped-bitmap constraint does not prohibit a decision image.
@@ -294,19 +339,25 @@ Commit the direction count and its evidence-based rationale before generation. M
 ## Current human-design process
 
 A human-design-process-v1 route uses Frame requested scope + Scout whole-screen analysis + Writer
-real copy, then a minimal token seed and 2-3 real concepts of ONE representative surface with the
+real copy, then a minimal token seed and the justified number of real concepts of ONE representative surface with the
 same content/state/view set. Art Director owns seed/plan/aggregate direction; independent Sketch
 calls own separate source directories. Commit the plan before source. Structural mode is optional
 diagnostic work; visual-study explores structure, density and provisional type together. No final
 beauty floor, full component library or late composition prerequisite gates these decision samples.
 
-Present all actual previews with IDs and concise tradeoffs. Interactive sessions ask ONE routine
+Native Pi defaults to harness selection under its signed run policy. Produce each committed
+Sketch through native maker, measure through candidate capture, then use candidate review for
+isolated selection. The ordinary user never has to choose a reference or candidate.
+Present all actual previews with IDs and concise tradeoffs only for an explicitly interactive
+historical route or a host-enabled developer evaluation. Interactive sessions ask ONE routine
 question: which direction should be developed? Preserve the actual user answer and displayed inputs.
 Only explicit signed autonomy permits a fresh isolated Eye concept-selection; child execution,
 missing tools, checkpoint:none or silence is not consent. Current selection is not asked again.
 Changed consumed content, seed/overrides or previews stale it and require the same checkpoint;
 additive downstream tokens or unaffected scope additions do not. Typed await-user stops retries and
 full expansion, while representative inspection/repair/rendering remains available.
+Autonomous repeated-defect exhaustion instead preserves the artifact and reports unresolved
+limitations without another design question, retry or quality approval.
 
 Typesetter proves chosen type in real/dynamic containers. Composer formalizes only needed components
 and full surface/state/view expansion, then Hand implements every requested surface. Resolve the
@@ -933,7 +984,7 @@ writable, project-local, or replayed receipts fail closed.
 - Register default is part of the GREEN target and follows evidence, not a house style. A `marketing` surface may select the first-class `content-led`, `confident`, or `showpiece` register from the brief, audience, subject, and available material; `confident` is no longer the silent default. Content-led marketing may use a true-white canvas, readable density, ordinary flow, and no mandatory display moment or decorative carrier. A competent restrained page is not RED merely because it declines spectacle. Motion remains independent: `one` arises only from explicit policy or selected evidence. Product/tool surfaces remain quiet unless their task evidence supports another intensity.
 - Restrained-colour ambition is judged by legibility and content priority. A `confident` or `showpiece` direction may need stronger scale or structure when colour is restrained, but no universal display-scale moment is required. `SLOP-FLAT-STACK` is a prompt to inspect hierarchy, not an automatic failure; fail only when the rendered reading order or subject specificity collapses. Product and content-led surfaces may correctly use moderate type and true white.
 - Visual material is conditional on the communication job. Use supplied photographs, product imagery, data, or diagrams when they carry evidence or explanation; leaving relevant authentic material unused still needs a reason. When no image-specific job exists, a clear text-led marketing surface may ship without generated CSS/SVG ornament. Missing final art never authorizes a placeholder, decorative gradient, or fake screenshot: acquire the approved asset, recompose around available real material, or remove the image zone.
-- A shipped abstract/atmospheric AI asset is lawful only when exact prompt/provider provenance binds
+- A shipped abstract/atmospheric/illustrative AI asset is lawful only when exact prompt/provider provenance binds
   the stable-read current content-addressed `omd decision` record in this trusted project, that record
   binds the exact current invocation, and the host authorizes the purpose-bound project/invocation/
   decision-digest payload. Caller-computed hashes and `currentDecision` data are comparisons only;

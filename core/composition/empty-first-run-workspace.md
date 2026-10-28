@@ -1,6 +1,6 @@
 # Empty first-run workspace
 
-> Candidate hypothesis only. Revalidate its condition, values, states, and responsive transition against the current composition contract; do not transfer this page recipe unchanged.
+> Candidate hypothesis only. Revalidate its condition, values, states, and responsive transition against this page's content, brief and references; do not transfer this page recipe unchanged.
 
 A product-surface pattern for a usable product has no user-created objects yet and needs one clear first step. The work object, not decorative framing, owns the first viewport. See `core/theory/ux.md`, `core/theory/layout.md`, and `core/theory/components.md`.
 

@@ -15,6 +15,7 @@ import { nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { readPersistedRoute, adaptiveRouteRecordSha256 } from '../route/adaptive-route-persistence.ts';
 import { validateTrustedOutcomeEvidence, parseTrustedOutcomeProjection } from './final-v2-outcome-gate.ts';
 import { digest } from '../measure/identity.ts';
+import { hasPublishedTaskFlowBenchmark } from '../ref/reference-research.ts';
 
 export type MeasuredObservationBinding = Readonly<{
   observationSha256: string; browserObservationSha256: string; captureSha256: string;
@@ -34,7 +35,9 @@ export function loadMeasuredObservationBindings(root: string, invocation: Projec
   const route = readPersistedRoute(root, invocation);
   validateTrustedOutcomeEvidence({ root, invocation, branch: 'adaptive-omission', required: true, observations: loaded,
     expected: { routeSha256: adaptiveRouteRecordSha256(route), sourceContractSha256: route.sourceContractSha256, sourceContract: route.sourceContract,
-      buildSha256: invocation.current.buildSha256, entrySurfaceRequired: route.gates.includes('greenfield-task-flow-benchmark') } });
+      buildSha256: invocation.current.buildSha256,
+      entrySurfaceRequired: route.gates.includes('greenfield-task-flow-benchmark')
+        && hasPublishedTaskFlowBenchmark(root, route.sourceContractSha256) } });
   const latest = loaded.at(-1)!, aggregate = observationSha256s.at(-1)!;
   const outcome = parseTrustedOutcomeProjection((latest.evidence as Record<string, unknown>).trustedOutcome);
   const receipt = parseTrustedBrowserReceipt(JSON.parse(readBrowserProjectFile({ root, fs, code: 'INVALID_OBSERVATION_ARTIFACT', label: 'measured trusted receipt' }, fsPath(root, `.omd/trusted-browser-receipt-sha256-${outcome.receiptSha256}.json`)).toString('utf8')));

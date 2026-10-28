@@ -1,3 +1,0 @@
-interface:
-  display_name: "(omd) concepts"
-  short_description: "Dispatch the existing candidate-generation stage from minimal tokens to one authentic direction choice."

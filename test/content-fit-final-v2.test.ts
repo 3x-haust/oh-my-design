@@ -8,8 +8,6 @@ import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { contentGrainDecisionToken, contentGrainSha256, parseContentGrain } from '../core/content-grain/contract.ts';
 import { browserObservationSha256, designDecisionSha256, validateBrowserObservationDecisionLinks, type BrowserObservationCore } from '../core/runtime/browser-observation.ts';
 import type { DesignDecision } from '../core/deliberation/contracts.ts';
-import { validateAdaptiveFinalEvidenceV2Graph } from '../core/evidence/final-v2-adaptive-contract.ts';
-import { adaptiveFinalEvidenceV2RootHash } from '../core/evidence/final-v2-adaptive-files.ts';
 import { FinalV2ContentFitError, validateFinalV2ContentFitCurrentness } from '../core/evidence/final-v2-content-fit.ts';
 
 const sha = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
@@ -79,32 +77,6 @@ function fitProject(): Readonly<{
   return { root, descriptor, evidence };
 }
 
-function graph(contentFit?: Readonly<{ path: string; schema: string; sha256: string }>): unknown {
-  const routeHash = sha('route'); const authorityHash = sha('authority');
-  const stages = ['art-direction', 'copy', 'type-proof', 'composition'].map((id) => ({
-    id, status: 'skipped', reason: `${id} skipped`, routeSha256: routeHash, authoritySha256: authorityHash,
-  }));
-  const routeReceipt = (path: string, digest = sha(path)) => ({ path, sha256: digest });
-  const route = {
-    schema: 'adaptive-source-seal-route-v1', pointer: routeReceipt('.omd/route.json'),
-    record: routeReceipt('.omd/route-record.json', routeHash), sourcePointer: routeReceipt('.omd/route-source.json'),
-    sourceContract: routeReceipt('.omd/route-source-record.json'), authority: routeReceipt('.omd/route-authority.json', authorityHash),
-    selectedModel: {}, stages,
-  };
-  const omissions = [
-    ['board', 'reference-board'], ['selection', 'reference-selection'], ['artDirection', 'art-direction'],
-    ['handoff', 'art-direction'], ['usage', 'reference-selection'], ['renderedBeats', 'frame'],
-    ['staticEvidence', 'art-direction'], ['motionEvidence', 'motion-one'], ['typeProof', 'type-proof'], ['composition', 'composition'],
-  ].map(([id, routeSkipId]) => ({ id, status: 'skipped', routeSkipId, reason: `${routeSkipId} skipped`, routeSha256: routeHash, authoritySha256: authorityHash }));
-  return {
-    schema: 'final-evidence-v2-adaptive-omission-graph', activation: receipt('.omd/activation.json', 'activation-context-v2'), route, omissions,
-    copy: receipt('.omd/copy.md', 'copy-deck-v2'), sourceSeal: receipt('.omd/source-seal.json', 'source-seal-v1'),
-    buildIdentity: receipt('.omd/build.json', 'omd-build-identity-v1'), blindLane: receipt('.omd/blind.json', 'adaptive-blind-review-v1'),
-    fidelityLane: receipt('.omd/fidelity.json', 'adaptive-fidelity-review-v1'), protocolLane: receipt('.omd/protocol.json', 'adaptive-protocol-review-v1'),
-    ...(contentFit === undefined ? {} : { contentFit }), observations: [receipt('.omd/observation.json', 'observation-v2')],
-  };
-}
-
 test('selected content grain requires a current fit receipt', () => {
   const value = fitProject();
   try {
@@ -119,12 +91,6 @@ test('skipped content grain rejects an invented fit receipt', () => {
     assert.throws(() => validateFinalV2ContentFitCurrentness({ root: value.root, route: selectedRoute(false), contentFit: value.descriptor, observations: value.evidence }), code('CONTENT_FIT_FORBIDDEN'));
     assert.doesNotThrow(() => validateFinalV2ContentFitCurrentness({ root: value.root, route: selectedRoute(false), observations: value.evidence }));
   } finally { rmSync(value.root, { recursive: true, force: true }); }
-});
-
-test('content fit changes the final graph root', () => {
-  const withoutFit = validateAdaptiveFinalEvidenceV2Graph(graph());
-  const withFit = validateAdaptiveFinalEvidenceV2Graph(graph(receipt('.omd/content-fit.json', 'content-fit-receipt-v1')));
-  assert.notEqual(adaptiveFinalEvidenceV2RootHash(withoutFit), adaptiveFinalEvidenceV2RootHash(withFit));
 });
 
 test('current content fit tolerates an authenticated historical graph in its observation chain', () => {

@@ -53,7 +53,8 @@ export async function withZoomedLocalView<T>(root: string, entry: string, viewpo
   try {
     return await inspectionDeadline(async own => {
       const extension = fileURLToPath(new URL('./zoom-extension', import.meta.url));
-      const context = await own(chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, viewport, serviceWorkers: 'allow', acceptDownloads: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] }));
+      // Measured at rest: scroll reveals and entrances show their settled state under reduced motion.
+      const context = await own(chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, viewport, reducedMotion: 'reduce', serviceWorkers: 'allow', acceptDownloads: false, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] }));
       const served = await own(serveProjectEntry(root, entry, { spa: state !== undefined }));
       const origin = new URL(served.url).origin, blocked: string[] = [];
       await context.addInitScript(browserCallback(() => { Object.defineProperty(navigator, 'serviceWorker', { value: undefined }); }));

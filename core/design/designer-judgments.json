@@ -1,0 +1,871 @@
+{
+  "schema": "designer-judgments-v1",
+  "judgments": [
+    {
+      "id": "one-protagonist",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Several elements compete as the first thing seen: the navigation bar outweighs the hero message, a hero object looks accidentally small, or image, headline, search and buttons are all equally strong.",
+      "ask": "What is the single thing this view exists to communicate or get done, and is it visibly the strongest element?",
+      "move": "State the view's purpose in one sentence, give the element that serves it the dominant size, position or contrast, and step down everything else in clear stages, including navigation and branding.",
+      "why": "A view with one clear lead tells people where to start; equal competition forces them to work out the order themselves.",
+      "notWhen": "Screens built for parallel comparison of equal options, personalized multi-task dashboards, or deliberately restrained brand compositions do not need an artificial single hero."
+    },
+    {
+      "id": "emphasis-budget",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Shadows, glows, glass, gradients, outlines, or one saturated accent color repeat across backgrounds, cards, buttons, nav and footer, so nothing stands out more than anything else; or a strong hero graphic sits beside equally loud surrounding chrome.",
+      "ask": "If everything is emphasized, which one or two things is the screen actually spending its emphasis on?",
+      "move": "Treat strong effects and accent color as a limited budget: assign them to the one or two elements that carry the screen's purpose (primary action, selected item, key graphic) and step every competing surface, border, logo and nav back toward neutral so the chosen focus wins by contrast rather than by adding more.",
+      "why": "Emphasis only works relative to its surroundings; repeating the same effect or color everywhere spends contrast until hierarchy disappears.",
+      "notWhen": "When color or effect consistently encodes meaning (status, category, risk, interactivity) it must stay even if it repeats; deliberately maximal brand or immersive campaign surfaces may run hot if focus and legibility still hold."
+    },
+    {
+      "id": "subtract-until-it-points",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Every section stacks a kicker label, a numbered tag, a heading, a side note, a coloured caveat line, badges and an accent rule; small secondary texts outnumber the content they annotate, so no screen has a single point and reading it tires the eye. Caveats that come from the build's own rules (not copied, example only, not real results) are printed on the page.",
+      "ask": "Remove each label, tag, note, caveat, badge and accent in turn: does the visitor lose anything they need, and what is left that this screen is for?",
+      "move": "Subtract before adjusting. Keep one point per screen and the few supports that serve it; drop kicker labels and numbered tags that repeat the heading, notes that restate the body, and caveats that answer the build's own rules rather than a visitor's doubt, which belong in the report to the user. Repair weak hierarchy by removing competitors, not by adding emphasis.",
+      "why": "People reviewing AI-made interfaces name excess first: so many elements and accents that there is no point to look at and the information is tiring. Designers spend most of their effort deciding what to leave out.",
+      "notWhen": "Reference documentation, dense tools and data tables where the information itself is the task, and legal or safety notices the visitor actually needs."
+    },
+    {
+      "id": "hierarchy-without-color",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Title, body, metadata, numbers and units sit at similar size and weight, with hierarchy attempted through color, boxes or effects instead; or roles differ by only one tiny cue.",
+      "ask": "Without color and effects, can I tell the reading order from size, weight, spacing and position alone?",
+      "move": "Build the hierarchy first from relative size, weight, leading and spacing, and make each text role differ by more than one cue (for example size plus weight, or position plus tone); only then layer color and effects on top of a structure that already reads.",
+      "why": "Type and space hierarchy survives theme changes, color-vision differences and later decoration, while hierarchy carried only by effects collapses as soon as they change.",
+      "notWhen": "Where position, table structure or explicit labels already make roles clear, or brand typography and accessibility requirements constrain contrast, use those signals instead of forcing extra scale steps."
+    },
+    {
+      "id": "order-follows-the-decision",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Identifiers, codes, badges, tags, or navigation arrows read before the facts a user actually decides on (price, date, title, total, summary), or the reading order does not match the order of the decision.",
+      "ask": "What does the user need to know, in what order, to make the decision this screen exists for, and does the visual order match it?",
+      "move": "List the content by decision relevance, then align size, weight, position, and contrast with that order; demote internal identifiers, provenance, and non-actionable metadata, and place the action after the information that justifies it.",
+      "why": "Hierarchy that mirrors the decision sequence lets users scan straight to the facts that matter and act without hunting.",
+      "notWhen": "Reorder when the audience's priority differs: a booking number is the primary key at check-in, technology tags matter most to a technical audience, and safety, allergen, or accreditation details can outrank price."
+    },
+    {
+      "id": "spacing-shows-membership",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Gaps are uniform, or a label or price sits closer to the neighboring card than to its own; the space inside a group is equal to or larger than the space between groups, so membership is ambiguous.",
+      "ask": "Can I tell which elements belong together from spacing alone, and does the gap inside each group read clearly smaller than the gap around it?",
+      "move": "Tighten spacing within a group and widen it between groups so the spacing hierarchy expresses ownership; calibrate total whitespace for grouping and readability rather than maximizing or minimizing it.",
+      "why": "Proximity is the cheapest grouping signal and removes the need for extra lines or boxes; mixed spacing levels are a more common fault than too little total space.",
+      "notWhen": "When strong borders, backgrounds, or alignment already define groups, or in deliberately even comparison layouts and dense data tables, spacing does not need to carry the grouping alone."
+    },
+    {
+      "id": "one-boundary-per-unit",
+      "surfaces": [
+        "any"
+      ],
+      "look": "A card sits inside a card, or one region is separated by a background tint, a border, a shadow, and a divider at once; there are more visible containers than meaningful groups. On mobile, nested padding, floating bars with margins, and many panel splits push the content start inward and text has been shrunk to fit.",
+      "ask": "Is each boundary describing a distinct group, state, or interaction scope, or are several boundaries saying the same thing twice and eating space the content needs?",
+      "move": "Count boundary layers on a region and remove them one at a time; keep one separation device per purpose (space, tone, or line); regroup into fewer larger units where containers outnumber groups; diagnose whether perceived complexity comes from content volume or from repeated edges; on narrow screens restructure containers and columns before shrinking type.",
+      "why": "Redundant boundaries add visual volume, fragment structure, and make users interpret edges that carry no meaning; on narrow screens each layer compounds and steals content width.",
+      "notWhen": "Keep layered boundaries where they mark real component scope: independent selection, drag, loading, scroll, permission, error state, or where a dense data table needs lines to be read accurately; multi-region dashboards should prioritize group relationships over region count."
+    },
+    {
+      "id": "decoration-behind-content",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Connector lines, dividers, badges, ornament shapes, background patterns, or meta labels are the first things the eye lands on, ahead of the actual content; a screen with little content still feels busy.",
+      "ask": "If I mentally delete each decorative element one at a time, does the grouping or meaning survive, and what does the eye land on first?",
+      "move": "Identify the core content first, then lighten or remove lines and ornaments whose only job is to fill or enliven, treating decoration as a shared budget; fix alignment, type, and spacing before adding any surface effect.",
+      "why": "Decoration that outranks content reverses the reading order and often hides structural problems that remain once it is removed.",
+      "notWhen": "When the ornament itself is the brand asset or the thing being judged, when a line encodes flow, state, or data relationship, or when maximal density is the deliberate and validated direction."
+    },
+    {
+      "id": "same-role-same-treatment",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Back buttons, headers, titles, inputs, CTAs, filters or icons that serve the same role differ in size, position, radius or style across screens or sections of one page.",
+      "ask": "Do elements that mean the same thing look and behave the same everywhere?",
+      "move": "Define one treatment per role and reuse it across screens and steps, changing only state or variant; when a later screen reveals repeated drift, treat it as a system issue (type, spacing, button tokens) rather than patching each instance.",
+      "why": "Consistency lowers learning cost and implementation variance, and makes state differences readable because they are the only things that change.",
+      "notWhen": "When roles differ in meaning, risk, navigation level or interaction, a shared appearance creates false equivalence; define explicit variants instead of forcing one component."
+    },
+    {
+      "id": "icon-family",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Icons mixing filled and outlined styles, different stroke weights, corner characters, containers or detail levels within one set; icons that blur or lose meaning at their actual display size.",
+      "ask": "Do these icons read as one family at the size they are actually shown?",
+      "move": "Normalize icon sets by grammar (stroke, fill versus line, corner style, inner padding, complexity, active-state signal) before adjusting size, and judge them at real display size and pixel alignment.",
+      "why": "Mixed icon grammar fragments a component group and can falsely suggest state differences, such as filled reading as selected.",
+      "notWhen": "Official brand or platform icons, intentionally mixed illustrative styles, or systems that use different grammars to encode different roles should not be mechanically unified."
+    },
+    {
+      "id": "scale-at-rendered-size",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Type that looks right on a large design canvas but tiny on the phone capture, a heading tuned in isolation that now overpowers its neighbors, or sizes copied from a reference screenshot at the wrong scale.",
+      "ask": "At real device size and next to its neighbors, is each size proportionate, and did the last change break the balance around it?",
+      "move": "Tune type and component scale relative to surrounding volume and role, re-adjust leading and spacing whenever size changes, compare against familiar products rendered at the same output width, and after any local change reassess neighbors, reverting over-corrections.",
+      "why": "Perceived size depends on context and rendering; fixed numbers or canvas impressions mislead, and local fixes often unbalance adjacent elements.",
+      "notWhen": "Accessibility minimums, platform specifications and established design tokens are floors and contracts that comparative tuning cannot override."
+    },
+    {
+      "id": "simple-by-structure-not-shrinking",
+      "surfaces": [
+        "any"
+      ],
+      "look": "A minimalist look achieved by making secondary text small, thin and faint, so supporting information is hard to read.",
+      "ask": "Is this simplicity coming from structure, or just from shrinking and fading content?",
+      "move": "Achieve calm through spacing, fewer separations, clear type steps and defined color roles, and raise secondary text weight or contrast a step when it becomes too weak to read.",
+      "why": "Faintness is a proxy for minimalism that trades away legibility rather than reducing complexity.",
+      "notWhen": "Truly low-priority information can recede, but only within verified contrast and size floors; dense monitoring tools may need strong segmentation instead of airy calm."
+    },
+    {
+      "id": "designed-not-leftover-space",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Large empty areas appear because elements are small or a group stretches across the full page width; the instinct is to fill gaps with decoration; a narrow content group sits alone on a wide desktop.",
+      "ask": "Is this empty space allocated for rhythm and hierarchy, or is it residue of an unresolved structure?",
+      "move": "Distinguish group width from page width, use spare desktop width for related columns or a primary-plus-secondary split when reading order stays clear, and when spacing tweaks cannot fix emptiness or symmetry, rethink the component structure rather than adding ornament.",
+      "why": "Residual space looks unfinished, while designed space guides reading.",
+      "notWhen": "Dense task UIs, wide comparison tables needing full width, narrow viewports where forced columns break reading, and whitespace that is deliberate breathing room."
+    },
+    {
+      "id": "shared-alignment-axes",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Text, images, and CTAs start at slightly different edges; icons trail variable-length text at different positions; spacing between repeated elements wobbles by small amounts.",
+      "ask": "Are elements on a small set of intentional axes, and are the deviations deliberate or accidental?",
+      "move": "Establish a frame and common alignment axes first, snap content and repeated icons to them, separate intentional exceptions, and distinguish accidental drift from optical correction.",
+      "why": "Shared axes create continuity across sections and make deliberate exceptions read as intentional.",
+      "notWhen": "Intentional asymmetry on expressive pages, centred branding, optical centring of irregular shapes, and responsive sections with different density."
+    },
+    {
+      "id": "text-on-changing-images",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Headline, icons, or controls sit directly on photographs whose brightness varies; legibility depends on this particular photo; a uniform dark overlay flattens the image.",
+      "ask": "Would this text and these icons stay legible on the brightest and busiest image the slot could receive?",
+      "move": "Assume image variation and choose the treatment that fits: local gradient or dim, reducing image competition, or moving text to its own region; verify contrast instead of trusting appearance.",
+      "why": "Image slots in CMS-driven or rotating surfaces change, so a treatment tuned to one photo fails silently on the next.",
+      "notWhen": "A single fixed image with controlled negative space and verified contrast, or cases where the image must not be altered and text can simply live outside it."
+    },
+    {
+      "id": "real-content-extremes",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Every card shows a short one-line title, a single-digit badge, a tidy image, and exactly the demo item count; copied list rows keep empty slots or ghost icons; only one item is polished while the full set was never laid out.",
+      "ask": "What happens to this layout with the longest real name, two or three lines, a large count, a bright or busy image, many items, a narrow width, or an empty state?",
+      "move": "Judge components at realistic extremes and at full repeated density, design overflow, truncation, and expansion rules, and finish one unit including its exception states before replicating it.",
+      "why": "Static mockups with ideal data hide breakage, height jumps, and density problems that appear immediately in production.",
+      "notWhen": "Fields whose length or count is strictly fixed by contract and enforced, where reserving space for imaginary extremes only loosens the layout."
+    },
+    {
+      "id": "narrow-width-restructures",
+      "surfaces": [
+        "any"
+      ],
+      "look": "The mobile or narrow view is the desktop scaled down: tiny text, cramped inputs, illustrations squeezed beside copy, sidebars eating the work area, the hero cut off by short viewport height, or text shrunk to fit a narrow container.",
+      "ask": "At this width and height, does the core content and action survive, or has everything just been made smaller?",
+      "move": "Per breakpoint, decide what to drop, reorder, collapse, or move outside the container; grow the container or move text out rather than shrinking type, and scale line height and padding with type and control size.",
+      "why": "Shrinking trades legibility and touch usability for false fidelity; structure changes keep the task intact.",
+      "notWhen": "When the removed information is legally or decisionally essential (use summary or drill-down instead), when mobile has a genuinely different task deserving its own flow, or when height is a hard constraint like one-screen comparison."
+    },
+    {
+      "id": "action-ladder",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Several buttons on one screen share the same filled style; secondary links compete with the main action; a section's buttons are louder than the persistent sticky CTA; continue-shopping weighs as much as checkout.",
+      "ask": "Which action is the real decision point here, and do the other actions visibly step down from it?",
+      "move": "Rank actions by priority and express the ladder through fill, outline, size, and text treatment; treat the always-visible primary CTA as the ceiling no other element exceeds; keep secondary actions available but quieter.",
+      "why": "Equal emphasis forces users to compare buttons instead of acting.",
+      "notWhen": "Toolbars of genuinely equal actions, legally or safety-required equal exposure, and flows where continuing to browse is the intended goal."
+    },
+    {
+      "id": "states-distinct-and-stable",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Selected, hover, or active items differ from default only by colour or a small check; an active nav style changes label width; accordion icons do not match open state; inputs show no focus, error, or disabled state; interactive text looks the same as static text; conditional badges shift neighbouring controls.",
+      "ask": "Can each state be told apart without relying on one cue, and does changing state leave the surrounding layout still?",
+      "move": "Encode states redundantly (fill, border, weight, label), list the states each component really needs and check each is visible, keep geometry constant across states by placing conditional elements at stable ends, and give interactive elements a shape and treatment that static text never uses.",
+      "why": "Ambiguous or layout-shifting states cause mis-selection and make the interface feel unstable.",
+      "notWhen": "When extra state cues become louder than the primary action, when a state change must deliberately signal a mode switch, and when an icon convention is strongly learned in that product and has accessible labels."
+    },
+    {
+      "id": "appearance-predicts-behavior",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Different controls (text input, date picker, counter, filter input vs results, main vs sub banner) share an identical box; a single/multiple selection rule is not reflected in the control type; or an icon-only control resembles another familiar function (scan vs QR, plus for add vs navigate, a password eye copied onto an unrelated field) or a key commerce function is shown only as an icon.",
+      "ask": "Does each control's appearance predict what it will do, how many choices it allows, and could a first-time user confuse it with a lookalike?",
+      "move": "Preserve semantic differences between controls through form, length, or position; separate inputs from outputs visually; match glyphs to their conventional meaning and pair ambiguous icons with a task label or predictable menu; simplify small icons to their essential silhouette so they do not compete with labels.",
+      "why": "Visual uniformity that hides interaction differences, and lookalike symbols, lead users to misread or trigger the wrong action.",
+      "notWhen": "True variants of one component should keep a shared structure; platform-established icons with accessible names under tight space can stay unlabeled; a glyph with a product-specific, clearly labeled function is fine."
+    },
+    {
+      "id": "color-has-roles",
+      "surfaces": [
+        "any"
+      ],
+      "look": "The brand or point colour appears on many buttons, tabs, prices, labels, and backgrounds at once; several accent hues compete; a red delete or green confirm button is the loudest thing on the screen regardless of its importance.",
+      "ask": "Does each strong colour on this screen correspond to one role (primary action, selection, warning) and is any colour loud only because of its hue?",
+      "move": "Assign colour by role and spend saturation only on the primary action, the current selection, and genuine alerts; desaturate secondary text and card backgrounds; set action prominence by priority and reversibility, not by the semantic colour of the verb.",
+      "why": "When every element is equally coloured nothing reads as important, and colour semantics can accidentally hijack the action hierarchy.",
+      "notWhen": "Monitoring screens where colour reliably encodes status, brand-led marketing where colour is the message, and confirmation or error steps where risk must be loud."
+    },
+    {
+      "id": "chrome-earns-its-space",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Tall two-tier headers, sticky bars or always-open search and menus permanently occupying a large share of a small viewport; long multi-section pages without any way to jump between sections.",
+      "ask": "Does each always-visible element justify the space it permanently takes from content?",
+      "move": "Weigh the structural cost of persistent chrome first: compact sticky areas without shrinking their targets, collapse low-frequency search or menus into expandable or overlay states, let sticky regions keep only the context or action that must stay visible, and add section navigation only where the page is long enough.",
+      "why": "Persistent elements tax every scroll position, so their footprint matters more than any single decoration.",
+      "notWhen": "When search or navigation is the core task, discoverability and keyboard access need persistent exposure; few sections do not justify extra navigation."
+    },
+    {
+      "id": "header-stays-in-reach",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "On a page several screens long the header scrolls away with the content, so moving to another section or the main action means scrolling back to the top; or a fixed header covers the heading an in-page link lands on.",
+      "ask": "Halfway down this page, can the visitor still reach the navigation and the main action, and does every in-page link land its heading in view below the header?",
+      "move": "Keep a compact header in view on long pages (sticky or fixed, its own background so content passing under it stays readable, a hairline once content scrolls beneath) and give in-page targets scroll-margin-top equal to the header height. Keep its footprint small and its navigation plain words.",
+      "why": "Of 26 finished landings with a conventional header, measured on 2026-10-23, 25 keep it fixed or sticky; NN/g finds persistent navigation saves return scrolling when it stays small and readable.",
+      "notWhen": "Short pages of one or two screens, immersive story pages where a fixed bar would break the scene, and documents with their own persistent table of contents."
+    },
+    {
+      "id": "image-frame-rules",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Thumbnails of the same content type use several different aspect ratios, show stretched or squashed subjects, or the same product appears with different crops in different slots.",
+      "ask": "Do repeated images follow one predictable ratio and crop rule, and do hero or banner slots work with the images that will actually be supplied?",
+      "move": "Unify ratios for the same content role, set explicit crop and fit rules, distinguish size change from ratio change, and validate templates against real supplied assets; give data-driven repeated content strict slots and leave curated banners room for individual art direction.",
+      "why": "A ratio contract keeps grids stable, prevents distortion, and lowers the production and CMS cost of every new asset.",
+      "notWhen": "Slots with genuinely different roles (hero versus thumbnail), user-generated media, or content whose original proportions carry meaning may need their own ratios."
+    },
+    {
+      "id": "readable-long-text",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Paragraphs span the full width of a wide screen, long body text is centered, dense feature prose has no sub-headings, or long answers and articles use one size and tone for title, body and source.",
+      "ask": "Can someone scan this long content and read a line comfortably without losing their place?",
+      "move": "Constrain text measure and grow outer margins on wide screens, start multi-line text on a consistent edge, break prose into scannable titles with subordinate explanations, and give titles, body, sources and dividers distinct role styles.",
+      "why": "Line length, start alignment and role styling govern how easily long text is scanned and re-entered.",
+      "notWhen": "Data tables, timelines and immersive canvases benefit from full width; short headlines may center; RTL and vertical scripts need their own rules; nuanced sequential text should not be chopped into slogans."
+    },
+    {
+      "id": "entry-states-the-offer",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "The first viewport shows a generic slogan or company self-description with vague modifiers; a newcomer cannot tell what is offered, to whom, or what to do next; the product's defining action is buried.",
+      "ask": "Could a first-time visitor say what this is, why it matters to them, and what to do next from the entry viewport alone?",
+      "move": "Make the offering, delivery channel or category, audience benefit, and the dominant next action explicit at entry; surface the product's defining goal as a primary control near the top when one exists.",
+      "why": "The entry viewport is where relevance is decided; abstraction there pushes the explanation burden onto the visitor.",
+      "notWhen": "When users must choose among genuinely different high-priority journeys or satisfy prerequisites first, and never by inventing capabilities or specifics the service cannot back."
+    },
+    {
+      "id": "section-rhythm",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Consecutive sections share the same height, proportion, density, image intensity, or shadow treatment, so a long page feels monotonous and crowded; or a background change between sections is too subtle to read as a transition.",
+      "ask": "Does the page have a rhythm of strong, small, and resting sections, or is every section the same template at the same volume?",
+      "move": "Vary scale and intensity deliberately: follow a strong visual section with a quiet one, interleave calmer images among saturated ones, reserve shadow or emphasis for selected sections, and when breaking rhythm do it with a clear purposeful contrast.",
+      "why": "Uniform repetition flattens priority and fatigues scanning on long pages.",
+      "notWhen": "Precise comparison tables and lists where equal size ensures fairness and scan efficiency should stay uniform; never weaken a continuous task for decorative rhythm."
+    },
+    {
+      "id": "concept-in-structure",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A claimed style (editorial, minimal, whitespace-led, renewed) is signaled only by a surface token such as a white background, one line, or a corner ornament while the composition is fragmented or unchanged; a motif appears in one section only; or linked sections and frequently visited screens look like different sites.",
+      "ask": "Is the intended concept expressed by the relationships among elements and recurring consistently enough to read as intentional, and does a redesign still contain the defect it claimed to fix?",
+      "move": "Decompose the claim into content order, information structure, interaction, and expression; check image character, tone, mass, and title hierarchy rather than single tokens; reapply the original problem definition to the new version; carry the motif and shared grammar (heading treatment, lines, spacing, brightness, layout relationships) across containers, backgrounds, media, and linked screens, keeping it out of controls where it harms recognition.",
+      "why": "Surface tokens alone do not create a higher-level impression, restyling can be mistaken for problem solving, and consistent recurrence makes an art direction legible instead of accidental.",
+      "notWhen": "A deliberate reskin may change only the expression layer; clearly signaled mode or campaign sections may differ; segmentation serving real grouping should remain in a whitespace concept; repeating one shape everywhere can add needless density."
+    },
+    {
+      "id": "materials-before-layout",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Sections laid out first and filled afterwards: placeholder copy at one weight, images picked to fit the box, numbers invented to fill a card, so the layout decides the content instead of the content deciding the layout.",
+      "ask": "Were the real materials — copy written with its hierarchy, the data each component shows, and the key images — made before the sections were composed, and does the layout follow from them?",
+      "move": "Make the materials first: write the copy in priority order (what is the title, what supports it, what is detail), structure the data each component shows, and produce the key images or graphics. Then assemble from the smallest unit up — item, card, group, section, page — so each step only arranges materials that already exist.",
+      "why": "Layout follows naturally from content whose hierarchy is already decided; boxes drawn first get filled with generic material and read as average.",
+      "notWhen": "A bounded edit to an existing page whose content is fixed; exploratory sketches whose job is to test a structure before content exists."
+    },
+    {
+      "id": "one-visual-brief-for-the-image-family",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Images or graphics made one at a time, each with its own light, colour temperature, material, framing and margin, so the set looks collected from different sources even though every piece is decent.",
+      "ask": "Is there one written visual brief — light and its colour temperature, material and finish, framing and margin, background — that every image follows, with only the subject or the section's claim changing?",
+      "move": "Write the invariants once (for example a warm 3,800K key light, matte black aluminium, frontal framing, generous margin, a backdrop matched to the page) and the per-item variables separately (the subject's form, the section's protagonist). Make every image or graphic from that pair, and when one drifts, repair it against the brief rather than restyling the rest.",
+      "why": "Consistency comes from shared decisions applied to every piece; a family made ad hoc never looks like one brand.",
+      "notWhen": "User-supplied photography that cannot be reshot; deliberately eclectic editorial collages whose brief is variety."
+    },
+    {
+      "id": "backdrop-matches-the-page",
+      "surfaces": [
+        "marketing",
+        "product"
+      ],
+      "look": "Product photos or rendered graphics sitting in visible rectangles because their backdrop is a slightly different tone from the page, so every image reads as a pasted box.",
+      "ask": "Where an image should sit in the page rather than on it, does the page or section background match the image's own backdrop, including in other themes or times of day?",
+      "move": "Pick the section background from the images' backdrop (or render the images on the page's background) so objects float in the same space; when the theme changes, change both together. Keep a visible frame only where the frame itself means something.",
+      "why": "Matched backdrops make objects belong to the page and let light and shadow carry depth; mismatched ones add accidental boundaries.",
+      "notWhen": "Galleries and user content whose images vary; editorial layouts where the photograph's own edge is part of the composition."
+    },
+    {
+      "id": "interaction-follows-a-brand-value",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Transitions and effects chosen because they are available or fashionable — fades everywhere, a parallax here, a marquee there — with no stated reason tied to what the brand promises.",
+      "ask": "Which named brand or product value does each interaction express, and is the pattern called by its proper name with a reference for how it should behave?",
+      "move": "Name the value (for example continuity) and pick the interaction that enacts it (a shared-element transition that carries the selected image into its detail page, a filter that morphs instead of blinking). When you can describe an effect but not name it, ask what the pattern is called and find references of it working before building it.",
+      "why": "Interactions read as designed when they enact the brand's idea; generic effects added for liveliness read as template.",
+      "notWhen": "Utility interactions whose only job is speed and clarity; reduced-motion contexts, where the value must be carried without movement."
+    },
+    {
+      "id": "repair-at-the-decision",
+      "surfaces": [
+        "any"
+      ],
+      "look": "A section that feels thin or off gets patched on the screen — an extra card, a bigger image, another effect — while the purpose, structure or direction that produced it stays unchanged, so the next screen repeats the problem.",
+      "ask": "Is this weakness local, or does it come from a missing or wrong decision in the purpose, the structure or the visual direction, and has that decision been revised before the screen?",
+      "move": "Trace the problem to the decision it came from (a missing story beat between hero and products, an unstated image rule, a component that was never planned), revise that decision in writing, then rebuild the affected units from it.",
+      "why": "Fixing the source keeps the whole page consistent and makes later changes predictable; patching symptoms accumulates exceptions.",
+      "notWhen": "Pure implementation defects (a clipped label, an overflow, a broken state) whose cause is local."
+    },
+    {
+      "id": "section-answers-the-visitor",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A section narrates how the product works inside — its loop, pipeline, numbered internal steps or architecture — where the visitor only needs what it does for them and why to believe it; or several sections restate the same promise in different shapes, so the page grows long without saying more.",
+      "ask": "Which question a visitor actually has does this section answer, and would anyone miss it if it were gone?",
+      "move": "Order the visitor's questions (what is it, what do I get, why believe it, how do I start) and keep one section per question; cut or merge the rest. Show the mechanism only as evidence for a promise, acted out in one graphic, not as a numbered explanation of the maker's process.",
+      "why": "People reviewing generated landings name excess first: every block explains, so nothing stands out and reading tires. Finished landings measured for this spend each screen on one claim and let a graphic or the product carry it.",
+      "notWhen": "Pages whose visitor operates the mechanism itself (API references, pipeline or settings documentation, onboarding where the steps are the task)."
+    },
+    {
+      "id": "proof-answers-a-doubt",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Trust sections use generic badges, vague stats, stock faces, or boilerplate FAQs; project previews lack the sector, type, or context needed to judge relevance.",
+      "ask": "Does each proof element answer a specific doubt a buyer would have, with concrete and verifiable detail?",
+      "move": "Replace generic credibility with concrete stories, figures, faces, and process evidence tied to stated differentiators; add enough metadata to previews that relevance is visible before click-through.",
+      "why": "Specific, attributable evidence persuades; generic proof reads as filler.",
+      "notWhen": "Never fabricate numbers, clients, or testimonials; omit details that are sensitive or better handled by filtering and dedicated case pages."
+    },
+    {
+      "id": "ask-matches-readiness",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A signup, donation, subscribe, or purchase CTA appears before the page explains the offer, or only one high-commitment action exists for all visitors.",
+      "ask": "Has the page delivered enough value to justify the ask at the point where the ask appears, and is there a path for visitors who are not ready yet?",
+      "move": "Sequence need, offer, and benefit before the primary ask while keeping a direct action for already-convinced visitors; add a secondary path (learn more, contact, smaller commitment) for those needing context, and state what the visitor receives.",
+      "why": "Unfamiliar visitors cannot evaluate a commitment without context, while ready visitors should not be slowed.",
+      "notWhen": "Do not delay critical actions for returning, urgent, or high-intent users; never move an action ahead of mandatory disclosure or consent; avoid competing CTAs when the task is simple."
+    },
+    {
+      "id": "show-the-real-thing",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A hero or section uses generic scenery, an enlarged icon, a clichéd illustration, or an image whose state does not match the section's product or action.",
+      "ask": "Does this image help the visitor understand the actual product, service, or action, or does it just fill space?",
+      "move": "Choose or crop imagery that depicts the product in use, the service behavior, or the category, matching the section's action and the polish of the surrounding design; vary image strength across a set rather than lining up equally pretty pictures.",
+      "why": "Specific imagery makes intangible offers easier to imagine; generic imagery weakens an otherwise tailored layout.",
+      "notWhen": "Where scenery is the product, heritage imagery is the message, rapid recognition matters more than novelty, or the offer is sensitive or abstract, use the fitting alternative (diagram, demonstration, neutral visual). Software that runs is not abstract: its own output is the real thing."
+    },
+    {
+      "id": "moving-content-needs-control",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A carousel, slider, or gallery with no position indicator, no visible arrows, auto-rotation without pause, or crucial information placed only inside rotating slides.",
+      "ask": "Can users tell there is more, where they are, and control the pace, and is anything essential trapped in the rotation?",
+      "move": "Provide explicit direction controls, current/total position, pause for auto-rotation, and selected thumbnails; keep crucial information outside rotating content; check that each page actually adds distinct content and present a time-sensitive priority as its own module with a clear action.",
+      "why": "Hidden or system-paced content is easily missed and burdens users who must wait or notice small controls.",
+      "notWhen": "A single static banner needs no controls; a carousel is acceptable for secondary content with adequate controls and accessibility; panels suit a few items only when simultaneous comparison is not needed."
+    },
+    {
+      "id": "states-as-a-set",
+      "surfaces": [
+        "product"
+      ],
+      "look": "Only the ideal default state is shown; no empty, loading, typing, submitted, error, selected, hover, expanded, permission-dependent or after-deletion views exist (requires state captures to verify).",
+      "ask": "For each state this screen passes through, what appears, what disappears, and which action changes?",
+      "move": "Lay out the states in sequence or as a matrix and check each one for leftover elements, missing feedback and changing actions; design resting and interactive states together so space for hover, focus and expansion is reserved from the start.",
+      "why": "Static single-state mockups hide logical contradictions, such as suggestions lingering after submit or controls that never appear, that only show up in transitions.",
+      "notWhen": "Truly static content with a single server-defined state, or states explicitly excluded from scope, do not need a full matrix; touch-only contexts need tap and focus rules instead of hover."
+    },
+    {
+      "id": "container-fits-the-items",
+      "surfaces": [
+        "product"
+      ],
+      "look": "Comparison data like prices and change rates rendered as loose decorative cards, image browsing forced into dense text lists, a long option set hidden behind a slider, or items paginated in ways that hinder comparison.",
+      "ask": "Is this list, grid, table or picker the right shape for how people use these items?",
+      "move": "Assign lists to detail comparison, grids to visual browsing, tables with column headers to cross-item attribute comparison, and choose expansion versus search or scrolling pickers by option count and memory load.",
+      "why": "Display patterns carry different scanning paths; matching the pattern to the task makes comparison or browsing faster.",
+      "notWhen": "When users must compare images and details at once, a mixed card or a view switch may fit better; few items with rich narrative may suit cards over tables."
+    },
+    {
+      "id": "rare-detail-recedes",
+      "surfaces": [
+        "product"
+      ],
+      "look": "Every repeated card shows full specs, options or per-item controls; long terms or technical text sit inline inside a form; mobile lists render all items compressed.",
+      "ask": "Does everyone need this detail all the time, or only once they show interest?",
+      "move": "Keep the shared, decision-relevant summary always visible and move variable options, deep specs, long supplementary text and rarely used controls behind expansion, a follow-up step or a separate surface, indicating how much is hidden and keeping the current choice visible.",
+      "why": "Revealing depth on demand cuts repetition noise during scanning while keeping full information reachable.",
+      "notWhen": "Information needed before acting (safety, eligibility, pricing conditions, legal disclosures) or values required for side-by-side comparison must stay visible; hover-only disclosure needs a touch alternative."
+    },
+    {
+      "id": "control-position-shows-scope",
+      "surfaces": [
+        "product"
+      ],
+      "look": "A search, filter, or sort control sits inside one tab or card while affecting the whole page (or the reverse); sort and filter are mixed in one control; controls sit far from the object they manipulate; the next action after finishing a list is out of reach.",
+      "ask": "From where this control sits, can I predict what it will change and where I will be when I need it?",
+      "move": "Place controls inside the container whose content they affect and above it when they affect everything; separate controls, active conditions, and result summaries by cause and effect; put follow-up actions where the task ends, and separate mode switches from close or destructive actions.",
+      "why": "Spatial containment is the cheapest scope signal, and placement at the point of need cuts travel and misclicks.",
+      "notWhen": "Explicitly designed composite controls with clear labels and state, long or virtualized lists where a sticky or top-level action is more discoverable, or overlaps that hide content."
+    },
+    {
+      "id": "form-asks-what-the-step-needs",
+      "surfaces": [
+        "product"
+      ],
+      "look": "Long forms with fields that could be collected later; placeholder-only inputs whose meaning disappears after typing; long terms or supplementary text inside a small scrolling box in the form.",
+      "ask": "Is every field needed for the very next step, and does each keep its meaning after it is filled?",
+      "move": "Cut or defer fields not needed now, keep persistent visible labels, and move long supplementary material to a separate readable surface so the core input path stays short and clear.",
+      "why": "Each extra field and ambiguity adds abandonment risk and harms error recovery.",
+      "notWhen": "Fields required for routing, eligibility, legal consent or security must stay; floating labels are acceptable only if they remain readable and accessible through autofill and error states."
+    },
+    {
+      "id": "overlay-fits-the-task",
+      "surfaces": [
+        "product"
+      ],
+      "look": "Action buttons or text cover the subject of a photo or a functional map; hover states hide the content; modals lack a visible close, scroll the page behind, or interrupt unrelated tasks.",
+      "ask": "Is the overlay hiding the very content the user needs, and can they dismiss or move through it?",
+      "move": "Move related actions to a clear group outside functional content, keep content visible in hover states, scroll long modal content inside the modal, give minimal overlays an explicit close, and reserve interrupting overlays for task-relevant or required moments.",
+      "why": "Overlays that obscure content or trap users trade the task for the interface.",
+      "notWhen": "Direct in-context manipulation with verified contrast and target size, legal consent or authentication gates, and intended reveal interactions with touch alternatives."
+    },
+    {
+      "id": "encodings-carry-meaning",
+      "surfaces": [
+        "product"
+      ],
+      "look": "Charts use color bands, blanks, line styles, or heights whose meaning is not stated; a chart repeats what an adjacent number already says; table dividers run in a direction unrelated to the record unit; orientation causes truncation.",
+      "ask": "Can each color, line, gap, and axis in this display be explained in one sentence, and does it add information?",
+      "move": "Verify reference points and encodings before styling, keep emphasis only on the key axis, add low-contrast guides to link values to axes, orient tables and charts along the comparison and growth direction, and design tables from longest content and importance before adding minimal lines.",
+      "why": "Decorative differences are read as data differences; legibility comes before visual novelty.",
+      "notWhen": "Purely decorative graphics, or analysis screens where trends need the chart even when numbers are present."
+    },
+    {
+      "id": "hit-area-matches-intent",
+      "surfaces": [
+        "product"
+      ],
+      "look": "Small icons or text links packed tightly, adjacent tap targets nearly touching, or a sticky bar shrunk until its controls are tiny.",
+      "ask": "Even if it looks small, is the actual tappable area large and separated enough to hit reliably?",
+      "move": "Judge controls by their touch or click area and distance from neighbors rather than their visible glyph; extend padding around small icons and text menus, and reduce persistent bar footprint without shrinking targets.",
+      "why": "Visual size and operable size are different; mis-taps come from the latter.",
+      "notWhen": "Non-interactive elements, or controls whose hit area already exceeds their visual bounds, should not be judged by appearance; exact minimums depend on platform and input method."
+    },
+    {
+      "id": "first-view-signals-more",
+      "surfaces": [
+        "marketing",
+        "product"
+      ],
+      "look": "The first viewport is fully occupied by a hero or search area with no hint of content below; horizontal carousels show neither a peeking next item, arrows nor indicators; a page count is visible without controls to move.",
+      "ask": "Can people see that more exists and how to get to it?",
+      "move": "Size the first view to the actual content structure so part of the next content or the key entry action shows; for carousels, reveal a partial next item or an indicator and pair any status display with a real control.",
+      "why": "Hidden continuation reduces discovery of below-the-fold and off-screen content, especially on mobile.",
+      "notWhen": "Focused single-task screens (a search landing, an immersive hero) may intentionally fill the view; when all items are visible or another navigation model is clear, extra cues are noise."
+    },
+    {
+      "id": "price-is-traceable",
+      "surfaces": [
+        "marketing",
+        "product"
+      ],
+      "look": "Prices lack a billing period or unit; the final total appears without item amount, discount, shipping, or coupon lines; the area near the buy button is dominated by brand story or description instead of price, benefits, delivery, and options.",
+      "ask": "Can a buyer reconstruct the final amount and its conditions from what is shown next to the purchase action?",
+      "move": "Decompose the price into its components with the unit and cadence attached, place decision information (price, benefit, delivery, options) next to the main action, and keep setup benefits near setup costs without obscuring totals.",
+      "why": "Purchase decisions stall when the cost is not explainable at the moment of commitment.",
+      "notWhen": "Single fixed-price products where extra rows add noise, models where taxes or shipping are only known later (label them as estimates), and high-involvement products where prior explanation must lead."
+    },
+    {
+      "id": "compare-on-shared-axes",
+      "surfaces": [
+        "marketing",
+        "product"
+      ],
+      "look": "Comparable attributes sit at different positions in each card; prices float without row alignment to their descriptions; a product grid uses extra width to enlarge cards rather than show more comparable items.",
+      "ask": "If the user's job is comparison, are the same attributes on the same line across items?",
+      "move": "Align comparable attributes on shared scan lines or table cells, centralise repeated labels, pair descriptions and prices on separate aligned columns, and decide a comparable items-per-row count before sizing cards.",
+      "why": "Comparison is a visual alignment task; misaligned attributes force memorisation.",
+      "notWhen": "Attributes that are not genuinely comparable, sequential explanations, very many alternatives better served by filters, and single-product immersive flows."
+    },
+    {
+      "id": "evidence-beside-commitment",
+      "surfaces": [
+        "marketing",
+        "product"
+      ],
+      "look": "Delivery, return, renewal, or total-cost information is hidden in the footer or late in checkout; testimonials and trust signals are far from the action; a sign-up box has no stated benefit; the selected plan is not reviewable at checkout.",
+      "ask": "At the moment of committing, can the user see what it costs, what happens next, and why to trust it?",
+      "move": "Place cost terms, plan summary with a change affordance, process steps, and credible proof adjacent to the commitment point; repeat the primary action after substantive content; pair sign-ups with a concrete benefit and answers to predictable objections.",
+      "why": "Risk and evidence near the decision reduce uncertainty more than the same content elsewhere.",
+      "notWhen": "When costs genuinely depend on later inputs (show ranges or rules instead), or proof cannot be substantiated."
+    },
+    {
+      "id": "display-type-carries-voice",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Headline, body, buttons and labels all share one neutral default sans at the same few weights, so the page reads like an unconfigured starter; or the opposite, a strongly characterful face is spread across navigation, tables and small UI until it shouts everywhere.",
+      "ask": "Does the display typography say something about this particular brand or offer, and is that voice confined to the places where it can be heard without hurting reading?",
+      "move": "Pick the headline face from the character already present in the brand (logo shapes, product labels, tone of the offer) rather than from habit, then let it own only display roles such as hero, section titles and promotional lines; keep body and interface text in a quiet, highly legible companion, and write down which roles use which face so the pairing behaves like a rule, not a mood.",
+      "why": "Default type with no relation to the brand is one of the fastest signals that a page was assembled rather than designed, while a distinctive display face confined to a few roles adds identity without costing readability.",
+      "notWhen": "Dense product interfaces, documentation and transactional flows where neutrality is the point; brands whose system already mandates a single family; early structural drafts where hierarchy is still unresolved and a novel face would hide the real problems; script or decorative faces that fail legibility at the sizes actually used."
+    },
+    {
+      "id": "script-aware-type-roles",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Korean text set in a Latin-first face so Hangul looks thin, uneven or old-fashioned; the same English word appears in two different faces in different spots; mixed Hangul-Latin strings switch face mid-line without a rule; a style list with several families multiplied by many near-identical weights.",
+      "ask": "For each script on this page (Hangul, Latin, numerals), is there one deliberate face and a small set of weights, applied by a rule someone else could follow?",
+      "move": "Set Hangul in a face drawn for Hangul and decide explicitly whether Latin and numerals share it or get a companion face; state the rule for mixed strings; collapse weights to the few that encode real hierarchy steps; audit by selecting every text layer and checking its face and weight against the rule rather than trusting appearance.",
+      "why": "Inconsistent face assignment and weight sprawl make pages look unfinished and multiply handoff errors, and a Latin-first face renders Hangul poorly enough that critics read it as a dated template.",
+      "notWhen": "A single well-designed multi-script family already covers every role; deliberate editorial contrast between scripts that is applied consistently; projects whose brand guide fixes the faces; Latin-only surfaces where the Hangul concern does not apply."
+    },
+    {
+      "id": "tracking-by-role",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Reading text, buttons and menus with visibly opened letter spacing so words fall apart; one tracking value pasted onto every style regardless of size; display Hangul left loose so large lines look gappy; negative tracking pushed so far that heavy display letters collide.",
+      "ask": "Is each tracking value doing a job for that role and size, or was it set once and copied everywhere?",
+      "move": "Keep reading text and controls close to the face's default; tighten large display lines, especially Hangul, only until word shapes knit together without touching; reserve open tracking for short uppercase labels or deliberate editorial moments; tune Latin and numerals separately from Hangul in mixed lines, and back off any value that makes letters crowd.",
+      "why": "Arbitrary tracking is one of the most frequently corrected details in critiques: loose spacing slows reading and looks amateur, over-tight spacing looks crude, and role-based tracking keeps word shapes intact at each size.",
+      "notWhen": "Logotypes, luxury or editorial display systems where wide spacing is a defined brand voice; short all-caps eyebrows and labels; faces already spaced for display use; event or campaign art where texture matters more than reading speed."
+    },
+    {
+      "id": "big-and-light-display",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Headlines and key numbers that get their emphasis from being both large and heavy, so the top of the page feels lumpy and every block competes; medium-size bold titles that read as blunt rather than confident; strong type stacked on top of glass, gradients and filled buttons.",
+      "ask": "Is this heading or number earning emphasis from scale, from weight, or from both at once, and does it need both?",
+      "move": "Let scale do most of the work for display type and key figures: make them larger and step the weight down, then let small supporting text gain a little weight and size so it stays legible; when a heavy weight is kept, reduce other loud effects nearby so only one channel is shouting.",
+      "why": "Using size and weight together exhausts the emphasis budget and makes layouts feel heavy; large lighter type creates clear contrast with a calmer, more considered texture.",
+      "notWhen": "Small sizes or low-contrast backgrounds where thin strokes break up; faces whose light weights are poorly drawn; utilitarian or energetic brands where a heavy display voice is intentional; one designer judged a bolder headline stronger in a sparse layout, so treat this as a direction to test, not a rule."
+    },
+    {
+      "id": "headline-breaks-by-meaning",
+      "surfaces": [
+        "marketing",
+        "product"
+      ],
+      "look": "Multi-line headlines whose breaks fall wherever the container ends, leaving a lone short word or splitting a phrase; long single-line titles stretching across the hero; automatic leading on large type that makes lines drift apart; mobile headings that break differently each time with no rule.",
+      "ask": "Do the line breaks and leading of each display line follow the phrasing a reader would speak, and is there a rule for how operated copy wraps?",
+      "move": "For hand-set display copy, break at phrase boundaries (in Korean, between word units) so each line carries a coherent piece of the message, keep display blocks to a few lines, and set display leading deliberately tighter than body; for headlines that operators will change, define the text area width and wrap behavior instead of hand-placing breaks, and test with the longest realistic line.",
+      "why": "Phrase-aligned breaks make large type read in one glance and look intentional, whereas container-driven breaks expose that the type was never composed.",
+      "notWhen": "CMS-driven or localized headlines where manual breaks become wrong when text changes (use width rules and balanced wrapping instead); typographic artwork where break placement is the expression; very narrow viewports where avoiding a widow would force a much smaller size."
+    },
+    {
+      "id": "value-numerals-lead",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Prices, percentages, balances or stats where the currency sign, unit or percent symbol is as large and heavy as the number; key figures the same size as their labels; the label read before the value.",
+      "ask": "When someone scans this figure, does the number itself arrive first, with its unit and label clearly subordinate but still present?",
+      "move": "Make the value the largest, clearest element of its group; set units, currency marks and percent signs smaller or lighter as separate text so they sit beside the number without competing; push labels and update times down in tone; keep enough room for the longest realistic value.",
+      "why": "People compare and decide on the number, so giving the unit equal weight dilutes the one thing they came to read; separating the unit also makes long values easier to fit.",
+      "notWhen": "Multi-currency or mixed-unit displays where the unit changes the meaning and must stay prominent; regulated price displays with fixed formatting; dense comparison tables where uniform figures aid column scanning; when a large number would hide a warning or status."
+    },
+    {
+      "id": "inline-glyph-matches-type",
+      "surfaces": [
+        "any"
+      ],
+      "look": "An arrow or small glyph after a link or button label, including a text character typed into the label to stand in for an icon, that is heavier, larger or thinner than the letters beside it, sits off the text's optical center, has a distorted, stretched or broken stroke, or is a stock shape whose corners and line ends disagree with the rest of the page; the arrow ends up as the loudest thing in its row.",
+      "ask": "Does this arrow or glyph look like it was drawn to sit beside these exact letters, at this size and weight?",
+      "move": "Treat an inline glyph as part of the type: match its stroke weight to the adjacent text weight, scale it to the letters rather than the box, center it optically on the text, and draw or choose it in the page's own shape language (rounded or angular ends, line or solid); then tone it down so the label leads; if the label plus arrow has grown into a standalone action, give it a proper button treatment instead.",
+      "why": "Mismatched glyphs are among the small craft defects critics fix first because they make the whole component look assembled from parts; a glyph that matches the type disappears into the label and just signals direction.",
+      "notWhen": "Official platform or brand icons that must keep their own drawing; places where the arrow is the primary affordance (carousel controls, scroll prompts) and needs more presence than surrounding text; very small sizes where an exact weight match would become illegible and a slightly heavier glyph is the right optical correction."
+    },
+    {
+      "id": "icon-earns-its-place",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Feature lists, stats or benefit rows each topped by a generic library icon that could sit above any other line; icons added to fill an empty corner; icons repeating exactly what the adjacent label already says; an icon whose picture does not match its action.",
+      "ask": "If I delete this icon, does anyone lose information, recognition speed or a needed cue, and if it stays, does its picture say something specific to this line?",
+      "move": "Remove icons that only decorate or duplicate their label; where an icon stays, choose or draw one whose subject matches that specific message or action, keep a text label wherever its meaning could be guessed wrong, and let text-led sections stand without icons when the words carry the navigation.",
+      "why": "Generic icon rows are a common template signal and add noise; designers repeatedly add icons for interest and then withdraw them once they see the clutter, while message-specific icons do help scanning.",
+      "notWhen": "Platform-standard controls (search, close, menu) that are already learned; compact navigation where icons are the established recognition cue; icon sets that encode real categories or states; sparse areas where a deliberately chosen illustrative mark is part of the art direction."
+    },
+    {
+      "id": "familiar-pattern-needs-a-reason",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A page assembled from the usual blocks in the usual order: centered hero, three equal feature cards with icons, every group wrapped in a card, uniform grid sections, standard commerce-style corners; a redesign that changed fonts, colours and radii but kept the original macro layout.",
+      "ask": "Which parts of this layout follow a familiar pattern because the content needs it, and where could the relationship between content and form change to say something about this offer?",
+      "move": "Keep the conventions that serve navigation and comprehension, then choose one or two places to change the macro composition itself: asymmetric columns, a section that breaks the grid, a different way of grouping than cards, content presented as the product would show it; carry that change through rather than adding surface decoration.",
+      "why": "Critics describe structure-level sameness as template-like even when the details are polished; differentiation comes from altered relationships and macro composition, not from recolouring the same skeleton.",
+      "notWhen": "Fundamentals (hierarchy, spacing, legibility) are still unresolved, where several designers deliberately steer back to an ordinary layout first; commerce and task flows where familiar patterns reduce learning cost; comparison content that needs uniform cards; brands whose recognisability depends on a fixed system."
+    },
+    {
+      "id": "specific-words-not-category-words",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Section labels, CTA text, value statements and eyebrows built from words that fit any company in the category: a values list of honesty and quality, a title that just names the artifact type, a related-content heading with no topic, a CTA that only says the action, invitations to stay up to date.",
+      "ask": "Could this heading, label or button text be pasted onto a competitor's page unchanged, and if so, what fact specific to this offer could replace it?",
+      "move": "Replace category words with the concrete outcome, mechanism, audience or topic: name what the visitor gets, what this subject is about, or what happens after the click; keep labels short but particular, and drop sections whose only content is generic reassurance.",
+      "why": "Generic wording makes a tailored layout feel templated and forces visitors to infer the value; specific words do the differentiating work that visuals alone cannot.",
+      "notWhen": "Utility labels where convention aids recognition (navigation, cart, sign in); well-known brands whose emotional line already has context; when the specific claim cannot be verified, since an inflated specific is worse than a plain generic; legal or regulated text."
+    },
+    {
+      "id": "copy-rhythm-reads-generated",
+      "surfaces": [
+        "marketing",
+        "any"
+      ],
+      "look": "Headlines that all share one generated rhythm: two-beat couplets cut with full stops, 'from A to B' spans, 'not A but B' and 'B rather than A' antitheses, a negation followed by a promise, an emotional 'because…' line, '…with us' sign-offs, translated second-person address, abstract nouns (process, result, flow, context, experience) where a fact should be, and in Korean '단순히 A가 아니라 B', 'A보다 B에 가깝습니다', '~를 함께 봅니다', sensory abstractions ('정서의 결'), an '이를 통해' with no named referent, closing declarations ('기준은 분명합니다') and reflexive lists of three. Each line sounds plausible alone; read in sequence they sound machine-made.",
+      "ask": "Reading only the headings top to bottom, do they vary in shape and say concrete things — a number, a real command, a named situation, an actual result — the way a person on the team would explain the product to a colleague?",
+      "move": "Before writing, read the headings and body lines of several real services in the same market and category (search them like any reference) and note how they speak: task names in verb-noun form, the user's own action and its immediate outcome, the tedious old steps named concretely before the new ones, a reassurance in the service's spoken register, real times and counts, a customer's own question as a heading. Transfer those sentence shapes, never their phrases. Then write the copy as material before layout, in priority order, read the headings in a row aloud, and replace each slogan with the specific fact it stood in for; let sentence shapes differ and drop translated 'you/your' address.",
+      "why": "Uniform antithesis couplets and abstract nouns are the most recognisable signature of generated copy; specific facts in varied, spoken sentences read as written by people who know the product.",
+      "notWhen": "A deliberate brand voice that is genuinely terse and poetic, set by the brand's own established copy; legal or UI microcopy whose wording is fixed."
+    },
+    {
+      "id": "copy-echoes-the-brief",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Page copy that hands the maker's instructions back to the visitor: a prohibition from the brief turned into an emphatic promise ('we never copy', 'without X', 'read-only', 'we do not change your choices'), the same constraint repeated in several sections, the brief's internal vocabulary ('task', 'original', 'allowed write scope', 'implementation target') used verbatim, and internal mechanics or vendor names the visitor never needed.",
+      "ask": "For each line, is it something this visitor needs to decide or act, said in their words — or is it an instruction, constraint or term that was given to the maker and has been echoed back onto the page?",
+      "move": "Treat the brief's rules, prohibitions and process constraints as rules for making, not as messages. Keep a constraint on the page only when the visitor benefits from knowing it, say it once in the visitor's own words at the level of detail they need (references, not the list of sites that supplied them), and drop the negation framing: describe what happens instead of what does not.",
+      "why": "Echoing instructions is a recognisable generated-content habit; it makes copy defensive and repetitive and exposes the prompt behind the page instead of the product.",
+      "notWhen": "Constraints that are themselves the offer and that visitors actively look for (privacy guarantees, no-account access, licence terms), stated once where the decision is made."
+    },
+    {
+      "id": "graphics-stand-without-captions",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Feature graphics wrapped in explanation: a caption under the image ('a graphic example explaining the flow'), small part labels inside the art ('one request', 'one flow', 'real screen'), disclaimers such as 'concept diagram' or 'not a real result', and a line restating the section heading beneath the picture.",
+      "ask": "Would comparable real landings caption or disclaim this graphic, or does the section's heading and body already carry what it means?",
+      "move": "Let the section copy carry the meaning and let the graphic stand alone. Put the description in the image's alt text, not under it; remove part labels the picture already shows; if a figure genuinely needs a qualification (illustrative numbers, a simulated result), say it once in the body copy where the claim is made, not as a stamp on the art.",
+      "why": "Captions and disclaimers on marketing art read as defensive and generated; designers make the picture clear enough to need no label.",
+      "notWhen": "Editorial, documentation and data pages where figures are numbered and referenced; legally required disclosures."
+    },
+    {
+      "id": "ornament-labels-must-mean",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Large section numbers, step counters or index labels that precede content with no real sequence; an oversized page number outshining the title; dividers, rules and counters that imply order or steps where none exists; small labels that restate the obvious category.",
+      "ask": "Does this number, counter or label tell the visitor something true about order, position or extent, or is it decoration borrowed from editorial templates?",
+      "move": "Keep numbering only where sequence, ranking or position matters, and then pair the current position with the total and keep the number subordinate to the title; otherwise remove it or reduce it to a quiet aside, and let the title carry the section.",
+      "why": "Unmotivated numbering steals emphasis from content and can falsely suggest a required order, and it is a recognisable template ornament.",
+      "notWhen": "Real processes, rankings, chapters or paged slides where position is information; non-linear card layouts where numbers are needed to show reading order; editorial systems that use numbering consistently as navigation."
+    },
+    {
+      "id": "identity-from-the-real-artifact",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A site whose colours, type and graphics have no visible link to the product, packaging, logo or existing materials; stock illustrations in an unrelated palette; promotional graphics that do not depict the thing being promoted; a brand with a strong look rendered as a generic shop or SaaS page.",
+      "ask": "Where do this page's colours, type, motifs and graphics come from, and can a visitor trace them back to the actual product or brand?",
+      "move": "Read the brand's existing artifacts and strategy first, then sample colour, typographic character and recurring shapes from them; recolour and adapt any stock asset into that palette and motif; make promotional graphics depict the specific product, card or service concerned.",
+      "why": "Critics call pages template-like when they could belong to anyone; deriving art direction from the real artifact makes the page an extension of the product and keeps generic category grammar from flattening a distinctive brand.",
+      "notWhen": "Brands with no usable assets yet, where a new identity must be designed deliberately; co-branding or licensing rules that forbid reproducing partner assets; products whose existing look is the problem the redesign was hired to fix."
+    },
+    {
+      "id": "graphic-and-type-interlock",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A hero where the headline sits in one column and an unrelated graphic floats in the other, so the type and the image could be swapped for any other pair without either noticing.",
+      "ask": "Does the hero graphic come from the brand's own name, mark or product, and does it physically engage the headline — overlapping, replacing or refracting part of the word — so type and image read as one composed object?",
+      "move": "Derive the hero object from something only this brand owns (a letter or ligature of its name, its mark, its product's shape) and set it into the headline: let it replace a glyph, sit across two words, refract the letters behind it, or set a cut-out product photograph across a giant repeated wordmark, at the scale of the type. Render the object once in the brand's material and reuse that material for the few supporting icons further down.",
+      "why": "When the graphic and the name interlock, the hero becomes the identity itself; a graphic beside a headline reads as stock decoration.",
+      "notWhen": "Headlines that must stay fully legible as running text for translation or accessibility; brands whose mark cannot be altered; product pages whose entry must show the working product instead."
+    },
+    {
+      "id": "motion-has-a-lead",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Motion contact sheet or timeline: every heading, paragraph and card fades up with the same delay and distance; nothing clearly arrives first; the headline is unreadable until a video or animation finishes loading; an entrance effect plays but attention ends up nowhere in particular.",
+      "ask": "In the first seconds, which element leads, what follows in what order, and is the key message readable before the choreography completes?",
+      "move": "Name the one element that should take attention first and the order the eye should travel (message, then evidence, then action, or object, then explanation), sequence only those semantic groups, and keep the total sequence short; show text immediately and let heavy media swap in behind it rather than gating content on load.",
+      "why": "Entrance motion is only useful when it moves attention somewhere on purpose; uniform fade-ups give everything equal drama, and delayed content feels sluggish rather than polished.",
+      "notWhen": "Reading, documentation and comparison pages where content should simply be present; repeat visits and frequent paths where the sequence becomes waiting; reduced-motion settings, where the same order should be conveyed by layout and an immediate static state."
+    },
+    {
+      "id": "motion-concentrated-on-meaning",
+      "surfaces": [
+        "marketing",
+        "product"
+      ],
+      "look": "Motion contact sheet or timeline: gradient drift, floating objects, marquee, particles and bouncing prompts all running at once with no distinct job; or the opposite, a fully static page where one focal object or urgent state would benefit from a small cue; large exaggerated travel where a slight lift would do.",
+      "ask": "If I remove each moving element, which ones change an explanation, a state cue, orientation or a deliberate brand moment, and are the rest just ambient activity?",
+      "move": "Strip ambient decorative movement and spend motion on one or two places that carry meaning: the hero object, an urgent status, a product mechanism, a motif that ties the page together; keep amplitude small and coherent (an object and its shadow move together), and leave the rest of the page still.",
+      "why": "Designers repeatedly cut competing effects and reintroduce a single focused motion, keeping liveliness while restoring clarity; concentrated motion reads as intent, scattered motion as noise.",
+      "notWhen": "Campaign or entertainment pages where expressive motion is the product itself; data or work tools where even small decorative motion distracts; users with reduced-motion preferences; rare celebratory or explanatory moments that justify larger expression."
+    },
+    {
+      "id": "scroll-scenes-pay-their-way",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Motion timeline: pinned sections that hold the scroll while text steps through, large type that zooms or locks the page, rotating product scenes; when stepped through, each scene conveys what a single image and sentence could; navigation feels obstructed on mobile or with a trackpad.",
+      "ask": "Does each scroll-driven scene explain a mechanism, geometry or change that a still image cannot, and is that worth taking control of the visitor's scrolling?",
+      "move": "Reserve pinned or scroll-linked scenes for content that genuinely changes over time or space, tie the scene to the explanation it carries, and otherwise lay content out in normal flow; compare the cost of interrupted movement with the impact actually delivered before keeping a story-style section.",
+      "why": "Imitated immersive scroll effects without strong content create friction without impact; designers recommend flattening them into ordinary scrolling when the payoff is weak.",
+      "notWhen": "Story-led launches where the narrative is the deliverable and performance, accessibility and reduced motion are handled; product explanations where a user-controlled step-through clarifies a mechanism; brand experiences tested with real users."
+    },
+    {
+      "id": "motion-checked-between-frames",
+      "surfaces": [
+        "any"
+      ],
+      "look": "Only visible in a timeline or frame sequence: the starting frame of an entrance hides the navigation or leaves text unreadable; a slow transition leaves ghosting; an element jumps backward mid-transition; an empty slide or panel flashes before content arrives; autoplaying demos with no pause; with reduced motion enabled, content stays invisible because it waits for an animation.",
+      "ask": "Have the first, middle and last frames, the speed, interruption and reduced-motion state all been seen, or only the resting screenshot?",
+      "move": "Review motion as a sequence: inspect the initial state for contrast and visibility, scrub intermediate frames for jumps or empty states, adjust slow transitions, add pause control to looping media, test reversal by interrupting it, and define a meaningful still frame that keeps all information when motion is reduced.",
+      "why": "A static capture cannot show timing, interruption or intermediate states, and critics found problems in exactly those frames that the final screenshot hid.",
+      "notWhen": "Purely static pages with no motion to review; prototypes explicitly scoped to layout where motion is deferred and labelled as such; platform-native transitions already handled by the system."
+    },
+    {
+      "id": "feature-art-shows-the-product-at-work",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Feature or how-it-works sections illustrated with grey wireframe boxes, placeholder bars, an invented example site with filler words ('Ideas into living things'), leaf and circle shapes, or one generic icon per feature; the art could sit beside any other product unchanged.",
+      "ask": "Does each feature's visual show this product performing that specific action, so a visitor understands the feature from the picture before reading the text?",
+      "move": "Look first at the feature sections of real services in the same category: their art is almost always the product's own interface or output, cropped large, holding real-looking specific content (names, amounts, code, responses, states) under one light. Do the same: show this product's real screen or real output cropped to the part that proves the section's claim, large enough that its words read, with the consequence visible. Software that runs always has real output: if the product's own session, capture or result is not at hand, run it. The page being built is not material for its own art: its render shrunk into a frame on itself is a mirror, not the product at work, and so is a capture of its own defect. Real output still needs art direction: one protagonist, no heading or caption inside the art, live type at a size that reads rather than a pasted screenshot. Stage names in boxes joined by a line are labels about the product, not the product at work. Let the order of what happens carry the explanation.",
+      "why": "Designers explain features by showing the mechanism; boxes and stock icons force the visitor to imagine it and mark the page as unfinished.",
+      "notWhen": "A still screenshot of the shipped product already shows the action clearly; documentation, pricing and comparison sections where text or tables carry the information; features with no visible mechanism and no output to show (a policy, a guarantee), where a plain statement is more honest than an invented scene. Never redraw an existing product's interface as a mock: show the real one."
+    },
+    {
+      "id": "annotation-kit-is-not-personality",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "The generated friendly-startup kit: highlighter swipes behind headline words, hand-drawn arrows and sticky-note callouts scattered over every screenshot, pastel colour blocks behind each section, cute avatar pills, speech-bubble quotes and small 'example' badges — applied everywhere so the page feels chatty but says nothing specific.",
+      "ask": "If I remove every highlight, scribbled arrow, sticky note and pastel block, does any section lose a fact or a pointer the visitor needed, or were they personality layered on to look approachable?",
+      "move": "Strip the kit and let the product and the sentence carry the section: one clear statement, the real interface at a readable size, and at most one precise pointer where an element genuinely needs finding, drawn in the brand's own type and colour rather than a marker-and-scribble style. Find warmth in specific words, real examples and considered type instead of stickers.",
+      "why": "This kit is now one of the most recognisable signatures of generated landings; it reads as AI-made at a glance and hides whether the product has anything particular to say.",
+      "notWhen": "A brand whose established identity genuinely is hand-drawn (an illustration studio, a stationery maker), where the marks are the brand's own drawing rather than a stock style."
+    },
+    {
+      "id": "graphic-grammar-recurs",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A striking graphic in the hero and plain text cards everywhere after it; or every section using a different illustration style, light, material or rendering technique; or isolated decorative pieces that never return.",
+      "ask": "Does one graphic grammar — the same material, light, rendering and subject world, whatever form it takes — carry the page from the hero through the sections to the final call to action?",
+      "move": "Decide the grammar from the selected references and the product: it may be product footage framed one way, a photographic treatment, a set of rendered objects or characters, a type-and-colour system, or a light and gradient field. Keep its material, light and rendering constant and bring it back where it explains something; vary composition and hue for rhythm, not the technique.",
+      "why": "A grammar that recurs turns separate sections into one authored page; switching techniques section by section reads as assembled from parts.",
+      "notWhen": "Very short single-purpose pages; brands whose established system already fixes the grammar, which then wins over a new invention."
+    },
+    {
+      "id": "graphics-belong-to-this-product",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A landing assembled from fashionable treatments (a violet gradient field, bento cards, floating capsules or spheres, glass panels, a marquee, scroll reveals) that would survive unchanged if the product name and nouns were swapped for another company's; deleting the graphics would lose no fact, step or identity.",
+      "ask": "If I swap the product's nouns for a competitor's, delete the graphics, or reorder the feature sections, does anything in the visual story break?",
+      "move": "Give every graphic one job tied to this product: show an input becoming a state change and a result, show a real relationship between real objects, or carry a recurring brand grammar through the page; drop treatments that pass the swap test, and order sections so the visual story depends on the sequence.",
+      "why": "Treatments combined without a product relationship read as a template even when polished; graphics that encode this product's mechanism cannot be swapped and make the page recognisably authored.",
+      "notWhen": "Purely atmospheric fields whose stated job is rhythm or mood between information sections; screenshot-led pages whose product UI already carries the specificity; brand systems whose recurring abstract grammar is itself the identity."
+    },
+    {
+      "id": "graphic-states-one-claim",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A section graphic that places several symbols at equal weight (a window, an icon, a cursor, a badge, a mascot) so none of them states the section's claim; or a polished scene a visitor admires without being able to say what it shows; or a stock symbol for one word of the headline (a magnifier, a rocket, a lightbulb) standing in for what the product does.",
+      "ask": "Covering the headline, can a visitor say from the picture alone what this section claims, and is there exactly one thing the eye lands on first?",
+      "move": "Pick the single moment the headline describes, make its key noun the protagonist and enlarge, lift and colour it; push every supporting element back into context by greying, blurring, cropping or reducing it to a skeleton. Use the product's real vocabulary — actual commands, values, state names — on the protagonist. Show the change this product makes, as it happens in this product, rather than describe it. The protagonist is real material from the product or an object that acts out its mechanism, never an invented example site, filler copy or placeholder shapes; words inside the art are only the labels its objects carry, and art that holds more words than its section copy explains nothing.",
+      "why": "A designer's feature graphic is an argument with one subject; equal-weight symbols read as decoration and leave the reader to guess the point.",
+      "notWhen": "Purely atmospheric fields between information sections; a real product screenshot or footage whose own content already isolates the subject."
+    },
+    {
+      "id": "dimension-from-light",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Graphics built from flat fills and hairline outlines that sit on the page like diagrams; or the opposite, heavy 3D models in every section that overwhelm the message and the brand.",
+      "ask": "Where the art direction wants depth, does it come from light on mostly 2D forms — and is any modelled 3D reserved for a recurring accent?",
+      "move": "Give the protagonist volume with light rather than geometry: a gradient fill, an inner top highlight, a colour-matched soft shadow, a glow field behind it, a slight tilt, and blur on the layers behind; let one or two shapes overlap or break the frame. Keep rendered 3D for a brand character or object that recurs, not for every scene.",
+      "why": "Polished product sites read as deep and tactile mostly through lit 2D shapes; flat diagrams look unfinished and wall-to-wall 3D looks like a stock icon pack.",
+      "notWhen": "Deliberately flat, editorial or technical brands; documentation and product UI, where depth effects compete with content."
+    },
+    {
+      "id": "gradient-behaves-like-light",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A gradient used as paint: an even linear wash across a section, a symmetric glow blob centred behind the headline, or a purple-to-pink rainbow that repeats identically in every section and could be deleted without losing anything.",
+      "ask": "Does each gradient behave like a light source in the space — with a direction, a soft falloff into the base tone and an edge it catches — within one hue family, and does where it falls lead the eye to the content it lights?",
+      "move": "Treat the base as a dark or pale room and the gradient as light entering it: large, soft and off-centre, raking from one side, fading into the base rather than filling it. Stay in one hue family and vary luminance; move the light's position from section to section for rhythm and let it leak across a section edge or catch a word, a rule or a card edge. Add fine grain so the falloff does not band, and keep body text on the calm part of the field.",
+      "why": "Designers use gradients as light, which gives depth, mood and direction; gradients used as fills read as a generated template and flatten the page.",
+      "notWhen": "Product UI and dense reading surfaces; brands whose palette is deliberately flat; sections where a photograph already supplies the light."
+    },
+    {
+      "id": "page-reaches-considered",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "The page is correct and readable but could introduce any product in its category: the hero states a promise over a decorative scene, proof is a row of round numbers or logos nobody can check, feature art is a picture about the product rather than the product doing something, and every state shown is the happy one.",
+      "ask": "Placed on the ladder template → clean → considered → memorable, does this page reach considered: would the brief's primary persona, within five seconds of the hero, see this product act on something realistic and believe the thing they came to check?",
+      "move": "Start from the brief's primary persona and their five-second belief. Put that proof in the hero: the product working on a representative input with its consequence visible (a choice and its result, a request and what came back), or its real output, using specific realistic content rather than round invented figures. Where the product has them, show one state beyond the happy path — pending, needs attention, empty, a limit — because trust is decided there. Give the primary action one clear rank, make proof checkable (conditions, named sources, the real output) and let motion explain a change rather than decorate an entrance. Memorable is one well-made idea only this product could have, on top of that.",
+      "why": "Before/after critiques of generated pages keep finding the same gap: the 'before' is clean but generic and its proof is made up; the 'after' answers one named visitor's question with the product visibly working on realistic data, including a failure or pending state. Rating the level first keeps twenty small polish notes from hiding that the page never shows the product.",
+      "notWhen": "Products with nothing to operate or output on screen (a physical service, a policy), where real photographs or the real artifact and plain conditions carry the proof; never simulate a mechanism the product does not have."
+    }
+  ]
+}

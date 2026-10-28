@@ -1,0 +1,48 @@
+# Landing rules: conventions of marketing and launch pages that are wrong on product screens (a receipt list
+# legitimately carries many words per screen, list rows carry "3 items · 2 days" metadata, an app header carries
+# icon buttons). The first-render check applies them only to a new landing; the measured slop review never does.
+
+- id: SLOP-ANNOTATION-LOAD
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const byId = new Map(ir.nodes.map(n => [n.id, n])); const skip = /(?:^|\\/)(?:header|footer|nav|code|pre|kbd|button|a)(?:[.#\\/]|$)/i; const media = n => /^(?:img|svg|canvas|video|picture)(?:[.#]|$)/i.test(String(n.path).split('/').pop()); const within = (id, test) => { const stack = [id]; while (stack.length) { const n = byId.get(stack.pop()); if (!n) continue; if (test(n)) return true; stack.push(...(n.children || [])); } return false; }; const texts = ir.nodes.filter(n => n.type === 'TEXT' && n.text && n.text.trim() && typeof n.fontSize === 'number' && !n.interactive && !n.heading && n.textContext !== 'control' && n.textContext !== 'navigation' && !skip.test(n.path)); if (!texts.length) return null; const weight = {}; for (const n of texts) weight[n.fontSize] = (weight[n.fontSize] || 0) + n.text.length; const body = Number(Object.entries(weight).sort((a, b) => b[1] - a[1])[0][0]); const sections = Math.max(1, ir.nodes.filter(n => n.heading === 1 || n.heading === 2).length); const notes = texts.filter(n => { if (n.fontSize > body * 0.875 || [...n.text.trim()].length > 40) return false; const parent = byId.get(n.parent); const group = parent && (byId.get(parent.parent) || parent); return Boolean(group) && within(group.id, x => Boolean(x.heading)) && !within(group.id, media); }).map(n => n.text.trim().slice(0, 30)); return notes.length >= 6 && notes.length >= sections ? notes.slice(0, 10) : null; })()"
+  assert: "value === null"
+  message: "Small notes around the headings: {value}. Kicker labels, numbered tags, tag rows and captions that restate a heading or describe what is already visible give every section a second voice, so no screen has one point; finished pages carry about none per section. Remove each one the visitor would not miss; keep a label only where it names something the content does not."
+
+- id: SLOP-NAV-LINK-ICON
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const byId = new Map(ir.nodes.map(n => [n.id, n])); const icon = n => /^(?:svg|img|i)(?:[.#]|$)/i.test(String(n.path).split('/').pop()) && n.box.w <= 24 && n.box.h <= 24; const text = n => { const stack = [n.id]; while (stack.length) { const x = byId.get(stack.pop()); if (!x) continue; if (x.text && x.text.trim()) return x.text.trim(); stack.push(...(x.children || [])); } return ''; }; const links = ir.nodes.filter(n => n.interactive && /(?:^|\\/)(?:header|nav)(?:[.#\\/]|$)/i.test(String(n.path)) && (n.children || []).some(id => { const c = byId.get(id); return c && icon(c); })); const named = links.map(text).filter(Boolean); return named.length ? named.slice(0, 6) : null; })()"
+  assert: "value === null"
+  message: "Navigation links carry drawn icons: {value}. Finished landings keep header and nav links as plain words (28 of 28 measured; only 2 put an external-link arrow on a nav link), and USWDS research found visitors do not reliably read the arrow anyway. Drop the icons; say the destination in the word if it matters. A dropdown chevron on a menu that opens is the exception."
+
+- id: SLOP-PAPER-TONE
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const page = node.fill ? node : ir.nodes.filter(n => n.parent === node.id).find(n => n.fill && !n.fill.inherited && n.box.w >= node.box.w * 0.9); const m = page && /^#?([0-9a-fA-F]{6})$/.exec(String(page.fill.value)); if (!m) return null; const q = m[1], r = parseInt(q.slice(0,2),16)/255, g = parseInt(q.slice(2,4),16)/255, b = parseInt(q.slice(4,6),16)/255, mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn, l = (mx + mn) / 2; if (!d || l < 0.9 || l > 0.985) return null; const sat = d / (1 - Math.abs(2 * l - 1)); let h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; if (h < 0) h += 360; return sat >= 0.12 && h >= 20 && h <= 70 ? '#' + q.toUpperCase() : null; })()"
+  assert: "value === null"
+  message: "The page ground is a warm paper tone ({value}). Off-white serves finished sites when it comes from the brand (6 of 30 measured), but as default warmth it reads generic and makes small text fainter. Start from white or the brand's own colour, or say which brand material the tone comes from."
+
+- id: SLOP-MIDDOT-META
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const skip = /(?:^|\\/)(?:footer|code|pre)(?:[.#\\/]|$)/i; const hits = ir.nodes.filter(n => n.type === 'TEXT' && n.text && !n.heading && !skip.test(String(n.path))).map(n => n.text.trim()).filter(t => { const parts = t.split(/\\s*[·•]\\s*/); return parts.length >= 2 && parts.every(p => p.length > 0 && [...p].length <= 20) && [...t].length <= 70; }); const byId = new Map(ir.nodes.map(n => [n.id, n])); const separated = [...new Set(ir.nodes.filter(n => n.text && /^\\s*[·•]\\s*$/.test(n.text) && !skip.test(String(n.path))).map(n => n.parent))].map(id => byId.get(id)).filter(Boolean).map(p => p.text && p.text.trim() ? p.text.trim().split(/\\s{2,}|\\n/).join(' · ') : (p.children || []).map(id => { const stack = [id]; while (stack.length) { const x = byId.get(stack.shift()); if (!x) continue; if (x.text && x.text.trim()) return x.text.trim(); stack.push(...(x.children || [])); } return ''; }).filter(Boolean).join(' ')).filter(t => [...t].length <= 90); const unique = [...new Set([...hits, ...separated])]; return unique.length ? unique.slice(0, 6) : null; })()"
+  assert: "value === null"
+  message: "Middle-dot meta strings: {value}. Short tokens joined by dots read as a metadata rail stapled under the content. Say the one fact that matters in a sentence, or show it (host logos, a real command); drop the rest."
+
+- id: SLOP-SCREEN-WORDS
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const skip = /(?:^|\\/)(?:header|footer|nav|code|pre)(?:[.#\\/]|$)/i; const band = 900; const words = {}; for (const n of ir.nodes) { if (n.type !== 'TEXT' || !n.text || skip.test(String(n.path)) || n.box.w <= 0) continue; const k = Math.floor(Math.max(0, n.box.y) / band); words[k] = (words[k] || 0) + n.text.trim().split(/\\s+/).filter(Boolean).length; } const heavy = Object.entries(words).filter(([, w]) => w > 110).map(([k, w]) => 'screen ' + (Number(k) + 1) + ': ' + w + ' words'); return heavy.length ? heavy : null; })()"
+  assert: "value === null"
+  message: "Too many words on one screen ({value}). A visitor takes in one point per screen; cut the explanations the brief already left out, move detail behind a link, and let the graphic carry the rest."

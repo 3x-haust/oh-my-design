@@ -8,7 +8,7 @@ wrapping, loading, and fallback.
 
 Work in this order:
 
-1. Read the target-language copy deck and identify productive and expressive roles.
+1. Read the page's target-language copy and identify productive and expressive roles.
 2. Name the task and register: dense scanning, long reading, transactional UI, editorial
    authority, playful showpiece, or another evidenced need.
 3. Study cited typography references for visible anatomy and behavior, not brand prestige.
@@ -22,7 +22,7 @@ copy, language coverage, voice, or production constraints.
 
 ## Native Pi maker handoff
 
-When native Pi will use the selected type proof, Typesetter writes exactly one
+When native Pi will use the selected type proof, write exactly one
 `## Approved type contract` section in `.omd/type-proof.md`. Include only committed
 role/family/size/weight/measure/wrapping and responsive constraints. Keep rejected
 alternatives and source rationale outside that section. This exports the existing type
@@ -42,9 +42,22 @@ One family can cover both roles. Two families can be justified when their visibl
 creates a useful distinction. Start with one or two families and add another only when a
 specimen proves the existing set cannot express a required role.
 
+Build a compact semantic scale, not a collection of local font-size decisions. Material's
+display/headline/title/body/label roles, Carbon's productive/expressive split, and
+Atlassian's named heading/body tokens are examples of coherent systems, not universal
+pixel mandates.
+([Material 3](https://developer.android.com/develop/ui/compose/designsystems/material3),
+[Carbon](https://www.carbondesignsystem.com/building-blocks/foundations/typography/overview),
+[Atlassian](https://atlassian.design/foundations/typography))
+
+Set body text first. Establish the reading size, line height, real measure, script coverage,
+and fallback texture; then choose heading steps that create only the distinctions the
+content needs. More than six distinct computed sizes in one view is an OMD review
+convention, not a standard: it asks whether local exceptions have replaced semantic roles.
+
 **[type-composition-boundary]** Keep a tested treatment distinct from its composed role assignment. A neutral specimen proves the supplied string at its recorded family, weight, size, measure, and viewport; it does not prove that this treatment should dominate the finished page. A semantic heading level does not select the largest rung. When the intended focal anchor is another content object, prove any needed alternative for the competing heading from real copy and record its scope, rather than prescribing two dominant treatments. This is not permission to shrink every heading: a heading may itself be the intended anchor, and an explicit user size or emphasis lock remains binding. If no competing assignment is unresolved, one proved treatment is enough.
 
-The proof handoff distinguishes exact selected assignments, tested treatment options, and unresolved assignments. An option is usable only for the exact text and conditions actually proved; a size somewhere in the token ladder is not proof for a different string or measure. Composer selects only within that evidence, then records the content-to-treatment mapping and attention relationship in its existing Focal hierarchy section. A missing option returns to typography proof before dependent candidates are made. No new type value or approval is inferred from a passing specimen, token check, or composition fingerprint. Final dominance is judged on the composed fixed-viewport renders, not the specimen alone.
+The proof handoff distinguishes exact selected assignments, tested treatment options, and unresolved assignments. An option is usable only for the exact text and conditions actually proved; a size somewhere in the token ladder is not proof for a different string or measure. Select only within that evidence, and know which content gets which treatment and which object is meant to hold attention first. A missing option goes back to a typography specimen before anything that depends on it is built. No new type value or approval is inferred from a passing specimen, token check, or composition fingerprint. Final dominance is judged on the composed fixed-viewport renders, not the specimen alone.
 
 ## Hierarchy is a content decision, not a filled template
 
@@ -110,9 +123,29 @@ are hypotheses to render, not mandates: body text often begins around the mid-te
 pixels, compact UI may begin lower, and display roles may begin much larger. Adjust only from
 specimen evidence.
 
-Likewise, a body line height around 1.4–1.7 can be a starting test. KLREQ's 160% example is
-an example, not a universal Korean requirement. Display lines often need tighter leading,
+Line height is role-specific. Material's examples are roughly 1.2 for display/title roles
+and 1.5 for body/label; Butterick recommends 1.2–1.45 for general web text. OMD uses
+1.2–1.6 as an advisory body-review band because it contains those starting points; it is
+not a WCAG requirement or a Korean-specific law. Display lines often need tighter leading,
 but the specimen must show that stacked glyphs, accents, and wrapping remain clear.
+([Material 3](https://developer.android.com/develop/ui/compose/designsystems/material3),
+[Butterick](https://practicaltypography.com/line-spacing.html))
+
+Butterick's 45–90-character line-length range includes spaces and is a broad Latin/web
+reference, not a Korean threshold. Measure Korean and mixed-script paragraphs in the
+actual font and viewport; inspect rendered line tracking, raggedness, and scanability
+instead of converting the Latin count into a fabricated Hangul limit.
+([Butterick](https://practicaltypography.com/line-length.html))
+
+Latin all-caps tracking guidance also does not transfer to Hangul. Butterick's 0.05–0.12em
+range concerns Latin capitals and small caps. Positive tracking at or above 0.05em on
+Korean body text is therefore an OMD review warning, not proof of failure; inspect the
+font and rendered rhythm.
+([Butterick](https://practicaltypography.com/letterspacing.html))
+
+Use tabular figures for values that users compare across rows or that change in place,
+such as prices, quantities, timers, and counters. Keep proportional numerals in prose and
+isolated values. ([Material 3](https://m3.material.io/styles/typography/applying-type))
 
 Record desktop and mobile container widths, line counts, deliberate breaks, accidental
 orphans, clipping, and the relationship between primary, secondary, and CTA text. Never hide

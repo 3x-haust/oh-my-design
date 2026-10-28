@@ -24,8 +24,8 @@ import { doctorBrowserProvider, type BrowserProviderDoctorOptions, type BrowserP
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const MARKETPLACE_URL = 'https://github.com/3x-haust/oh-my-design.git';
-// Derived from what the build emitted, never hardcoded: a hardcoded list is how
-// omd-sketch survived its own deletion, twice.
+// Derived from what the build emitted, never hardcoded, so removed agents and skills
+// cannot survive through a stale installer list.
 function shippedSkillNames(): string[] {
   return readdirSafe(join(pkgRoot, 'dist', 'codex', 'skills'));
 }
@@ -61,16 +61,15 @@ function backupFile(path: string, home: string): void {
 // Every omd subcommand the skill invokes. A loop that raises a permission prompt ten times
 // per iteration is a loop nobody finishes.
 const OMD_ALLOW = [
-  'Bash(omd check:*)', 'Bash(omd ir:*)', 'Bash(omd render:*)',
-  'Bash(omd frame:*)', 'Bash(omd ref:*)', 'Bash(omd choose:*)',
-  'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
-  'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)', 'Bash(omd copy:*)',
-  'Bash(omd composition:*)', 'Bash(omd complete:*)', 'Bash(omd completion:*)',
-  'Bash(omd text-slop:*)', 'Bash(omd visual-richness:*)', 'Bash(omd stack:*)',
-  'Bash(omd route:*)', 'Bash(omd workflow:*)', 'Bash(omd status:*)', 'Bash(omd clean:*)', 'Bash(omd schema:*)',
-  'Bash(omd stage:*)', 'Bash(omd cue:*)', 'Bash(omd brief:*)',
-  'Bash(omd source:*)', 'Bash(omd pack:*)', 'Bash(shasum:*)',
-  'Bash(omd candidate:*)', 'Bash(omd tokens:*)', 'Bash(omd measure:*)',
+  'Bash(omd lifecycle:*)', 'Bash(omd route:*)', 'Bash(omd schema:*)',
+  'Bash(omd stage:*)', 'Bash(omd guard:*)', 'Bash(omd ref:*)',
+  'Bash(omd feedback:*)', 'Bash(omd language:*)', 'Bash(omd ai-judgment:*)',
+  'Bash(omd locale:*)', 'Bash(omd first-render:*)', 'Bash(omd render:*)',
+  'Bash(omd check:*)', 'Bash(omd probe:*)', 'Bash(omd slop:*)',
+  'Bash(omd lighthouse:*)', 'Bash(omd measure:*)', 'Bash(omd figma:*)',
+  'Bash(omd target:*)', 'Bash(omd pack:*)', 'Bash(omd doctor:*)',
+  'Bash(omd browser:*)', 'Bash(omd coach:*)', 'Bash(omd learn:*)',
+  'Bash(omd usage:*)', 'Bash(omd hash:*)',
 ];
 
 // Pre-namespace skill directory names that predate the `omd-` prefix. Pruned on install so a
@@ -504,15 +503,6 @@ function doctorClaude(d: Detected): DoctorCheck[] {
   const straySkills = readdirSafe(join(d.home, 'skills')).filter((name) => name.startsWith('omd-') || LEGACY_SKILLS.includes(name)).sort();
   checks.push(check('no duplicate direct skills', straySkills.length === 0, straySkills.length ? `found ${straySkills.join(', ')}` : undefined));
 
-  const copyPermission = settings?.permissions?.allow?.includes('Bash(omd copy:*)') ?? false;
-  checks.push(check('copy check permission present', copyPermission));
-  const compositionPermission = settings?.permissions?.allow?.includes('Bash(omd composition:*)') ?? false;
-  checks.push(check('composition check permission present', compositionPermission));
-  const shasumPermission = settings?.permissions?.allow?.includes('Bash(shasum:*)') ?? false;
-  checks.push(check('composition hash permission present', shasumPermission));
-  const sourcePermission = settings?.permissions?.allow?.includes('Bash(omd source:*)') ?? false;
-  checks.push(check('source seal permission present', sourcePermission));
-
   return checks;
 }
 
@@ -531,23 +521,9 @@ function doctorCodex(d: Detected): DoctorCheck[] {
 
   const omdAgents = readdirSafe(join(d.home, 'agents')).filter((f) => f.startsWith('omd-') && f.endsWith('.toml'));
   checks.push(check('agents registered', omdAgents.length > 0));
-  const typesetterRegistered = config?.agents?.['omd-typesetter']?.config_file === './agents/omd-typesetter.toml'
-    && existsSync(join(d.home, 'agents', 'omd-typesetter.toml'));
-  checks.push(check('typesetter agent registered', typesetterRegistered));
-  const composerRegistered = config?.agents?.['omd-composer']?.config_file === './agents/omd-composer.toml'
-    && existsSync(join(d.home, 'agents', 'omd-composer.toml'));
-  checks.push(check('composer agent registered', composerRegistered));
-  const artDirectorPath = config?.agents?.['omd-art-director']?.config_file;
-  const artDirectorRegistered = typeof artDirectorPath === 'string' && existsSync(join(d.home, artDirectorPath));
-  checks.push(check('art-director agent registered', artDirectorRegistered));
-  if (artDirectorRegistered) {
-    try {
-      const profile = parseToml(readFileSync(join(d.home, artDirectorPath!), 'utf8'));
-      checks.push(check('art-director agent configuration valid', profile.name === 'omd-art-director'
-        && typeof profile.developer_instructions === 'string'
-        && typeof profile.model_reasoning_effort === 'string'));
-    } catch (error) { checks.push(check('art-director agent configuration valid', false, error instanceof Error ? error.message : String(error))); }
-  }
+  const eyePath = config?.agents?.['omd-eye']?.config_file;
+  const eyeRegistered = typeof eyePath === 'string' && existsSync(join(d.home, eyePath));
+  checks.push(check('eye agent registered', eyeRegistered));
 
   const skillsPresent = shippedSkillNames().some((name) => existsSync(join(d.home, 'skills', name)));
   checks.push(check('skills present', skillsPresent));

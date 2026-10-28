@@ -22,9 +22,12 @@ export function currentDeveloperCalibration(root: string, invocation?: ProjectRu
   const cases = scope === null ? [] : selectDeveloperEvaluationCases(snapshot, scope);
   return Object.freeze({
     snapshotSha256: snapshot.digest,
+    mode: snapshot.mode,
     scope,
     cases,
     precedence: 'Current request, project constraints and verified evidence override these advisory examples.',
-    limitation: 'Past developer comparisons are calibration data, not this user’s taste or a verdict on this output.',
+    limitation: snapshot.mode === 'experimental'
+      ? 'These are unvalidated developer experiment examples, not approved calibration, this user’s taste or a verdict on this output.'
+      : 'Past developer comparisons are calibration data, not this user’s taste or a verdict on this output.',
   });
 }

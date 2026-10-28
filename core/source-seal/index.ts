@@ -3,11 +3,6 @@ import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, 
 import { extname, join, relative, resolve, sep } from 'node:path';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { replaceProjectFileAtomically } from '../runtime/project-write.ts';
-import {
-  createAdaptiveWorkflowSourceBinding,
-  isAdaptiveWorkflowSourceBinding,
-  type AdaptiveWorkflowSourceBinding,
-} from '../design-development/workflow-persistence.ts';
 import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import {
   adaptiveSourceSealInputHashes,
@@ -15,10 +10,6 @@ import {
   isAdaptiveSourceSealRoute,
   type AdaptiveSourceSealRoute,
 } from './adaptive-inputs.ts';
-import {
-  type SourceBoundProofPath,
-  validateSourceBoundProofCurrentness,
-} from '../composition-contract/source-currentness.ts';
 import { FIXED_DERIVED_PROJECT_ROOTS } from '../runtime/derived-project-tree.ts';
 import { parseRouteRecord } from '../route/adaptive-route-record.ts';
 import { verifyReviewPurposeAuthority } from '../route/review-purpose-authority.ts';
@@ -61,15 +52,7 @@ export interface AdaptiveSourceSealArtifact {
   route: AdaptiveSourceSealRoute;
   sources: SourceSealSources;
 }
-export interface WorkflowSourceSealArtifact {
-  schemaVersion: 2;
-  sealedAt: string;
-  inputs: Record<string, string>;
-  route: AdaptiveSourceSealRoute;
-  workflow: AdaptiveWorkflowSourceBinding;
-  sources: SourceSealSources;
-}
-export type SourceSealArtifact = LegacySourceSealArtifact | AdaptiveSourceSealArtifact | WorkflowSourceSealArtifact;
+export type SourceSealArtifact = LegacySourceSealArtifact | AdaptiveSourceSealArtifact;
 
 export interface SourceSealFinding {
   id: 'SOURCE-SEAL-MISSING' | 'SOURCE-SEAL-STALE';
@@ -92,11 +75,10 @@ function isSafeSourcePath(value: unknown): value is string {
 }
 
 function isSourceSealArtifact(value: unknown): value is SourceSealArtifact {
-  if (!isRecord(value) || (value.schemaVersion !== SOURCE_SEAL_SCHEMA_VERSION && value.schemaVersion !== 2) || typeof value.sealedAt !== 'string') return false;
+  if (!isRecord(value) || value.schemaVersion !== SOURCE_SEAL_SCHEMA_VERSION || typeof value.sealedAt !== 'string') return false;
   if (!isRecord(value.inputs) || !Array.isArray(value.sources)) return false;
   const route = value.route;
-  if (value.schemaVersion === 2 && (!isAdaptiveSourceSealRoute(route) || !isAdaptiveWorkflowSourceBinding(value.workflow))) return false;
-  if (value.schemaVersion === 1 && value.workflow !== undefined) return false;
+  if (value.workflow !== undefined) return false;
   const expectedInputs = route === undefined
     ? ['copyDeckSha256', 'typeProofSha256', 'compositionSha256'].sort()
     : isAdaptiveSourceSealRoute(route) ? Object.keys(adaptiveSourceSealInputHashes(route)).sort() : [];
@@ -231,31 +213,14 @@ export function createSourceSeal(
   const stat = lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`source root must be a non-symlink directory: ${root}`);
   const hasAdaptiveRoute = existsSync(join(root, '.omd', 'route.json'));
-  const hasWorkflow = existsSync(join(root, '.omd', 'workflow-plan.json'));
-  if ((hasAdaptiveRoute || hasWorkflow) && invocation === undefined) throw new Error('ROUTE_AUTHORITY_REQUIRED: adaptive source sealing requires the current host invocation');
-  if (hasWorkflow && !hasAdaptiveRoute) throw new Error('WORKFLOW_ROUTE_REQUIRED: workflow source sealing requires an adaptive route');
+  if (hasAdaptiveRoute && invocation === undefined) throw new Error('ROUTE_AUTHORITY_REQUIRED: adaptive source sealing requires the current host invocation');
   const route = hasAdaptiveRoute && invocation !== undefined ? createAdaptiveSourceSealRoute(root, invocation) : undefined;
-  const workflow = hasWorkflow && invocation !== undefined ? createAdaptiveWorkflowSourceBinding(root, invocation) : undefined;
-  const proofPaths = ['.omd/type-proof.md', '.omd/composition.md']
-    .filter((path) => route?.stages.some((stage) => stage.status === 'selected' && stage.artifacts.some((artifact) => artifact.path === path))) as SourceBoundProofPath[];
-  if (route !== undefined && proofPaths.length > 0) {
-    const findings = validateSourceBoundProofCurrentness(root, proofPaths);
-    if (findings.length > 0) throw new Error(`SOURCE_BOUND_PROOF_CURRENTNESS_RED:${JSON.stringify(findings)}`);
-  }
   const sources = listProductionSourceFiles(root).map((path) => ({
     path,
     sha256: hashBytes(readStableSourceFile(root, join(root, path))),
   }));
   if (route === undefined) return {
     schemaVersion: SOURCE_SEAL_SCHEMA_VERSION, sealedAt, inputs: legacyInputHashes(root), sources,
-  };
-  if (workflow !== undefined) return {
-    schemaVersion: 2,
-    sealedAt,
-    inputs: adaptiveSourceSealInputHashes(route),
-    route,
-    workflow,
-    sources,
   };
   return {
     schemaVersion: SOURCE_SEAL_SCHEMA_VERSION,
@@ -288,8 +253,6 @@ function createContinuationSourceSeal(
     route.sourceContract,
     route.authority,
     ...(route.referenceApplication ?? []),
-    ...route.stages.flatMap(stage => stage.status === 'selected'
-      ? [...stage.artifacts, ...(stage.confidenceDebt ? [stage.confidenceDebt.record] : [])] : []),
   ]) {
     const bytes = readStableSourceFile(root, join(root, receipt.path));
     if (hashBytes(bytes) !== receipt.sha256) {
@@ -299,27 +262,13 @@ function createContinuationSourceSeal(
   // Continuation is read-only, but purpose origins remain live authority, not merely a hash
   // embedded in previously sealed route/source bytes.
   const record = parseRouteRecord(JSON.parse(readStableSourceFile(root, join(root, route.record.path)).toString('utf8')));
+  const modelLed = record.sourceContract.processPolicy?.schema !== 'human-design-process-v1';
+  if ((route.executionStyle === 'model-led') !== modelLed) {
+    throw new Error('adaptive route execution style does not match the signed process schema');
+  }
   const purpose = record.sourceContract.reviewPurpose;
   const authority = record.sourceContract.reviewPurposeAuthority;
   if (purpose && authority) verifyReviewPurposeAuthority(root, authority, purpose, record.sourceContract.request);
-  for (const stage of route.stages) {
-    if (stage.status !== 'selected' || stage.confidenceDebt === undefined) continue;
-    const selectedPath = stage.id === 'art-direction' ? '.omd/art-direction.json'
-      : stage.id === 'copy' ? '.omd/copy-deck.md' : `.omd/${stage.id}.md`;
-    try { lstatSync(join(root, selectedPath)); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
-    // lstat also catches dangling symlinks. New owned outputs need a fresh owner-bound seal;
-    // a continuation must not reuse the earlier absence/debt claim, even for invalid output.
-    throw new Error(`selected artifact materialized after confidence-debt source seal: ${selectedPath}`);
-  }
-  const proofPaths = ['.omd/type-proof.md', '.omd/composition.md']
-    .filter((path) => route.stages.some((stage) => stage.status === 'selected' && stage.artifacts.some((artifact) => artifact.path === path))) as SourceBoundProofPath[];
-  if (proofPaths.length > 0) {
-    const findings = validateSourceBoundProofCurrentness(root, proofPaths);
-    if (findings.length > 0) {
-      throw new Error(`SOURCE_BOUND_PROOF_CURRENTNESS_RED:${JSON.stringify(findings)}`);
-    }
-  }
   return {
     schemaVersion: SOURCE_SEAL_SCHEMA_VERSION,
     sealedAt,
@@ -365,7 +314,7 @@ export function validateSourceSeal(
   } catch (error) {
     return [{
       id: 'SOURCE-SEAL-STALE',
-      path: sealed.schemaVersion === 2 ? '.omd/workflow-plan.json' : sealed.route === undefined ? '.omd/source-seal.json' : '.omd/route.json',
+      path: sealed.route === undefined ? '.omd/source-seal.json' : '.omd/route.json',
       message: error instanceof Error ? error.message : String(error),
     }];
   }
@@ -386,12 +335,6 @@ export function validateSourceSeal(
   if (canonicalRouteJson(sealed.route ?? null) !== canonicalRouteJson(current.route ?? null)) {
     findings.push({ id: 'SOURCE-SEAL-STALE', path: '.omd/route.json', message: 'adaptive route decision, authority, or current artifact changed after source seal' });
   }
-  if (sealed.schemaVersion !== current.schemaVersion
-    || (sealed.schemaVersion === 2 && current.schemaVersion === 2
-      && canonicalRouteJson(sealed.workflow) !== canonicalRouteJson(current.workflow))) {
-    findings.push({ id: 'SOURCE-SEAL-STALE', path: '.omd/workflow-plan.json', message: 'workflow plan, selected artifacts, reviews, or current pointers changed after source seal' });
-  }
-
   const sealedSources = new Map(sealed.sources.map((item) => [item.path, item.sha256]));
   const currentSources = new Map(current.sources.map((item) => [item.path, item.sha256]));
   for (const sourcePath of [...new Set([...sealedSources.keys(), ...currentSources.keys()])].sort()) {

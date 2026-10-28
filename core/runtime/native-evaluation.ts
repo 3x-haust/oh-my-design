@@ -19,6 +19,7 @@ import { writeTrustedEvaluationObservation } from './trusted-evaluation-observat
 import { deriveTrustedEvaluationPlanFromProject } from './trusted-evaluation-plan.ts';
 import { requireResolvedNativeReframe } from './native-reframe.ts';
 import { requireRetainedFirstRenderReview } from '../design/first-render-review.ts';
+import { recordModelLedExecution } from './model-led-execution.ts';
 
 export class NativeEvaluationError extends Error {
   override readonly name = 'NativeEvaluationError';
@@ -63,13 +64,6 @@ export async function runNativeEvaluation(input: NativeEvaluationInput) {
     throw new NativeEvaluationError('NATIVE_EVALUATION_BUILD_MISMATCH');
   }
   const routeSha256 = adaptiveRouteRecordSha256(route);
-  const graphBytes = readStableProjectFile({ root, path: resolve(root, '.omd/decision-graph.json'),
-    label: 'native evaluation decision graph', fs: nodeStableProjectFileSystem() });
-  const graphInput: unknown = JSON.parse(graphBytes.toString('utf8'));
-  const graph = validateDecisionGraph(graphInput);
-  if (graph.value === undefined || graph.value.decisions.length === 0) {
-    throw new NativeEvaluationError('NATIVE_EVALUATION_DECISION_GRAPH_INVALID');
-  }
   const identity = deriveTrustedEvaluationIdentity({
     sourceContractSha256: route.sourceContractSha256, taskOutcome: route.sourceContract.taskOutcome,
     evidenceClaims: route.sourceContract.evidenceClaims, allowedPaths: route.allowedPaths, entryPath: manifest.entryPath,
@@ -83,6 +77,14 @@ export async function runNativeEvaluation(input: NativeEvaluationInput) {
   if (boundManifest.scripts.length !== identity.requiredOutcomeRefs.length
     || new Set(boundManifest.scripts.map(script => script.outcomeRef)).size !== identity.requiredOutcomeRefs.length) {
     throw new NativeEvaluationError('NATIVE_EVALUATION_MANIFEST_MISMATCH');
+  }
+  recordModelLedExecution(root, input.invocation, manifest.entryPath);
+  const graphBytes = readStableProjectFile({ root, path: resolve(root, '.omd/decision-graph.json'),
+    label: 'native evaluation decision graph', fs: nodeStableProjectFileSystem() });
+  const graphInput: unknown = JSON.parse(graphBytes.toString('utf8'));
+  const graph = validateDecisionGraph(graphInput);
+  if (graph.value === undefined || graph.value.decisions.length === 0) {
+    throw new NativeEvaluationError('NATIVE_EVALUATION_DECISION_GRAPH_INVALID');
   }
   const writer = createProjectWriteAdapter(root, input.invocation);
   writer.write('.omd/build.json', `${canonicalJson(build)}\n`);

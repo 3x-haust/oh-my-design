@@ -1,7 +1,7 @@
 # Form wizard stepper
 
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
-> against the current composition contract; do not transfer this page recipe unchanged.
+> against this page's content, brief and references; do not transfer this page recipe unchanged.
 
 A focused multi-step flow — onboarding, signup, checkout, complex creation — composed as
 one narrow column with a visible progress model, one decision cluster per step, and an
@@ -98,7 +98,7 @@ UX acceptance contract, not polish).
 ```
 
 The primary button predicts the next step by name ("다음: 결제" — a CTA predicts what
-happens after activation, per the copy-deck protocol). The final step ends on a designed
+happens after activation). The final step ends on a designed
 confirmation that restates what was created and names the first real action in the
 product (§Peak-end rule: the end is a deliberate moment, not a redirect).
 

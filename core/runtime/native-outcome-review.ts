@@ -12,6 +12,13 @@ import { reviewerText } from './reviewer-text.ts';
 
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const fail = (detail: string): never => { throw new Error(`NATIVE_OUTCOME_REVIEW_INVALID:${detail}`); };
+export const NATIVE_TEMPORAL_EVIDENCE_LIMITS = Object.freeze([
+  'actual-speed-unmeasured',
+  'input-latency-unmeasured',
+  'interruptibility-unmeasured',
+  'reduced-motion-parity-unmeasured',
+  'reference-timing-unmeasured',
+] as const);
 const object = (value: unknown): Record<string, unknown> => {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return fail('object required');
   return Object.fromEntries(Object.entries(value));
@@ -51,10 +58,53 @@ export function nativeOutcomeExecutionEvidence(root: string, invocation: Project
   }
   const requirements = (['mustHave', 'mustNotHave', 'completionEvidence'] as const)
     .flatMap(kind => route.sourceContract.taskOutcome[kind].map(requirement => ({ kind, requirement })));
+  const temporalCaptures = (receipt.temporalCaptures ?? []).map(capture => {
+    const bytes = read(capture.path);
+    if (hash(bytes) !== capture.sha256
+      || bytes.length < 24
+      || !bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))
+      || bytes.toString('ascii', 12, 16) !== 'IHDR'
+      || bytes.readUInt32BE(16) !== capture.width
+      || bytes.readUInt32BE(20) !== capture.height) return fail('temporal capture changed');
+    return {
+      outcomeRef: capture.outcomeRef,
+      component: capture.component,
+      state: capture.state,
+      viewport: capture.width === 1280 ? 'desktop' as const : 'mobile' as const,
+      phase: capture.phase,
+      captureMoment: capture.captureMoment,
+      playbackSampling: capture.playbackSampling,
+      captureSha256: capture.sha256,
+      width: capture.width,
+      height: capture.height,
+      pngBase64: bytes.toString('base64'),
+    };
+  });
   return {
     receiptSha256: projection.receiptSha256, executionPlanSha256: receipt.executionPlanSha256,
     productionRevisionSha256: receipt.productionRevisionSha256,
     transcript: receipt.transcript,
+    ...(temporalCaptures.length === 0 ? {} : {
+      temporalEvidenceLimits: NATIVE_TEMPORAL_EVIDENCE_LIMITS,
+      temporalCaptures,
+    }),
+    stateCaptures: receipt.captures.flatMap(capture => {
+      if (capture.outcomeRef === undefined) return [];
+      const script = plan.scripts.find(candidate => candidate.outcomeRef === capture.outcomeRef);
+      const viewport = capture.width === 1280 && capture.height === 900
+        ? 'desktop' as const
+        : capture.width === 390 && capture.height === 844
+          ? 'mobile' as const
+          : undefined;
+      return script?.captureState === undefined || viewport === undefined ? [] : [{
+        outcomeRef: capture.outcomeRef,
+        component: script.captureState.component,
+        state: script.captureState.state,
+        viewport,
+        captureSha256: capture.sha256,
+        testedState: `outcome-${hash(Buffer.from(capture.outcomeRef)).slice(0, 16)}`,
+      }];
+    }),
     outcomes: plan.scripts.map(script => {
       const requirement = requirements[refs.indexOf(script.outcomeRef)] ?? fail('requirement missing');
       const result = receipt.outcomeResults.find(row => row.outcomeRef === script.outcomeRef)
@@ -62,7 +112,11 @@ export function nativeOutcomeExecutionEvidence(root: string, invocation: Project
       const actions = script.actions.map(action => {
         switch (action.kind) {
           case 'click': return action;
+          case 'press': return action;
           case 'reload': return action;
+          case 'hover': return action;
+          case 'focus': return action;
+          case 'press-start': return action;
           case 'fill': return { ...action, value: reviewerText(action.value) };
           default: return action satisfies never;
         }

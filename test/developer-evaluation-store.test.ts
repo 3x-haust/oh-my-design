@@ -1,115 +1,35 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test, { after } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { PNG } from 'pngjs';
+import { captureDesignExecutionPolicy } from '../core/config/design-execution.ts';
 import {
-  DeveloperEvaluationError,
   appendDeveloperEvaluation,
+  createDeveloperEvaluationExperiment,
   openDeveloperEvaluationStore,
   parseDeveloperEvaluationInput,
-  parseDeveloperEvaluationSnapshot,
+  resolveDeveloperEvaluationHome,
+  pinEligibleDeveloperEvaluationSnapshot,
   pinDeveloperEvaluationSnapshot,
   promoteDeveloperEvaluationCase,
+  readDeveloperEvaluationInput,
   readDeveloperEvaluationSnapshot,
-  resolveDeveloperEvaluationHome,
+  readDeveloperEvaluationSnapshotForPublication,
+  readHistoricalDeveloperEvaluationRecord,
+  readHistoricalDeveloperEvaluationSnapshot,
+  recordDeveloperEvaluationExperimentRun,
   reviseDeveloperEvaluation,
   revokeDeveloperEvaluation,
-  selectDeveloperEvaluationCases,
   type DeveloperEvaluationRecordInput,
-  type DeveloperEvaluationScope,
-  type DeveloperEvaluationStore,
-  type EvaluationRole,
 } from '../core/coach/developer-evaluation-store.ts';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { capturePiRequest } from '../extensions/omd-request-source.ts';
+import { PiNativeRuns } from '../extensions/omd-native-run.ts';
 
-const roots: string[] = [];
-after(() => roots.forEach((root) => rmSync(root, { recursive: true, force: true })));
-const hash = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
-const png = (label: string): Buffer => Buffer.concat([
-  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-  Buffer.from(label),
-]);
-const scope: DeveloperEvaluationScope = { route: '/settings/profile', surface: 'product', task: 'edit-profile' };
-
-function fixture(namespace: 'real' | 'fixture' = 'real'): {
-  root: string;
-  store: DeveloperEvaluationStore;
-  imageA: string;
-  imageB: string;
-} {
-  const root = mkdtempSync(join(tmpdir(), 'omd-developer-evaluation-'));
-  roots.push(root);
-  const projectRoot = join(root, 'project');
-  mkdirSync(projectRoot, { mode: 0o700 });
-  const imageA = join(root, 'a.png');
-  const imageB = join(root, 'b.png');
-  writeFileSync(imageA, png('a'), { mode: 0o600 });
-  writeFileSync(imageB, png('b'), { mode: 0o600 });
-  return {
-    root,
-    imageA,
-    imageB,
-    store: openDeveloperEvaluationStore({
-      directory: join(root, 'private-store'),
-      projectRoot,
-      namespace,
-    }),
-  };
-}
-function interview(answer = 'yes') {
-  return {
-    questions: [{
-      id: 'preference',
-      prompt: 'Which outcome better supports the task?',
-      options: [{ id: 'yes', label: 'The candidate supports it.' }, { id: 'no', label: 'It does not.' }],
-    }],
-    answers: [{ questionId: 'preference', optionIds: [answer], text: null }],
-  } as const;
-}
-function record(
-  fx: ReturnType<typeof fixture>,
-  recordId: string,
-  requestId: string,
-  role: EvaluationRole = { kind: 'development' },
-  recordScope: DeveloperEvaluationScope = scope,
-): DeveloperEvaluationRecordInput {
-  return {
-    recordId,
-    requestId,
-    taskId: `task-${recordId}`,
-    capturedAt: '2026-10-11T08:00:00.000Z',
-    scope: recordScope,
-    role,
-    images: {
-      a: { path: fx.imageA, sha256: hash(readFileSync(fx.imageA)) },
-      b: { path: fx.imageB, sha256: hash(readFileSync(fx.imageB)) },
-    },
-    humanResponse: {
-      interview: interview(),
-      comparisonChoice: role.kind === 'held-out' ? role.candidateImage : 'a',
-      satisfaction: 'satisfied',
-      postChange: interview(),
-    },
-    relations: { references: ['reference:profile-form'], design: ['relation:label-before-control'] },
-    changes: { attempted: ['increased field grouping'], preserved: ['kept existing submit flow'] },
-    modelInterpretation: {
-      summary: 'The response may support preserving the task hierarchy.',
-      advisory: ['Preserve the visible task hierarchy for this exact route, surface, and task.'],
-    },
-    experiment: {
-      model: 'caller-selected-model',
-      settings: { reasoning: 'medium', temperature: 0 },
-      budget: { unit: 'tokens', limit: 1200 },
-      criteriaVersion: 'profile-criteria-v1',
-    },
-    reuse: { consent: 'allow-private-advisory-reuse', scope: recordScope },
-  };
-}
-const heldOut = (
-  candidateRecordId: string,
-  caseDecision: 'approve' | 'reject' | 'uncertain' = 'approve',
-): EvaluationRole => ({ kind: 'held-out', candidateRecordId, candidateImage: 'a', caseDecision });
+import { fixture, hash, interview, nativeRun, png, record, roots } from './helpers/developer-evaluation.ts';
 
 test('verbatim developer text preserves surrounding whitespace and line breaks', () => {
   const fx = fixture('fixture');
@@ -118,10 +38,10 @@ test('verbatim developer text preserves surrounding whitespace and line breaks',
   const saved = appendDeveloperEvaluation(fx.store, {
     ...input,
     humanResponse: { ...input.humanResponse,
-      interview: { questions: [{ id: 'note', prompt: '의견', options: [] }],
-        answers: [{ questionId: 'note', optionIds: [], text }] } },
+      interview: { questions: [...input.humanResponse.interview.questions, { id: 'note', prompt: '의견', options: [] }],
+        answers: [...input.humanResponse.interview.answers, { questionId: 'note', optionIds: [], text }] } },
   });
-  assert.equal(saved.humanResponse.interview.answers[0]?.text, text);
+  assert.equal(saved.humanResponse.interview.answers.find(answer => answer.questionId === 'note')?.text, text);
 });
 
 test('refusing project-local evaluation storage creates no directory or record', () => {
@@ -192,7 +112,7 @@ test('append verifies image bytes and refuses absent interview answers', () => {
   assert.throws(() => appendDeveloperEvaluation(fx.store, missing), /exactly one answer/);
 
   const tampered = record(fx, 'tampered-image', 'request-two');
-  writeFileSync(fx.imageA, png('changed'), { mode: 0o600 });
+  writeFileSync(fx.imageA, png(255), { mode: 0o600 });
   assert.throws(() => appendDeveloperEvaluation(fx.store, tampered), /do not match SHA-256/);
 
   const malformedPath = join(fx.root, 'not-an-image.png');
@@ -205,205 +125,207 @@ test('append verifies image bytes and refuses absent interview answers', () => {
       a: { path: malformedPath, sha256: hash(readFileSync(malformedPath)) },
     },
   };
-  assert.throws(() => appendDeveloperEvaluation(fx.store, malformed), /not a recognized image/);
+  assert.throws(() => appendDeveloperEvaluation(fx.store, malformed), /image|PNG/);
 });
 
-test('revision and revocation append immutable history and make the latest record inactive', () => {
-  const fx = fixture();
-  const original = appendDeveloperEvaluation(fx.store, record(fx, 'candidate', 'request-one'));
-  const revisedBase = record(fx, 'candidate', 'request-one');
-  const revisedInput: DeveloperEvaluationRecordInput = {
-    ...revisedBase,
-    modelInterpretation: {
-      ...revisedBase.modelInterpretation,
-      advisory: ['Keep the profile task grouping for this exact structural scope.'],
-    },
-  };
-  const revised = reviseDeveloperEvaluation(fx.store, {
-    reason: 'The interviewer clarified the preserved behavior.',
-    revisedAt: '2026-10-11T08:15:00.000Z',
-    record: revisedInput,
+test('a non-native host cannot create private automatic calibration pins', t => {
+  const fx = fixture('fixture');
+  const directory = join(fx.root, 'unauthorized-pins');
+  const previous = process.env.OMD_EVALUATION_HOME;
+  const previousSnapshot = process.env.OMD_EVALUATION_SNAPSHOT;
+  process.env.OMD_EVALUATION_HOME = directory;
+  delete process.env.OMD_EVALUATION_SNAPSHOT;
+  t.after(() => {
+    if (previous === undefined) delete process.env.OMD_EVALUATION_HOME;
+    else process.env.OMD_EVALUATION_HOME = previous;
+    if (previousSnapshot === undefined) delete process.env.OMD_EVALUATION_SNAPSHOT;
+    else process.env.OMD_EVALUATION_SNAPSHOT = previousSnapshot;
   });
-  assert.equal(revised.revisesSha256, original.recordSha256);
-  assert.equal(revised.revision, 2);
-  assert.equal(readdirSync(join(fx.store.directory, 'namespaces', 'real', 'records')).length, 2);
-  const revocation = revokeDeveloperEvaluation(fx.store, {
-    recordId: 'candidate',
-    reason: 'The participant withdrew reuse permission.',
+  capturePiRequest(fx.projectRoot, 'A new request');
+  const runs = new PiNativeRuns(captureDesignExecutionPolicy({}));
+  runs.observe({ cwd: fx.projectRoot, model: { provider: 'test', id: 'test' },
+    thinkingLevel: 'high', sessionManager: { getSessionId: () => 'test' } });
+  assert.throws(() => runs.prepare(fx.projectRoot, ['schema', 'route-input'],
+    fileURLToPath(new URL('..', import.meta.url))), /native Pi host/);
+  assert.equal(existsSync(directory), false);
+});
+
+test('caller-rehashed run JSON and arbitrary image hashes are not native experiment evidence', () => {
+  const fx = fixture();
+  appendDeveloperEvaluation(fx.store, record(fx, 'development', 'training-request'));
+  const requestSha256 = hash('held-out-one');
+  const snapshot = createDeveloperEvaluationExperiment(fx.store, {
+    recordId: 'development',
+    runtimeSourceSha256: hash('runtime-source'),
+    plannedHeldOutRequestSha256s: [requestSha256, hash('held-out-two')],
+    criteriaIds: ['hierarchy'],
+    pinIdentity: hash('authority-attack-pin'),
+    pinnedAt: '2026-10-11T09:00:00.000Z',
+  });
+  assert.throws(() => recordDeveloperEvaluationExperimentRun(fx.store, {
+    snapshotId: snapshot.snapshotId,
+    nativeRun: nativeRun(fx, snapshot, requestSha256),
+    requestSha256,
+    resultImageSha256s: { a: hash('not-a-native-image-a'), b: hash('not-a-native-image-b') },
+    capturedAt: '2026-10-11T10:00:00.000Z',
+  }));
+});
+
+test('raw comparison, candidate satisfaction, reference preference, and reuse answers are authoritative', () => {
+  const fx = fixture();
+  const base = record(fx, 'contradictory', hash('request'));
+  for (const humanResponse of [
+    { ...base.humanResponse, comparisonChoice: 'b' as const },
+    { ...base.humanResponse, satisfaction: 'mixed' as const },
+    { ...base.humanResponse, satisfactionCandidate: 'b' as const },
+    { ...base.humanResponse, interview: { ...base.humanResponse.interview,
+      answers: base.humanResponse.interview.answers.map(answer => answer.questionId === 'comparison'
+        ? { ...answer, text: 'B' } : answer) } },
+  ]) {
+    assert.throws(() => appendDeveloperEvaluation(fx.store, {
+      ...base,
+      recordId: `${base.recordId}-${humanResponse.comparisonChoice}-${humanResponse.satisfaction}-${humanResponse.satisfactionCandidate}`,
+      humanResponse,
+    }), /authoritative|candidate-specific|raw interview option|option label/);
+  }
+  assert.throws(() => appendDeveloperEvaluation(fx.store, {
+    ...base,
+    recordId: 'reuse-conflict',
+    reuse: { ...base.reuse, consent: 'deny' },
+  }), /reuse summary conflicts/);
+
+  const separate = record(fx, 'separate-signals', hash('separate'));
+  const saved = appendDeveloperEvaluation(fx.store, {
+    ...separate,
+    images: { ...separate.images, references: { a: separate.images.b, b: separate.images.a } },
+    humanResponse: {
+      interview: interview('b', 'mixed', 'b', 'allow', 'a'),
+      comparisonChoice: 'b',
+      satisfaction: 'mixed',
+      satisfactionCandidate: 'b',
+      referencePreference: 'a',
+      postChange: { questions: [], answers: [] },
+    },
+  });
+  assert.equal(saved.humanResponse.referencePreference, 'a');
+  assert.equal(saved.humanResponse.satisfactionCandidate, 'b');
+  assert.equal(saved.humanResponse.satisfaction, 'mixed');
+  assert.throws(() => appendDeveloperEvaluation(fx.store, {
+    ...separate, recordId: 'unbound-reference-preference', humanResponse: saved.humanResponse,
+  }), /actual displayed reference image pair/);
+});
+
+test('only decodable permission-authorized PNGs are retained as immutable private evidence', () => {
+  const fx = fixture();
+  const malformed = join(fx.root, 'header-only.png');
+  writeFileSync(malformed, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), { mode: 0o600 });
+  const malformedInput = record(fx, 'malformed', hash('malformed'));
+  assert.throws(() => appendDeveloperEvaluation(fx.store, {
+    ...malformedInput,
+    images: { ...malformedInput.images, a: { path: malformed, sha256: hash(readFileSync(malformed)) } },
+  }), /decodable PNG/);
+
+  const saved = appendDeveloperEvaluation(fx.store, record(fx, 'retained', hash('retained')));
+  assert.notEqual(saved.images.a.path, fx.imageA);
+  assert.match(saved.images.a.path, /private-store.*images.*sha256-/);
+  unlinkSync(fx.imageA);
+  unlinkSync(fx.imageB);
+  const recovered = readDeveloperEvaluationInput(fx.store, saved.recordId);
+  assert.equal(hash(readFileSync(recovered.images.a.path)), saved.images.a.sha256);
+  assert.equal(hash(readFileSync(recovered.images.b.path)), saved.images.b.sha256);
+  assert.deepEqual(recovered.imageUse, {
+    modelDisclosure: 'allow-current-developer-session',
+    retention: 'allow-private-evidence-copy',
+    externalShare: 'deny',
+    productAssetReuse: 'deny',
+  });
+});
+
+test('revision and revocation invalidate future publication but preserve frozen and historical reads', () => {
+  const fx = fixture();
+  const source = appendDeveloperEvaluation(fx.store, record(fx, 'candidate', hash('training')));
+  const revised = reviseDeveloperEvaluation(fx.store, {
+    reason: 'Clarified the model interpretation separately.',
+    revisedAt: '2026-10-11T08:15:00.000Z',
+    record: {
+      ...readDeveloperEvaluationInput(fx.store, source.recordId),
+      modelInterpretation: {
+        summary: 'Revised model hypothesis.',
+        advisory: ['Preserve the task context, not the literal styling.'],
+      },
+    },
+  });
+  assert.equal(revised.revisesSha256, source.recordSha256);
+  revokeDeveloperEvaluation(fx.store, {
+    recordId: revised.recordId,
+    reason: 'Developer withdrew reuse permission.',
     revokedAt: '2026-10-11T08:30:00.000Z',
   });
-  assert.equal(revocation.recordSha256, revised.recordSha256);
-  assert.equal(readdirSync(join(fx.store.directory, 'namespaces', 'real', 'records')).length, 2);
-  assert.throws(() => reviseDeveloperEvaluation(fx.store, {
-    reason: 'Cannot revise a revoked response.',
-    revisedAt: '2026-10-11T08:45:00.000Z',
-    record: revisedInput,
-  }), /not active/);
-});
+  assert.throws(() => readDeveloperEvaluationInput(fx.store, revised.recordId), /not active/);
 
-test('promotion refuses fixture records, repeated requests, scope mismatch, and non-approval', () => {
-  const fixtureStore = fixture('fixture');
-  appendDeveloperEvaluation(fixtureStore.store, record(fixtureStore, 'candidate', 'request-one'));
-  assert.throws(() => promoteDeveloperEvaluationCase(fixtureStore.store, {
-    recordId: 'candidate',
-    heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /can never promote/);
-
-  const repeated = fixture();
-  appendDeveloperEvaluation(repeated.store, record(repeated, 'candidate', 'request-one'));
-  appendDeveloperEvaluation(repeated.store, record(repeated, 'held-one', 'request-two', heldOut('candidate')));
-  appendDeveloperEvaluation(repeated.store, record(repeated, 'held-two', 'request-two', heldOut('candidate')));
-  assert.throws(() => promoteDeveloperEvaluationCase(repeated.store, {
-    recordId: 'candidate',
-    heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /different requests/);
-
-  const mismatch = fixture();
-  appendDeveloperEvaluation(mismatch.store, record(mismatch, 'candidate', 'request-one'));
-  appendDeveloperEvaluation(mismatch.store, record(mismatch, 'held-one', 'request-two', heldOut('candidate')));
-  appendDeveloperEvaluation(mismatch.store, record(
-    mismatch,
-    'held-two',
-    'request-three',
-    heldOut('candidate'),
-    { route: '/settings/profile', surface: 'product', task: 'delete-profile' },
-  ));
-  assert.throws(() => promoteDeveloperEvaluationCase(mismatch.store, {
-    recordId: 'candidate',
-    heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /exact matching scope/);
-
-  const rejected = fixture();
-  appendDeveloperEvaluation(rejected.store, record(rejected, 'candidate', 'request-one'));
-  appendDeveloperEvaluation(rejected.store, record(rejected, 'held-one', 'request-two', heldOut('candidate')));
-  appendDeveloperEvaluation(rejected.store, record(rejected, 'held-two', 'request-three', heldOut('candidate', 'uncertain')));
-  assert.throws(() => promoteDeveloperEvaluationCase(rejected.store, {
-    recordId: 'candidate',
-    heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /explicit approving held-out/);
-});
-
-test('promotion refuses forged favorable decisions and inconsistent or unmeasured experiments', () => {
-  const uninterpreted = fixture();
-  const uninterpretedBase = record(uninterpreted, 'candidate', 'request-one');
-  appendDeveloperEvaluation(uninterpreted.store, {
-    ...uninterpretedBase,
-    modelInterpretation: { summary: '', advisory: [] },
-  });
-  appendDeveloperEvaluation(uninterpreted.store, record(uninterpreted, 'held-one', 'request-two', heldOut('candidate')));
-  appendDeveloperEvaluation(uninterpreted.store, record(uninterpreted, 'held-two', 'request-three', heldOut('candidate')));
-  assert.throws(() => promoteDeveloperEvaluationCase(uninterpreted.store, {
-    recordId: 'candidate', heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /separately recorded model advisory/);
-
-  const forged = fixture();
-  appendDeveloperEvaluation(forged.store, record(forged, 'candidate', 'request-one'));
-  appendDeveloperEvaluation(forged.store, record(forged, 'held-one', 'request-two', heldOut('candidate')));
-  const neitherBase = record(forged, 'held-two', 'request-three', heldOut('candidate'));
-  appendDeveloperEvaluation(forged.store, {
-    ...neitherBase,
-    humanResponse: { ...neitherBase.humanResponse, comparisonChoice: 'neither' },
-  });
-  assert.throws(() => promoteDeveloperEvaluationCase(forged.store, {
-    recordId: 'candidate', heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /favor the declared candidate/);
-
-  const unsatisfied = fixture();
-  appendDeveloperEvaluation(unsatisfied.store, record(unsatisfied, 'candidate', 'request-one'));
-  appendDeveloperEvaluation(unsatisfied.store, record(unsatisfied, 'held-one', 'request-two', heldOut('candidate')));
-  const mixedBase = record(unsatisfied, 'held-two', 'request-three', heldOut('candidate'));
-  appendDeveloperEvaluation(unsatisfied.store, {
-    ...mixedBase,
-    humanResponse: { ...mixedBase.humanResponse, satisfaction: 'mixed' },
-  });
-  assert.throws(() => promoteDeveloperEvaluationCase(unsatisfied.store, {
-    recordId: 'candidate', heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /be satisfied/);
-
-  const inconsistent = fixture();
-  appendDeveloperEvaluation(inconsistent.store, record(inconsistent, 'candidate', 'request-one'));
-  appendDeveloperEvaluation(inconsistent.store, record(inconsistent, 'held-one', 'request-two', heldOut('candidate')));
-  const differentExperiment = record(inconsistent, 'held-two', 'request-three', heldOut('candidate'));
-  appendDeveloperEvaluation(inconsistent.store, {
-    ...differentExperiment,
-    experiment: { ...differentExperiment.experiment, criteriaVersion: 'profile-criteria-v2' },
-  });
-  assert.throws(() => promoteDeveloperEvaluationCase(inconsistent.store, {
-    recordId: 'candidate', heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /same measured experiment contract/);
-
-  const unmeasured = fixture();
-  const unmeasuredRecord = (recordId: string, requestId: string, role: EvaluationRole): DeveloperEvaluationRecordInput => {
-    const base = record(unmeasured, recordId, requestId, role);
-    return { ...base, experiment: { ...base.experiment, budget: { unit: 'unmeasured', limit: 0 } } };
+  const historicalCore = {
+    schema: 'developer-evaluation-snapshot-v1',
+    requestRunId: 'historical-run',
+    pinnedAt: '2026-10-11T08:00:00.000Z',
+    cases: [],
   };
-  appendDeveloperEvaluation(unmeasured.store, unmeasuredRecord('candidate', 'request-one', { kind: 'development' }));
-  appendDeveloperEvaluation(unmeasured.store, unmeasuredRecord('held-one', 'request-two', heldOut('candidate')));
-  appendDeveloperEvaluation(unmeasured.store, unmeasuredRecord('held-two', 'request-three', heldOut('candidate')));
-  assert.throws(() => promoteDeveloperEvaluationCase(unmeasured.store, {
-    recordId: 'candidate', heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  }), /measured experiment metadata/);
+  const digest = hash(canonicalJson(historicalCore));
+  writeFileSync(
+    join(fx.store.directory, 'namespaces', 'real', 'snapshots', `sha256-${digest}.json`),
+    canonicalJson({ ...historicalCore, snapshotId: digest, digest }),
+    { mode: 0o600 },
+  );
+  assert.equal(readHistoricalDeveloperEvaluationSnapshot(fx.store, digest).schema, 'developer-evaluation-snapshot-v1');
+  assert.throws(() => readDeveloperEvaluationSnapshot(fx.store, digest), /snapshot.*unknown|snapshot.schema/);
+
+  const historicalRecord = {
+    schema: 'developer-evaluation-record-v1',
+    namespace: 'real',
+    recordId: 'historical-only',
+    note: 'Historical records require an explicit reader and never enter current publication.',
+  };
+  const recordSha256 = hash(canonicalJson(historicalRecord));
+  writeFileSync(
+    join(fx.store.directory, 'namespaces', 'real', 'records', `sha256-${recordSha256}.json`),
+    canonicalJson({ ...historicalRecord, recordSha256 }),
+    { mode: 0o600 },
+  );
+  assert.equal(readHistoricalDeveloperEvaluationRecord(fx.store, recordSha256).schema, 'developer-evaluation-record-v1');
+  assert.doesNotThrow(() => appendDeveloperEvaluation(fx.store, record(fx, 'current-after-history', hash('current'))));
 });
 
-test('pinned snapshots are frozen, path-free, stable, parseable, and selected only by exact scope', () => {
-  const fx = fixture();
-  appendDeveloperEvaluation(fx.store, record(fx, 'candidate', 'request-one'));
-  appendDeveloperEvaluation(fx.store, record(fx, 'held-one', 'request-two', heldOut('candidate')));
-  appendDeveloperEvaluation(fx.store, record(fx, 'held-two', 'request-three', heldOut('candidate')));
-  const promoted = promoteDeveloperEvaluationCase(fx.store, {
-    recordId: 'candidate',
-    heldOutRecordIds: ['held-one', 'held-two'],
-    promotedAt: '2026-10-11T09:00:00.000Z',
-  });
-  const snapshot = pinDeveloperEvaluationSnapshot(fx.store, {
-    requestRunId: 'native-run-one',
-    caseIds: [promoted.caseId],
-    pinnedAt: '2026-10-11T09:15:00.000Z',
-  });
-  assert(Object.isFrozen(snapshot));
-  assert(Object.isFrozen(snapshot.cases));
-  assert(Object.isFrozen(snapshot.cases[0]?.scope));
-  const serialized = JSON.stringify(snapshot);
-  assert(!serialized.includes(fx.imageA));
-  assert(!serialized.includes('request-one'));
-  assert(!serialized.includes('Which outcome'));
-  assert(!serialized.includes('caller-selected-model'));
-  assert.equal(snapshot.cases[0]?.authority, 'none');
-  assert.equal(snapshot.cases[0]?.currentRequestPrecedence, 'always');
-  assert.deepEqual(snapshot.cases[0]?.developerSignal, { comparisonChoice: 'a', satisfaction: 'satisfied' });
-  assert.deepEqual(snapshot.cases[0]?.designRelations, ['relation:label-before-control']);
-  assert.deepEqual(snapshot.cases[0]?.changeSummary, {
-    attempted: ['increased field grouping'],
-    preserved: ['kept existing submit flow'],
-  });
-  assert.equal(snapshot.cases[0]?.advisorySource, 'model-interpretation');
-  assert.deepEqual(parseDeveloperEvaluationSnapshot(JSON.parse(serialized)), snapshot);
-  assert.deepEqual(readDeveloperEvaluationSnapshot(fx.store, snapshot.snapshotId), snapshot);
-  assert.equal(selectDeveloperEvaluationCases(snapshot, scope).length, 1);
-  assert.equal(selectDeveloperEvaluationCases(snapshot, { ...scope, task: 'delete-profile' }).length, 0);
-  assert.throws(() => selectDeveloperEvaluationCases(snapshot, scope, 4), /at most three/);
+test('fixture data cannot create experiments or validated production snapshots', () => {
+  const fx = fixture('fixture');
+  const source = appendDeveloperEvaluation(fx.store, record(fx, 'candidate', hash('training')));
+  assert.throws(() => createDeveloperEvaluationExperiment(fx.store, {
+    recordId: source.recordId,
+    runtimeSourceSha256: hash('runtime-source'),
+    plannedHeldOutRequestSha256s: [hash('one'), hash('two')],
+    criteriaIds: ['task-complete'],
+    pinIdentity: hash('pin'),
+    pinnedAt: '2026-10-11T08:30:00.000Z',
+  }), /fixture/);
+  assert.throws(() => pinDeveloperEvaluationSnapshot(fx.store, {
+    pinIdentity: hash('pin'),
+    caseIds: [],
+    pinnedAt: '2026-10-11T08:30:00.000Z',
+  }), /fixture/);
+});
 
-  appendDeveloperEvaluation(fx.store, record(fx, 'unrelated', 'request-four'));
-  assert.equal(JSON.stringify(snapshot), serialized);
-  assert.deepEqual(readDeveloperEvaluationSnapshot(fx.store, snapshot.snapshotId), snapshot);
-  revokeDeveloperEvaluation(fx.store, {
-    recordId: 'candidate',
-    reason: 'The developer withdrew this case after the run started.',
-    revokedAt: '2026-10-11T09:30:00.000Z',
+test('an ordinary preflight pin freezes an empty eligible selection', () => {
+  const fx = fixture();
+  const pinIdentity = hash('ordinary-native-preflight');
+  const first = pinEligibleDeveloperEvaluationSnapshot(fx.store, {
+    pinIdentity,
+    pinnedAt: '2026-10-11T08:00:00.000Z',
   });
-  assert.equal(JSON.stringify(snapshot), serialized);
-  assert.equal(selectDeveloperEvaluationCases(snapshot, scope).length, 1);
-  assert.throws(
-    () => readDeveloperEvaluationSnapshot(fx.store, snapshot.snapshotId),
-    /references an inactive case/,
-  );
+  assert.equal(first.mode, 'validated');
+  assert.deepEqual(first.cases, []);
+  appendDeveloperEvaluation(fx.store, record(fx, 'later-record', hash('later-request')));
+  const resumed = pinEligibleDeveloperEvaluationSnapshot(fx.store, {
+    pinIdentity,
+    pinnedAt: '2026-10-11T09:00:00.000Z',
+  });
+  assert.equal(resumed.snapshotId, first.snapshotId);
+  assert.deepEqual(resumed.cases, []);
 });

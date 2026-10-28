@@ -24,6 +24,8 @@ export function referenceMeasuredInvariants(reference: Pick<Reference, 'invarian
     const receipt = reference.capturePreparation;
     if (receipt?.schema !== 'reference-capture-preparation-receipt-v1' || !Array.isArray(receipt.notMeasured)
       || receipt.notMeasured.length !== 3 || new Set(receipt.notMeasured).size !== 3
+      || (receipt.captureSha256 !== undefined && receipt.captureSha256 !== null
+        && (typeof receipt.captureSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.captureSha256)))
       || ['interaction-probe', 'motion-probe', 'energy-curve'].some(name => !(receipt.notMeasured as readonly string[]).includes(name))) throw new Error('prepared reference has invalid probe coverage');
     return { ...invariants, measurementCoverage: { ...PREPARED_MEASUREMENT_COVERAGE } };
   }

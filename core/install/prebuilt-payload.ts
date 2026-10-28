@@ -16,6 +16,7 @@ const PACK_DIRECTORIES = [
   ['core', 'graphics'],
   ['core', 'craft'],
   ['core', 'protocol'],
+  ['core', 'guides'],
 ] as const;
 
 export type ExpectedPrebuiltFile =

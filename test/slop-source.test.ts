@@ -83,6 +83,22 @@ const detectorCases: Array<{
   },
 ];
 
+test('slop CLI delivers the complete large JSON inventory through a pipe', t => {
+  const root = temp();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  for (let index = 0; index < 350; index++) {
+    write(root, `surface-${index}.html`, '<h1>Build work that<br>people remember</h1>');
+  }
+  const expected = scanSlopSource(root);
+  assert.ok(Buffer.byteLength(JSON.stringify(expected)) > 65_536);
+  const result = spawnSync(process.execPath,
+    ['--import', 'tsx', cli, 'slop', 'scan', root, '--json'],
+    { cwd: repository, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stderr, '');
+  assert.deepEqual(JSON.parse(result.stdout), expected);
+});
+
 for (const [id, source] of [
   ['mid-sentence-break', '<h1>Complete.<span title=">not visible"></span><br>Next sentence.</h1>'],
   ['decorative-ordinal-run', ['01', '02', '03'].map(value => `<b class="ordinal-display"><span title=">${value}"></span></b>`).join('')],

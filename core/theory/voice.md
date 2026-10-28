@@ -138,10 +138,10 @@ are the phrases the copy should use or echo. The user who writes "I used to spen
 hours a week reconciling this manually" has handed you a sentence. The copy that quotes
 their situation back to them is the copy that converts.
 
-This connects directly to the scout's community captures. A Reddit thread where users argue
-about exactly this product category, a Hacker News comment naming why a redesign failed —
-these are not sentiment data. They are voice data. The scout captures them; the hand uses
-them. A voice study that records how a site writes is the positive model; the community
+This connects directly to community captures kept as references. A Reddit thread where users
+argue about exactly this product category, a Hacker News comment naming why a redesign
+failed — these are not sentiment data. They are voice data. Keep them, then use them in the
+copy. A voice study that records how a site writes is the positive model; the community
 captures record the phrases the audience already uses for the problem.
 
 ---
@@ -160,11 +160,11 @@ and 합니다체 (하다 → 합니다, 됩니다 → 됩니다). They can imply
 warmth. Neither is a universal product default; choose from the voice contract, audience,
 situation, and required authority. Defaulting to a soft, conversational 해요체 because it is the familiar consumer-app register — on a landing whose subject is technical, authoritative, or precision-first — is a register-fit miss, not a safe default. The speech level is chosen from this subject's audience and the authority its value claim needs, and recorded in the Voice contract with that reason; a landing that persuades on rigor and precision usually earns a firmer register than one that persuades on friendliness.
 
-Toss committed to 해요체 across every string in its product and published the rule
-explicitly: all copy uses 해요체, without exception, regardless of context or screen.
-Their stated reason is consistency of experience — 합니다체 anywhere breaks the register
-the rest of the product has established. The rule also extends to avoiding over-polite forms
-(~시겠어요?, ~께) that amplify formality past what the relationship calls for.
+Toss documents 해요체 as a product-wide voice choice and describes consistency as part of
+that experience. This is evidence about Toss's own service, not a universal Korean rule or
+proof that every legal, safety, institutional, or B2B surface should use the same register.
+([Toss, first UX writer](https://toss.tech/article/1st_uxwriter),
+[Toss writing principles](https://toss.tech/article/8-writing-principles-of-toss))
 
 Cite Toss (and 당근, Kakao) as documented examples of register discipline, never as a voice to copy. The
 register rules are already stated above — do not web-search a product's copy strings to imitate "토스식
@@ -214,19 +214,26 @@ or technical explanation may need a longer sentence. When a compact surface comb
 unrelated jobs, split at the change; retain a connective when it carries a real logical
 relationship that juxtaposition would lose.
 
-### What Korean products actually sound like
+### Service character is not human impersonation
 
-Successful Korean consumer products such as Toss, 당근, and Kakao show that consistency is
-not the same as informality. Their compact action and state copy is precise within its chosen
-register. Heroes often lead with the user's change; documentation, comparisons, and feature
-details may explain mechanism when mechanism is the useful fact.
+User-supplied guidance makes two boundaries explicit:
 
-배민 (Baemin) operates in a distinct creative register — warm, witty, deliberately playful —
-but the underlying commitment is the same: a consistent voice that was designed and held,
-not allowed to drift. Their UX writing interview at bcut.baemin.com describes the first
-UX writer's mandate as "ensuring the text inside the app communicates clearly with users
-and protecting consistency." The register is brand-specific; the structural commitment is
-universal.
+- 해요체 is a speech-level decision, not permission for a service to pretend it is a person.
+  Human-sounding fillers, emotions, or first-person claims still need a truthful speaker and
+  a useful job.
+- UI text reflects this service's character and philosophy. Do not copy another service's
+  vocabulary or branded friendliness. Reuse shared domain terms when users already know the
+  concept; name a product-specific feature from its own behavior.
+
+The same guidance prioritizes accuracy, concision, and consistency before brand voice.
+Consistency means one term per concept and one intentional speech level per speaker and
+relationship, with explicit exceptions for quoted speech, legal text, safety, or another
+changed speaker. It does not mean every string has the same sentence shape.
+
+Woowa Brothers' first-party account of an internal UX-writing assistant reinforces the
+need for explicit, maintained, context-aware rules and for asking which component a string
+will occupy. Its currency example is Baemin-specific and must not become a Korean-wide
+format rule. ([Woowa Brothers](https://techblog.woowahan.com/23836/))
 
 ### Document-structure narration: write the content, not that content is coming
 
@@ -339,9 +346,9 @@ honest or performed. A genuine takeaway — something the writer actually learne
 — earns the closure. A resolution that smoothes over ongoing uncertainty changes the claim.
 If the answer does not exist yet, retain that uncertainty instead of packaging a lesson.
 
-### Uniform sentence endings and not-X-but-Y: pre-handoff checks, not linter rules
+### Uniform sentence endings and not-X-but-Y: pre-build checks, not linter rules
 
-Two Korean patterns require contextual pre-handoff review and cannot become safe
+Two Korean patterns require contextual pre-build review and cannot become safe
 deterministic rules:
 
 **Three or more consecutive identical sentence-final endings** (이에요./이에요./이에요. or
@@ -350,7 +357,7 @@ product benefit lists deliberately use parallel endings: "빠릅니다.
 정확합니다. 쉽습니다." is valid copy that would false-positive on every legitimate feature
 section. A linter rule would fire on too much legitimate writing to be trusted.
 
-Pre-handoff check: if adjacent sentences share an ending, ask whether the ideas are truly
+Pre-build check: if adjacent sentences share an ending, ask whether the ideas are truly
 parallel. Keep the form when it supports comparison or recall. If sameness hides a change in
 communicative job, repair that sentence's job rather than forcing a different ending.
 
@@ -360,13 +367,13 @@ a brand that deliberately contrasts itself with a
 category norm ("빠른 게 아니라 정확합니다") uses this construction with intent. No narrow
 regex distinguishes the cases reliably.
 
-Pre-handoff check: when this construction appears in the hero or opening paragraph, ask
-whether the contrast is a designed claim (cite it in decisions.md with the brand reason)
+Pre-build check: when this construction appears in the hero or opening paragraph, ask
+whether the contrast is a designed claim (say so in the report with the brand reason)
 or a hedge that weakens the useful claim. Delete empty hedges; keep designed contrasts. "AI가 만든
 게 아니라, 사람이 썼어요" as a self-description of the tool is a hedge; "비싼 게 아니라
 오래 씁니다" as a product claim is a designed contrast.
 
-Neither pattern has an `omd check` rule. Both belong on the hand's pre-handoff review pass.
+Neither pattern has an `omd check` rule. Both belong in the maker's own read before building.
 
 Translated English marketing is the loudest failure mode. The sentence structure of
 English product copy — subject, action verb, object, benefit clause — does not map cleanly
@@ -466,7 +473,7 @@ The self-introduction pattern is regex-describable:
 It is not a safe linter rule. Product comparison tables, developer documentation, feature
 detail sections, and UI tooltip copy all use constructions that match this pattern
 legitimately. Without reliable hero-node detection, the rule would false-positive on too
-much legitimate writing to be trusted. It belongs on the hand's pre-handoff review pass,
+much legitimate writing to be trusted. It belongs in the maker's own read before building,
 in the same category as the not-X-but-Y construction documented above under Korean copy.
 
 ---
@@ -544,15 +551,15 @@ conclusion is about domain specialisation in attention heads, not about copy reg
   (copyhackers.com/how-to-do-rapid-fire-review-mining/) — voice-of-customer method:
   mine real user language from reviews and forums; the customer names the value better
   than the copywriter
-- Toss Tech. (2022). "토스의 8가지 라이팅 원칙들."
-  toss.tech/article/8-writing-principles-of-toss — eight principles built from A/B test
-  data: Predictable hint, Weed cutting, Remove empty sentences, Focus on key message, Easy
-  to speak (avoid 한자어 and 문어체), Suggest over force, Universal words, Find hidden emotion
-- Toss Developer Center, UX Writing Guide
-  (developers-apps-in-toss.toss.im/design/ux-writing.html) — 해요체 as the product-wide
-  standard; active voice preference; one message per sentence; native Korean over Sino-Korean
-- 배민 UX Writing interview (bcut.baemin.com/6287/) — first UX writer mandate: clear
-  communication and consistency of voice; register as a designed commitment, not a default
+- Toss Tech. (2022), ["토스의 8가지 라이팅 원칙들"](https://toss.tech/article/8-writing-principles-of-toss)
+  — directional principles for Toss's product context, including predictable hints,
+  removing empty sentences, spoken clarity, and contextual emotion; not universal A/B laws
+  or a voice to copy
+- Toss Tech. (2023), ["첫 UX writer는 무슨 일을 해야 할까"](https://toss.tech/article/1st_uxwriter)
+  — Toss-specific voice adoption and the value of concrete examples over abstract voice prose
+- Woowa Brothers. (2025), ["안녕하세요! AI UX라이터 제민희입니다. 무엇을 도와드릴까요?"](https://techblog.woowahan.com/23836/)
+  — first-party case study on explicit, grounded, component-aware writing rules; product-specific
+  examples do not establish universal Korean copy conventions
 - Qian et al. (2025). "Enhancing Human-Like Responses in Large Language Models."
   arxiv.org/abs/2501.05032 — dialogue preference evidence for register fit; not static UI
   authorship evidence and not authority for phrase-level lint
@@ -582,10 +589,9 @@ preview is not a sent request; sent is not received; received is not an appointm
 appointment is not a visit; a visit is not completion. Likewise, in-memory state, tab-scoped
 session storage, persistent browser storage, and remote persistence are different claims.
 
-Record those limits in the copy deck's typed Truth contract before writing action,
-confirmation, status, or summary text. If a frozen requirement label exceeds either boundary,
-return it to the framer instead of preserving an overclaim or inventing a softer downstream
-synonym. Confirmation copy names the achieved boundary first. It adds a reference, next actor,
+Settle those limits before writing action, confirmation, status, or summary text. If a
+requested label exceeds either boundary, rename it to the verified boundary and say so in the
+report instead of preserving an overclaim or inventing a softer downstream synonym. Confirmation copy names the achieved boundary first. It adds a reference, next actor,
 timing, or recovery only when that information exists and changes what the user can do.
 
 This separation follows the state distinctions visible in GOV.UK confirmation patterns,
@@ -595,37 +601,36 @@ one transition, but the evidence must establish every transition the copy names.
 
 ---
 
-## Official evidence map and layer ownership
+## Official evidence map by layer
 
-- **Toss writing principles** — https://toss.tech/article/21022 — writer: one key message,
+- **Toss writing principles** — https://toss.tech/article/21022 — copy: one key message,
   remove repeated/empty lines, make the next screen predictable, use one spoken breath,
-  preserve user choice. Eye: read aloud and test CTA prediction.
-- **Toss marketing writing** — https://toss.tech/article/Marketing_Writing — writer: connect
+  preserve user choice. Review: read aloud and test CTA prediction.
+- **Toss marketing writing** — https://toss.tech/article/Marketing_Writing — copy: connect
   the audience's present concern to a concrete next action; do not turn a click-rate tactic
   into an unsupported product claim.
 - **Apple Writing HIG** — https://developer.apple.com/design/human-interface-guidelines/writing
-  — writer: clear, concise, useful labels in the platform's voice. Hand: place text where it
+  — copy: clear, concise, useful labels in the platform's voice. Build: place text where it
   explains the affected control or state.
 - **Microsoft UI text guide** — https://learn.microsoft.com/en-us/windows-server/manage/windows-admin-center/extend/guides/ui-text-style-guide
-  — writer: consistent terminology, direct action labels, sentence-style capitalization.
-- **W3C Writing for Web Accessibility** — https://www.w3.org/WAI/tips/writing/ — writer:
-  descriptive headings/link text and plain language. Hand: expose the same meaning to
+  — copy: consistent terminology, direct action labels, sentence-style capitalization.
+- **W3C Writing for Web Accessibility** — https://www.w3.org/WAI/tips/writing/ — copy:
+  descriptive headings/link text and plain language. Build: expose the same meaning to
   assistive technology.
 - **GOV.UK confirmation pages** — https://design-system.service.gov.uk/patterns/confirmation-pages/
-  — writer/eye: name the completed boundary and include useful next-step truth.
+  — copy/review: name the completed boundary and include useful next-step truth.
 - **NHS online GP forms** — https://www.nhs.uk/nhs-services/gps/using-an-online-form-to-contact-your-gp-surgery/
-  — writer/eye: keep request submission and downstream service response distinct.
+  — copy/review: keep request submission and downstream service response distinct.
 - **Seoul 120 civil complaints** — https://www.120dasan.or.kr/dsnc/main/contents.do?menuNo=200022
-  — writer/eye: receipt, transfer, processing, and result remain distinct operational states.
+  — copy/review: receipt, transfer, processing, and result remain distinct operational states.
 
-Ownership is deliberate. `omd-writer` establishes facts, audience language, voice, and
-surface copy in `.omd/copy-deck.md`. Copy-editor eye judges fact fidelity, scan, repetition,
-CTA prediction, register, emotion, and recovery in context. `omd copy --check` verifies only
-explicit structure, state applicability, exact unresolved sentinels, and fact-ID links.
+The maker writes the copy from the brief: facts, audience language, voice, and surface
+strings. The isolated first-render reviewer judges fact fidelity, scan, repetition, action
+prediction, register, and recovery in the rendered page.
 
 Screenshot phrases and common connectives are prompt/eval observations, never global lint:
 legitimate brands and sentences use them. AI detectors, perplexity thresholds, and sentence-
 length distributions are forbidden as shipping gates: domain, language, accessibility copy,
 and short UI labels create false positives, and a statistical signal cannot establish
-authorship or copy quality. Use those ideas only to prompt a contextual human/eye review;
-never reject a deck because a detector score or distribution looks machine-like.
+authorship or copy quality. Use those ideas only to prompt a contextual human or reviewer read;
+never reject copy because a detector score or distribution looks machine-like.

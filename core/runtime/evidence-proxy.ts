@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 /** Retained for callers that size evidence; receipts are never inline. */
 export const MAX_INLINE_EVIDENCE_BYTES = 8 * 1024 * 1024;
+export const MAX_BROKERED_EVIDENCE_BYTES = 16 * 1024 * 1024;
 export const MAX_LOOPBACK_ALIAS_TTL_MS = 5 * 60 * 1000;
 
 /** Metadata only: reviewer evidence bytes stay in the launch broker. */
@@ -54,8 +55,8 @@ export class ReviewerEvidenceProxy {
   create(payloadInput: unknown, aliasOptions?: LoopbackAliasOptions): ReviewerEvidenceReceipt {
     const payload = toPayload(payloadInput);
     if (payload.byteLength === 0) throw new ReviewerIsolationError('evidence payload must not be empty');
-    if (aliasOptions === undefined && payload.byteLength > MAX_INLINE_EVIDENCE_BYTES) {
-      throw new ReviewerIsolationError(`brokered evidence payload exceeds ${MAX_INLINE_EVIDENCE_BYTES} bytes`);
+    if (aliasOptions === undefined && payload.byteLength > MAX_BROKERED_EVIDENCE_BYTES) {
+      throw new ReviewerIsolationError(`brokered evidence payload exceeds ${MAX_BROKERED_EVIDENCE_BYTES} bytes`);
     }
     if (aliasOptions !== undefined) {
       if (!aliasOptions.scope || !Number.isSafeInteger(aliasOptions.byteLimit) || aliasOptions.byteLimit !== payload.byteLength || !Number.isFinite(Date.parse(aliasOptions.expiresAt))) {

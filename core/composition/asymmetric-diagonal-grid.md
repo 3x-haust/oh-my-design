@@ -1,7 +1,7 @@
 # Asymmetric / diagonal grid
 
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
-> against the current composition contract; do not transfer this page recipe unchanged.
+> against this page's content, brief and references; do not transfer this page recipe unchanged.
 
 Marketing/showpiece only. Do not use this recipe on a product work surface, operational dashboard, settings screen, admin flow, checkout, or repeated task loop. If the surface exists to help a user finish work, choose a product composition recipe instead.
 
@@ -49,7 +49,7 @@ hero at 9rem and a diagonal element compete for the same attention budget.
   /* Rotation of the off-grid element.
      Small angles (3–7°) read as intentional tilt.
      Larger angles (15°+) read as a different object category.
-     Keep this value from the board's reference study — do not pick it arbitrarily. */
+     Take this value from the kept references — do not pick it arbitrarily. */
   --diagonal-rotate: 4deg;
 
   /* The off-grid element's column span and offset.

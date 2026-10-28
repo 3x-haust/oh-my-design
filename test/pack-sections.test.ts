@@ -50,9 +50,6 @@ test('dieted source prompts rely on delivered contracts instead of static pack-s
   const cited = SOURCES.flatMap((source) => citedSections(readFileSync(join(ROOT, source), 'utf8'))
     .map(({ file, section }) => `${source}: ${file}#${section}`));
   assert.deepEqual(cited, []);
-  const coordinator = readFileSync(join(ROOT, 'src', 'skills', 'omd-ultradesign', 'SKILL.md'), 'utf8');
-  assert.match(coordinator, /Deliver current contracts/);
-  assert.match(coordinator, /omd brief <stage> --role <role>/);
 });
 
 test('a scoped read returns one section and costs a fraction of the whole file', () => {

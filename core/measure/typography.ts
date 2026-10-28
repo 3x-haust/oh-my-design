@@ -5,9 +5,9 @@ export function typography(nodes: MeasureNode[], viewportArea: number): Pick<Met
   const clusters: MetricValues['type-ladder']['clusters'] = [];
   for (const n of [...text].sort((a, b) => a.size - b.size || a.weight - b.weight || (a.families.join() < b.families.join() ? -1 : 1))) {
     let cluster = clusters.find(c => n.size - c.minSize <= 0.25 && c.weight === n.weight && c.families.join('\0') === n.families.join('\0'));
-    if (!cluster) { cluster = { minSize: n.size, maxSize: n.size, weight: n.weight, families: n.families, leading: [], nodeCount: 0, graphemes: 0, textArea: 0, viewportShare: 0, roles: [], subjectIds: [] }; clusters.push(cluster); }
+    if (!cluster) { cluster = { minSize: n.size, maxSize: n.size, weight: n.weight, families: n.families, leading: [], tracking: [], nodeCount: 0, graphemes: 0, textArea: 0, viewportShare: 0, roles: [], subjectIds: [] }; clusters.push(cluster); }
     cluster.maxSize = Math.max(cluster.maxSize, n.size); cluster.nodeCount++; cluster.graphemes += n.graphemes;
-    cluster.subjectIds.push(n.id); if (!cluster.roles.includes(n.role)) cluster.roles.push(n.role); if (!cluster.leading.includes(n.leading)) cluster.leading.push(n.leading);
+    cluster.subjectIds.push(n.id); if (!cluster.roles.includes(n.role)) cluster.roles.push(n.role); if (!cluster.leading.includes(n.leading)) cluster.leading.push(n.leading); if (!cluster.tracking.includes(n.tracking)) cluster.tracking.push(n.tracking);
   }
   for (const c of clusters) { c.textArea = unionArea(text.filter(n => c.subjectIds.includes(n.id)).flatMap(n => n.lines.map(l => intersect(l.box, n.visibleBox!)))); c.viewportShare = c.textArea / viewportArea; c.roles.sort(); }
   const small = text.filter(n => n.size < 12);

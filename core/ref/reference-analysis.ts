@@ -7,12 +7,18 @@ import { verifyBrowseRetention } from './browse/retention.ts';
 import { readBrowseBytes } from './browse/trace.ts';
 import { refIdentity } from './identity.ts';
 import type { Receipt } from './browse/contract.ts';
+import { PNG } from 'pngjs';
+import { loadRefs } from './store.ts';
+import { requireReferenceDirectionAdmission } from './reference-direction-admission.ts';
+
+type ImageUse = Readonly<{ rights: 'allowed' | 'restricted' | 'unknown'; visibility: 'public' | 'user-session' }>;
 
 export const REFERENCE_ANALYSIS_PATH = '.omd/reference-analysis.json';
 export const REFERENCE_ANALYSIS_DOC_PATH = '.omd/analysis.md';
 export type ReferenceAnalysis = Readonly<{ schema: 'reference-analysis-v1'; sourceContractSha256: string; domainBriefSha256: string;
   references: readonly Readonly<{ referenceId: string; capture: Receipt; image: Receipt;
-    screenType: string; mainTask: string; hierarchy: string; density: string; typography: string; components: string }>[];
+    screenType: string; mainTask: string; hierarchy: string; density: string; typography: string; components: string;
+    imageUse?: ImageUse }>[];
   selectedReferenceIds: readonly string[];
   patterns: readonly Readonly<{ pattern: string; referenceIds: readonly string[]; decision: 'apply' | 'do-not-apply'; reason: string }>[];
   screens: ReferenceApplication['screens'] }>;
@@ -32,13 +38,22 @@ function receipt(value: unknown): Receipt {
   if (!/^\.omd\/refs\/(domain|design)\/[^/]+\.(png|json)$/.test(path)) return fail('whole retained native reference receipt required, not a zoom/detail or diagnostic');
   return { path, sha256: digest(item.sha256) };
 }
+function imageUse(value: unknown): ImageUse {
+  const item = object(value, ['rights', 'visibility']);
+  if ((item.rights !== 'allowed' && item.rights !== 'restricted' && item.rights !== 'unknown')
+    || (item.visibility !== 'public' && item.visibility !== 'user-session')) return fail('explicit image use required');
+  return { rights: item.rights, visibility: item.visibility };
+}
 export function parseReferenceAnalysis(value: unknown): ReferenceAnalysis {
   const input = object(value, ['schema', 'sourceContractSha256', 'domainBriefSha256', 'references', 'selectedReferenceIds', 'patterns', 'screens']);
   if (input.schema !== 'reference-analysis-v1') return fail('unknown schema');
   const references = list(input.references, value => {
-    const item = object(value, ['referenceId', 'capture', 'image', 'screenType', 'mainTask', 'hierarchy', 'density', 'typography', 'components']);
+    const hasImageUse = typeof value === 'object' && value !== null && Object.hasOwn(value, 'imageUse');
+    const item = object(value, ['referenceId', 'capture', 'image', 'screenType', 'mainTask', 'hierarchy', 'density', 'typography', 'components',
+      ...(hasImageUse ? ['imageUse'] : [])]);
     return { referenceId: text(item.referenceId), capture: receipt(item.capture), image: receipt(item.image), screenType: text(item.screenType),
-      mainTask: text(item.mainTask), hierarchy: text(item.hierarchy), density: text(item.density), typography: text(item.typography), components: text(item.components) };
+      mainTask: text(item.mainTask), hierarchy: text(item.hierarchy), density: text(item.density), typography: text(item.typography), components: text(item.components),
+      ...(hasImageUse ? { imageUse: imageUse(item.imageUse) } : {}) };
   });
   const ids = new Set(references.map(item => item.referenceId)); if (ids.size !== references.length) return fail('duplicate reference id');
   const checkedIds = (value: unknown) => {
@@ -66,13 +81,37 @@ export function validateReferenceAnalysis(root: string, input: unknown, current:
   if (names.length !== analysis.screens.length || names.some(name => !analysis.screens.some(screen => screen.surface === name))) return fail('cover every current surface exactly once');
   const references = analysis.references.map(item => {
     const record: unknown = JSON.parse(readBrowseBytes(root, item.capture).toString('utf8'));
+    if (item.imageUse !== undefined) {
+      if (typeof record !== 'object' || record === null || Object.hasOwn(record, 'browse')) {
+        return fail('image use cannot override a recorded browse permission');
+      }
+      const reference = loadRefs(root).find(ref => refIdentity(ref.source, ref.component) === item.referenceId);
+      const acquisition = reference?.acquisition;
+      if (!reference || reference.researchLane !== 'design' || reference.kind !== 'image' || reference.invariants !== null
+        || !acquisition?.sourceImage || (acquisition.captureMethod !== undefined && acquisition.captureMethod !== 'full-page')
+        || !/^[a-f0-9]{64}$/.test(acquisition.sourceImageSha256 ?? '') || acquisition.imageSha256 !== item.image.sha256
+        || reference.imagePath !== item.image.path) return fail('complete retained original image required; no component crops or invented DOM');
+      const admission = requireReferenceDirectionAdmission(root, reference, current.sourceContractSha256,
+        analysis.selectedReferenceIds.includes(item.referenceId) ? 'direction' : 'support');
+      if (admission.captureSha256 !== item.capture.sha256) return fail('original capture differs from its independent admission');
+      const png = PNG.sync.read(readBrowseBytes(root, item.image));
+      if (png.width !== acquisition.imageDimensions?.width || png.height !== acquisition.imageDimensions.height) {
+        return fail('original dimensions changed');
+      }
+      return { item, evidence: { reference, lane: reference.researchLane, ...item.imageUse,
+        sourceApp: reference.component, sourceUrl: reference.source, provenance: 'retained-original' as const } };
+    }
     const verified = verifyBrowseRetention(root, record, { sourceContractSha256: current.sourceContractSha256 });
     if (verified.reference.referenceUnit !== 'whole-screen' || item.referenceId !== refIdentity(verified.reference.source, verified.reference.component)
       || item.image.path !== verified.reference.imagePath || item.image.sha256 !== verified.keep.image.sha256) return fail('reference id/image does not bind a whole-screen native keep');
-    return { item, verified };
+    if (verified.seal.lane === 'design') requireReferenceDirectionAdmission(root, verified.reference,
+      current.sourceContractSha256, analysis.selectedReferenceIds.includes(item.referenceId) ? 'direction' : 'support');
+    return { item, evidence: { reference: verified.reference, lane: verified.seal.lane,
+      rights: verified.keep.rights, visibility: verified.keep.visibility, sourceApp: verified.keep.sourceApp,
+      sourceUrl: verified.keep.sourceUrl, provenance: 'recorded-browse' as const } };
   });
   for (const screen of analysis.screens) for (const lane of ['domain', 'design'] as const) for (const id of screen[lane].referenceIds) {
-    if (!references.some(ref => ref.item.referenceId === id && ref.verified.seal.lane === lane)) return fail('surface reference belongs to the other lane');
+    if (!references.some(ref => ref.item.referenceId === id && ref.evidence.lane === lane)) return fail('surface reference belongs to the other lane');
   }
   return { analysis, references };
 }

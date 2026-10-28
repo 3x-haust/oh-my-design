@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto';
+import { canonicalJson, sha256 } from './canonical-json.ts';
+export { canonicalJson, sha256 } from './canonical-json.ts';
 import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parseReferenceBoard } from './board-parser.ts';
@@ -55,16 +56,6 @@ export type ReferenceBoardArtifacts = {
   readonly projectionBytes: string;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-const encode = (value: unknown): string => {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(encode).join(',')}]`;
-  if (!isRecord(value)) return JSON.stringify(value);
-  return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${encode(value[key])}`).join(',')}}`;
-};
-
-export const canonicalJson = (value: unknown): string => `${encode(value)}\n`;
-export const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 export const referenceBoardProjectSha256 = (root: string): string => sha256(trustedProjectRoot(root));
 
 const common = (piece: ResolvedReferenceBoardPiece): Omit<RawBoardPiece, 'evidence'> => ({

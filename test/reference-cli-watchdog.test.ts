@@ -11,6 +11,12 @@ test('browser acquisitions use the shorter ceiling while other commands retain t
     assert.equal(omdCliBudgetMs(['ref', action]), 300_000);
   assert.equal(omdCliBudgetMs(['ref', 'work-next']), 600_000);
   assert.equal(omdCliBudgetMs(['guard', 'production']), 600_000);
+  assert.equal(omdCliBudgetMs(['lifecycle', 'finish', '--json']), 2_700_000);
+  // Commands that wait on an isolated reviewer get the longer budget.
+  for (const args of [['first-render', 'check', '--page', 'dist/index.html'], ['taste', 'graphic', 'a.png'], ['ref', 'direction-review']])
+    assert.equal(omdCliBudgetMs(args), 1_200_000, args.join(' '));
+  assert.doesNotMatch(new OmdTimeoutError(1_500_000, ['lifecycle', 'finish']).message, /work-next/);
+  assert.match(new OmdTimeoutError(300_000, ['ref', 'add']).message, /work-next/);
 });
 
 test('user cancellation aborts an in-flight command independently of its watchdog', async () => {

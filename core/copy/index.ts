@@ -236,7 +236,7 @@ function parseFacts(body: string, violations: CopyViolation[]): Map<string, Fact
     const factText = cells[factIndex] ?? '';
     if (!id && !status && !source && !factText) continue;
     if (!/^[A-Z][A-Z0-9]*-\d+$/.test(id) || !['verified', 'fixture', 'open'].includes(status) || !source || /^(?:N\/A|none)$/i.test(source) || !factText) {
-      violations.push(issue('COPY-FACT-LEDGER', `Invalid fact row "${id || '(missing ID)'}"; require ID, verified|fixture|open status, source, and fact.`));
+      violations.push(issue('COPY-FACT-LEDGER', `Invalid fact row "${id || '(missing ID)'}"; require a hyphenated ID such as F-001, verified|fixture|open status, source, and fact.`));
       continue;
     }
     if (facts.has(id)) {

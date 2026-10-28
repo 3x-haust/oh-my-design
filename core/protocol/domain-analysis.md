@@ -16,13 +16,13 @@ away or excuse it with a one-line skip reason (`DOMAIN_ANALYSIS_REQUIRED`).
 
 ## What it produces
 
-A single validated artifact, `.omd/domain-brief.json` (`domain-brief-v1`, `omd domain check`):
+A single validated artifact, `.omd/domain-brief.json` (`domain-brief-v1`). There is no separate check
+command: the commands that read it (`omd ref discover-plan`, reference analysis) validate it and name
+the failing field:
 
-Read the complete current request, not an intake summary. Author the fields in
-`.omd/.cache/domain-input.json`, then run `omd domain set --input .omd/.cache/domain-input.json --json`
-after checked domain entry. This publisher copies the authenticated route's exact request bytes;
-the input may omit `request`. It does not invent surfaces, confirm planning, or approve scope.
-Directly writing the final brief remains supported but must preserve that same complete request.
+Read the complete current request, not an intake summary. Write `.omd/domain-brief.json` directly
+after checked domain entry, copying the authenticated route's exact, complete request into `request`.
+Writing the brief does not invent surfaces, confirm planning, or approve scope.
 Every screen and consequential task explicitly listed by the user must remain represented; grouping
 navigation is not permission to drop a screen, state, recovery path or interaction. The bounded
 inventory supports up to 64 surfaces, not a target or a default count.

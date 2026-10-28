@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { deflateSync, crc32 } from 'node:zlib';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,7 +12,6 @@ import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
-const CLI = new URL('../bin/omd.ts', import.meta.url).pathname;
 
 const root = (context: TestContext): string => {
   const directory = mkdtempSync(join(tmpdir(), 'omd-board-artifacts-'));
@@ -80,15 +78,13 @@ test('board artifacts canonicalize an ancestor-symlink project alias after CLI s
   symlinkSync(dirname(value.root), aliasParent, 'dir'); context.after(() => unlinkSync(aliasParent));
   const aliasRoot = join(aliasParent, basename(value.root));
 
-  // When: the CLI selects the candidate from the real root while a parent validates from the alias root.
-  const cli = spawnSync(process.execPath, [CLI, 'ref', 'select', 'candidate', '--json'], { cwd: value.root, encoding: 'utf8' });
-  assert.equal(cli.status, 0, cli.stderr);
+  // When: the retained host-owned selector commits from the real root while a parent validates from the alias root.
+  selectReferenceCandidateV2Autonomously(value.root, 'candidate', value.invocation);
   const real = readReferenceBoardArtifacts(value.root); const alias = readReferenceBoardArtifacts(aliasRoot);
   const selection = readPreReferenceSelectionV2(aliasRoot);
   const realSelection = validatePreReferenceSelectionV2(value.root); const aliasSelection = validatePreReferenceSelectionV2(aliasRoot);
 
   // Then: canonical artifacts remain byte-identical and the v2 selection binds the real-root artifacts from either spelling.
-  assert.equal(cli.status, 0, cli.stderr);
   assert.equal(alias.boardBytes, real.boardBytes);
   assert.equal(alias.assemblyBytes, real.assemblyBytes);
   assert.equal(selection.captureSha256, sha256(real.boardBytes));

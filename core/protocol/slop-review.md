@@ -35,6 +35,11 @@ candidates exits successfully; unreadable or invalid roots are operational failu
 The read-only scan below remains useful for early attention. Completion now requires a native loop:
 
 1. `omd schema slop-scope` supplies the local production/build entries and viewport inventory.
+   For a measured terminal route use `omd schema slop-measured-scope --json` instead.
+   Its existing `slop checkpoint` publisher consumes the current authenticated
+   `captures[].measurement.packet` receipts and any required supplemental surface packets.
+   Deduplicate packet receipts by SHA and inspect their retained whole captures; an empty
+   starter is not publishable evidence. Historical v1 scope/review does not satisfy v2 closure.
    Use a built SPA HTML entry, not an unrelated localhost port. Cover the final entry/viewports.
    Replay each final SPA/modal/error state with `state: {name,startRoute,route,actions,assertions}`;
    the schema command describes bounded click/fill/select/press actions and visible/hidden assertions.
@@ -47,6 +52,15 @@ The read-only scan below remains useful for early attention. Completion now requ
 2. `omd slop checkpoint --input .omd/.cache/slop-scope.json --json` captures those entries, runs the
    source scanner and existing rendered slop linter, and returns `reviewInput` and the checkpoint path.
    Open the checkpoint's `views[].image` files. Source candidates and render warnings remain distinct.
+   For a large measured checkpoint, read the same signed inventory with
+   `omd slop review-input --checkpoint <checkpoint-sha256> --offset 0 --limit 1 --json`.
+   Follow `nextOffset` until null and retain every finding and decision template exactly once.
+   Each page revalidates current native evidence and pins the checkpoint digest; a changed
+   checkpoint refuses rather than mixing inventories. Image/IR and measurement receipts locate
+   the complete evidence. Combine all page decisions and the unchanged required resolutions
+   into one review input, then author each judgment from its actual evidence.
+   Reading pages does not publish a review or authorize dismissal. Missing findings still
+   refuse at the existing review publisher.
 3. Fill the returned versioned reviewInput: summary and every finding's `confirmed|dismissed`,
    individual rendered reason and actual viewIds. In measured v2, also bind exact packet SHA and
    measurement IDs, typed disposition and applicable owner contract evidence. Deterministic RED,
@@ -57,6 +71,13 @@ The read-only scan below remains useful for early attention. Completion now requ
 4. Confirmed findings require owner repair, rebuild, another same-scope checkpoint, then explicit
    after-render resolutions for the previous confirmed IDs. Judge every new finding as well.
    A disappeared pattern is not automatically a successful repair; the reviewer checks the new image.
+   If source or contract repairs already made an unreviewed measured checkpoint stale, run the
+   native evaluator again, then publish a fresh measured checkpoint with the same view/state scope.
+   It retains the old checkpoint with `review: null` and carries every unreviewed finding, including
+   inherited obligations, into `reviewInput.resolved`. Do not author a retrospective approval.
+   Resolve every inherited item against the new current packet and whole captures, alongside
+   every new finding, using `review-set` and `review-check`. Historical packet citations,
+   unchanged recaptures, changed scope and missing resolutions refuse; old bytes remain intact.
 5. `omd slop review-check --json` must pass. CLI final-v2 finalization (including lifecycle finalize)
    and terminal completion preflight require this loop against the trusted final entry/viewports.
    Final state coverage also compares the actual viewport pixels with the authenticated final

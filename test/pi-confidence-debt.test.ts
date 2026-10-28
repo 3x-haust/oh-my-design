@@ -54,3 +54,17 @@ test('legacy debt-free completion without a matrix leaves the authorized message
   assert.equal(await handleOmdMessageEnd(input), undefined);
   assert.deepEqual(input.message, before);
 });
+
+test('a stalled first-render report keeps the agent report and asks for no further repair', async () => {
+  const stage = { schema: 'stage-next-v2', stage: 'independent-review', owner: 'coordinator', action: 'report-stalled-first-render',
+    next: null, instruction: 'Stop repairing; report the remaining findings.', problems: ['FIRST_RENDER_LOOP_STALLED', 'persistent-findings'],
+    progress: { routeSha256: 'b'.repeat(64), validatedStages: [], materialProgressIdentities: [] } };
+  const { input, commands } = task(stage);
+  const sent: unknown[] = [];
+  const result = await handleOmdMessageEnd({ ...input, workflowStarted: true,
+    pi: { ...input.pi, sendMessage: (message: unknown) => { sent.push(message); } } }) as { message: { content: { text: string }[] } };
+  assert.deepEqual(commands, [['stage', 'next', '--json']]);
+  assert.equal(result.message.content[0]!.text, 'Delivered the application.');
+  assert.match(result.message.content[1]!.text, /not verified completion[\s\S]*persistent-findings/);
+  assert.deepEqual(sent, []);
+});

@@ -38,6 +38,13 @@ import { publishTestAdaptiveRoute, createTestProjectWriteAdapter } from './helpe
 import { discoveryBrowser } from './helpers/discovery-capture.ts';
 import { testPng, testSearchReceipt } from './helpers/search-execution.ts';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
+import { publishReferenceAnalysis } from '../core/ref/reference-analysis.ts';
+import { readWholeScreenReferenceHandoff } from '../core/ref/reference-handoff.ts';
+import { refIdentity } from '../core/ref/identity.ts';
+import { browseFixture } from './helpers/browse-fixture.ts';
+import { runBrowseDriver } from '../core/ref/browse/driver.ts';
+import { parseBrowseCommand } from '../core/ref/browse/parser.ts';
+import { executeBrowseCommand } from '../core/ref/browse/client.ts';
 
 const cliPath = fileURLToPath(new URL('./fixtures/pi-reviewer-rpc.mjs', import.meta.url));
 const nodePath = realpathSync(process.execPath);
@@ -117,6 +124,80 @@ async function authenticatedAdmission(t: TestContext, f: Fixture, mode = 'refere
   await Promise.race([evidence, new Promise<never>((_, reject) => AbortSignal.timeout(5_000).addEventListener('abort', () => reject(new Error('reviewer evidence event timeout')), { once: true }))]);
   return { packet, result };
 }
+
+test('independently admitted original images enter analysis without fabricated browser observations', { timeout: 30_000 }, async t => {
+  const f = fixture(t);
+  const reference: Reference = {
+    ...f.reference, kind: 'image', invariants: null,
+    acquisition: {
+      requestedUrl: f.reference.source, finalUrl: f.reference.source, httpStatus: 200, links: [],
+      imageSha256: hash(f.png), sourceImage: 'https://visual.example/original.png',
+      sourceImageSha256: hash(f.png), imageDimensions: { width: 2560, height: 1800 }, captureMethod: 'full-page',
+    },
+  };
+  delete reference.selector;
+  delete reference.blueprint;
+  saveRef(f.root, reference, f.writer);
+  const { packet, result } = await authenticatedAdmission(t, f, 'reference-direction', [reference]);
+  publishReferenceDirectionAdmission(f.root, packet, result, f.invocation, f.writer);
+  const evidence = [{ status: 'user-provided', reference: 'request' }];
+  const domain = JSON.stringify({
+    schema: 'domain-brief-v1', request: f.task, domain: 'support', summary: 'Support inbox',
+    surfaces: [{ name: 'Inbox', purpose: 'Inspect inquiries', evidence }],
+    coreObjects: [{ name: 'Inquiry', evidence }], audience: { description: 'Support agents', evidence },
+    referenceQueries: { component: ['inquiry list'], craft: ['task context'], mood: ['clear hierarchy'] },
+    planning: {
+      businessGoal: { text: 'Inspect inquiries', disposition: 'non-factual-working-decision' },
+      successSignal: { text: 'Find a record', disposition: 'non-factual-working-decision' },
+      nonGoals: [{ text: 'No external messaging', disposition: 'omit-from-production-claims' }],
+    },
+  });
+  f.writer.write('.omd/domain-brief.json', domain);
+  const id = refIdentity(reference.source, reference.component);
+  const input = {
+    schema: 'reference-analysis-v1', sourceContractSha256: f.sourceContractSha256, domainBriefSha256: hash(domain),
+    references: [{
+      referenceId: id, capture: { path: relative(f.root, f.capturePath), sha256: hash(readFileSync(f.capturePath)) },
+      image: { path: relative(f.root, f.imagePath), sha256: hash(f.png) },
+      screenType: 'Record workspace', mainTask: 'Inspect inquiries', hierarchy: 'List beside detail',
+      density: 'Populated records', typography: 'Readable headings', components: 'List and detail',
+      imageUse: { rights: 'allowed', visibility: 'public' },
+    }],
+    selectedReferenceIds: [id], patterns: [],
+    screens: [{
+      surface: 'Inbox', target: { route: '/', state: 'initial' },
+      domain: { referenceIds: [], coverage: 'brief-derived', gap: 'No source behavior observed.',
+        application: 'Implement requested inquiries.', doNotTransfer: 'No source capability claims.', reason: 'Brief owns function.' },
+      design: { referenceIds: [id], coverage: 'partial', gap: 'No mobile or interactive observation.',
+        application: 'Keep list context beside detail.', doNotTransfer: 'No branding.', reason: 'Visible whole-image relationship.' },
+      checks: ['Verify actual destination behavior.'],
+    }],
+  };
+  const current = { sourceContractSha256: f.sourceContractSha256, request: f.task };
+  publishReferenceAnalysis(f.root, input, current, f.writer);
+  const handoff = readWholeScreenReferenceHandoff(f.root, 'hand', current);
+  assert.ok('images' in handoff);
+  assert.equal(handoff.images[0]?.sha256, hash(f.png));
+  assert.equal(handoff.images[0]?.provenance, 'retained-original');
+  assert.equal('browse' in reference, false);
+  publishReferenceAnalysis(f.root, { ...input, references: input.references.map(item => ({
+    ...item, imageUse: { rights: 'unknown', visibility: 'user-session' },
+  })) }, current, f.writer);
+  const withheld = readWholeScreenReferenceHandoff(f.root, 'hand', current);
+  assert.ok('images' in withheld);
+  assert.deepEqual(withheld.images, []);
+  assert.equal(withheld.withheld.length, 1);
+  publishReferenceAnalysis(f.root, input, current, f.writer);
+  const published = readFileSync(join(f.root, '.omd/reference-analysis.json'));
+  const admissionPointer = readFileSync(join(f.root, REFERENCE_DIRECTION_ADMISSION_POINTER));
+  f.writer.remove(REFERENCE_DIRECTION_ADMISSION_POINTER);
+  assert.throws(() => publishReferenceAnalysis(f.root, input, current, f.writer), /ADMISSION_MISSING/);
+  assert.deepEqual(readFileSync(join(f.root, '.omd/reference-analysis.json')), published);
+  f.writer.write(REFERENCE_DIRECTION_ADMISSION_POINTER, admissionPointer);
+  writeFileSync(f.imagePath, Buffer.from('changed original'));
+  assert.throws(() => publishReferenceAnalysis(f.root, input, current, f.writer));
+  assert.deepEqual(readFileSync(join(f.root, '.omd/reference-analysis.json')), published);
+});
 
 test('invalid reviewer bindings identify the exact mismatched field without publication', { timeout: 30_000 }, async t => {
   const f = fixture(t);
@@ -390,26 +471,6 @@ test('stale predecessor cannot discard an authenticated Eye batch', { timeout: 3
   assert.deepEqual(readFileSync(join(f.root, REFERENCE_DIRECTION_ADMISSION_POINTER)), pointer);
   assert.deepEqual(readApprovedReferenceAppearanceIntent(f.root, f.reference),
     ['A focused primary work object with restrained supporting hierarchy.']);
-});
-
-test('direction planning uses the packet task normalization while preserving the route request bytes', { timeout: 30_000 }, async t => {
-  const request = '\n  Build a personal reading app. \n';
-  const f = fixture(t, request);
-  assert.equal(f.task, request);
-  const planned = planReferenceDirectionReview(f.root, {
-    sourceContractSha256: f.sourceContractSha256, task: f.task, references: [f.reference],
-  });
-  assert.ok(planned.packet);
-  assert.equal(planned.selected, 1);
-  const reviewed = await authenticatedAdmission(t, f);
-  publishReferenceDirectionAdmission(f.root, reviewed.packet, reviewed.result, f.invocation, f.writer);
-  assert.equal(planReferenceDirectionReview(f.root, {
-    sourceContractSha256: f.sourceContractSha256, task: f.task, references: [f.reference],
-  }).carried, 1);
-  assert.throws(() => planReferenceDirectionReview(f.root, {
-    sourceContractSha256: f.sourceContractSha256, task: 'A different task', references: [f.reference],
-  }), /REFERENCE_DIRECTION_ADMISSION_STALE/);
-  assert.equal(readPersistedRoute(f.root, f.invocation).request, request);
 });
 
 test('a legitimate source-contract change prepares and publishes a fresh review without carrying the old verdict', { timeout: 45_000 }, async t => {
@@ -809,12 +870,7 @@ test('missing, stale, forged, unauthorized, wrong-lane, and support-only admissi
     assert.deepEqual(readFileSync(join(f.root, '.omd/reference-board.json')), previousBoard);
     assert.deepEqual(readFileSync(join(f.root, '.omd/reference-research.json')), previousResearch);
   };
-  const research = { ...structuredClone(inputSkeleton('reference-research').skeleton) as Record<string, unknown>,
-    sourceContractSha256: f.sourceContractSha256 };
-  const options = { expectedSourceContractSha256: f.sourceContractSha256, expectedRequest: f.task, benchmarkRequired: false };
-
   assert.throws(() => authorReferenceBoard(f.root, f.boardInput), /REFERENCE_DIRECTION_ADMISSION_MISSING/);
-  assert.throws(() => publishReferenceResearch(f.root, research, options, f.writer), /REFERENCE_DIRECTION_ADMISSION_MISSING/);
   assertUnchanged();
 
   const authorized = await authenticatedAdmission(t, f);

@@ -7,6 +7,27 @@ test('normal execution is autonomous without developer configuration', () => {
   assert.equal(policy.mode, 'autonomous');
   assert.equal(policy.selectionActor, 'harness');
   assert.equal(policy.designQuestions, false);
+  assert.equal(policy.criteriaVersion, 'model-led-design-v1');
+});
+
+test('model-led workflow is the only host-selected production path', () => {
+  for (const mode of ['autonomous', 'developer-evaluation']) {
+    const direct = captureDesignExecutionPolicy({ OMD_DESIGN_MODE: mode });
+    assert.equal(direct.criteriaVersion, 'model-led-design-v1');
+    assert.deepEqual(parseDesignExecutionPolicy(direct), direct);
+  }
+  assert.throws(() => captureDesignExecutionPolicy({ OMD_DESIGN_WORKFLOW: 'structured' }));
+  assert.throws(() => captureDesignExecutionPolicy({ OMD_DESIGN_WORKFLOW: 'model-led' }));
+  assert.throws(() => captureDesignExecutionPolicy({ OMD_DESIGN_WORKFLOW: 'ignore-results' }));
+});
+
+test('historical signed policies retain their structured execution contract', () => {
+  const historical = {
+    mode: 'autonomous', selectionActor: 'harness', designQuestions: false,
+    criteriaVersion: 'autonomous-design-v1',
+  };
+  assert.deepEqual(parseDesignExecutionPolicy(historical), historical);
+  assert.throws(() => parseDesignExecutionPolicy({ ...historical, criteriaVersion: 'anything-goes' }));
 });
 
 test('only the exact host setting enables developer evaluation', () => {

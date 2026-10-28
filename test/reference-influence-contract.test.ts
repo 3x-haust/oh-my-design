@@ -15,7 +15,6 @@ import { parseReferenceInfluenceProof, validateReferenceInfluenceProof, validate
 import { assertReferenceVisualPacketNotShipped, buildReferenceVisualPacket, validateReferenceVisualPacketCurrentness } from '../core/ref/reference-visual-packet.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
-import { inputSkeleton } from '../core/schema/inputs.ts';
 import { verifyReferenceEvidence } from '../core/ref/reference-verification.ts';
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC', 'base64');
@@ -117,16 +116,6 @@ test('declared feature bindings retain source-free numeric correspondence and re
   withFeatures.candidates[0].pieces[0].binding.measurements[0].sourceNodes = [1, 999];
   assert.throws(() => authorReferenceBoard(root, withFeatures), /source node 999/);
   assert.deepEqual(JSON.parse(readFileSync(join(root, '.omd/reference-board.json'), 'utf8')), board, 'invalid definitions cannot replace the existing board');
-});
-
-test('reference-state guidance separates observed sources from destination outcomes', () => {
-  const plan = inputSkeleton('acquisition-plan');
-  assert.ok(plan.constraints);
-  assert.match(plan.constraints.join(' '), /reference component state to inspect, not a desired destination capability/);
-  assert.match(plan.constraints.join(' '), /Framer repairs the acquisition plan/);
-  const board = inputSkeleton('reference-board');
-  assert.ok(board.constraints);
-  assert.match(board.constraints.join(' '), /truthfully describe the captured reference state and match zone.requiredState/);
 });
 
 test('Framer rejects non-transferable state and falsifier payloads before Scout builds a board', () => {

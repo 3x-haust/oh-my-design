@@ -106,6 +106,21 @@
   assert: "!/^\\s*[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(value)"
   message: "Heading or button opens with an emoji: {value}. An emoji borrows emotional charge it has not earned. If it is doing a job your typography or copy failed to do, fix those instead."
 
+# Typed arrow used as an icon. A link or button whose label begins or ends with an arrow character
+# ("GitHub ↗", "시작하기 →", a lone "→") takes the arrow's weight, size and baseline from the text font,
+# so it sits low and thin beside the label instead of being drawn to the label's optical weight and
+# centred on its cap height. SLOP-EMOJI-HEADING deliberately ignores these arrows; this rule names them.
+# Fires only on interactive nodes and only at the label's start or end, so an arrow inside a sentence,
+# a flow written in body copy ("요청 → 구현") and arrows in non-interactive text never fire.
+- id: SLOP-TYPED-ARROW-ICON
+  layer: 1
+  category: slop
+  severity: warn
+  when: "Boolean(node.interactive) && Boolean(node.text)"
+  value: "node.text"
+  assert: "!/^\\s*[\\u{2190}-\\u{21FF}\\u{2794}-\\u{27BF}\\u{27F0}-\\u{27FF}\\u{2900}-\\u{297F}\\u{2B00}-\\u{2B2F}](?:\\s|$)|[\\u{2190}-\\u{21FF}\\u{2794}-\\u{27BF}\\u{27F0}-\\u{27FF}\\u{2900}-\\u{297F}\\u{2B00}-\\u{2B2F}]\\s*$/u.test(value)"
+  message: "Typed arrow used as an icon: {value}. The arrow inherits the text font's weight, size and baseline, so it reads as a stray character next to the label. Finished sites keep navigation and secondary links as plain words; drop the arrow and let the label speak. Only a primary action whose direction carries meaning may take one drawn icon at the label's optical weight."
+
 # Decorative geometric-glyph ornament. SLOP-EMOJI-HEADING covers emoji (U+1F300+, U+2600–27BF) and
 # deliberately ignores functional arrows (U+2190–21FF); it does NOT see the Geometric Shapes block
 # (U+25A0–U+25FF: ◆ ◇ ◈ ● ○ ▪ ▫ ◼ ◻ ▸ ▹ ◂ and friends). A different little diamond, square, or
@@ -348,7 +363,7 @@
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "(() => { const groups={}; for(const p of ir.nodes){ const children=(p.children||[]).map(id=>ir.nodes.find(n=>n.id===id)).filter(Boolean); for(let i=0;i<children.length-1;i++){ const a=children[i],b=children[i+1]; if(a.heading&&b.type==='TEXT'&&/^p(?:[.-]|$)/i.test(b.name)&&b.text){const key=p.name+'|h'+a.heading+'|'+b.name;(groups[key]=groups[key]||[]).push({parent:p.path,heading:a.text||a.path,support:b.text.slice(0,32)});break;} } } const repeated=Object.values(groups).filter(items=>items.length>=3).sort((a,b)=>b.length-a.length)[0]; return repeated?{count:repeated.length,examples:repeated.slice(0,3)}:null; })()"
+  value: "(() => { const groups={}; const byId=new Map(ir.nodes.map(n=>[n.id,n])); for(const p of ir.nodes){ const children=(p.children||[]).map(id=>byId.get(id)).filter(Boolean); for(let i=0;i<children.length-1;i++){ const a=children[i],b=children[i+1]; if(a.heading&&b.type==='TEXT'&&/^p(?:[.-]|$)/i.test(b.name)&&b.text){const key=p.name+'|h'+a.heading+'|'+b.name;(groups[key]=groups[key]||[]).push({parent:p.path,heading:a.text||a.path,support:b.text.slice(0,32)});break;} } } const repeated=Object.values(groups).filter(items=>items.length>=3).sort((a,b)=>b.length-a.length)[0]; return repeated?{count:repeated.length,examples:repeated.slice(0,3)}:null; })()"
   assert: "value === null"
   message: "Repeated heading-plus-support formula: {value}. Three or more sections use the same title then automatic subtitle structure. Keep support only where it adds context the heading, work object, or state cannot carry."
 
@@ -359,7 +374,7 @@
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "(() => { const cards=ir.nodes.filter(n=>n.type==='FRAME'&&n.radius&&(n.paintColors||[]).some(p=>p.property==='border')&&n.children.length>0); if(cards.length<4)return null; const counts={};for(const c of cards){const r=String(c.radius.value);counts[r]=(counts[r]||0)+1;}const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];if(!top||top[1]/cards.length<0.75)return null;const text=ir.nodes.filter(n=>n.text&&n.parent!==null);if(text.length<4)return null;const inside=text.filter(t=>cards.some(c=>{let p=t.parent;while(p){if(p===c.id)return true;p=ir.nodes.find(n=>n.id===p)?.parent||null;}return false;})).length;return inside/text.length>=0.7?{cards:cards.length,radius:top[0],uniformPercent:Math.round(top[1]/cards.length*100),wrappedTextPercent:Math.round(inside/text.length*100)}:null; })()"
+  value: "(() => { const cards=ir.nodes.filter(n=>n.type==='FRAME'&&n.radius&&(n.paintColors||[]).some(p=>p.property==='border')&&n.children.length>0); if(cards.length<4)return null; const counts={};for(const c of cards){const r=String(c.radius.value);counts[r]=(counts[r]||0)+1;}const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];if(!top||top[1]/cards.length<0.75)return null;const text=ir.nodes.filter(n=>n.text&&n.parent!==null);if(text.length<4)return null;const parentOf=new Map(ir.nodes.map(n=>[n.id,n.parent]));const cardIds=new Set(cards.map(c=>c.id));const inside=text.filter(t=>{let p=t.parent;while(p){if(cardIds.has(p))return true;p=parentOf.get(p)||null;}return false;}).length;return inside/text.length>=0.7?{cards:cards.length,radius:top[0],uniformPercent:Math.round(top[1]/cards.length*100),wrappedTextPercent:Math.round(inside/text.length*100)}:null; })()"
   assert: "value === null"
   message: "Uniform card wrapper system: {value}. Most content is enclosed in the same-radius bordered box, flattening unlike roles into ornamental chrome. Keep containers only where boundaries carry grouping or interaction meaning."
 
@@ -562,3 +577,23 @@
   value: "node.lineHeight"
   assert: "value >= 1.3"
   message: "Body leading {value} is too tight for a paragraph. Long prose at line-height below ~1.3 (the browser 'normal' default is ~1.2) crowds the lines and slows reading; set body leading around 1.4–1.6. Headings may be tighter. See theory/typography.md §Size, measure, and line height."
+
+# Annotation load: the page hangs many short small texts — kicker labels, numbered tags, "A · B · C" tag
+# rows, captions — inside the heading groups, around words that already say it. Finished pages measured for
+# this (leviosa.ai.kr, kaleoyouth.com, coding.bio, linear.app, raycast.com, vercel.com, toss.im) carry about
+# none per section; small text inside a product graphic or mock UI is content, not annotation, so a group
+# holding an image, svg, canvas or video is not counted, nor are controls, navigation, header/footer or code.
+# Decorated navigation: header or nav links that carry a small drawn icon beside their word — an
+# external-link arrow after "GitHub", a chevron after every item. Finished landings keep navigation as
+# plain words; the icon adds a second voice to every link and reads as a template default. Icon-only
+# controls (a menu button, a logo mark) have no text and never fire.
+# Paper tone as atmosphere: the page ground is a warm off-white (cream, parchment, "paper") rather than a
+# chosen colour or plain white. Generated landings reach for it to look warm and editorial without a brand
+# reason, and small tinted text on it loses contrast. A brand whose own material is that tone keeps it and
+# says so; this warns only.
+# Middle-dot meta strings: short tokens joined by "·" outside the footer ("요청 · 목표 · 범위", "오픈소스 · MIT",
+# "Claude Code · Codex · Pi"). They read as a metadata rail stapled under real content, a habit of generated pages
+# (Hallmark's floor bans them outright). Korean footers joining policy links with dots are a convention and never fire.
+# Words per screen: a viewport-high band of the page carries far more words than a visitor reads in one look.
+# Finished landings let one screen make one point (Hallmark caps a screen at about 80 words); long reading pages,
+# documentation and code are exceptions, and code, footer and navigation text are not counted.

@@ -7,7 +7,17 @@ import { validateAcquisitionPlan, type AcquisitionPlan, type AcquisitionZoneV2 }
 import type { RouteRecord } from '../route/index.ts';
 import type { CraftRefSignal } from './craft-usage.ts';
 import { querySeeds } from './reference-query.ts';
-import { gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
+import { componentGalleryQuery, gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
+
+/** Where designers look for one component at a time; leads for spacing, hierarchy and anatomy, not whole-page direction. */
+const COMPONENT_GALLERIES = [
+  { name: 'Dribbble', url: 'https://dribbble.com/', purpose: 'Component discovery: search "<component> ui design", compare many shots side by side, and keep the designer original whose spacing, hierarchy and control anatomy fit the current direction.' },
+  { name: 'Behance', url: 'https://www.behance.net/', purpose: 'Component and case-study discovery: open the project and keep the specific screen or component image, not the cover.' },
+  { name: 'Notefolio', url: 'https://notefolio.net/', purpose: 'Korean designers\' component and screen work: search in Korean, open the work and keep the specific screen or component image.' },
+  { name: 'Cosmos', url: 'https://www.cosmos.so/', purpose: 'Visual and graphic discovery without login: search elements for illustrations, graphic treatments and UI fragments, a public alternative where Pinterest shows little logged out.' },
+  { name: 'Component Gallery', url: 'https://component.gallery/', purpose: 'One component across real design systems: open components/<name> and compare how shipped systems solve its anatomy and states.' },
+  { name: 'Refero', url: 'https://refero.design/', purpose: 'Real web app screens by pattern: search a screen type and keep the specific shipped screen.' },
+] as const;
 import { inferredKoreanReferenceMarket, marketDesignQueries, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v2' as const;
@@ -147,13 +157,16 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   // or a promise that a provider's entire catalogue/API is free.
   const galleryCandidates = !discovering ? [] : marketing ? [
     { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Website composition, typography, rhythm; follow the entry to the live site.' },
+    { name: 'Nook', url: 'https://nook.ai.kr/', purpose: 'Curated finished websites with many Korean brands, filterable by industry, purpose and colour; search in Korean, open the site entry and follow it to the live site.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Visual-direction discovery; open the pin and trace its original, not just a thumbnail.' },
+    ...COMPONENT_GALLERIES,
   ] : [
     { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Visually excellent finished websites; inspect the full original live site and select its actual visual character.' },
     { name: 'Mobbin', url: 'https://mobbin.com/explore/screens', purpose: 'Finished released app flows; inspect multiple distinct real screens from the same product, not a pattern list or one confirmation state.' },
     { name: 'Page Flows', url: 'https://pageflows.com/screens/', purpose: 'Public product screens and flow steps; retain a concrete screen and inspect surrounding flow context.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Discover finished websites and released app flows; trace each pin to original full-size screens, not a mood thumbnail.' },
     { name: 'Behance', url: 'https://www.behance.net/', purpose: 'Discover visually exceptional shipped-product case studies; inspect multiple actual app screens and original product where available.' },
+    ...COMPONENT_GALLERIES.filter(gallery => gallery.name !== 'Behance'),
   ];
   const motionDiscovery = motionEvidenceRequired;
   const decisions = (plan?.zones ?? []).filter(zone => zone.required).map(zone => {
@@ -238,13 +251,14 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
           search.searchParams.set('q', finishedQuery(query));
           return [{ lane: 'design' as const, query: finishedQuery(query), url: search.href, queryParam: 'q' as const },
             ...(marketing ? gallerySearchInputs(query, 'marketing') : [])];
-        })),
+        }).concat(queries.component.flatMap(component =>
+          gallerySearchInputs(componentGalleryQuery(component), marketing ? 'marketing' : 'product')))),
       nativeEntryInputs: Object.freeze(marketing ? galleryCandidates.map(candidate =>
         Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url })) : []),
       domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
       fallback: marketing
         ? 'Use actual search results or inspect a public gallery list only to find an original finished website. Retain the whole original at native resolution, never a list thumbnail or cropped screenshot. Use the OMD-owned browser for permitted login or challenge. Do not purchase, start a trial, install an MCP, or claim a blocked source was inspected.'
-        : 'Search several finished-product sites with public task content, then open their original product URLs and inspect populated desktop/mobile states. A gallery is optional lead discovery only after direct products fail, never a retained design reference. Stage whole 2x captures for independent Eye review; only approved directions are retained. Use the OMD-owned browser for permitted login or challenge. Do not purchase, start a trial, install an MCP, or claim a blocked source was inspected.',
+        : 'Search several finished-product sites with public task content, then open their original product URLs and inspect populated desktop/mobile states for the overall direction. For each component that needs a decision, search the component galleries the way designers do ("<component> ui design" on Pinterest, Dribbble, Behance, Notefolio), lay the candidates side by side, and keep the designer original that fits the current direction for its spacing, hierarchy and control anatomy. Stage whole 2x captures for independent Eye review; only approved directions are retained. Use the OMD-owned browser for permitted login or challenge. Do not purchase, start a trial, install an MCP, or claim a blocked source was inspected.',
     }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,

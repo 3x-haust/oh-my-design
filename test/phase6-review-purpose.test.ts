@@ -27,7 +27,11 @@ for (const purpose of ['ordinary', 'benchmark', 'release'] as const) test(`genui
   } finally { bound.dispose(); }
   writeFileSync(input, JSON.stringify({ request: 'old request' }));
   const legacy = bindings.materialize(root, args, source);
-  try { assert.equal('reviewPurpose' in JSON.parse(readFileSync(legacy.args[3]!, 'utf8')), false); } finally { legacy.dispose(); }
+  try {
+    const restored = JSON.parse(readFileSync(legacy.args[3]!, 'utf8'));
+    assert.equal(restored.reviewPurpose, purpose);
+    assert.deepEqual(restored.reviewPurposeAuthority, origin.reviewPurposeAuthority);
+  } finally { legacy.dispose(); }
 });
 
 test('a product benchmark mention or quoted directive never selects benchmark/release evaluation', () => {

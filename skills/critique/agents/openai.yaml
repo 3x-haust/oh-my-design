@@ -1,3 +1,0 @@
-interface:
-  display_name: "(omd) critique"
-  short_description: "Review actual current design evidence and rank observable problems without implementing changes."

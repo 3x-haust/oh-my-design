@@ -48,10 +48,9 @@ export function checkNativeFinalReview(input: Readonly<{ root: string; invocatio
     const attempt = descriptor(pointer.attempt);
     throw new NativeFinalReviewStateError(`review in progress or rejected: ${String(pointer.reason)}; inspect ${attempt.path}`);
   }
-  const measured = pointer.schema === 'native-pi-final-review-v2', policy = loadReviewPolicy(run.projectRoot, input.invocation);
-  if (!measured && requiresMeasuredTerminal(readPersistedRoute(run.projectRoot, input.invocation))) throw new NativeFinalReviewStateError('current process needs measured native review');
-  exact(pointer, ['schema', 'runId', 'buildSha256', 'briefSha256', measured ? 'measuredTerminal' : 'lanes', 'attempt']);
-  if ((!measured && pointer.schema !== 'native-pi-final-review-v1') || pointer.runId !== run.runId
+  const policy = loadReviewPolicy(run.projectRoot, input.invocation);
+  exact(pointer, ['schema', 'runId', 'buildSha256', 'briefSha256', 'measuredTerminal', 'attempt']);
+  if (pointer.schema !== 'native-pi-final-review-v2' || pointer.runId !== run.runId
     || pointer.buildSha256 !== run.buildSha256 || pointer.briefSha256 !== run.briefSha256) throw new NativeFinalReviewStateError('run binding');
   const load = (artifact: Descriptor): Buffer => {
     const bytes = read(artifact.path);
@@ -62,13 +61,14 @@ export function checkNativeFinalReview(input: Readonly<{ root: string; invocatio
   if (attemptDescriptor.path !== `.omd/final-review/attempts/sha256-${attemptDescriptor.sha256}.json`) throw new NativeFinalReviewStateError('attempt path');
   const attempt = object(JSON.parse(load(attemptDescriptor).toString('utf8')));
   exact(attempt, ['schema', 'runId', 'results', 'failures']);
-  const requiredLanes = (['blindLane', 'fidelityLane', 'protocolLane'] as const).filter(lane => !measured || policy.lanes[policyLane(lane)] > 0);
+  const requiredLanes = (['blindLane', 'fidelityLane', 'protocolLane'] as const)
+    .filter(lane => policy.lanes[policyLane(lane)] > 0);
   if (attempt.schema !== 'native-pi-final-review-attempt-v1' || attempt.runId !== run.runId
     || !Array.isArray(attempt.failures) || attempt.failures.length !== 0
     || !Array.isArray(attempt.results) || attempt.results.length !== requiredLanes.length) throw new NativeFinalReviewStateError('review attempt');
-  const terminal = measured ? parseMeasuredTerminal(pointer.measuredTerminal) : undefined;
-  if (terminal && digest(terminal.reviewPolicy) !== digest(policy)) throw new NativeFinalReviewStateError('measured review policy changed');
-  const rawLanes = object(terminal?.lanes ?? pointer.lanes);
+  const terminal = parseMeasuredTerminal(pointer.measuredTerminal);
+  if (digest(terminal.reviewPolicy) !== digest(policy)) throw new NativeFinalReviewStateError('measured review policy changed');
+  const rawLanes = object(terminal.lanes);
   exact(rawLanes, requiredLanes);
   const lanes = Object.fromEntries(requiredLanes.map(lane => [lane, descriptor(rawLanes[lane])]));
   const results = attempt.results.map(object);

@@ -17,7 +17,7 @@ import type { RawIr, Rule } from '../types.ts';
 import { parseViewState, withLocalView, statefulIr, type ViewState } from '../render/stateful.ts';
 import { MAX_INSPECTION_VIEWS } from '../render/view-capacity.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
-import { captureMeasuredSlopCheckpoint, publishMeasuredSlopReview, checkMeasuredSlopReview, hasMeasuredSlopReview } from './measured-review.ts';
+import { captureMeasuredSlopCheckpoint, publishMeasuredSlopReview, checkMeasuredSlopReview, checkRouteMeasuredSlopReview, hasMeasuredSlopReview } from './measured-review.ts';
 
 export const SLOP_REVIEW_POINTER = '.omd/slop/latest.json';
 type Receipt = { path: string; sha256: string };
@@ -281,10 +281,15 @@ export function checkSlopReview(root: string, expectedViews: readonly ExpectedVi
 }
 
 /** The already validated final graph supplies the production target, not a caller's narrower scope. */
-export function checkSlopFinalGraph(root: string, graph: unknown) {
+export function checkSlopFinalGraph(root: string, graph: unknown, invocation?: ProjectRunInvocation) {
   if (graph && typeof graph === 'object' && Reflect.get(graph, 'measuredTerminal') !== undefined) {
     const terminal = Reflect.get(graph, 'measuredTerminal') as import('../evidence/final-v2-measured-contract.ts').MeasuredTerminal;
-    const measurements = [...new Map([...terminal.measurements, ...terminal.process?.surface?.measurements ?? []].map(r => [r.sha256, r])).values()];
+    const measurements = terminal.measurements;
+    if (terminal.slopPolicy !== undefined) {
+      if (invocation === undefined) return fail('integrated final review requires the authenticated invocation');
+      return checkRouteMeasuredSlopReview(root, invocation, { measurements, slopPolicy: terminal.slopPolicy })
+        ?? { status: 'integrated-final-review' as const, measurements };
+    }
     return checkMeasuredSlopReview(root, { measurements, slop: terminal.slop });
   }
   const value = graph as { schema?: string; productionSchema?: string; observations?: Receipt[] };

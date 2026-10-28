@@ -96,6 +96,15 @@ test('a changed gallery item cannot fabricate traversal for a direct source', t 
   assert.ok(value.gallery.ref.acquisition);
   value.gallery.ref.acquisition.finalUrl = 'https://www.pinterest.com/pin/987654321/';
   writeFileSync(value.gallery.path, JSON.stringify(value.gallery.ref));
+  assert.throws(() => captureLane(value.root, { source: value.source.source, lane: 'design' }, invocation), /DESIGN_REFERENCE_UNSEARCHED/);
+  assert.throws(() => captureLane(value.root, { source: value.source.source, lane: 'design', fromUser: true }, invocation), /DESIGN_REFERENCE_NOT_FROM_USER/);
+  mkdirSync(join(value.root, '.omd/user-turns'), { recursive: true });
+  writeFileSync(join(value.root, '.omd/user-turns/t.json'), JSON.stringify({ text: 'Use https://visual.example/task as the bar.' }));
+  assert.equal(captureLane(value.root, { source: value.source.source, lane: 'design', fromUser: true }, invocation), 'design');
+  const session = join(value.root, '.omd/discovery/browse/s1');
+  mkdirSync(join(session, 'observations'), { recursive: true });
+  writeFileSync(join(session, 'trace.jsonl'), `${JSON.stringify({ action: { verb: 'search' }, observation: { sha256: 'o1' } })}\n`);
+  writeFileSync(join(session, 'observations/o1.json'), JSON.stringify({ text: 'Results', linkClaims: [{ url: value.source.source, text: 'Visual' }] }));
   assert.equal(captureLane(value.root, { source: value.source.source, lane: 'design' }, invocation), 'design');
 });
 

@@ -98,7 +98,8 @@ function requirePurposeBoundPayload(
   try {
     requireHostPayloadAuthorization(invocation, projectRoot, purpose, payload);
   } catch (error) {
-    const reason = error instanceof ActivationContextValidationError ? error.reason : 'missing host payload authorization';
+    const reason = error instanceof ActivationContextValidationError ? error.reason
+      : `missing host payload authorization${error instanceof Error ? `: ${error.message}` : ''}`;
     throw new InvocationValidationError(reason);
   }
   return activation;

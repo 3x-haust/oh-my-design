@@ -1,6 +1,5 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { brokeredBrowserOperationNames } from './codex-browser-operation.ts';
 import { loadRoleProfile } from '../core/brief/profiles.ts';
 
 function shellWord(value: string): string {
@@ -23,16 +22,6 @@ export function codexCliContext(ownerCliPath: string, nodePath = process.execPat
       const profile = loadRoleProfile(role, roleMode);
       return [`Role profile: ${profile.role}/${profile.mode}; sha256=${profile.sha256}. This text does not issue a role-mode grant.`, profile.source];
     })()),
-    ...(role === 'omd-scout' || role === 'omd-typesetter' || role === 'omd-hand' || role === 'omd-sketch' ? [
-      `Browser capability: this role uses the host-brokered OMD browser CLI. Allowed browser operations: ${brokeredBrowserOperationNames(role, roleMode).join(', ') || 'none in this source mode'}.`,
-      'The absence of an interactive browser MCP tool does not mean these commands are unavailable. Use the exact issuing CLI above; the host brokers browser execution with your live role authority. A healthy browser doctor is only an installation check: an actual command and saved capture must still succeed.',
-      'This grants no install, provider launch, or authority changes. Preserve the exact command error when it fails; do not start a browser provider, import a session, or substitute another runtime.',
-      ...(role === 'omd-scout' ? [
-        'Use `omd ref browse` for the current recorded whole-screen research cycle. Its returned budget is cumulative for the route cycle: use the latest verified actions counter and never add counters from earlier sessions.',
-        'Legacy selector capture remains explicit: inspect a reachable source with ir/render, then capture its verified selector with ref add or ref add-batch. For an existing state or known disclosure, print `omd schema reference-capture-preparation` and use its supported capture path with energy disabled.',
-        'That path permits only explicit disclosure clicks and visibility observations, not arbitrary typing, submission, navigation, or a logged-in session. If a reference cannot expose the required state, report the observed primitive and remaining gap to Framer; do not relabel it or relax the destination behavior.',
-      ] : []),
-    ] : []),
     ...(existsSync(installer) ? [
       'The read-only `oh-my-design browser doctor --json` health check uses the installer entry point, not an `omd browser` subcommand:',
       `${shellWord(nodePath)} ${shellWord(realpathSync(installer))} browser doctor --json`,

@@ -1,9 +1,6 @@
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync } from 'node:fs';
-import { CONFIDENCE_DEBT_PATH, readConfidenceDebt } from '../brief/confidence-debt.ts';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
-import { parseReferenceHandoffReceipt, validateDecisionBoundReferenceHandoffs } from '../ref/reference-handoff.ts';
 import { adaptiveRouteAuthorityBytes, adaptiveRouteAuthorityPath } from '../route/adaptive-route-authority.ts';
 import {
   ADAPTIVE_ROUTE_POINTER_SCHEMA,
@@ -12,28 +9,18 @@ import {
 } from '../route/adaptive-route-persistence.ts';
 import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
-import { intentLedgerSha256, validateIntentCurrentPointer, validateIntentLedger } from '../runtime/intent.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
-import { readCurrentCulturalDesignProfile } from '../locale/cultural-profile-files.ts';
-import { readSelectedArtDirection } from '../art-direction/selected.ts';
-import { currentSelectedSystem } from '../measure/selected-system.ts';
-import { checkReferenceApplication, hasReferenceApplicationArtifacts, REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH } from '../ref/reference-application.ts';
 import {
-  REFERENCE_LOCALE_BINDING_EVIDENCE_PATH,
-  REFERENCE_LOCALE_BINDING_PATH,
-  validateReferenceLocaleBindingCurrentness,
-} from '../ref/reference-locale-binding.ts';
+  checkReferenceApplication,
+  hasReferenceApplicationArtifacts,
+  REFERENCE_APPLICATION_PATH,
+  REFERENCE_APPLICATION_PROJECTION_PATH,
+} from '../ref/reference-application.ts';
 
 export const ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA = 'adaptive-source-seal-route-v1' as const;
 const SHA256 = /^[a-f0-9]{64}$/;
-const APPROVED_INPUTS = Object.freeze([
-  ['art-direction', null],
-  ['copy', '.omd/copy-deck.md'],
-  ['type-proof', '.omd/type-proof.md'],
-  ['composition', '.omd/composition.md'],
-] as const);
-
+const STAGES = Object.freeze(['art-direction', 'copy', 'type-proof', 'composition'] as const);
 type Receipt = Readonly<{ path: string; sha256: string }>;
 export type SourceSealConfidenceDebt = Readonly<{
   record: Receipt;
@@ -41,12 +28,13 @@ export type SourceSealConfidenceDebt = Readonly<{
   claim: 'not-verified';
 }>;
 type StageBinding = Readonly<
-  | { id: string; status: 'selected'; artifacts: readonly Receipt[]; confidenceDebt?: SourceSealConfidenceDebt }
-  | { id: string; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string }
-  | { id: string; status: 'not-selected'; routeSha256: string; authoritySha256: string }
+  | { id: typeof STAGES[number]; status: 'selected'; artifacts: readonly Receipt[]; confidenceDebt?: SourceSealConfidenceDebt }
+  | { id: typeof STAGES[number]; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string }
+  | { id: typeof STAGES[number]; status: 'not-selected'; routeSha256: string; authoritySha256: string }
 >;
 export type AdaptiveSourceSealRoute = Readonly<{
   schema: typeof ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA;
+  executionStyle: 'model-led';
   pointer: Receipt;
   record: Receipt;
   sourcePointer: Receipt;
@@ -57,108 +45,17 @@ export type AdaptiveSourceSealRoute = Readonly<{
   referenceApplication?: readonly Receipt[];
 }>;
 
-const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const fs = nodeStableProjectFileSystem();
+const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+const read = (root: string, path: string, label: string): Buffer =>
+  readStableProjectFile({ root, path: resolve(root, path), label, fs });
+const receipt = (root: string, path: string, label: string): Receipt =>
+  Object.freeze({ path, sha256: hash(read(root, path, label)) });
+const json = (root: string, path: string, label: string): unknown =>
+  JSON.parse(read(root, path, label).toString('utf8'));
+const object = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function read(root: string, path: string, label: string): Buffer {
-  return readStableProjectFile({ root, path: resolve(root, path), label, fs });
-}
-function receipt(root: string, path: string, label: string): Receipt {
-  return Object.freeze({ path, sha256: hash(read(root, path, label)) });
-}
-function json(root: string, path: string, label: string): unknown {
-  const value: unknown = JSON.parse(read(root, path, label).toString('utf8'));
-  return value;
-}
-function currentArtDirection(root: string, route: AdaptiveRouteRecord): readonly Receipt[] {
-  const pointerPath = '.omd/art-direction.json';
-  if (route.sourceContract.processPolicy) {
-    const selected = readSelectedArtDirection(root, route.sourceContractSha256);
-    const pointer = json(root, pointerPath, 'selected art direction pointer') as { record: Receipt };
-    const system = currentSelectedSystem(root);
-    if (!system || system.tokens.baseTokensSha256 !== selected.decision.effectiveBaseTokensSha256) throw new Error('STALE_DIRECTION: selected token system is missing or changed');
-    return [receipt(root, pointerPath, 'selected art direction pointer'), receipt(root, pointer.record.path, 'selected art direction record'),
-      selected.decision.candidateSelection, ...system.receipts];
-  }
-  let pointer;
-  try { pointer = validateArtDirectionPointer(json(root, pointerPath, 'art-direction current pointer')); } catch {
-    throw new Error('ART_DIRECTION_DECISION_REQUIRED: selected adaptive art-direction requires its exact current decision');
-  }
-  const recordPath = `.omd/${pointer.record}`;
-  const record = validateArtDirectionRecord(json(root, recordPath, 'art-direction immutable record'));
-  if (pointer.sha256 !== artDirectionSha256(record)) throw new Error('ART_DIRECTION_RECORD_STALE: current pointer does not match immutable record');
-  const intentPointer = validateIntentCurrentPointer(json(root, '.omd/intent-current.json', 'intent current pointer'));
-  const ledger = validateIntentLedger(json(root, `.omd/${intentPointer.record}`, 'intent immutable record'));
-  if (intentLedgerSha256(ledger) !== intentPointer.sha256 || record.intentLedgerSha256 !== intentPointer.sha256) {
-    throw new Error('ART_DIRECTION_INTENT_STALE: current art direction is not bound to the current intent ledger');
-  }
-  const composer = parseReferenceHandoffReceipt(json(root, '.omd/reference-handoffs/composer.json', 'composer reference handoff'));
-  const hand = parseReferenceHandoffReceipt(json(root, '.omd/reference-handoffs/hand.json', 'hand reference handoff'));
-  validateDecisionBoundReferenceHandoffs(root, { composer, hand });
-  return Object.freeze([
-    receipt(root, pointerPath, 'art-direction current pointer'),
-    receipt(root, recordPath, 'art-direction immutable record'),
-    receipt(root, '.omd/reference-handoffs/composer.json', 'composer reference handoff'),
-    receipt(root, '.omd/reference-handoffs/hand.json', 'hand reference handoff'),
-  ]);
-}
-function absent(root: string, path: string): boolean {
-  try { lstatSync(resolve(root, path)); return false; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true; throw error; }
-}
-
-function stageDebt(root: string, record: AdaptiveRouteRecord, id: string): SourceSealConfidenceDebt | undefined {
-  if (absent(root, CONFIDENCE_DEBT_PATH)) return undefined;
-  const before = receipt(root, CONFIDENCE_DEBT_PATH, 'confidence debt');
-  const itemIds = readConfidenceDebt(root, record.sourceContractSha256).filter(item => item.stage === id).map(item => item.id).sort();
-  if (receipt(root, CONFIDENCE_DEBT_PATH, 'confidence debt').sha256 !== before.sha256) throw new Error('confidence debt changed while sealing');
-  return itemIds.length ? Object.freeze({ record: before, itemIds: Object.freeze([...new Set(itemIds)]), claim: 'not-verified' }) : undefined;
-}
-
-function stageBindings(
-  root: string,
-  record: AdaptiveRouteRecord,
-  routeSha256: string,
-  authoritySha256: string,
-  invocation: ProjectRunInvocation,
-): readonly StageBinding[] {
-  return Object.freeze(APPROVED_INPUTS.map(([id, path]): StageBinding => {
-    if (record.strategy.stages.includes(id)) {
-      // Absence alone is not a skip. Only current, stage-specific recorded debt permits a
-      // preliminary snapshot; existing files (including dangling symlinks) take the strict path.
-      if (id !== 'composition' && absent(root, path ?? '.omd/art-direction.json')) {
-        const confidenceDebt = stageDebt(root, record, id);
-        if (confidenceDebt) return Object.freeze({ id, status: 'selected', artifacts: Object.freeze([]), confidenceDebt });
-      }
-      let artifacts = path === null
-        ? currentArtDirection(root, record)
-        : Object.freeze([receipt(root, path, `${id} approved input`)]);
-      if (id === 'composition' && record.sourceContract.localeDesign?.decision === 'research') {
-        const locale = readCurrentCulturalDesignProfile(root, invocation);
-        const referenceBinding = record.strategy.stages.includes('reference-board')
-          && existsSync(resolve(root, '.omd/reference-board.json'))
-          ? validateReferenceLocaleBindingCurrentness(root)
-          : null;
-        artifacts = Object.freeze([
-          ...artifacts,
-          receipt(root, locale.profilePointerPath, 'cultural profile pointer'),
-          receipt(root, locale.profileRecordPath, 'cultural profile record'),
-          receipt(root, locale.projectionPointerPath, 'cultural projection pointer'),
-          receipt(root, locale.projectionRecordPath, 'cultural projection record'),
-          ...(referenceBinding === null ? [] : [
-            receipt(root, REFERENCE_LOCALE_BINDING_PATH, 'locale reference binding projection'),
-            receipt(root, REFERENCE_LOCALE_BINDING_EVIDENCE_PATH, 'locale reference binding evidence'),
-          ]),
-        ]);
-      }
-      return Object.freeze({ id, status: 'selected', artifacts });
-    }
-    const skipped = record.strategy.skips.find((entry) => entry.id === id);
-    return skipped
-      ? Object.freeze({ id, status: 'skipped', reason: skipped.reason, routeSha256, authoritySha256 })
-      : Object.freeze({ id, status: 'not-selected', routeSha256, authoritySha256 });
-  }));
-}
 function persistedPointer(
   root: string,
   path: '.omd/route.json' | '.omd/route-source.json',
@@ -175,57 +72,44 @@ function persistedPointer(
   return Object.freeze({ record: value.record, sha256: value.sha256 });
 }
 
-export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectRunInvocation): AdaptiveSourceSealRoute {
+export function createAdaptiveSourceSealRoute(
+  root: string,
+  invocation: ProjectRunInvocation,
+): AdaptiveSourceSealRoute {
   const record = readPersistedRoute(root, invocation);
-  const routePointer = persistedPointer(
-    root,
-    '.omd/route.json',
-    ADAPTIVE_ROUTE_POINTER_SCHEMA,
-    'route-records',
-  );
-  const sourcePointer = persistedPointer(
-    root,
-    '.omd/route-source.json',
-    ADAPTIVE_ROUTE_SOURCE_POINTER_SCHEMA,
-    'route-sources',
-  );
+  if (record.sourceContract.processPolicy?.schema === 'human-design-process-v1') {
+    throw new Error('LEGACY_STRUCTURED_PROCESS_UNSUPPORTED');
+  }
+  const routePointer = persistedPointer(root, '.omd/route.json', ADAPTIVE_ROUTE_POINTER_SCHEMA, 'route-records');
+  const sourcePointer = persistedPointer(root, '.omd/route-source.json', ADAPTIVE_ROUTE_SOURCE_POINTER_SCHEMA, 'route-sources');
   const authorityRecord = record.sourceContractSha256 === sourcePointer.sha256
     ? record
     : Object.freeze({ ...record, sourceContractSha256: sourcePointer.sha256 });
-  const authorityBytes = adaptiveRouteAuthorityBytes(
-    authorityRecord,
-    routePointer.sha256,
-    invocation,
-  );
+  const authorityBytes = adaptiveRouteAuthorityBytes(authorityRecord, routePointer.sha256, invocation);
   const authoritySha256 = hash(authorityBytes);
-  const routePath = `.omd/${routePointer.record}`;
-  const sourcePath = `.omd/${sourcePointer.record}`;
-  const authorityPath = `.omd/${adaptiveRouteAuthorityPath(authorityBytes)}`;
-  const stages = stageBindings(root, record, routePointer.sha256, authoritySha256, invocation);
-  // Selected research decisions are approved production inputs, not mutable notes outside the seal.
-  // Keep non-discovery/copy-only routes free of unrelated reference requirements.
-  const requiresApplication = record.gates.includes('dual-reference-research')
-    || (record.projectMode === 'greenfield' && existsSync(resolve(root, '.omd/reference-research.json')));
-  // Partial pre-production snapshots remain possible. They cannot pass application review/final
-  // completion: that gate requires the exact application input digest. Publishing the missing plan
-  // changes this route binding and invalidates the preliminary seal rather than blessing it later.
-  let needsApplication = false;
-  if (requiresApplication && hasReferenceApplicationArtifacts(root)) {
+  const needsApplication = hasReferenceApplicationArtifacts(root);
+  if (needsApplication) {
     checkReferenceApplication(root, {
       expectedSourceContractSha256: record.sourceContractSha256,
-      benchmarkRequired: record.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: record.request,
+      benchmarkRequired: record.gates.includes('greenfield-task-flow-benchmark'),
+      expectedRequest: record.request,
     });
-    needsApplication = true;
   }
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA,
+    executionStyle: 'model-led',
     pointer: receipt(root, '.omd/route.json', 'adaptive route pointer'),
-    record: receipt(root, routePath, 'adaptive route record'),
+    record: receipt(root, `.omd/${routePointer.record}`, 'adaptive route record'),
     sourcePointer: receipt(root, '.omd/route-source.json', 'adaptive route source pointer'),
-    sourceContract: receipt(root, sourcePath, 'adaptive route source contract'),
-    authority: receipt(root, authorityPath, 'adaptive route authority'),
+    sourceContract: receipt(root, `.omd/${sourcePointer.record}`, 'adaptive route source contract'),
+    authority: receipt(root, `.omd/${adaptiveRouteAuthorityPath(authorityBytes)}`, 'adaptive route authority'),
     selectedModel: record.selectedModel,
-    stages,
+    stages: Object.freeze(STAGES.map(id => Object.freeze({
+      id,
+      status: 'not-selected' as const,
+      routeSha256: routePointer.sha256,
+      authoritySha256,
+    }))),
     ...(needsApplication ? { referenceApplication: Object.freeze([
       receipt(root, REFERENCE_APPLICATION_PATH, 'screen reference application'),
       receipt(root, REFERENCE_APPLICATION_PROJECTION_PATH, 'source-free reference application'),
@@ -233,65 +117,32 @@ export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectR
   });
 }
 
-function object(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-function isReceipt(value: unknown): value is Receipt {
-  return object(value) && Object.keys(value).length === 2 && typeof value.path === 'string'
-    && typeof value.sha256 === 'string' && SHA256.test(value.sha256);
-}
-function isStage(value: unknown): value is StageBinding {
-  if (!object(value) || typeof value.id !== 'string') return false;
-  if (value.status === 'selected') {
-    if (!Array.isArray(value.artifacts)) return false;
-    if (Object.hasOwn(value, 'confidenceDebt')) {
-      const debt = value.confidenceDebt;
-      return ['art-direction', 'copy', 'type-proof'].includes(value.id) && Object.keys(value).length === 4
-        && value.artifacts.length === 0 && object(debt) && Object.keys(debt).length === 3
-        && debt.claim === 'not-verified' && isReceipt(debt.record) && debt.record.path === CONFIDENCE_DEBT_PATH
-        && Array.isArray(debt.itemIds) && debt.itemIds.length > 0
-        && debt.itemIds.every(id => typeof id === 'string' && SHA256.test(id))
-        && new Set(debt.itemIds).size === debt.itemIds.length;
-    }
-    return Object.keys(value).length === 3 && value.artifacts.length > 0 && value.artifacts.every(isReceipt);
-  }
-  if (value.status === 'not-selected') return Object.keys(value).length === 4
-    && typeof value.routeSha256 === 'string' && SHA256.test(value.routeSha256)
-    && typeof value.authoritySha256 === 'string' && SHA256.test(value.authoritySha256);
-  return value.status === 'skipped' && Object.keys(value).length === 5 && typeof value.reason === 'string'
-    && value.reason.trim().length > 0 && typeof value.routeSha256 === 'string' && SHA256.test(value.routeSha256)
-    && typeof value.authoritySha256 === 'string' && SHA256.test(value.authoritySha256);
-}
+const isReceipt = (value: unknown): value is Receipt =>
+  object(value) && Object.keys(value).length === 2 && typeof value.path === 'string'
+  && typeof value.sha256 === 'string' && SHA256.test(value.sha256);
+
 export function adaptiveSourceSealInputHashes(route: AdaptiveSourceSealRoute): Record<string, string> {
-  const hashes: Record<string, string> = {};
-  if (route.referenceApplication) hashes.referenceApplicationSha256 = route.referenceApplication[0]!.sha256;
-  for (const stage of route.stages) {
-    if (stage.status !== 'selected') continue;
-    if (stage.confidenceDebt) {
-      hashes.confidenceDebtSha256 = stage.confidenceDebt.record.sha256;
-      continue;
-    }
-    const artifact = stage.id === 'art-direction' ? stage.artifacts[1] : stage.artifacts[0];
-    if (artifact === undefined) throw new Error(`cannot seal source: ${stage.id} selected artifact is missing`);
-    const key = stage.id === 'art-direction' ? 'artDirectionSha256'
-      : stage.id === 'copy' ? 'copyDeckSha256'
-      : stage.id === 'type-proof' ? 'typeProofSha256'
-      : stage.id === 'composition' ? 'compositionSha256' : undefined;
-    if (key !== undefined) hashes[key] = artifact.sha256;
-  }
-  return hashes;
+  return route.referenceApplication
+    ? { referenceApplicationSha256: route.referenceApplication[0]!.sha256 }
+    : {};
 }
 
 export function isAdaptiveSourceSealRoute(value: unknown): value is AdaptiveSourceSealRoute {
-  if (!object(value) || Object.keys(value).length !== (Object.hasOwn(value, 'referenceApplication') ? 9 : 8) || value.schema !== ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA) return false;
+  if (!object(value) || value.schema !== ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA
+    || value.executionStyle !== 'model-led'
+    || ![value.pointer, value.record, value.sourcePointer, value.sourceContract, value.authority].every(isReceipt)
+    || !object(value.selectedModel)
+    || !Array.isArray(value.stages)
+    || value.stages.length !== STAGES.length) return false;
   if (Object.hasOwn(value, 'referenceApplication') && (!Array.isArray(value.referenceApplication)
-    || value.referenceApplication.length !== 2 || !value.referenceApplication.every(isReceipt)
+    || value.referenceApplication.length !== 2
+    || !value.referenceApplication.every(isReceipt)
     || value.referenceApplication[0]?.path !== REFERENCE_APPLICATION_PATH
     || value.referenceApplication[1]?.path !== REFERENCE_APPLICATION_PROJECTION_PATH)) return false;
-  if (![value.pointer, value.record, value.sourcePointer, value.sourceContract, value.authority].every(isReceipt)) return false;
-  if (!object(value.selectedModel) || !Array.isArray(value.stages) || value.stages.length !== APPROVED_INPUTS.length
-    || !value.stages.every(isStage)) return false;
-  const debtHashes = value.stages.flatMap(stage => stage.status === 'selected' && stage.confidenceDebt ? [stage.confidenceDebt.record.sha256] : []);
-  return new Set(debtHashes).size <= 1
-    && canonicalRouteJson(value.stages.map((stage) => stage.id)) === canonicalRouteJson(APPROVED_INPUTS.map(([id]) => id));
+  return value.stages.every((stage, index) => object(stage)
+    && stage.id === STAGES[index]
+    && stage.status === 'not-selected'
+    && typeof stage.routeSha256 === 'string' && SHA256.test(stage.routeSha256)
+    && typeof stage.authoritySha256 === 'string' && SHA256.test(stage.authoritySha256))
+    && canonicalRouteJson(value.stages.map(stage => Reflect.get(stage, 'id'))) === canonicalRouteJson(STAGES);
 }

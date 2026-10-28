@@ -1,7 +1,7 @@
 # Master-detail flow
 
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
-> against the current composition contract; do not transfer this page recipe unchanged.
+> against this page's content, brief and references; do not transfer this page recipe unchanged.
 
 A list (master) and the selected object's workspace (detail) presented as one continuous
 loop: select → inspect → act → return. The composition decision is where the detail

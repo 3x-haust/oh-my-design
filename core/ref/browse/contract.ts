@@ -15,8 +15,10 @@ export type BrowseAction = Start
   | (Readonly<{ verb: 'goto'; url: string; reason: string; scope: 'target-market' | 'global' | 'unscoped'; sourceId: string | null; flowId: string | null }> & Ready)
   | (Readonly<{ verb: 'search'; provider: string; query: string; queryParam: string; querySelector: string | null; submitSelector: string | null; scope: 'target-market' | 'global' | 'unscoped' }> & Ready)
   | (Readonly<{ verb: 'scroll'; direction: 'up' | 'down' | 'left' | 'right'; amount: number | null; selector: string | null }> & Ready)
-  | (Readonly<{ verb: 'click' | 'similar' }> & Target & Ready)
+  | (Readonly<{ verb: 'click' | 'similar' | 'cookie' }> & Target & Ready)
   | (Readonly<{ verb: 'back' }> & Ready)
+  | Readonly<{ verb: 'challenge'; method: 'checkbox' | 'click' | 'drag' | 'type'; x: number | null; y: number | null;
+    toX: number | null; toY: number | null; text: string | null; submit: boolean }>
   | Readonly<{ verb: 'shot'; selector: string | null; screenId: string | null; state: string | null; assertVisible: readonly string[]; assertHidden: readonly string[] }>
   | Readonly<{ verb: 'crop'; selector: string; reference: string | null; as: string | null; slot: string | null }>
   | Readonly<{ verb: 'keep'; sourceApp: string | null; capture: string | null; lane: Lane | null; reason: string; role: 'visual-direction' | 'component-support' | 'task-flow' | null; direction: string | null; rights: 'allowed' | 'restricted' | 'unknown'; rightsNotes: string | null }>
@@ -75,10 +77,10 @@ export type BrowseResult = Readonly<{ ok: boolean; outcome: string; sessionId: s
   tray: readonly BrowseKeep[]; snapshotStale: boolean; privacyWarning?: string; error?: { code: string; message: string }; retryAfterMs?: number;
   capture?: Readonly<{ id: string; image: Receipt; scope: 'whole-screen' | 'zoom-detail' }>;
   contactSheet?: Readonly<{ image: Receipt; metadata: Receipt }>;
-  seal?: Receipt; retained?: BrowseSummary['retained']; confidenceDebt?: readonly ReferenceConfidenceDebt[] }>;
+  seal?: Receipt; retained?: BrowseSummary['retained']; confidenceDebt?: readonly ReferenceConfidenceDebt[]; note?: string }>;
 export type DriverReply = Readonly<{ result: BrowseResult; events: readonly BrowseEvent[]; assets: readonly PublishedAsset[];
   checkpoint: Checkpoint | null; seal: BrowseSeal | null }>;
-export const ACQUISITION = new Set(['goto', 'search', 'scroll', 'click', 'similar', 'back', 'shot', 'crop']);
+export const ACQUISITION = new Set(['goto', 'search', 'scroll', 'click', 'similar', 'cookie', 'back', 'shot', 'crop', 'challenge']);
 export const AFTER_STOP = ['keep', 'drop', 'contact-sheet', 'status', 'end'] as const;
 export class BrowseError extends Error {
   override readonly name = 'BrowseError';

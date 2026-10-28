@@ -23,6 +23,11 @@ export function paint(dom: MeasurementDom, png: Buffer): Pick<MetricValues, 'can
     else if (!owner.media && backdrop(owner).every((channel, i) => channel === root[i])
       && root.slice(0, 3).every((channel, offset) => Math.round(channel) === image.pixels[i + offset])) exposedCanvasSamples++;
     if (owner?.media && !owner.unsupported.length) { const sample = media.get(owner.id) ?? { sum: 0, count: 0 }; sample.sum += Math.abs(luminance(pixel) - luminance(backdrop(owner))); sample.count++; media.set(owner.id, sample); }
+    // An image over a blurred, gradient or image ground: its ground is read from the rendered pixels just outside it.
+    else if (owner?.media && owner.unsupported.every(reason => reason === 'complex-backdrop')) {
+      const ground = renderedGround(image, dom, owner.visibleBox!);
+      if (ground !== null) { const sample = media.get(owner.id) ?? { sum: 0, count: 0 }; sample.sum += Math.abs(luminance(pixel) - luminance(ground)); sample.count++; media.set(owner.id, sample); }
+    }
     if (c.saturation >= 0.30 && c.lightness >= 0.15 && c.lightness <= 0.90) samples.push({ hue: c.hue, subjectId: owner?.id ?? null });
   }
   // Connected components under circular distance; union makes 359/1 one cluster.
@@ -39,4 +44,18 @@ export function paint(dom: MeasurementDom, png: Buffer): Pick<MetricValues, 'can
     canvasPaintShare: canvasPixels / total,
     mediaContrast: new Map([...media].map(([id, sample]) => [id, sample.sum / sample.count])),
   };
+}
+
+/** The mean colour of the rendered pixels a few pixels outside a box's left and right edges, or null off-canvas. */
+function renderedGround(image: ReturnType<typeof decodePng>, dom: MeasurementDom, box: NonNullable<MeasurementDom['nodes'][number]['visibleBox']>): RGBA | null {
+  const points = [[box.x - 3, box.y + box.h / 2], [box.x + box.w + 3, box.y + box.h / 2], [box.x + box.w / 2, box.y - 3], [box.x + box.w / 2, box.y + box.h + 3]]
+    .filter(([x, y]) => x! >= 0 && y! >= 0 && x! < dom.viewport.innerWidth && y! < dom.viewport.innerHeight);
+  if (!points.length) return null;
+  const sum = [0, 0, 0];
+  for (const [x, y] of points) {
+    const px = Math.min(image.width - 1, Math.floor(x! * image.width / dom.viewport.innerWidth)), py = Math.min(image.height - 1, Math.floor(y! * image.height / dom.viewport.innerHeight));
+    const i = (py * image.width + px) * image.channels;
+    for (let c = 0; c < 3; c++) sum[c]! += image.pixels[i + c]!;
+  }
+  return [sum[0]! / points.length, sum[1]! / points.length, sum[2]! / points.length, 1];
 }

@@ -116,13 +116,14 @@ const round4 = (v: number): number => Math.round(v * 10000) / 10000;
  *
  * Region summary: the frame is split into three equal vertical thirds (top / mid / bottom).
  * `regionFractions[i]` is the fraction of that third's pixels that changed — answering
- * "where did the motion happen" without requiring layout data.
+ * where pixels changed without requiring layout data or establishing the cause.
  *
  * IMPORTANT: this function sees ALL pixel-level motion, including GSAP and rAF-driven
  * libraries that `document.getAnimations()` cannot detect. Where
  * `ir.meta.motion.animatedProperties` may read as [] for a GSAP-only page, a non-zero
- * energy curve confirms motion occurred — closing the getAnimations() blind spot documented
- * on MotionMeasurement and Invariants.animatedProperties.
+ * energy curve can reveal visible changes missed by that inventory. Video, GIFs, asset
+ * loading and timers can also change pixels; energy alone does not establish an authored
+ * interaction, its timing, smoothness or quality.
  *
  * Pure and deterministic: given the same PNG buffers and threshold it always returns the
  * same result. Safe to call in unit tests with synthetic buffers.

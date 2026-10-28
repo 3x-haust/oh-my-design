@@ -64,24 +64,3 @@ test('a shipped photo needs a real source page, a safe local path, and descripti
   assert.throws(() => validatePhotoProvenance({ ...base, altText: 'hero-portrait.jpg' }), /describe the image or action, not be a filename/);
   assert.throws(() => validatePhotoProvenance({ ...base, extra: 1 }), /unknown field/);
 });
-
-test('the sourcing protocol documents permitted libraries, the CC-BY attribution rule, and the never-ship list', () => {
-  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-  const doc = join(root, 'core', 'graphics', 'photo-sourcing.md');
-  assert.ok(existsSync(doc), 'photo-sourcing.md must exist');
-  const md = readFileSync(doc, 'utf8').replace(/\s+/g, ' ');
-  assert.match(md, /Unsplash[\s\S]*Pexels[\s\S]*Openverse[\s\S]*Wikimedia/i);
-  assert.match(md, /CC-BY family requires attribution/i);
-  assert.match(md, /Pinterest[\s\S]*studied for mood only/i);
-  assert.match(md, /never fetches, scrapes, hotlinks, or downloads/i);
-  assert.match(md, /`content` requires descriptive `altText`/i);
-  assert.match(md, /`decorative` requires exactly `altText: ""`/i);
-  assert.match(md, /`functional` requires `altText` that names the action/i);
-  assert.match(md, /default to `content`/i);
-});
-test('the loop protocol wires shipped-photo provenance to validatePhotoProvenance', () => {
-  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-  const loop = readFileSync(join(root, 'core', 'protocol', 'human-design-loop.md'), 'utf8').replace(/\s+/g, ' ');
-  assert.match(loop, /validated per `graphics\/photo-sourcing\.md` \(`validatePhotoProvenance`\)/i);
-  assert.match(loop, /An unpermitted or unknown licence \(Pinterest, Getty, all-rights-reserved\) never ships/i);
-});

@@ -35,11 +35,13 @@ test('--shot pairs a scoped component screenshot with its blueprint on one recor
   assert.match(ref.imagePath!, /\.omd[\\/]refs[\\/].*cards\.ref-[a-f0-9]{16}\.png$/);
 });
 
-test('--shot without --selector is a usage error (a scoped shot needs a subtree)', () => {
+test('--shot without --selector captures the whole page, the same as the default', () => {
   const dir = project();
   const result = run(['ref', 'add', SLOP, '--as', 'whole', '--shot'], dir);
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /--shot requires --selector/);
+  assert.equal(result.status, 0, result.stderr);
+  const ref = loadRefs(dir)[0]!;
+  assert.equal(ref.selector, undefined);
+  assert.ok(ref.imagePath && existsSync(join(dir, ref.imagePath)), 'the whole-page image is kept');
 });
 
 test('a reference captures its image by default, without --shot', async () => {

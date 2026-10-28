@@ -126,6 +126,13 @@ test('an expired receipt is refused', () => {
   const expired = verifySelfSignedReceipt({ projectRoot: root, receipt: minted.receipt, signature: minted.signature, expected: id, now: 1_000 + SELF_SIGNED_RECEIPT_TTL_MS });
   assert.equal(expired.ok, false);
   if (!expired.ok) assert.match(expired.reason, /expired/);
+  // A command that may run long (a finish with a final review) carries authority for its whole budget, never less
+  // than the default.
+  const long = mintSelfSignedReceipt({ projectRoot: root, ...id, payloadAuthorizations: [], now: 1_000, ttlMs: 50 * 60_000 });
+  assert.equal(verifySelfSignedReceipt({ projectRoot: root, receipt: long.receipt, signature: long.signature, expected: id, now: 1_000 + 40 * 60_000 }).ok, true);
+  assert.equal(verifySelfSignedReceipt({ projectRoot: root, receipt: long.receipt, signature: long.signature, expected: id, now: 1_000 + 50 * 60_000 }).ok, false);
+  const short = mintSelfSignedReceipt({ projectRoot: root, ...id, payloadAuthorizations: [], now: 1_000, ttlMs: 60_000 });
+  assert.equal(short.receipt.expiresAt, 1_000 + SELF_SIGNED_RECEIPT_TTL_MS);
 });
 
 test('a shape-extended receipt is refused rather than partially read', () => {

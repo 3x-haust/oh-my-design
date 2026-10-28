@@ -11,7 +11,7 @@ test('all source roles, skills and mode profiles fit explicit budgets including 
   const result = promptBudget(promptRoot);
   assert.deepEqual(result.violations, []);
   assert.ok(result.total <= result.target); assert.ok(result.total < result.ceiling);
-  assert.equal(result.rows.filter(r => r.kind === 'profile').length, 14);
+  assert.equal(result.rows.filter(r => r.kind === 'profile').length, 3);
   assert.ok(result.maximumLoadedStatic < result.total);
 });
 
@@ -19,7 +19,7 @@ test('one closed trusted profile is byte-identical in both emitted host distribu
   for (const [path, bytes] of Object.entries(emittedRoleProfiles(promptRoot))) for (const host of ['claude', 'codex']) {
     assert.equal(readFileSync(join(promptRoot, 'dist', host, path), 'utf8'), bytes);
   }
-  assert.equal(loadRoleProfile('omd-hand', 'observer').role, 'omd-hand');
+  assert.equal(loadRoleProfile('omd-eye', 'fidelity').role, 'omd-eye');
   assert.throws(() => loadRoleProfile('omd-eye', '../hand/source'));
 });
 
@@ -29,5 +29,5 @@ test('profile identity changes build identity without replacing source skill ide
   const changed = createBuildIdentity(packageVersion(promptRoot), agents, skills, profiles.map((p, index) => index ? p : { ...p, source: `${p.source}\nChanged trusted profile bytes.\n` }));
   assert.notEqual(changed.buildSha256, baseline.buildSha256);
   assert.equal(changed.sourceSkillSha256, baseline.sourceSkillSha256);
-  assert.equal(agents.length, 11); assert.ok(agents.every(a => a.model === undefined));
+  assert.equal(agents.length, 1); assert.ok(agents.every(a => a.model === undefined));
 });

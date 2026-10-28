@@ -1,20 +1,21 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalize } from '../ir/normalize.ts';
 import { check, loadRules } from '../rules/engine.ts';
 import { MeasurementIndex, validateSlopMeasurementDecision, type SlopMeasurementDecision } from '../measure/citations.ts';
 import type { Receipt, MeasuredIr, MetricKind, Measurement, VisualMeasurement } from '../measure/types.ts';
 import { loadMeasurement } from '../measure/files.ts';
-import { readArtifact, sourceDigest, loadContracts } from '../measure/inputs.ts';
+import { readArtifact, sourceDigest } from '../measure/inputs.ts';
 import { canonicalBytes, digest, sha256 } from '../measure/identity.ts';
 import * as v from '../measure/validation.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 import { acquireProjectMutationLock, requireProjectWriteAdapterForInvocation, replaceProjectFileAtomically, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { validateSourceBoundProofCurrentness } from '../composition-contract/source-currentness.ts';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { isModelLedProcess } from '../route/process-policy.ts';
 import { scanSlopSource } from './index.ts';
 import { checkSlopReview } from './review.ts';
+import { historicalCheckpoint, inheritedSlopFindings, measuredSlopScope, type Finding, type Checkpoint, type Review } from './measured-history.ts';
+import { projectPathEntryExists } from '../runtime/project-path-entry.ts';
 
 const pointerPath = '.omd/slop/latest.json';
 const rulesRoot = fileURLToPath(new URL('../rules/builtin', import.meta.url));
@@ -23,18 +24,15 @@ function renderRuleInventory(raw: MeasuredIr, rules: ReturnType<typeof loadRules
   const key = `${irSha256}:${rulesSha256}`;
   const cached = renderRuleCache.get(key);
   if (cached) return cached;
-  const ir = normalize(raw), result = { warnings: check(ir, rules), applicable: check(ir, rules.map(rule => ({ ...rule, assert: 'false' }))).map(f => f.id) };
+  // Builtins consume the rendered IR, not its full measurement provenance. Keep that
+  // authenticated payload in the packet/measurement paths, outside timed rule clones.
+  const { measurement: _measurement, ...ruleInput } = raw;
+  const ir = normalize(ruleInput), result = { warnings: check(ir, rules), applicable: check(ir, rules.map(rule => ({ ...rule, assert: 'false' }))).map(f => f.id) };
   // Reuse only identical authenticated IR and exact current rule bytes. Source scans, packet
   // attestation, source/build/contracts and rule bytes are still reread on every validation.
   if (renderRuleCache.size >= 64) renderRuleCache.delete(renderRuleCache.keys().next().value!);
   renderRuleCache.set(key, result); return result;
 }
-type Finding = { id: string; kind: 'source-candidate' | 'render-warning' | 'measurement'; rule: string; path: string; question: string;
-  viewIds: string[]; subjectIds: string[]; basis: 'contract' | 'accessibility' | 'heuristic' | 'coverage'; behavioral: boolean; kinds: MetricKind[]; packetSha256s?: string[] };
-type Checkpoint = { schema: 'slop-checkpoint-v2'; sourceSha256: string; rulesSha256: string; measurements: Receipt[];
-  views: { id: string; packetSha256: string; image: Receipt; ir: Receipt; subjectIds: string[] }[]; findings: Finding[]; filesScanned: number;
-  parent: { checkpoint: Receipt; review: Receipt } | null; signature: string };
-type Review = { schema: 'slop-review-v2'; checkpointSha256: string; summary: string; decisions: SlopMeasurementDecision[]; resolved: SlopMeasurementDecision[]; signature: string };
 type Pointer = { schema: 'slop-review-pointer-v2'; checkpoint: Receipt; review: Receipt | null };
 const fail = (message: string): never => v.fail(`SLOP_REVIEW_REQUIRED: ${message}`);
 function saved<T>(root: string, receipt: Receipt): T {
@@ -44,14 +42,92 @@ function saved<T>(root: string, receipt: Receipt): T {
   if (sha256(bytes) !== receipt.sha256) fail('measured slop bytes changed');
   return JSON.parse(bytes.toString('utf8')) as T;
 }
+function pointerValue(root: string): unknown | null {
+  if (!projectPathEntryExists(root, pointerPath)) return null;
+  try {
+    return JSON.parse(readArtifact(root, pointerPath).toString('utf8'));
+  } catch {
+    return fail('measured slop pointer is unreadable');
+  }
+}
 function currentPointer(root: string): Pointer | null {
-  if (!existsSync(resolve(root, pointerPath))) return null;
-  const value = JSON.parse(readArtifact(root, pointerPath).toString('utf8'));
+  const value = pointerValue(root);
+  if (value === null) return null;
   v.object({ schema: v.enumeration('slop-review-pointer-v2'), checkpoint: v.receipt, review: v.nullable(v.receipt) })(value);
-  return value;
+  return value as Pointer;
 }
 export function hasMeasuredSlopReview(root: string): boolean {
-  return existsSync(resolve(root, pointerPath)) && JSON.parse(readArtifact(root, pointerPath).toString('utf8')).schema === 'slop-review-pointer-v2';
+  const value = pointerValue(root);
+  if (value === null) return false;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('measured slop pointer is invalid');
+  const schema = (value as { schema?: unknown }).schema;
+  if (schema === 'slop-review-pointer-v2') { currentPointer(root); return true; }
+  if (schema === 'slop-review-pointer-v1') {
+    v.object({ schema: v.enumeration('slop-review-pointer-v1'), checkpoint: v.receipt, review: v.nullable(v.receipt) })(value);
+    return false;
+  }
+  return fail('measured slop pointer schema is invalid');
+}
+/** Current repair evidence, not a completion or review approval. */
+export function measuredSlopRepairInput(root: string) {
+  const raw = pointerValue(root);
+  if (raw === null) return null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail('measured slop pointer is invalid');
+  const value = raw as Record<string, unknown>;
+  if (value.schema === 'slop-review-pointer-v1') {
+    v.object({ schema: v.enumeration('slop-review-pointer-v1'), checkpoint: v.receipt,
+      review: v.nullable(v.receipt) })(value);
+    return null;
+  }
+  const latest = currentPointer(root) ?? fail('measured checkpoint required');
+  const checkpoint = saved<Checkpoint>(root, latest.checkpoint);
+  const actual = current(root, checkpoint);
+  const unresolved = inheritedSlopFindings(root, {
+    checkpoint: latest.checkpoint, review: latest.review,
+  }).findings;
+  // Repair context preserves every obligation and observed target, not the raw
+  // metric matrices already verified by current(). Review still loads those
+  // immutable packets through MeasurementIndex; this projection is no approval.
+  return {
+    lineage: { checkpoint: latest.checkpoint, review: latest.review,
+      sourceSha256: checkpoint.sourceSha256, measurements: checkpoint.measurements,
+      views: checkpoint.views, findings: checkpoint.findings, unresolved,
+      measurementEvidence: actual.packets.map(({ receipt, packet }) => ({
+        receipt, scope: packet.scope, subjects: packet.subjects,
+        findings: packet.findings, summary: packet.summary,
+      })) },
+    captures: actual.packets.flatMap(({ packet }) => packet.captures),
+  };
+}
+export function measuredSlopReviewInput(root: string, checkpointSha256: string, offset = 0, limit = 1) {
+  v.sha(checkpointSha256);
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 8) fail('invalid review input page');
+  const latest = currentPointer(root) ?? fail('measured checkpoint required');
+  if (latest.checkpoint.sha256 !== checkpointSha256) fail('review input checkpoint changed');
+  const checkpoint = saved<Checkpoint>(root, latest.checkpoint);
+  current(root, checkpoint);
+  if (offset > checkpoint.findings.length) fail('review input page exceeds finding inventory');
+  const findings = checkpoint.findings.slice(offset, offset + limit);
+  const viewIds = new Set(findings.flatMap(finding => finding.viewIds));
+  const outstanding = inheritedSlopFindings(root, checkpoint.parent).findings;
+  return {
+    schema: 'slop-measured-review-input-page-v1',
+    checkpoint: latest.checkpoint, measurements: checkpoint.measurements,
+    offset, total: checkpoint.findings.length,
+    nextOffset: offset + findings.length < checkpoint.findings.length ? offset + findings.length : null,
+    findings,
+    views: checkpoint.views.filter(view => viewIds.has(view.id)).map(({ subjectIds: _, ...view }) => view),
+    reviewInput: {
+      schema: 'slop-review-v2', checkpointSha256, summary: '',
+      decisions: findings.map(finding => ({ id: finding.id, status: 'confirmed', disposition: 'repair-required',
+        reason: '', viewIds: finding.viewIds, measurementRefs: [], contractEvidenceRefs: [] })),
+      resolved: outstanding.map(resolution),
+    },
+  };
+}
+function resolution(finding: Finding): SlopMeasurementDecision {
+  return { id: finding.id, status: 'dismissed', disposition: 'not-present-in-render', reason: '',
+    viewIds: finding.viewIds, measurementRefs: [], contractEvidenceRefs: [] };
 }
 function save(writer: ProjectWriteAdapter, directory: string, value: unknown): Receipt {
   const bytes = canonicalBytes(value), sha = sha256(bytes), path = `.omd/slop/${directory}/${sha}.json`;
@@ -111,16 +187,8 @@ function current(root: string, checkpoint: Checkpoint) {
   for (const key of ['views', 'findings', 'filesScanned', 'sourceSha256', 'rulesSha256'] as const) if (digest(actual[key]) !== digest(checkpoint[key])) fail(`stale measured slop ${key}`);
   return actual;
 }
-function exceptionApplies(root: string, ref: { receipt: Receipt; field: string }, finding: Finding, packets: VisualMeasurement[]): boolean {
-  // Only typed, currently owner-bound typography commitments are exceptions. Prose is not authority.
-  if (!['TEXT_UNDER_12', 'SLOP-MICRO-LABELS', 'SLOP-DECORATIVE-MONOSPACE', 'default-font-pair', 'global-terminal-styling'].includes(finding.rule)
-    || ref.receipt.path !== '.omd/type-proof.md' || sha256(readArtifact(root, ref.receipt.path)) !== ref.receipt.sha256
-    || validateSourceBoundProofCurrentness(root, ['.omd/type-proof.md']).length) return false;
-  const contract = loadContracts(root).contracts.type;
-  const role = contract?.roles.find(role => ref.field === `Measurement contract.roles.${role.id}`);
-  if (!role || !packets.every(p => p.binding.inputs.some(i => i.kind === 'type-proof' && digest(i.receipt) === digest(ref.receipt)))) return false;
-  const subjects = packets.flatMap(p => p.subjects).filter(s => finding.viewIds.includes(s.viewId) && (!finding.subjectIds.length || finding.subjectIds.includes(s.id)));
-  return subjects.length > 0 && subjects.every(s => s.role === role.id) && packets.every(p => p.measurements.filter(m => m.kind === 'contract-conformance').every(m => m.coverage.status === 'complete' && m.value.observations.filter(o => o.role === role.id).every(o => o.result === 'pass')));
+function exceptionApplies(_root: string, _ref: { receipt: Receipt; field: string }, _finding: Finding, _packets: VisualMeasurement[]): boolean {
+  return false;
 }
 function absent(root: string, checkpoint: Checkpoint, finding: Finding, measurement: Measurement, resolving: boolean): boolean {
   if (finding.kind === 'source-candidate') {
@@ -154,13 +222,10 @@ function validateReview(root: string, input: unknown, receipt: Receipt, checkpoi
   const exact = (actual: string[], expected: string[]) => new Set(actual).size === actual.length && digest([...actual].sort()) === digest([...expected].sort());
   if (!exact(candidate.decisions.map(d => d.id), checkpoint.findings.map(f => f.id))) fail('every measured finding needs one scoped disposition');
   candidate.decisions.forEach(d => validate(d, checkpoint.findings.find(f => f.id === d.id)!));
-  let outstanding: Finding[] = [];
+  const outstanding = inheritedSlopFindings(root, checkpoint.parent).findings;
   if (checkpoint.parent) {
-    const old = saved<Checkpoint>(root, checkpoint.parent.checkpoint), review = saved<Review>(root, checkpoint.parent.review);
-    verify(root, old, 'slop-checkpoint-v2'); verify(root, review, 'slop-review-v2');
-    if (review.checkpointSha256 !== checkpoint.parent.checkpoint.sha256) fail('parent review/checkpoint mismatch');
-    outstanding = old.findings.filter(f => review.decisions.some(d => d.id === f.id && d.status === 'confirmed'));
-    if (outstanding.length && digest(old.views.map(v => v.id)) !== digest(checkpoint.views.map(v => v.id))) fail('repair scope changed');
+    const old = historicalCheckpoint(root, checkpoint.parent.checkpoint);
+    if (outstanding.length && measuredSlopScope(root, old) !== measuredSlopScope(root, checkpoint)) fail('repair scope changed');
     if (outstanding.length && old.sourceSha256 === checkpoint.sourceSha256 && digest(old.measurements) === digest(checkpoint.measurements)) fail('confirmed finding has no fresh after-render evidence');
   }
   if (!exact(candidate.resolved.map(d => d.id), outstanding.map(f => f.id))) fail('every outstanding issue needs an after-render resolution');
@@ -173,18 +238,24 @@ export function captureMeasuredSlopCheckpoint(root: string, input: unknown, writ
   try {
   v.object({ schema: v.enumeration('slop-measured-scope-v2'), measurements: v.array(v.receipt) })(input);
   const measurements = (input as { measurements: Receipt[] }).measurements;
-  const historical = existsSync(resolve(root, pointerPath)) && !hasMeasuredSlopReview(root) ? checkSlopReview(root) : null;
+  if (measurements.length === 0) fail('current measurement receipts required');
+  const historical = projectPathEntryExists(root, pointerPath) && !hasMeasuredSlopReview(root) ? checkSlopReview(root) : null;
   const actual = inventory(root, measurements), previous = historical ? null : currentPointer(root);
-  if (previous && !previous.review) fail('triage the previous measured checkpoint before rescan');
   const { packets: _packets, ...facts } = actual;
-  const checkpoint = signed(root, { schema: 'slop-checkpoint-v2' as const, ...facts, measurements, parent: previous ? { checkpoint: previous.checkpoint, review: previous.review! } : null,
+  const parent = previous ? { checkpoint: previous.checkpoint, review: previous.review } : null;
+  const outstanding = inheritedSlopFindings(root, parent).findings;
+  const checkpoint = signed(root, { schema: 'slop-checkpoint-v2' as const, ...facts, measurements, parent,
     ...(historical ? { historicalPredecessor: { checkpoint: historical.checkpoint, review: historical.review } } : {}) });
+  if (previous && (!previous.review || outstanding.length)) {
+    const old = historicalCheckpoint(root, previous.checkpoint);
+    if (measuredSlopScope(root, old) !== measuredSlopScope(root, checkpoint)) fail('repair scope changed');
+    if (old.sourceSha256 === checkpoint.sourceSha256 && digest(old.measurements) === digest(measurements)) fail('supersession requires fresh after-render evidence');
+  }
   current(root, checkpoint);
   const receipt = save(writer, 'checkpoints', checkpoint);
   replaceProjectFileAtomically({ projectRoot: root, relativePath: pointerPath, content: canonicalBytes({ schema: 'slop-review-pointer-v2', checkpoint: receipt, review: null }), invocation });
   const decision = (finding: Finding): SlopMeasurementDecision => ({ id: finding.id, status: 'confirmed', disposition: 'repair-required', reason: '', viewIds: finding.viewIds, measurementRefs: [], contractEvidenceRefs: [] });
-  const old = previous ? saved<Review>(root, previous.review!) : null;
-  return { checkpoint: receipt, findings: checkpoint.findings, reviewInput: { schema: 'slop-review-v2' as const, checkpointSha256: receipt.sha256, summary: '', decisions: checkpoint.findings.map(decision), resolved: old?.decisions.filter(d => d.status === 'confirmed').map(d => ({ ...d, status: 'dismissed' as const, disposition: 'not-present-in-render' as const, measurementRefs: [], reason: '' })) ?? [] } };
+  return { checkpoint: receipt, findings: checkpoint.findings, reviewInput: { schema: 'slop-review-v2' as const, checkpointSha256: receipt.sha256, summary: '', decisions: checkpoint.findings.map(decision), resolved: outstanding.map(resolution) } };
   } finally { release(); }
 }
 export function publishMeasuredSlopReview(root: string, input: unknown, writer: ProjectWriteAdapter, invocation: ProjectRunInvocation): Receipt {
@@ -199,6 +270,19 @@ export function publishMeasuredSlopReview(root: string, input: unknown, writer: 
   replaceProjectFileAtomically({ projectRoot: root, relativePath: pointerPath, content: canonicalBytes({ ...latest, review: receipt }), invocation }); return receipt;
   } finally { release(); }
 }
+export function checkRouteMeasuredSlopReview(root: string, invocation: ProjectRunInvocation, expected?: {
+  measurements: readonly Receipt[]; slop?: { checkpoint: Receipt; review: Receipt };
+  slopPolicy?: 'integrated-final-review-v1';
+}) {
+  const modelLed = isModelLedProcess(readPersistedRoute(root, invocation).sourceContract);
+  if (expected?.slopPolicy !== undefined && !modelLed) fail('integrated final craft review requires the current model-led host policy');
+  if (modelLed && !projectPathEntryExists(root, pointerPath)
+    && (expected === undefined || expected.slopPolicy === 'integrated-final-review-v1')) return null;
+  if (expected !== undefined && expected.slop === undefined) fail('present measured slop evidence must retain its exact checkpoint and review');
+  return checkMeasuredSlopReview(root, expected?.slop === undefined ? undefined
+    : { measurements: expected.measurements, slop: expected.slop });
+}
+
 export function checkMeasuredSlopReview(root: string, expected?: { measurements: readonly Receipt[]; slop: { checkpoint: Receipt; review: Receipt } }) {
   if (expected) {
     const pointer = currentPointer(root) ?? fail('current measured slop pointer required');
@@ -212,16 +296,7 @@ export function checkMeasuredSlopReview(root: string, expected?: { measurements:
   validateReview(root, input, latest.checkpoint, checkpoint);
   if (review.decisions.some(d => d.status === 'confirmed')) fail('measured issues remain');
   if (expected && digest(expected.measurements) !== digest(checkpoint.measurements)) fail('slop must retain the exact graph measurement packets, not a recapture');
-  let rounds = 1, parent = checkpoint.parent;
-  const seen = new Set([latest.checkpoint.sha256]);
-  while (parent) {
-    if (rounds >= 100 || seen.has(parent.checkpoint.sha256)) fail('cyclic measured slop history');
-    seen.add(parent.checkpoint.sha256);
-    const old = saved<Checkpoint>(root, parent.checkpoint), review = saved<Review>(root, parent.review);
-    verify(root, old, 'slop-checkpoint-v2'); verify(root, review, 'slop-review-v2');
-    if (review.checkpointSha256 !== parent.checkpoint.sha256) fail('measured history review/checkpoint mismatch');
-    rounds++; parent = old.parent;
-  }
+  const rounds = 1 + inheritedSlopFindings(root, checkpoint.parent).rounds;
   return { status: 'reviewed' as const, rounds, checkpoint: latest.checkpoint, review: latest.review, findings: checkpoint.findings.length,
     measurements: checkpoint.measurements,
     independence: 'not-attested' as const, scopeBinding: 'trusted-measured-packets-and-subjects' as const,

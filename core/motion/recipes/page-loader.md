@@ -3,8 +3,9 @@
 A page loader covers the initial render while assets load, then exits — revealing the
 page underneath as an entrance rather than a progressive paint. It is the opening
 sentence of the experience: the palette commits, the type register declares itself, the
-motion vocabulary introduces itself. Done well, the loader adds nothing to the perceived
-wait time; done badly, it is the first thing the user resents.
+motion vocabulary introduces itself. A loader is still extra interface work and can hide
+content that is already ready, so it should represent a real loading state rather than a
+ceremonial delay.
 
 ## When it earns its place / When it does not
 
@@ -22,23 +23,18 @@ every visit is spending attention budget the user did not agree to spend. Also: 
 where asset load time is variable and potentially fast — a loader on a sub-100ms page
 load adds the only delay the user experiences.
 
-The hard rule: the loader must exit no later than 300ms after the `load` event fires.
-`expressive.md` and `core/theory/motion.md` both state the outer bound: three seconds
-total, under one second as the performance target. A loader that runs independent of
-asset load time — a fixed-duration animation that plays regardless — is spending the
-user's attention against an arbitrary clock. Tie the exit to the `load` event with a
-minimum hold of 300ms (so the entrance reads as intentional, not as a flash) and a
-maximum of 3000ms (absolute outer bound).
+Exit as soon as the required content is ready. Do not impose a minimum hold so the
+entrance can finish its ceremony: if readiness happens before the loader meaningfully
+appears, remove it. Nielsen's 0.1/1/10-second response-time guidance concerns system
+feedback and attention, not fixed animation-duration boundaries. A maximum timeout may
+prevent a broken loader from trapping the page, but it is a recovery path rather than a
+substitute for an honest readiness signal.
 
 ## Parameters
 
 ```css
 :root {
-  /* Minimum time the loader holds even if the page loads faster.
-     Below this, the loader reads as a flash rather than an entrance. */
-  --loader-hold-min: 300ms;
-
-  /* Maximum time before the loader forces exit regardless of load state. */
+  /* Recovery timeout before the loader forces exit regardless of load state. */
   --loader-hold-max: 2400ms;
 
   /* Duration of the loader's exit animation. */
@@ -65,7 +61,7 @@ maximum of 3000ms (absolute outer bound).
   </div>
 </div>
 
-<main class="page-content" id="page" style="opacity: 0;">
+<main class="page-content" id="page">
   <!-- page content -->
 </main>
 ```
@@ -75,14 +71,19 @@ maximum of 3000ms (absolute outer bound).
   position: fixed;
   inset: 0;
   z-index: 1000;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   background-color: var(--color-bg-dark, #0a0a0a);
   color: var(--color-text-dark, #fff);
 }
 
+.page-loader.is-loading {
+  display: flex;
+}
+
 .page-loader.is-exiting {
+  pointer-events: none;
   animation: loader-exit var(--loader-exit-duration) var(--loader-exit-ease) forwards;
 }
 
@@ -95,6 +96,7 @@ maximum of 3000ms (absolute outer bound).
 }
 
 .page-content {
+  opacity: 1;
   transition: opacity var(--loader-page-enter-duration) var(--loader-page-enter-ease);
 }
 
@@ -108,67 +110,85 @@ maximum of 3000ms (absolute outer bound).
   const loader = document.getElementById('loader');
   const page = document.getElementById('page');
   if (!loader || !page) return;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (document.readyState === 'complete' || reduced.matches) {
+    loader.remove();
+    return;
+  }
+  loader.classList.add('is-loading');
 
   // Read token values from :root.
   const root = document.documentElement;
-  const minHold = parseFloat(getComputedStyle(root).getPropertyValue('--loader-hold-min')) || 300;
   const maxHold = parseFloat(getComputedStyle(root).getPropertyValue('--loader-hold-max')) || 2400;
-  const exitDuration = parseFloat(getComputedStyle(root).getPropertyValue('--loader-exit-duration')) || 480;
 
-  let loadFired = false;
-  let startTime = Date.now();
+  let exiting = false;
+  let maxTimer;
+
+  function remove() {
+    clearTimeout(maxTimer);
+    window.removeEventListener('load', handleReady);
+    reduced.removeEventListener('change', handlePreference);
+    loader.remove();
+  }
 
   function exit() {
+    if (exiting) return;
+    exiting = true;
     loader.classList.add('is-exiting');
     loader.setAttribute('aria-hidden', 'true');
     page.classList.add('is-visible');
-    setTimeout(() => loader.remove(), exitDuration);
+    const animations = loader.getAnimations();
+    if (animations.length === 0) remove();
+    else Promise.allSettled(animations.map(animation => animation.finished)).then(remove);
   }
 
-  function maybeExit() {
-    const elapsed = Date.now() - startTime;
-    const remaining = Math.max(0, minHold - elapsed);
-    setTimeout(exit, remaining);
-  }
+  // Recovery bound: do not let a failed readiness signal trap the page.
+  maxTimer = setTimeout(exit, maxHold);
 
-  // Absolute outer bound — never hold longer than --loader-hold-max.
-  const maxTimer = setTimeout(exit, maxHold);
-
-  window.addEventListener('load', () => {
+  function handleReady() {
     clearTimeout(maxTimer);
-    maybeExit();
-  });
+    exit();
+  }
+
+  function handlePreference() {
+    if (reduced.matches) remove();
+  }
+  window.addEventListener('load', handleReady, { once: true });
+  reduced.addEventListener('change', handlePreference);
 })();
 ```
 
 ## React
 
 ```tsx
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
-function PageLoader({ minHold = 300 }: { minHold?: number }) {
-  const [visible, setVisible] = useState(true);
+function PageLoader() {
+  const [visible, setVisible] = useState(false);
+  const reduced = useReducedMotion();
 
   useEffect(() => {
-    const start = Date.now();
-
     function handleLoad() {
-      const elapsed = Date.now() - start;
-      const delay = Math.max(0, minHold - elapsed);
-      setTimeout(() => setVisible(false), delay);
+      setVisible(false);
     }
 
     if (document.readyState === 'complete') {
       handleLoad();
     } else {
+      setVisible(true);
       window.addEventListener('load', handleLoad, { once: true });
     }
 
-    // Absolute maximum — never hold beyond 2.4s
+    // Recovery timeout if the readiness signal never arrives.
     const timeout = setTimeout(() => setVisible(false), 2400);
-    return () => clearTimeout(timeout);
-  }, [minHold]);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener('load', handleLoad);
+    };
+  }, []);
+
+  if (reduced) return null;
 
   return (
     <AnimatePresence>
@@ -225,14 +245,11 @@ if (prefersReduced) {
 
 ## Performance note
 
-The loader is `position: fixed`, covering the entire viewport. While it is visible, the
-content beneath it does not need to paint — the browser can defer content paint until
-the loader exits. In practice this is a performance advantage: the actual page content
-renders in parallel with the loader's animation and is ready when the loader clears.
-
-The exit animation uses `transform: translateY(-100%)` and `opacity` — both compositor
-properties. The loader exits smoothly even if the main thread is busy parsing content
-beneath it.
+The loader is `position: fixed`, covering the entire viewport. It can add paint,
+rasterization, memory, and accessibility cost while obscuring useful progress beneath
+it. The exit uses `transform` and `opacity`, which usually avoid layout work, but smooth
+delivery still depends on the page, device, and browser. Profile the real entrance
+rather than treating the overlay as a performance optimization.
 
 Remove the loader element from the DOM (`loader.remove()`) after the exit transition
 completes. A `position: fixed; z-index: 1000` element left in the DOM blocks pointer

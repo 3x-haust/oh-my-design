@@ -60,7 +60,7 @@ export function verifyBrowseSession(root: string, receipt: Receipt, options: { s
       const observed = parseCanonical<BrowseObservation>(bytes);
       validateBrowseObservationShape(observed);
       if (observed.schema !== 'reference-browse-observation-v1' || observed.url !== event.finalUrl || observed.documentId !== event.documentId
-        || observed.controls.length > 200 || observed.text.length > 24_000 || observed.dpr !== 1 || !event.screenshot) browseFail('BROWSE_OBSERVATION_BINDING', 'document/capture mismatch', 2);
+        || observed.controls.length > 200 || observed.text.length > 24_000 || ![1, 2].includes(observed.dpr) || !event.screenshot) browseFail('BROWSE_OBSERVATION_BINDING', 'document/capture mismatch', 2);
       if (!['scoped-dom', 'image-only', 'not-measured'].includes(observed.measurement)
         || (observed.kind === 'component' && (observed.measurement !== 'scoped-dom' || !observed.invariants || !observed.blueprint || !observed.vector))
         || (observed.kind === 'image' && (observed.measurement !== 'image-only' || observed.invariants !== null || observed.blueprint !== null || observed.vector !== null))) browseFail('BROWSE_MEASUREMENT_SCOPE', 'image-only must be explicit; missing component measurements are not visual-only', 2);

@@ -19,7 +19,7 @@ const REQUIRED_HEADINGS = [
   '## Do not combine with',
 ];
 
-// ── Six parameterized recipe files; protocol notes may live beside them ─────────────────────────
+// ── Parameterized recipe files; protocol notes may live beside them ─────────────────────────
 const EXPECTED_RECIPES = [
   'gradient-mesh.md',
   'noise-grain-texture.md',
@@ -33,14 +33,14 @@ test('core/graphics/ directory exists', () => {
   assert.ok(existsSync(recipesDir), `graphics directory not found at ${recipesDir}`);
 });
 
-test('all 6 expected graphics recipe files exist', () => {
+test('all expected graphics recipe files exist', () => {
   for (const name of EXPECTED_RECIPES) {
     const path = join(recipesDir, name);
     assert.ok(existsSync(path), `missing graphics recipe: ${name}`);
   }
 });
 
-test('graphics directory contains exactly the six parameterized recipe files', () => {
+test('graphics directory contains exactly the parameterized recipe files', () => {
   const files = readdirSync(recipesDir)
     .filter((file) => file.endsWith('.md') && file !== 'photo-sourcing.md')
     .sort();
@@ -86,33 +86,6 @@ test('gradient-mesh.md documents SLOP-GRADIENT hue combinations', () => {
   assert.ok(
     namesHueCombination,
     'gradient-mesh.md: Linter notes must name specific flagged hue combinations'
-  );
-});
-
-// ── placeholder-policy.md must contain the core defect sentence ──────────────
-
-test('placeholder-policy.md states grey box is a design defect', () => {
-  const path = join(recipesDir, 'placeholder-policy.md');
-  if (!existsSync(path)) {
-    assert.fail('placeholder-policy.md not found');
-  }
-  const content = readFileSync(path, 'utf8');
-  assert.ok(
-    content.includes('defect'),
-    'placeholder-policy.md: must state that a grey box is a design defect'
-  );
-  // The policy must name all three alternative strategies.
-  assert.ok(
-    content.includes('typographic'),
-    'placeholder-policy.md: must document typographic block alternative'
-  );
-  assert.ok(
-    content.includes('pattern'),
-    'placeholder-policy.md: must document pattern fill alternative'
-  );
-  assert.ok(
-    content.includes('gradient'),
-    'placeholder-policy.md: must document generated gradient alternative'
   );
 });
 

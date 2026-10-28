@@ -8,6 +8,9 @@ import type { PiRequestBindingInfo } from './omd-request-binding.ts';
 import { compactPiRouteOutput } from './omd-route-output.ts';
 import { compactPiDiscoveryOutput } from './omd-discovery-output.ts';
 import type { PiHostContext, PiNativeRuns } from './omd-native-run.ts';
+import { designerCaseToolContext, type DesignerCasePart } from './omd-designer-cases.ts';
+import { omdCliBudgetMs } from './omd-cli-budget.ts';
+export { omdCliBudgetMs };
 
 const MAX_OUTPUT_CHARS = 50_000;
 const require = createRequire(import.meta.url);
@@ -47,6 +50,7 @@ type ExecResult = Readonly<{
 
 export type OmdRunResult = Readonly<{
   text: string;
+  context?: readonly DesignerCasePart[];
   details: { code: number; killed: boolean; requestBinding?: PiRequestBindingInfo };
 }>;
 
@@ -114,17 +118,13 @@ export function monitorOmdProgress(
   return stop;
 }
 
-export const omdCliBudgetMs = (args: readonly string[]): number =>
-  args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '') ? 660_000
-    : args[0] === 'ref' && ['advance', 'navigate', 'add', 'add-batch', 'discover-batch', 'search', 'leads'].includes(args[1] ?? '')
-    ? 300_000 : 600_000;
-
 export class OmdTimeoutError extends Error {
   override readonly name = 'OmdTimeoutError';
   readonly code = 'OMD_CLI_TIMEOUT';
   readonly budgetMs: number;
   constructor(budgetMs: number, args: readonly string[]) {
-    super(`OMD_CLI_TIMEOUT: omd ${args.slice(0, 2).join(' ')} 명령이 ${Math.floor(budgetMs / 1000)}초를 초과했습니다. ref work-next를 확인하고 다른 소스를 선택하세요.`);
+    super(`OMD_CLI_TIMEOUT: omd ${args.slice(0, 2).join(' ')} 명령이 ${Math.floor(budgetMs / 1000)}초를 초과했습니다. `
+      + (args[0] === 'ref' ? 'ref work-next를 확인하고 다른 소스를 선택하세요.' : '같은 명령을 한 번 다시 실행하고, 다시 넘기면 그대로 보고하세요.'));
     this.budgetMs = budgetMs;
   }
 }
@@ -195,7 +195,8 @@ export type PortablePiTool = Readonly<{
     onUpdate: OmdProgressCallback | undefined,
     context: PortablePiContext,
   ): Promise<{
-    content: Array<{ type: 'text'; text: string }>;
+    content: [{ type: 'text'; text: string }, ...Array<
+      { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string; text?: never }>];
     details: { code: number; killed: boolean; requestBinding?: PiRequestBindingInfo };
   }>;
 }>;
@@ -227,13 +228,13 @@ function boundedOutput(result: ExecResult, args: readonly string[]): string {
   if (result.code === 0 && !result.killed) {
     const route = compactPiRouteOutput(result.stdout, args);
     if (route !== undefined) return route;
-    if (args.includes('--json') && result.stderr.trim() === '') {
-      try {
-        JSON.parse(combined);
-        return combined;
-      } catch (error) {
-        if (!(error instanceof SyntaxError)) throw error;
-      }
+  }
+  if (!result.killed && result.stderr.trim() === '') {
+    try {
+      JSON.parse(combined);
+      return combined;
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
     }
   }
   return `${combined.slice(0, MAX_OUTPUT_CHARS)}\n[OMD output truncated]`;
@@ -297,15 +298,20 @@ export async function runOmd(
   }, budgetMs);
   let prepared: Readonly<{ args: readonly string[]; dispose(): void }> | undefined;
   try {
+    runtimeSnapshot.assertIntact();
     prepared = nativeRuns?.prepare(cwd, args, runtimeSnapshot.root);
     const result = await Promise.race([(pi.execOwned ?? runOwnedOmdProcess).call(pi, process.execPath, [runtimeSnapshot.entryPath, ...(prepared?.args ?? args)], { cwd, signal: controller.signal }), stopped]);
     if (timedOut) { await timeoutTeardown; throw new OmdTimeoutError(budgetMs, args); }
     if (signal?.aborted) throw new OmdCancelledError();
+    runtimeSnapshot.assertIntact();
     const text = boundedOutput(result, args);
     if (result.code !== 0 || result.killed) {
       throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
     }
-    return { text: text || 'OMD completed successfully.', details: { code: result.code, killed: result.killed } };
+    const context = designerCaseToolContext(runtimeSnapshot.root, args, result.stdout);
+    return { text: text || 'OMD completed successfully.',
+      ...(context.length === 0 ? {} : { context }),
+      details: { code: result.code, killed: result.killed } };
   } catch (error) {
     if (timedOut) { await timeoutTeardown; throw new OmdTimeoutError(budgetMs, args); }
     if (signal?.aborted) throw new OmdCancelledError();
@@ -320,14 +326,23 @@ export async function runOmd(
 
 export function structuredToolDiagnostic(error: unknown, args: readonly string[]): OmdRunResult | null {
   const [root, action] = args;
+  const evaluation = root === 'lifecycle' && action === 'evaluate';
+  const finish = root === 'lifecycle' && action === 'finish';
   const expectedCheck = root === 'guard' || (root === 'route' && action === 'validate')
     || (root === 'brief' && args.includes('--check'))
+    || evaluation || finish
     || /^(?:check|validate|research-check|apply-check|apply-review-check|review-check|discover-batch)$/.test(action ?? '');
   if (!(error instanceof OmdCommandError) || error.code !== 1 || error.killed || !expectedCheck || !args.includes('--json')
     || error.stderr.trim() !== '' || error.stdout.trim() === '') return null;
   try {
     const parsed: unknown = JSON.parse(error.stdout);
     if (typeof parsed !== 'object' || parsed === null) return null;
+    if (finish && (Reflect.get(parsed, 'schema') !== 'model-led-completion-result-v1'
+      || Reflect.get(parsed, 'meaning') !== 'native-completion' || Reflect.get(parsed, 'ok') !== false
+      || typeof Reflect.get(parsed, 'diagnostic') !== 'object')) return null;
+    if (evaluation && (!('ok' in parsed) || parsed.ok !== false
+      || !('executionStatus' in parsed) || parsed.executionStatus !== 'fail'
+      || !('acceptanceStatus' in parsed) || parsed.acceptanceStatus !== 'review-required')) return null;
     if (root === 'ref' && action === 'discover-batch'
       && (!('ok' in parsed) || parsed.ok !== false
         || !('outcomes' in parsed) || !Array.isArray(parsed.outcomes))) return null;

@@ -98,11 +98,22 @@ export class PiReviewerRpc {
     const response = this.#promise(pending => this.#pending.set(id, pending), timeoutMs);
     this.child.stdin.write(`${JSON.stringify({ ...payload, id })}\n`);
     const value = await response;
-    if (value.success === false || value.error !== undefined) throw new PiReviewerError('rpc-command-failed');
+    if (value.success === false || value.error !== undefined) {
+      const error = value.error;
+      const remote = typeof error === 'object' && error !== null && !Array.isArray(error)
+        ? piRecord(error, 'rpc-error') : undefined;
+      throw new PiReviewerError('rpc-command-failed', {
+        type: 'rpc-response', event: payload.type ?? payload.method,
+        error: typeof error === 'string' ? error : remote?.message,
+        reason: typeof remote?.code === 'number' || typeof remote?.code === 'string' ? String(remote.code) : undefined,
+      });
+    }
     return value;
   }
-  waitEvent(type: string, timeoutMs = 10 * 60_000): Promise<Record<string, unknown>> {
-    const found = this.events.find(event => event.type === type);
+  /** Resolves with the first `type` event at or after index `after` in `events`. */
+  // A measured final review reads every required view of the page and measured in at about 13 minutes per turn.
+  waitEvent(type: string, timeoutMs = 20 * 60_000, after = 0): Promise<Record<string, unknown>> {
+    const found = this.events.slice(after).find(event => event.type === type);
     if (found !== undefined) return Promise.resolve(found);
     return this.#promise(pending => this.#waiters.add({ type, pending }), timeoutMs);
   }

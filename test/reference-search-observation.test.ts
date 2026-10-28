@@ -153,6 +153,17 @@ test('an opaque pseudo-element cannot leave covered market text as visible evide
   assert.equal(h.execution.results?.find(result => result.url === imageCovered), undefined);
 });
 
+test('a pseudo-element decoration beside or beneath the text leaves real labels visible', async t => {
+  const beside = 'https://beside.example/service';
+  const beneath = 'https://beneath.example/service';
+  // A static block whose ::after art sits to the right of the copy (its containing block is the page wrapper),
+  // and a z-index:0 ::before painted under a z-index:10 copy layer.
+  const h = await observe(t, { html: `${navbar}<style>.page{position:relative}.art::after{content:"";position:absolute;top:0;left:900px;width:300px;height:600px;background:white}.under{position:relative}.under::before{content:"";position:absolute;inset:0;z-index:0;background:white}</style><main class="page"><div class="art"><a href="${beside}" style="display:inline-block;width:400px">South Korea service for residents</a></div><section class="under"><div style="position:relative;z-index:10"><a href="${beneath}">South Korea benefit service</a></div></section></main>` });
+  assert.equal(h.execution.status, 'page-observed');
+  assert.ok(h.execution.results?.find(result => result.url === beside));
+  assert.ok(h.execution.results?.find(result => result.url === beneath));
+});
+
 test('unrendered image alt, pseudo z-index, background images and subpixel clips cannot forge labels', async t => {
   const imageOnly = 'https://image-alt.example/service';
   const pseudoZ = 'https://pseudo-z.example/service';

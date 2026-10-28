@@ -113,11 +113,14 @@ export async function browserDeadline<T>(context: BrowserContext, operation: () 
 }
 
 /** Exact local build bytes; fresh context; no account cookies, remote API writes or navigation. */
-export async function withLocalView<T>(browser: Browser, root: string, view: { page: string; viewport: { width: number; height: number }; state?: ViewState }, inspect: (page: Page) => Promise<T>): Promise<T> {
+export async function withLocalView<T>(browser: Browser, root: string, view: { page: string; viewport: { width: number; height: number }; state?: ViewState; reducedMotion?: 'reduce' }, inspect: (page: Page) => Promise<T>): Promise<T> {
   return inspectionDeadline(async own => {
     const served = await own(serveProjectEntry(root, view.page, { spa: view.state !== undefined }));
     const origin = new URL(served.url).origin;
-    const context = await own(browser.newContext({ viewport: view.viewport, serviceWorkers: 'block', acceptDownloads: false }));
+    const context = await own(browser.newContext({ viewport: view.viewport, serviceWorkers: 'block', acceptDownloads: false,
+      ...(view.reducedMotion ? { reducedMotion: view.reducedMotion } : {}) }));
+    // A visitor's Chrome lets a clicked copy button write the clipboard; headless Chromium refuses unless granted.
+    await context.grantPermissions(['clipboard-write'], { origin });
     const blocked: string[] = [];
     await context.route('**/*', route => {
       const request = route.request();

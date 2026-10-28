@@ -46,7 +46,7 @@ export async function measureProject(input: { root: string; entry: string; scope
         if (local === null) { unsupported.push(`${view.id}: browser zoom is only supported in the disposable local worker`); continue; }
         try { captures.push(await withZoomedLocalView(root, local, request.viewport, request.state, page => captureMeasuredView(page, view, contracts, captureContext))); }
         catch (error) { if (!(error instanceof ZoomUnsupportedError)) throw error; unsupported.push(error.message); }
-      } else if (local !== null) captures.push(await withLocalView(browser, root, { page: local, viewport: request.viewport, ...(request.state ? { state: request.state } : {}) }, page => captureMeasuredView(page, view, contracts, captureContext)));
+      } else if (local !== null) captures.push(await withLocalView(browser, root, { page: local, viewport: request.viewport, reducedMotion: 'reduce', ...(request.state ? { state: request.state } : {}) }, page => captureMeasuredView(page, view, contracts, captureContext)));
       else {
         if (request.state) throw new Error('VISUAL_MEASUREMENT: diagnostic URLs do not accept state actions');
         captures.push(await externalCapture(browser, url!, view, contracts));
@@ -63,7 +63,8 @@ async function externalCapture(browser: Browser, url: URL, view: ViewSpec, contr
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
   if (!loopback) await assertPublicNetworkUrl(url.href);
   const proxy = loopback ? null : await createPublicNetworkProxy();
-  const context = await browser.newContext({ viewport: view.viewport, serviceWorkers: 'block', acceptDownloads: false, ...(proxy ? { proxy: { server: proxy.server } } : {}) });
+  // Measured at rest: a page's scroll reveals show their settled state under reduced motion, not a half-hidden one.
+  const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce', serviceWorkers: 'block', acceptDownloads: false, ...(proxy ? { proxy: { server: proxy.server } } : {}) });
   const resources: string[] = [];
   try {
     await disableUnproxiedRealtimeTransports(context); await context.routeWebSocket('**/*', socket => socket.close());

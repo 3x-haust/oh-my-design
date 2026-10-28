@@ -53,8 +53,8 @@ navigate normally without any animation. Never block navigation on this feature.
 /* ── Default cross-fade (applies to the entire page swap) ─────────────────── */
 
 /* The browser's built-in view-transition cross-fade animates opacity from 1→0
-   (old) and 0→1 (new). Override duration and easing; the opacity animation is
-   provided by the UA stylesheet and runs as a compositor-only operation. */
+   (old) and 0→1 (new). Override duration and easing; rendering behavior still
+   depends on the browser and captured content. */
 ::view-transition-old(root) {
   animation-duration: var(--vt-duration);
   animation-timing-function: var(--vt-exit-ease);
@@ -202,38 +202,41 @@ function WorkDetail({ id }: { id: string }) {
 
 ## Reduced-motion variant
 
-When `prefers-reduced-motion: reduce` is active, the view transition should use an
-instant switch or a very short cross-fade — not the full animated morph.
+When `prefers-reduced-motion: reduce` is active, disable the non-essential view
+transition rather than relying on a near-zero global duration.
+
+WCAG 2.3.3 covers non-essential animation triggered by interaction at Level AAA; it is
+not the same applicability test as WCAG 2.2.2 for automatically moving content. This
+recipe honors the user's preference as a product requirement without relabeling every
+view transition as a Level A failure.
 
 ```css
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-old(*),
   ::view-transition-new(*) {
-    animation-duration: 0.01ms !important;
-    animation-delay: 0ms !important;
+    animation: none !important;
   }
 }
 ```
 
-This preserves the API's before/after snapshot mechanism (which prevents content flash
-during SPA navigation) while removing the perceptible animation. Users get a fast,
-clean swap without motion.
+The navigation still completes; only the transition animation is removed. If a specific
+transition is essential to understanding the state change, provide an equivalent reduced
+variant and test it rather than applying a global timing hack.
 
 ## Performance note
 
 `document.startViewTransition()` captures a screenshot of the current page state before
 making changes. On content-heavy pages, this screenshot capture is measurable — profile
-it before committing. The transition itself (the CSS animation between old and new
-states) runs off the main thread for elements with composited properties.
+it before committing. The transition's rendering path depends on the properties,
+snapshots, browser, and page; do not assume that the API guarantees off-main-thread
+execution or negligible cost.
 
-Named transitions (`view-transition-name`) promote an element to its own compositor
-layer during the transition. This is correct behaviour — the element needs to animate
-independently from the page content around it. Remove or clear `view-transition-name`
-on elements that are not currently transitioning; permanently promoted layers consume
-GPU memory without benefit.
+Named transitions isolate captured elements for the transition, but layer behavior is
+an implementation detail. Clear dynamic names when they are no longer semantically
+needed, and use performance tools rather than assuming permanent GPU promotion.
 
 Unique `view-transition-name` values are required across all simultaneously visible
-named elements. Two elements with the same `view-transition-name` produce undefined
-behaviour. When setting names dynamically (e.g., per-card IDs), ensure the ID is stable
+named elements. Duplicate names cause `ViewTransition.ready` to reject and the visual
+transition to be skipped. When setting names dynamically (e.g., per-card IDs), ensure the ID is stable
 and unique across the page.

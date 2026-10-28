@@ -10,7 +10,7 @@ import omdExtension, {
   type PortablePiCommand,
   type PortablePiTool,
 } from '../extensions/omd.ts';
-import { formatOmdProgress, monitorOmdProgress } from '../extensions/omd-runtime.ts';
+import { formatOmdProgress, monitorOmdProgress, OmdCommandError } from '../extensions/omd-runtime.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -171,6 +171,33 @@ test('omd_cli returns exact current discovery action with source-bound historica
   assert.ok(text.length < JSON.stringify(output).length / 10);
 });
 
+test('omd_cli preserves complete failed evaluation JSON without changing execution status', async () => {
+  for (const size of [55_000, 49_000]) {
+    const diagnostic = { ok: false, executionStatus: 'fail', acceptanceStatus: 'review-required',
+      failure: { selector: '#ticket-CS-1041', observed: 'x'.repeat(size) } };
+    const loaded = loadExtension(async () => ({
+      stdout: JSON.stringify(diagnostic), stderr: '', code: 1, killed: false,
+    }));
+    const result = await loaded.tool.execute('failed-evaluation',
+      { args: ['lifecycle', 'evaluate', '--manifest', 'manifest.json', '--json'] },
+      undefined, undefined, { cwd: '/tmp/project' });
+    assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), diagnostic);
+    assert.deepEqual(result.details, { code: 1, killed: false });
+  }
+});
+
+test('omd_cli keeps a malformed evaluation failure as a failed command', async () => {
+  const loaded = loadExtension(async () => ({
+    stdout: JSON.stringify({ ok: false, executionStatus: 'pass',
+      acceptanceStatus: 'review-required', failure: 'x'.repeat(55_000) }),
+    stderr: '', code: 1, killed: false,
+  }));
+  await assert.rejects(loaded.tool.execute('malformed-evaluation',
+    { args: ['lifecycle', 'evaluate', '--manifest', 'manifest.json', '--json'] },
+    undefined, undefined, { cwd: '/tmp/project' }),
+  error => error instanceof OmdCommandError && error.code === 1);
+});
+
 test('omd_cli still bounds oversized malformed or human-readable output', async () => {
   for (const args of [['stage', 'next', '--json'], ['help']]) {
     const loaded = loadExtension(async () => ({
@@ -184,14 +211,33 @@ test('omd_cli still bounds oversized malformed or human-readable output', async 
   }
 });
 
-test('omd_cli keeps oversized fatal JSON as a bounded command failure', async () => {
+test('omd_cli preserves oversized fatal JSON while retaining command failure', async () => {
+  const diagnostic = { error: 'x'.repeat(60_000) };
   const loaded = loadExtension(async () => ({
-    stdout: JSON.stringify({ error: 'x'.repeat(60_000) }), stderr: '', code: 2, killed: false,
+    stdout: JSON.stringify(diagnostic), stderr: '', code: 2, killed: false,
   }));
   await assert.rejects(loaded.tool.execute('large-error', { args: ['stage', 'next', '--json'] },
-    undefined, undefined, { cwd: '/tmp/project' }), error => error instanceof Error
-      && error.message.startsWith('OMD_CLI_FAILED (2):')
-      && error.message.length < 51_000 && error.message.endsWith('[OMD output truncated]'));
+    undefined, undefined, { cwd: '/tmp/project' }), error => error instanceof OmdCommandError
+      && error.code === 2 && !error.killed
+      && error.message === `OMD_CLI_FAILED (2): ${JSON.stringify(diagnostic)}`);
+});
+
+test('omd_cli preserves structured failed check and implicit-JSON evaluation output', async () => {
+  for (const size of [49_000, 55_000]) {
+    const diagnostic = { ok: false, findings: [{ id: 'FOCUS-001', evidence: 'x'.repeat(size) }] };
+    for (const args of [
+      ['check', 'dist/index.html', '--json', '--no-log'],
+      ['lifecycle', 'evaluate', '--manifest', 'manifest.json'],
+    ]) {
+      const loaded = loadExtension(async () => ({
+        stdout: JSON.stringify(diagnostic), stderr: '', code: 1, killed: false,
+      }));
+      await assert.rejects(loaded.tool.execute('failed-json', { args },
+        undefined, undefined, { cwd: '/tmp/project' }), error => error instanceof OmdCommandError
+          && error.code === 1 && !error.killed
+          && error.message === `OMD_CLI_FAILED (1): ${JSON.stringify(diagnostic)}`);
+    }
+  }
 });
 
 test('a partly failed discovery batch keeps its successful receipt in structured Pi output', async () => {

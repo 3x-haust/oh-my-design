@@ -61,19 +61,13 @@ test('webgl-scene-scaffold.md codifies lazy init, a DPR cap, teardown, and conte
 });
 
 // The pack lives in interaction/recipes and must not disturb the locked motion cookbook count.
-test('the WebGL pack does not disturb the 12 CSS motion recipes', () => {
+test('the WebGL pack does not disturb the 14 CSS motion recipes', () => {
   const motion = readdirSync(join(root, 'core', 'motion', 'recipes')).filter((f) => f.endsWith('.md'));
-  assert.equal(motion.length, 12, `expected motion recipes to remain 12, found ${motion.length}`);
+  assert.equal(motion.length, 14, `expected motion recipes to remain 14, found ${motion.length}`);
 });
 test('expressive.md points at the WebGL escalation pack so it is discoverable at the showpiece ceiling', () => {
   const expressive = readFileSync(join(root, 'core', 'theory', 'expressive.md'), 'utf8');
   assert.match(expressive, /webgl-scene-scaffold\.md/);
   assert.match(expressive, /shader-gradient-field\.md/);
   assert.match(expressive, /webgl-particle-field\.md/);
-});
-test('the hand implements expressive motion only from an authorized accessible performance contract', () => {
-  const hand = readFileSync(join(root, 'src', 'agents', 'hand.agent.yaml'), 'utf8').replace(/\s+/g, ' ');
-  assert.match(hand, /Motion exists only under the actual selected supported trigger\/state\/reduced-motion\/performance contract/i);
-  assert.match(hand, /semantic structure/);
-  assert.match(hand, /Preserve real data and lawful asset provenance/i);
 });

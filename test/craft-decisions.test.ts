@@ -1,16 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync, realpathSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, realpathSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { recordCraft, readCraft, type CraftCheckpointInput } from '../core/craft/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { browserFixturePng } from './helpers/browser-observation-decision-links.ts';
 
-const cli = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-craft-decision-')));
   const bytes = browserFixturePng(390, 844);
@@ -65,15 +62,4 @@ test('historical change-only notes remain readable and cannot impersonate explic
   assert.equal(readCraft(root)[0]?.decision, undefined);
   assert.throws(() => recordCraft(root, { ...legacy, criterion: 'Keep the action visible.' }, adapter), /explicit --decision/);
   assert.doesNotThrow(() => recordCraft(root, { ...legacy, changed: 'No change' }, adapter));
-});
-
-test('craft CLI preserves and displays an explicit retain decision', () => {
-  const { root, input } = fixture();
-  const result = spawnSync(process.execPath, [cli, 'craft', 'checkpoint', 'semantic', '--render', input.render,
-    '--observed', input.observed, '--decision', 'retain', '--criterion', input.criterion!, '--reason', input.reason!], { cwd: root, encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  const status = spawnSync(process.execPath, [cli, 'craft', 'status', '--json'], { cwd: root, encoding: 'utf8' });
-  assert.equal(status.status, 0, status.stderr);
-  assert.equal(JSON.parse(status.stdout)[0].decision, 'retain');
-  assert.match(readFileSync(join(root, '.omd', 'craft.jsonl'), 'utf8'), /renderSha256/);
 });

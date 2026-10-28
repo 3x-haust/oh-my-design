@@ -115,6 +115,7 @@ function receipts(value: unknown, schema: string, label: string): readonly Adapt
 }
 function skippedArt(route: AdaptiveSourceSealRoute, omissions: readonly AdaptiveFinalOmission[]): void {
   const art = route.stages.find((stage) => stage.id === 'art-direction');
+  if (route.executionStyle === 'model-led' && art?.status === 'not-selected') return;
   if (art?.status !== 'skipped' && !omissions.some(o => o.id === 'artDirection' && o.status === 'selected-with-debt')) fail('a selected-art route needs an explicit selected-with-debt binding to use the omission branch');
 }
 

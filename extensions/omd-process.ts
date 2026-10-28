@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 
 export type OwnedExecResult = Readonly<{ stdout: string; stderr: string; code: number; killed: boolean }>;
-export type OwnedExecOptions = Readonly<{ cwd: string; signal?: AbortSignal }>;
+export type OwnedExecOptions = Readonly<{ cwd: string; signal?: AbortSignal; env?: Readonly<Record<string, string>> }>;
 export type OwnedExecDependencies = Readonly<{
   spawn: typeof spawn;
   kill(pid: number, signal: NodeJS.Signals): void;
@@ -26,6 +26,7 @@ export function runOwnedOmdProcess(
     try {
       child = dependencies.spawn(command, [...args], {
         cwd: options.cwd, shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+        ...(options.env === undefined ? {} : { env: { ...process.env, ...options.env } }),
       });
     } catch (error) { reject(error); return; }
     let stdout = '';

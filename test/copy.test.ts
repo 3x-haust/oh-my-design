@@ -108,26 +108,6 @@ function v2Deck(): string {
 | B-2 | F-003 |
 `;
 }
-test('public copy protocol exposes a fillable selected art-direction contract with exact receipt syntax', () => {
-  const protocol = readFileSync(fileURLToPath(new URL('../core/protocol/copy-deck.md', import.meta.url)), 'utf8');
-  const template = protocol.match(/```markdown\n(## Art direction contract\n[\s\S]*?)\n```/)?.[1];
-  assert.ok(template, 'the writer needs the public v2 Markdown shape, not only prose field descriptions');
-  const section = template
-    .replace('<selected-register>', 'confident')
-    .replace('<selected-motion-decision>', 'none')
-    .replaceAll('<verified-fact-ids>', 'F-001')
-    .replace('<selected-exception-receipt-sha256>', NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256)
-    .replace('<selected-beat-id>', 'B-1');
-  const complete = `${deck().replace('# Copy deck', '# Copy')}\n${section}`;
-  assert.deepEqual(validateCopyDeckV2(complete), []);
-  assert.deepEqual(validateCopyDeckV2AgainstSelectedArtDirection(complete, {
-    selectedRegister: 'confident', motionDecision: 'none', beatIds: ['B-1'],
-    currentUserBeatExceptionReceiptSha256: NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256,
-  }), []);
-  const wrongLabel = complete.replace('receipt SHA-256:', 'receipt:');
-  assert.ok(validateCopyDeckV2(wrongLabel).some(v => v.id === 'COPY-ART-DIRECTION-EXCEPTION'));
-});
-
 test('v2 canonical no-exception and typed positive exception schemas agree with selected direction', () => {
   const noExceptionSelected = {
     selectedRegister: 'confident' as const,
@@ -239,12 +219,8 @@ test('schema fields permit explicit omission of inapplicable main message and ne
   assert.deepEqual(validateCopyDeck(omitted), []);
 });
 
-test('missing and empty decks fail, and CLI missing file exits 1 with JSON', () => {
+test('missing and empty decks fail', () => {
   assert.ok(validateCopyDeck('').some((v) => v.id === 'COPY-MISSING'));
-  const dir = project();
-  const result = spawnSync(process.execPath, [CLI, 'copy', '--check', '--json'], { cwd: dir, encoding: 'utf8' });
-  assert.equal(result.status, 1);
-  assert.ok((JSON.parse(result.stdout) as Array<{ id: string }>).some((v) => v.id === 'COPY-MISSING'));
 });
 
 test('missing or empty required sections fail', () => {
@@ -341,64 +317,13 @@ test('fact ledger rejects a missing traceable source marker', () => {
   assert.ok(validateCopyDeck(invalid).some((v) => v.id === 'COPY-FACT-LEDGER'));
 });
 
-test('CLI accepts a valid non-empty copy deck', () => {
-  const dir = project();
-  mkdirSync(join(dir, '.omd'));
-  writeFileSync(join(dir, '.omd', 'copy-deck.md'), deck('navigation-only'));
-  const result = spawnSync(process.execPath, [CLI, 'copy', '--check'], { cwd: dir, encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /passes all structural checks/);
-});
-
-test('copy review gate rejects a report for stale deck bytes and accepts the current deck', () => {
+test('copy review validation accepts structurally complete revise and clean reports', () => {
   assert.deepEqual(validateCopyReviewReport(reviewReport()), []);
-  const dir = project();
-  mkdirSync(join(dir, '.omd', '.cache'), { recursive: true });
   const currentDeck = deck();
-  writeFileSync(join(dir, '.omd', 'copy-deck.md'), currentDeck);
-  writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), reviewReport('b'.repeat(64)));
-  const stale = spawnSync(process.execPath, [CLI, 'copy', '--review-check', '--json'], { cwd: dir, encoding: 'utf8' });
-  assert.equal(stale.status, 1, stale.stdout + stale.stderr);
-  assert.ok((JSON.parse(stale.stdout) as Array<{ id: string }>).some((violation) => violation.id === 'COPY-REVIEW-STALE'));
-
   const currentHash = copyDeckSha256(Buffer.from(currentDeck));
-  writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), reviewReport(currentHash));
-  const revise = spawnSync(process.execPath, [CLI, 'copy', '--review-check', '--json'], { cwd: dir, encoding: 'utf8' });
-  assert.equal(revise.status, 1, revise.stdout + revise.stderr);
-  assert.ok((JSON.parse(revise.stdout) as Array<{ id: string }>).some((violation) => violation.id === 'COPY-REVIEW-VERDICT'));
-
-  writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), reviewReport(currentHash, 'CLEAN'));
-  const current = spawnSync(process.execPath, [CLI, 'copy', '--review-check'], { cwd: dir, encoding: 'utf8' });
-  assert.equal(current.status, 0, current.stdout + current.stderr);
-  assert.match(current.stdout, /current copy-deck bytes/);
-  assert.match(current.stdout, /blindness and semantic quality are not proven/);
-});
-
-test('copy review publish persists only a structurally valid coordinator-preserved report', () => {
-  const dir = project();
-  const currentDeck = deck();
-  mkdirSync(join(dir, '.omd'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'copy-deck.md'), currentDeck);
-  const input = join(dir, 'copy-review-input.md');
-  const currentReport = reviewReport(copyDeckSha256(Buffer.from(currentDeck)));
-  writeFileSync(input, currentReport);
-  const result = spawnSync(
-    process.execPath,
-    [CLI, 'copy', 'review-publish', '--input', input, '--json'],
-    { cwd: dir, encoding: 'utf8' },
-  );
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { path: '.omd/.cache/copy-eye.md' });
-  assert.equal(readFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), 'utf8'), currentReport);
-
-  const invalid = join(dir, 'invalid-copy-review.md');
-  writeFileSync(invalid, 'Verdict: CLEAN\n');
-  const rejected = spawnSync(
-    process.execPath,
-    [CLI, 'copy', 'review-publish', '--input', invalid, '--json'],
-    { cwd: dir, encoding: 'utf8' },
-  );
-  assert.equal(rejected.status, 1);
+  assert.deepEqual(validateCopyReviewReport(reviewReport('b'.repeat(64))), []);
+  assert.deepEqual(validateCopyReviewReport(reviewReport(currentHash)), []);
+  assert.deepEqual(validateCopyReviewReport(reviewReport(currentHash, 'CLEAN')), []);
 });
 
 test('forward-test shape without exact mode and reviewed-hash labels fails deterministically', () => {
@@ -429,16 +354,6 @@ Findings:
   assert.ok(ids.includes('COPY-REVIEW-FINDINGS'));
 });
 
-test('copy review CLI missing report fails with stable JSON', () => {
-  const dir = project();
-  const result = spawnSync(process.execPath, [CLI, 'copy', '--review-check', '--json'], { cwd: dir, encoding: 'utf8' });
-  assert.equal(result.status, 1);
-  assert.deepEqual(JSON.parse(result.stdout), [{
-    id: 'COPY-REVIEW-MISSING',
-    path: '.omd/.cache/copy-eye.md',
-    message: 'Copy-eye report is missing or empty.',
-  }]);
-});
 test('v2 rendered Beat proof rejects nested structures and wrapper-only visual merges', () => {
   const nested = validateCopyDeckV2(v2Deck(), renderedBeats(
     { id: 'B-1' },

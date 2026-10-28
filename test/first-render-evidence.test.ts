@@ -7,6 +7,15 @@ import { publishDesignJudgment } from '../core/design/judgment-files.ts';
 import { loadMeasurement } from '../core/measure/files.ts';
 import { measurementFixture } from './helpers/visual-measurement.ts';
 
+test('structured first-render capture still refuses an absent owner-authored hypothesis without mutation', async t => {
+  const { root, writer, invocation, html } = measurementFixture('clean');
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  await assert.rejects(() => publishFirstRenderCheck(root, 'dist/index.html', undefined, writer, invocation), /hypothesis is missing/);
+  assert.equal(existsSync(join(root, '.omd/first-render-critic.json')), false);
+  assert.equal(existsSync(join(root, '.omd/visual-measurement.json')), false);
+  assert.deepEqual(readFileSync(join(root, 'src/index.html')), html);
+});
+
 test('native first-render facts derive from immutable measurements; invented surfaces refuse without mutation', async t => {
   const { root, writer, invocation, html } = measurementFixture('clean');
   t.after(() => rmSync(root, { recursive: true, force: true }));

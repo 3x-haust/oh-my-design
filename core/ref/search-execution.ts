@@ -174,7 +174,7 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     // page prose is not a trustworthy semantic signal for access classification.
     const googleChallenge = new URL(input.url).hostname === 'www.google.com'
       && (new URL(finalUrl).pathname.startsWith('/sorry/') || httpStatus === 429);
-    const challenge = googleChallenge ? 'Google search challenge; hand off to the consented browser user or use public search fallback' : null;
+    const challenge = googleChallenge ? 'Google search challenge; search the component on a design gallery instead (omd ref browse search dribbble|pinterest|behance|notefolio "<component> ui design"), use omd ref browse challenge with the person watching, or a public search fallback' : null;
     const gallery = gallerySearchProvider(input) !== null;
     const httpOk = httpStatus === 200;
     status = challenge !== null ? 'blocked' : !httpOk ? 'http-error'

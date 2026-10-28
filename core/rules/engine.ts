@@ -29,7 +29,9 @@ export const CONTEXTUAL_COPY_RULE_IDS = new Set([
 type Compiled = Script;
 
 const cache = new Map<string, Compiled>();
-const RULE_EVALUATION_TIMEOUT_MS = 250;
+// Bounds a runaway rule. A fresh VM context is slow to create while reviewers and browsers load the machine;
+// at 250ms a one-line rule timed out and failed a whole completion run.
+const RULE_EVALUATION_TIMEOUT_MS = 2000;
 
 function compile(ruleId: string, expr: string): Compiled {
   const key = ruleId + ' ' + expr;
@@ -43,25 +45,15 @@ function compile(ruleId: string, expr: string): Compiled {
   return script;
 }
 
+const READS_IR = /\bir\b/u;
+
 function evalExpr(ruleId: string, expr: string, node: Node, ir: Ir, value: RuleValue): unknown {
   try {
-    let irSnapshot: unknown;
-    let hasIrSnapshot = false;
+    // Each expression gets its own mutable snapshot. Clone before entering the VM so the
+    // evaluation timeout bounds rule computation, not the cost of copying a large IR.
     const context = {
       node: structuredClone(node),
-      // Most per-node expressions never read ir. Clone only on first access, still
-      // giving each expression its own mutable snapshot rather than sharing data.
-      get ir(): unknown {
-        if (!hasIrSnapshot) {
-          irSnapshot = structuredClone(ir);
-          hasIrSnapshot = true;
-        }
-        return irSnapshot;
-      },
-      set ir(next: unknown) {
-        irSnapshot = next;
-        hasIrSnapshot = true;
-      },
+      ir: READS_IR.test(expr) ? structuredClone(ir) : undefined,
       value: structuredClone(value),
     };
     return compile(ruleId, expr).runInNewContext(context, { timeout: RULE_EVALUATION_TIMEOUT_MS, contextCodeGeneration: { strings: false, wasm: false } });
@@ -90,7 +82,9 @@ export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categorie
     if (opts.layers && !opts.layers.includes(rule.layer)) continue;
     if (opts.categories && !opts.categories.includes(rule.category)) continue;
 
-    for (const node of ir.nodes) {
+    const candidates = rule.when === 'node.parent === null'
+      ? ir.nodes.filter(node => node.parent === null) : ir.nodes;
+    for (const node of candidates) {
       if (!evalExpr(rule.id, rule.when, node, ir, null)) continue;
 
       const value = (rule.value ? evalExpr(rule.id, rule.value, node, ir, null) : null) as RuleValue;

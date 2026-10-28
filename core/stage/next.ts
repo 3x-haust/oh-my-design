@@ -1,167 +1,182 @@
-import { join } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { checkProductionReadiness } from '../brief/production-readiness.ts';
+import { checkTerminalCompletion } from '../completion/preflight.ts';
 import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts';
-import { buildBrief } from '../brief/index.ts';
-import { checkBriefEntry } from '../brief/entry.ts';
-import { unprovidedPlanningStatements, validateDomainBrief, type DomainPlanningDisposition } from '../domain/domain-brief.ts';
-import { resolveRunState } from './contract.ts';
-import { stageArtifactProblems } from './output.ts';
-import { referenceInterpretationWork, referenceResearchWork } from './reference-work.ts';
-import { referenceDiscoveryWork, type ReferenceDiscoveryAction } from '../ref/discovery-work.ts';
+import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
-import { nativeCompletionWork } from './native-completion.ts';
-import { canDeferMissingCopy, confidenceDebt, DEBT_CAPABLE_STAGES, readConfidenceDebt, recordConfidenceDebt } from '../brief/confidence-debt.ts';
-import { evidenceBudget } from './evidence-budget.ts';
-import { candidateDirectionState, directionPresentation } from '../brief/candidate-choice.ts';
-import { refinementEscalation } from './refinement-work.ts';
+import { readFirstRenderReview } from '../design/first-render-review.ts';
+import { COMPONENT_REFERENCE_GUIDANCE, referenceBreadth } from '../ref/component-references.ts';
+import { componentReferencesPending, designBriefPending, directionReviewPending, graphicDecisionPending, GRAPHIC_COMPARISON_GUIDANCE } from '../design/new-surface-advisories.ts';
+import { DESIGN_BRIEF_GUIDANCE } from '../design/design-brief.ts';
+import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
+import {
+  firstRenderLoopState,
+  firstRenderReviewMatchesCurrentRoute,
+} from '../design/first-render-checkpoint.ts';
 
-/** Fresh and interrupted runs use the same current-disk work pointer. No artifacts are fabricated. */
+const base = (routeSha256: string | null) => ({
+  schema: 'stage-next-v2' as const,
+  meaning: 'next-work-not-completion' as const,
+  deliveryMode: 'implementation' as const,
+  owner: 'coordinator' as const,
+  confidenceDebt: [],
+  deferredStages: [] as string[],
+  progress: {
+    routeSha256,
+    workSha256: null,
+    materialProgressIdentities: [] as string[],
+    validatedStages: [] as string[],
+  },
+  problems: [] as string[],
+  entryBlockers: [] as string[],
+  planning: [] as string[],
+  schemas: [] as string[],
+  contracts: [] as string[],
+  judgedBy: [] as string[],
+  referenceWork: null,
+});
+
+/** Sole model-led work pointer retained for host continuation. */
 export function nextStageWork(root: string, packRoot: string, invocation: ProjectRunInvocation) {
-  const route = readPersistedRoute(root, invocation);
-  const escalation = route.sourceContract.processPolicy ? refinementEscalation(root, route.sourceContractSha256) : null;
-  if (escalation) {
-    const { defects, ...pending } = escalation;
+  if (!existsSync(resolve(root, '.omd/route.json'))) {
     return {
-    schema: 'stage-next-v2', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
-    action: 'await-user', stage: 'production', owner: 'coordinator', reason: 'repeated-defect',
-    pending, escalationEvidence: defects, resumeAuthority: null,
-    confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages: [] as string[],
-    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: null, validatedStages: [] as string[] },
-    problems: [], entryBlockers: [], planning: [], schemas: [], contracts: [], judgedBy: [], referenceWork: null,
-    next: null, instruction: 'Stop automatic repairs and completion retries. Preserve the actual three fixes/results and wait for renewed human authority; budget cannot waive a required defect.',
+      ...base(null),
+      stage: 'route',
+      action: 'classify-route',
+      next: 'omd route starter --json',
+      instruction: 'Author the model-led route input, validate it, and classify it before production.',
     };
   }
-  const direction = route.sourceContract.processPolicy ? candidateDirectionState(root) : null;
-  if (direction?.pending) return {
-    schema: 'stage-next-v2', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
-    action: 'await-user', stage: 'candidate-generation', owner: 'coordinator',
-    reason: direction.selectionStatus === 'stale' ? 'stale-direction' : 'direction-choice',
-    pending: direction.pending, resumeAuthority: null, selectionStatus: direction.selectionStatus,
-    presentation: directionPresentation(root, direction.pending),
-    confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages: [] as string[],
-    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: null, validatedStages: [] as string[] },
-    problems: [], entryBlockers: [], planning: [], schemas: [], contracts: [], judgedBy: [], referenceWork: null,
-    next: 'omd candidate select --input <selection-input.json> --json',
-    instruction: 'Present all actual previews and tradeoffs once, then wait for actual user input. No acquisition, repair or completion retry may cross this pause. Representative source repair and inspection remain available.',
-  };
-  const state = resolveRunState(root, packRoot, invocation);
-  const planning: Array<{ field: string; text: string; disposition: DomainPlanningDisposition }> = [];
-  if (state.stages.some(s => s.stage === 'domain' && s.present) && !stageArtifactProblems(root, 'domain', invocation).length) {
-    const brief = validateDomainBrief(JSON.parse(readFileSync(join(root, '.omd/domain-brief.json'), 'utf8')));
-    planning.push(...unprovidedPlanningStatements(brief.planning));
+  const route = readPersistedRoute(root, invocation);
+  const routeSha256 = adaptiveRouteRecordSha256(route);
+  if (!isModelLedProcess(route.sourceContract)) {
+    return {
+      ...base(routeSha256),
+      stage: 'unsupported',
+      action: 'stop-blocked',
+      problems: ['LEGACY_STRUCTURED_PROCESS_UNSUPPORTED'],
+      next: null,
+      instruction: 'This persisted structured route is historical and cannot resume production. Start a new model-led route from the unchanged request.',
+    };
   }
-  const outputs = state.stages.map(s => ({ ...s, problems: stageArtifactProblems(root, s.stage, invocation),
-    entry: checkBriefEntry(root, s.stage, packRoot, invocation) }));
-  const browseStop = route.sourceContract.reviewPurpose !== undefined && route.references.decision === 'discover'
-    ? referenceDiscoveryWork(root, route) : null;
-  let incomplete: typeof outputs[number] | undefined;
-  const deferredStages: string[] = [];
-  for (const output of outputs) {
-    if (!output.problems.length && (route.sourceContract.processPolicy === undefined || !output.entry.blockers.length)) continue;
-    const debtCapable = DEBT_CAPABLE_STAGES.has(output.stage)
-      || (output.stage === 'copy' && !output.present && canDeferMissingCopy(route));
-    if (!debtCapable || route.sourceContract.processPolicy === undefined) { incomplete = output; break; }
-    if (browseStop?.status === 'stopped-with-debt' && !output.present
-      && ['acquisition', 'scout', 'reference-board', 'reference-selection', 'moodboard'].includes(output.stage)) {
-      recordConfidenceDebt(root, route.sourceContractSha256,
-        [confidenceDebt(output.stage, `${browseStop.instruction} ${output.problems.join('; ')}`, 'evidence-gap')], invocation);
-      deferredStages.push(output.stage); continue;
+  const readiness = checkProductionReadiness(root, invocation, packRoot);
+  if (!readiness.ok) {
+    return {
+      ...base(routeSha256),
+      stage: 'production',
+      action: 'repair-production-readiness',
+      problems: readiness.blockers,
+      next: 'omd guard production --json',
+      instruction: 'Repair the current authority, scope, design-language, or unresolved reframe blocker, then rerun the production guard.',
+    };
+  }
+  // New products and landings start from a written brief, then look for references in its words.
+  if (designBriefPending(root, route)) {
+    return {
+      ...base(routeSha256),
+      stage: 'brief',
+      action: 'write-design-brief',
+      next: 'omd schema design-brief',
+      instruction: DESIGN_BRIEF_GUIDANCE,
+    };
+  }
+  // New products and landings point to component references once.
+  if (componentReferencesPending(root, route)) {
+    return {
+      ...base(routeSha256),
+      stage: 'references',
+      action: 'gather-component-references',
+      next: 'omd ref browse start --lane design --json',
+      instruction: `${referenceBreadth(root)} ${COMPONENT_REFERENCE_GUIDANCE}`,
+    };
+  }
+  if (directionReviewPending(root, route)) {
+    return {
+      ...base(routeSha256),
+      stage: 'references',
+      action: 'review-reference-directions',
+      next: 'omd ref direction-review --json',
+      instruction: 'An isolated reviewer judges every kept page for craft and fit: direction, support or reject. Choose the primary '
+        + 'from the pages it marks direction and give support pages one named part each; if none is direction, keep better finished sites and review again.',
+    };
+  }
+  // The section graphics are designed before the page around them, as the brief's "shows" plans them.
+  if (graphicDecisionPending(root, route, invocation.current.briefSha256)) {
+    return {
+      ...base(routeSha256),
+      stage: 'graphics',
+      action: 'compare-section-graphics',
+      next: 'omd pack theory/imagegen.md',
+      instruction: GRAPHIC_COMPARISON_GUIDANCE,
+    };
+  }
+  // Until the first render exists, the work is composing the page; name the knowledge for that.
+  if (!existsSync(resolve(root, '.omd/first-render'))) {
+    return {
+      ...base(routeSha256),
+      stage: 'production',
+      action: 'compose-first-render',
+      next: 'omd guard production --json',
+      instruction: composeGuidance(route),
+    };
+  }
+  if (!existsSync(resolve(root, '.omd/.cache/trusted-lifecycle-manifest.json'))) {
+    return {
+      ...base(routeSha256),
+      stage: 'browser-evidence',
+      action: 'author-lifecycle-manifest',
+      next: 'omd schema trusted-lifecycle-manifest --json',
+      instruction: 'Author the trusted lifecycle manifest for the actual built entry and requested outcomes.',
+    };
+  }
+  const firstRender = readFirstRenderReview(root);
+  const firstRenderIsCurrent = firstRender !== null
+    && firstRenderReviewMatchesCurrentRoute(root, route, firstRender);
+  if (firstRender !== null && firstRenderIsCurrent) {
+    const loop = firstRenderLoopState(root, route);
+    if (loop.stalled) {
+      return {
+        ...base(routeSha256),
+        stage: 'independent-review',
+        action: loop.bestRestored ? 'report-stalled-first-render' : 'restore-best-first-render',
+        problems: ['FIRST_RENDER_LOOP_STALLED', ...loop.reasons],
+        next: loop.bestRestored ? null : 'omd first-render restore --json',
+        instruction: loop.bestRestored
+          ? 'The first-render loop stalled and the best source is restored. Stop repairing; report the remaining localized findings and the current desktop/mobile captures to the user.'
+          : 'The first-render loop stalled. Restore the best checkpoint, then report the remaining localized findings and both current captures to the user instead of continuing repair.',
+      };
     }
-    const budget = evidenceBudget(root, route.sourceContractSha256, output.stage, invocation);
-    if (!budget.exhausted) { incomplete = output; break; }
-    recordConfidenceDebt(root, route.sourceContractSha256,
-      [confidenceDebt(output.stage, `${budget.reason} ${[...output.problems, ...output.entry.blockers].join('; ')}`, 'budget-exhausted')], invocation);
-    deferredStages.push(output.stage);
-  }
-  const stage = incomplete?.stage ?? null;
-  const brief = stage === null ? null : buildBrief(root, stage, packRoot, invocation);
-  const entry = stage === null ? null : checkBriefEntry(root, stage, packRoot, invocation);
-  let interpretation = route.sourceContract.processPolicy !== undefined && !deferredStages.includes('reference-board') && route.strategy.stages.includes('reference-board')
-    && (stage === null || ['art-direction', 'composition', 'candidate-generation'].includes(stage))
-    ? referenceInterpretationWork(root, route.sourceContract.reviewPurpose === undefined ? undefined
-      : { sourceContractSha256: route.sourceContractSha256, request: route.request }) : null;
-  if (interpretation && browseStop?.status === 'stopped-with-debt') {
-    recordConfidenceDebt(root, route.sourceContractSha256, [confidenceDebt('reference-interpretation', browseStop.instruction)], invocation);
-    interpretation = null; deferredStages.push('reference-interpretation');
-  }
-  if (interpretation) {
-    const budget = evidenceBudget(root, route.sourceContractSha256, 'reference-interpretation', invocation);
-    if (budget.exhausted) {
-      recordConfidenceDebt(root, route.sourceContractSha256,
-        [confidenceDebt('reference-interpretation', budget.reason, 'budget-exhausted')], invocation);
-      interpretation = null;
-      deferredStages.push('reference-interpretation');
+    if (firstRender.progress?.verdict === 'regressed'
+      && !(loop.bestRestoreApplied && !loop.bestRestored)) {
+      return {
+        ...base(routeSha256),
+        stage: 'independent-review',
+        action: loop.bestRestoreApplied ? 'change-approach-from-restored-best' : 'restore-best-first-render',
+        problems: ['FIRST_RENDER_REGRESSED'],
+        next: loop.bestRestoreApplied ? null : 'omd first-render restore --json',
+        instruction: loop.bestRestoreApplied
+          ? `The best first-render source is restored. Try a materially different approach before recapturing; do not patch forward from the regressed attempt. ${REPAIR_KNOWLEDGE}`
+          : 'Restore the best first-render checkpoint before trying a materially different approach.',
+      };
     }
   }
-  const research = stage === 'reference-board' && (route.sourceContract.processPolicy === undefined || entry?.blockers.length === 0) && route.references.decision === 'discover'
-    ? referenceResearchWork(root, { expectedSourceContractSha256: route.sourceContractSha256,
-      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request,
-      wholeScreen: route.sourceContract.reviewPurpose !== undefined }) : null;
-  const missingReferenceBoard = stage === 'reference-board' && incomplete?.present === false
-    && (route.sourceContract.processPolicy === undefined || entry?.blockers.length === 0) && route.references.decision === 'discover';
-  let discoveryWork: ReturnType<typeof referenceDiscoveryWork> | null = null;
-  let referenceLimitation: string | null = null;
-  if (missingReferenceBoard) {
-    try { discoveryWork = referenceDiscoveryWork(root, route); }
-    catch (error) { referenceLimitation = error instanceof Error ? error.message : String(error); }
+  try {
+    checkTerminalCompletion(root, invocation);
+    return {
+      ...base(routeSha256),
+      stage: null,
+      action: 'report-completion',
+      next: 'omd guard completion --json',
+      instruction: 'Terminal evidence is current. Run the completion guard before reporting completion.',
+    };
+  } catch {
+    return {
+      ...base(routeSha256),
+      stage: 'independent-review',
+      action: 'finish-model-led',
+      next: 'omd lifecycle finish --json',
+      instruction: 'Run model-led lifecycle completion to evaluate the real build, perform isolated review, and publish final evidence.',
+    };
   }
-  const referenceExhausted = discoveryWork?.status === 'exhausted' || referenceLimitation !== null;
-  const native = stage === null && interpretation === null && route.deliveryMode !== 'design-only'
-    && isNativePiInvocation(invocation) ? nativeCompletionWork(root, invocation) : null;
-  const nativeBrief = native?.stage ? checkBriefEntry(root, native.stage, packRoot, invocation) : null;
-  return {
-    schema: 'stage-next-v2', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
-    hardBlockers: [], warnings: [...(entry?.blockers ?? []), ...(referenceLimitation === null ? [] : [`Reference discovery limitation: ${referenceLimitation}`]), ...(discoveryWork?.status === 'exhausted' ? ['Reference acquisition budget exhausted; continue implementation with the recorded limitation'] : []), ...planning.map(p => `non-factual planning: ${p.field} (${p.disposition})`)]
-      .map(message => ({ code: 'STAGE_PROCESS_ADVISORY', classification: 'advisory' as const, subjectId: stage ?? 'run', sourceDigests: [], message })),
-    advisoryResponsesNeeded: [...(entry?.blockers ?? []).map(message => ({ code: 'STAGE_PROCESS_ADVISORY', subjectId: stage ?? 'run', message, status: 'needs-agent-reason' as const }))],
-    evidenceAvailable: outputs.filter(s => s.present && s.problems.length === 0).map(s => s.stage),
-    completion: { browserEvidence: native?.stage === 'independent-review' ? 'current' as const : 'missing' as const,
-      independentReview: native?.stage === null ? 'pass' as const : 'missing' as const },
-    selectionStatus: direction?.selectionStatus ?? 'skipped',
-    confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages,
-    stage, owner: brief?.owner ?? null,
-    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: discoveryWork?.workSha256 ?? null,
-      materialProgressIdentities: discoveryWork?.materialProgressIdentities ?? [], validatedStages: outputs
-      .filter(s => ['domain', 'frame', 'reference-board', 'copy', 'composition'].includes(s.stage)
-        && s.problems.length === 0 && s.entry.blockers.length === 0)
-      .map(s => s.stage) },
-    action: stage === null ? route.deliveryMode === 'design-only' ? 'review-design-handoff' : 'implement-or-evaluate'
-      : discoveryWork?.action?.kind === 'replan-discovery' ? 'replan-reference-discovery'
-        : discoveryWork?.status === 'action' && discoveryWork.action !== null
-          ? ({
-            'browser-consent': 'browser-consent',
-            'collect-leads': 'collect-leads',
-            'direct-entry': 'acquire-reference',
-            'follow-link': 'acquire-reference',
-            'publish-board': 'author-output',
-            'replan-discovery': 'replan-reference-discovery',
-            'retain-reference': 'retain-reference',
-            'review-candidates': 'review-candidates',
-            'start-browse': 'acquire-reference',
-            'continue-browse': 'acquire-reference',
-            'narrow-tray': 'acquire-reference',
-            'end-browse': 'acquire-reference',
-            search: 'acquire-reference',
-          } satisfies Readonly<Record<ReferenceDiscoveryAction['kind'], string>>)[discoveryWork.action.kind]
-        : discoveryWork?.status === 'exhausted' ? 'resolve-external-blocker'
-          : incomplete?.present ? 'repair-output' : 'author-output',
-    problems: stage === null ? [] : stageArtifactProblems(root, stage, invocation),
-    entryBlockers: entry?.blockers ?? [], planning,
-    next: discoveryWork !== null && !referenceExhausted
-      ? discoveryWork.next
-      : stage === null
-      ? route.deliveryMode === 'design-only' ? 'omd completion design-check --input .omd/design-handoff.json --json' : 'omd guard production --json'
-      : `omd brief ${stage} --check --json`,
-    schemas: brief?.schemas ?? [], contracts: brief?.contracts ?? [], judgedBy: brief?.judgedBy ?? [],
-    instruction: discoveryWork !== null && !referenceExhausted
-        ? discoveryWork.instruction
-        : `Read and deliver this stage's contracts, satisfy entry, execute the owned work, then its applicable output checks. Recompute stage next after changes.${planning.length === 0 ? '' : ' Keep classified planning hypotheses non-factual: omit omit-from-production-claims statements from claims, label non-factual-working-decision statements as run-owned decisions, and never use either to remove explicit requirements.'} Remaining output quality, reference currentness, candidates, rendered evidence and independent review still require their own gates; this pointer never certifies completion.`,
-    referenceWork: discoveryWork,
-    ...(research ?? interpretation ?? {}),
-    ...(native === null ? {} : { ...native, entryBlockers: nativeBrief?.blockers ?? [],
-      schemas: nativeBrief?.schemas ?? [], contracts: nativeBrief?.contracts ?? [], judgedBy: nativeBrief?.judgedBy ?? [],
-      ...('procedure' in native ? { procedure: native.procedure }
-        : nativeBrief?.procedure === undefined ? {} : { procedure: nativeBrief.procedure }) }),
-  };
 }

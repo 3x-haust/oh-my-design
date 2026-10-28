@@ -6,13 +6,13 @@ announcements, zoom behavior, or action meaning. Verify those in a real browser.
 
 | Concern | When it applies | How to verify in a real browser | Failure signal |
 | --- | --- | --- | --- |
-| Accessible name computation | Every interactive control, form field, image action, region that needs a label, and named dialog | Inspect the accessibility tree for computed name and source. Compare it with the visible label. Activate icon-only controls with a screen reader and speech output on. | Name is absent, generic, duplicated in context, taken from placeholder alone, or conflicts with the visible label. An icon's file name becomes the action name. |
+| Accessible name computation | Every interactive control, form field, image action, region that needs a label, and named dialog | Inspect the accessibility tree for computed name and source. Compare it with the visible label. Activate icon-only controls with a screen reader and speech output on. A placeholder may supply a browser fallback in some mappings, but it is not a persistent visible label. | Name is absent, generic, duplicated in context, taken only from placeholder, or conflicts with the visible label. An icon's file name becomes the action name. |
 | Landmarks and headings | Every page, route, dialog with sections, and repeated navigation region | Inspect landmark roles and names. Navigate by landmarks and headings in a screen reader. Check one main region, labeled repeated navigation, a logical heading outline, and a dialog heading. | Users can't locate main content, two navigation regions have the same unnamed role, heading levels encode visual size rather than structure, or a dialog has no name. |
 | Reading order | Any layout where CSS grid, flex order, positioning, columns, cards, overlays, or responsive changes may differ from DOM order | Read with CSS on and navigate in browse mode. Compare spoken sequence with the visual sequence at desktop and narrow widths. Turn CSS off as a diagnostic, not as the pass condition. | Instructions are read after their controls, paired content separates, a modal's background enters the sequence, or responsive visual order contradicts DOM meaning. |
-| Focus order and visible focus | Every keyboard-operable page and every tab stop, including controls revealed after interaction | Start at the browser chrome, press Tab and Shift+Tab through 100% of tab stops, then use component-specific arrow keys. Repeat after opening dialogs, menus, disclosures, and errors. Inspect each focused element at 100%, 200%, and 400% zoom. | Any tab stop has no visible focus, focus is clipped or covered, order jumps without task logic, an inactive element receives focus, focus enters inert background, a trap has no exit, or closing a surface loses the trigger. |
+| Focus order and visible focus | Every keyboard-operable page and every tab stop, including controls revealed after interaction | Start at the browser chrome, press Tab and Shift+Tab through 100% of tab stops, then use component-specific arrow keys. Repeat after opening dialogs, menus, disclosures, and errors. Inspect each focused element at 100%, 200%, and 400% zoom. WCAG 2.4.7 requires a visible focus mode; it does not require one outline style. | Any tab stop has no visible focus, focus is clipped or covered, order jumps without task logic, an inactive element receives focus, focus enters inert background, a trap has no exit, or closing a surface loses the trigger. |
 | Live regions for async state | Search results, availability checks, save status, uploads, background errors, and updates that don't move focus | With a screen reader running, subscribe before triggering the update. Trigger one success, one empty result, and one failure. Confirm one concise announcement for each settled state. | Nothing is announced, every keystroke is announced, stale results speak after current results, the same status repeats, or focus is stolen to report routine progress. |
 | Error association | Every field or group that can become invalid | Submit an empty or invalid form. Inspect `aria-invalid`, description relationships, group naming, summary links, and resulting focus. Correct the field and inspect again. | A red border is the only signal, message isn't named with the field, `aria-describedby` points to a missing node, `aria-invalid` remains after correction, or summary focus and links don't work. |
-| Pointer target size | Every pointer target, especially compact controls, icon buttons, table actions, and adjacent links | Measure the CSS pixel target box and spacing in DevTools. Test touch emulation and a real touch device where available. WCAG 2.2 SC 2.5.8 requires at least 24 by 24 CSS px or its spacing exception. Aim for 44 by 44px for touch. | A target is under 24 by 24 CSS px and doesn't meet the spacing exception, adjacent targets overlap the required clearance, or a visually small icon has no larger hit area. |
+| Pointer target size | Every pointer target, especially compact controls, icon buttons, table actions, and adjacent links | Measure the actual hit area and spacing in CSS pixels. Test touch emulation and a real touch device where available. WCAG 2.2 SC 2.5.8 requires at least 24 by 24 CSS px or an applicable spacing/other exception. Larger platform recommendations are usability targets, not the criterion itself. | A target is under 24 by 24 CSS px and doesn't meet an exception, adjacent targets overlap the required clearance, or a visually small icon has no larger hit area. |
 | Text contrast | All meaningful text, including placeholder text and text in hover, focus, selected, error, and disabled-adjacent states | Use computed foreground and background colors in each state. Verify 4.5:1 for normal text and 3:1 for large text, defined here as at least 24px regular or 18.66px bold. Test over images and gradients at the weakest point. | Any required pair falls below its ratio, a translucent layer changes the real ratio, or text becomes unreadable in a reachable state. |
 | Non-text contrast | Control boundaries, focus indicators, state indicators, icons required to operate, and meaningful chart marks | Measure each meaningful graphic against adjacent colors in every state. Verify at least 3:1 where WCAG 1.4.11 applies. Check that shape or text also carries state. | Input boundary, focus ring, selected mark, or required icon is below 3:1, disappears against one adjacent color, or relies on color alone. |
 | Reflow | Every web surface except content with an essential two-dimensional layout | At 1280 CSS px viewport width, zoom to 400%, which yields a 320 CSS px content width. Also test a direct 320 CSS px viewport. Pan only in the allowed single direction. | Page-level horizontal scrolling is needed for ordinary content, controls overlap or clip, sticky regions consume the view, text is lost, or reading and focus order break. Data tables may scroll in their bounded region when two-dimensional layout is essential. |
@@ -43,8 +43,8 @@ keyboard behavior.
 ## Numeric floors
 
 - Visible focus: inspect 100% of reachable tab stops.
-- Target size: 24 by 24 CSS px minimum under WCAG 2.2 SC 2.5.8, including its spacing exception.
-  Use 44 by 44px as the recommended touch target.
+- Target size: 24 by 24 CSS px under WCAG 2.2 SC 2.5.8 unless its spacing or another
+  explicit exception applies. Larger platform targets remain useful recommendations.
 - Contrast: 4.5:1 for normal text, 3:1 for text at least 24px regular or 18.66px bold, and 3:1
   for applicable non-text UI information.
 - Reflow: 320 CSS px width, including the equivalent 400% zoom test from a 1280 CSS px viewport.
@@ -52,8 +52,10 @@ keyboard behavior.
 
 ## Sources
 
-- W3C, Web Content Accessibility Guidelines 2.2
-- W3C WAI, ARIA Authoring Practices Guide
-- W3C, Accessible Name and Description Computation
-- HTML Living Standard
-- Apple Human Interface Guidelines and Material Design, touch-target recommendations
+- [W3C, Web Content Accessibility Guidelines 2.2](https://www.w3.org/TR/WCAG22/)
+- [W3C, Focus Visible understanding](https://www.w3.org/WAI/WCAG22/UNDERSTANDING/focus-visible.html)
+- [W3C, Target Size (Minimum) understanding](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum)
+- [W3C WAI, ARIA Authoring Practices Guide](https://www.w3.org/WAI/ARIA/apg/)
+- [W3C, Accessible Name and Description Computation](https://www.w3.org/TR/accname-1.2/)
+- [HTML Living Standard](https://html.spec.whatwg.org/)
+- [Apple Human Interface Guidelines, Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)

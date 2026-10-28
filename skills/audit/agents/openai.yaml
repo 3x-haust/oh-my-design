@@ -1,3 +1,0 @@
-interface:
-  display_name: "(omd) audit"
-  short_description: "Audit current renders and stress coverage, repair real defects and stop under the bound refinement policy."

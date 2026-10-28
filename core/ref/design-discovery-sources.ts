@@ -27,7 +27,16 @@ export function designDiscoveryProvider(url: string): string | null {
   if (host === 'dribbble.com' && /^\/shots\/\d[^/]*\/?$/.test(path)) return 'Dribbble';
   if (host === 'behance.net' && /^\/gallery\/\d+(?:\/[^/]+)?\/?$/.test(path)) return 'Behance';
   if (host === 'siteinspire.com' && /^\/websites?\/\d[^/]*\/?$/.test(path)) return 'Siteinspire';
+  // Notefolio work pages are /<creator>/<work id>; service, help and account paths are not works.
+  if (host === 'notefolio.net' && /^\/(?!service\/|login|register|agency|search)[a-z0-9_.-]+\/\d+\/?$/i.test(path)) return 'Notefolio';
   if (host === 'land-book.com' && /^\/websites\/[^/]+\/?$/.test(path)) return 'Land-book';
+  if (host === 'refero.design' && /^\/pages\/[0-9a-f-]{36}\/?$/i.test(path)) return 'Refero';
+  if (host === 'nook.ai.kr' && /^\/site\/[0-9a-f-]{36}\/?$/i.test(path)) return 'Nook';
+  if (host === 'awwwards.com' && /^\/sites\/[a-z0-9][a-z0-9-]*\/?$/.test(path)) return 'Awwwards';
+  if (host === 'landing.love' && /^\/sites\/[a-z0-9][a-z0-9-]*\/?$/.test(path)) return 'Landing Love';
+  if (host === '21st.dev' && /^\/(?:@[a-z0-9_-]+|community\/components\/[a-z0-9_-]+)\/(?:components\/)?[a-z0-9][a-z0-9-]*\/?$/i.test(path)) return '21st.dev';
+  if (host === 'fontsinuse.com' && /^\/uses\/\d+\/[a-z0-9][a-z0-9-]*\/?$/.test(path)) return 'Fonts In Use';
+  if (host === 'component.gallery' && /^\/components\/[a-z][a-z0-9-]*\/?$/.test(path)) return 'Component Gallery';
   if (host === 'godly.website' && /^\/website\/[^/]+\/?$/.test(path)) return 'Godly';
   if (host === 'mobbin.com' && MOBBIN_SCREEN.test(path)) return 'Mobbin';
   if (host === 'pageflows.com' && PAGE_FLOWS_SCREEN.test(path)) return 'Page Flows';
@@ -49,6 +58,7 @@ export function designDiscoveryItemIdentity(url: string): string | null {
     : provider === 'Dribbble' ? canonicalItem(/^\/shots\/(\d+)/.exec(path)?.[1])
       : provider === 'Behance' ? canonicalItem(/^\/gallery\/(\d+)/.exec(path)?.[1])
         : provider === 'Siteinspire' ? canonicalItem(/^\/websites?\/(\d+)/.exec(path)?.[1])
+          : provider === 'Notefolio' ? canonicalItem(/^\/[^/]+\/(\d+)/.exec(path)?.[1])
           : provider === 'UI Bowl'
             ? path.replace(/^\/(screens?|apps?|patterns?|components?)\//, (_match, kind: string) => `/${kind.replace(/s$/, '')}/`)
             : path;
@@ -91,11 +101,21 @@ export function designDiscoveryDirectoryProvider(url: string): string | null {
   if (host === 'siteinspire.com' && (path === '/' || /^\/(?:websites|styles|types|subjects)(?:\/[a-z][a-z0-9-]*)?$/.test(path)
     || /^\/websites\/category\/[a-z][a-z0-9-]*$/.test(path))) return 'Siteinspire';
   if (host === 'dribbble.com' && (path === '/' || /^\/(?:shots|tags|search)(?:\/[a-z][a-z0-9-]*)?$/.test(path))) return 'Dribbble';
+  if (host === 'notefolio.net' && (path === '/' || path === '/search')) return 'Notefolio';
   if (host === 'behance.net' && (['/', '/galleries', '/for_you'].includes(path)
     || path === '/search/projects' || path.startsWith('/search/projects/'))) return 'Behance';
   if (/^(?:[a-z]{2}\.)?pinterest\.(?:com|co\.uk|ca|de|fr|jp|co\.kr|com\.au)$/.test(host)
     && (path === '/' || /^\/ideas(?:\/[a-z][a-z0-9-]*\/\d+)?$/.test(path))) return 'Pinterest';
   if (host === 'land-book.com' && (path === '/' || /^\/(?:websites|categories)(?:\/[a-z][a-z0-9-]*)?$/.test(path))) return 'Land-book';
+  if (host === 'cosmos.so' && (path === '/explore' || /^\/search\/elements\/[^/]+$/.test(path))) return 'Cosmos';
+  if (host === 'refero.design' && path === '/search') return 'Refero';
+  if (host === 'nook.ai.kr' && path === '/') return 'Nook';
+  if (host === 'awwwards.com' && path === '/websites') return 'Awwwards';
+  if (host === '21st.dev' && /^\/s\/[^/]+$/.test(path)) return '21st.dev';
+  if (host === 'onepagelove.com' && path === '/' && parsed.searchParams.has('s')) return 'One Page Love';
+  if (host === 'lapa.ninja' && path === '/search') return 'Lapa Ninja';
+  if (host === 'landing.love' && path === '/search') return 'Landing Love';
+  if (host === 'fontsinuse.com' && path === '/search') return 'Fonts In Use';
   if (host === 'godly.website' && (path === '/' || /^\/(?:websites|collections)(?:\/[a-z][a-z0-9-]*)?$/.test(path))) return 'Godly';
   if (host === 'uibowl.io' && ['/', '/screens', '/apps', '/patterns', '/components'].includes(path)) return 'UI Bowl';
   if (host === 'mobbin.com' && path === '/explore/screens') return 'Mobbin';

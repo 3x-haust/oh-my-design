@@ -1,11 +1,10 @@
-import { directionPresentation, type PendingDirection } from '../core/brief/candidate-choice.ts';
-import * as directionData from '../core/brief/candidate-data.ts';
 import { resumeRouteInput } from './omd-bootstrap-repair.ts';
 import { parseUserQuestion, questionText, browserAnswer, type UserQuestion } from './omd-user-question.ts';
 import { formatCompletionHostCapabilities } from '../core/completion/host-capabilities.ts';
 import type { RepairLoop } from './omd-repair-progress.ts';
 import type { RouteBootstrap } from './omd-route-bootstrap.ts';
 import { guardFailure, type OmdRunResult, type PortablePiApi, type PortablePiEvent } from './omd-runtime.ts';
+import { finishModelLedTurn } from './omd-model-led-completion.ts';
 
 type StagePlanning = Readonly<{ field: string; text: string }>;
 export type ReferenceWork = Readonly<{
@@ -18,7 +17,6 @@ export type ReferenceWork = Readonly<{
   circuits: readonly Readonly<{ provider: string; threshold: number; receipts: readonly string[] }> [];
 }>;
 type StageWorkPointer = Readonly<{
-  awaiting?: { reason: string; pending: PendingDirection };
   stage: string;
   owner: string;
   action: string;
@@ -58,7 +56,6 @@ type MessageEndTask = Readonly<{
   onReferenceWork?(work: ReferenceWork | null): void;
   browserDoctor?(): Promise<import('../core/browser/contracts.ts').UserBrowserDoctorReport>;
   explicitUserBrowser?: boolean;
-  onAwaitUser?(pending: PendingDirection): boolean;
 }>;
 
 const stringList = (value: unknown): readonly string[] => Array.isArray(value)
@@ -136,14 +133,6 @@ function referenceWork(value: unknown): ReferenceWork | null {
 export function parseStageWork(text: string): StageWorkPointer | null {
   const value: unknown = JSON.parse(text);
   if (typeof value !== 'object' || value === null || !['stage-next-v1', 'stage-next-v2'].includes(Reflect.get(value, 'schema'))) return null;
-  // Typed waits outrank reference recovery rewriting, retry budgets and terminal diagnosis.
-  if (Reflect.get(value, 'schema') === 'stage-next-v2' && Reflect.get(value, 'action') === 'await-user') {
-    const p = directionData.object(Reflect.get(value, 'pending'), ['id', 'inputDigest', 'presentedSet', 'question', 'optionIds', 'decisionId']);
-    const pending: PendingDirection = { id: directionData.sha(p.id), inputDigest: directionData.sha(p.inputDigest), presentedSet: directionData.nullableReceipt(p.presentedSet), question: directionData.text(p.question), optionIds: directionData.ids(p.optionIds), decisionId: directionData.id(p.decisionId) };
-    const reason = directionData.enumeration(Reflect.get(value, 'reason'), ['direction-choice', 'stale-direction', 'repeated-defect', 'missing-authority']);
-    return { stage: directionData.text(Reflect.get(value, 'stage')), owner: 'coordinator', action: 'await-user', next: '', instruction: pending.question,
-      problems: [], entryBlockers: [], planning: [], routeSha256: null, validatedStages: [], materialProgressIdentities: [], referenceWork: null, limitations: [], awaiting: { reason, pending } };
-  }
   const stageValue = Reflect.get(value, 'stage');
   if (stageValue === null && Reflect.get(value, 'schema') === 'stage-next-v1') return null;
   const stage = typeof stageValue === 'string' ? stageValue : Reflect.get(value, 'deliveryMode') === 'design-only' ? 'design-handoff' : 'production';
@@ -168,7 +157,7 @@ export function parseStageWork(text: string): StageWorkPointer | null {
     stage,
     owner: typeof owner === 'string' ? owner : `${stage} owner`,
     action: autonomousReading ? 'resolve-design-reading' : recovering ? 'replan-discovery' : typeof action === 'string' ? action : 'repair-output',
-    next: autonomousReading ? 'omd schema design-language-input' : recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : `omd brief ${stage} --check --json`,
+    next: autonomousReading ? 'omd schema design-language-input' : recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : '',
     instruction: typeof instruction === 'string' ? instruction : 'Perform the owned work, then recompute stage next.',
     problems: stringList(Reflect.get(value, 'problems')),
     entryBlockers: stringList(Reflect.get(value, 'entryBlockers')),
@@ -193,7 +182,7 @@ function actionPacket(work: StageWorkPointer): string {
   return [
     `Owner: ${work.owner}`,
     `Required action: ${work.action}`,
-    `Start/check: ${work.next}`,
+    `Start/check: ${work.next || 'no command; perform the required action directly'}`,
     ...(work.referenceWork?.action === null || work.referenceWork === null ? [] : [
       `Reference action: ${work.referenceWork.action.args.length > 0 ? `omd ${work.referenceWork.action.args.join(' ')}` : work.next}`,
       `Reference reason: ${work.referenceWork.action.reason}`,
@@ -240,19 +229,45 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       const result = await run(['stage', 'next', '--json'], cwd, signal);
       if (interrupted()) return;
       let work = parseStageWork(result.text);
-      if (work?.awaiting) {
-        task.onReferenceWork?.(null);
-        const pending = work.awaiting.pending, present = task.onAwaitUser?.(pending) ?? true;
-        if (!present) return;
-        const presentation = ['direction-choice', 'stale-direction'].includes(work.awaiting.reason) ? directionPresentation(cwd, pending) : null;
-        const content: NonNullable<PortablePiEvent['message']>['content'] = [];
-        for (const option of presentation?.options ?? []) {
-          content.push({ type: 'text', text: `${option.id}: ${option.layoutStrategy}\n${option.tradeoffs.map(t => `- ${t}`).join('\n')}` });
-          for (const preview of option.previews) content.push({ type: 'text', text: `${option.id} / ${preview.viewId}` },
-            { type: 'image', mimeType: 'image/png', data: directionData.readReceipt(cwd, preview.png).toString('base64') });
+      if (work?.action === 'finish-model-led') {
+        const text = await finishModelLedTurn(task);
+        let visible = text;
+        if (text.startsWith('{')) {
+          const result: unknown = JSON.parse(text);
+          if (typeof result === 'object' && result !== null) {
+            const complete = Reflect.get(result, 'ok') === true;
+            const diagnostic = Reflect.get(result, 'diagnostic');
+            const category = typeof diagnostic === 'object' && diagnostic !== null ? Reflect.get(diagnostic, 'category') : null;
+            const canRepair = !complete && category !== 'authority' && category !== 'cancelled';
+            visible = koreanMessage(message, task.responseLocale)
+              ? complete
+                ? `구현과 실제 브라우저 동작, 독립 모델 검토가 완료됐습니다. 사람의 미적 평가를 받은 것은 아닙니다.\n결과: ${String(Reflect.get(result, 'finalEvidencePath'))}`
+                : `자동 검증의 ${String(Reflect.get(result, 'phase'))} 단계에서 문제가 확인됐습니다. ${canRepair ? '실제 결과와 검증 내용을 비교해 수정을 이어갑니다.' : '권한 또는 중단 상태를 해결하기 전에는 완료를 주장하지 않습니다.'}`
+              : complete ? `Implementation, real browser checks and isolated model review completed.\nEvidence: ${String(Reflect.get(result, 'finalEvidencePath'))}`
+                : `Completion is unverified at ${String(Reflect.get(result, 'phase'))}. ${canRepair ? 'Repair continues from the retained evidence.' : 'Authority or cancellation requires resolution.'}`;
+            const limitations = limitationList(Reflect.get(result, 'limitations'));
+            if (limitations.length) visible += `\n${limitations.join('\n')}`;
+          }
         }
-        content.push({ type: 'text', text: pending.question });
-        return { message: { ...message, content } };
+        return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
+          { type: 'text', text: visible }] } };
+      }
+      if (work?.action === 'stop-blocked') {
+        task.onReferenceWork?.(null);
+        const status = koreanMessage(message, task.responseLocale)
+          ? `반복 수정 후에도 필수 결함이 남아 자동 수정을 중단했습니다. 품질 검증을 통과한 결과는 아닙니다. 현재 산출물과 검증 기록은 ${cwd}에 보존했습니다.`
+          : `Automatic repairs stopped with unresolved required defects. This is not quality approval. The current artifact and evidence remain in ${cwd}.`;
+        return { message: { ...message, content: [{ type: 'text' as const,
+          text: [status, ...work.problems, ...work.limitations].join('\n') }] } };
+      }
+      // Reporting the stalled loop is the required action itself: keep the agent's report and stop prompting.
+      if (work?.action === 'report-stalled-first-render') {
+        task.onReferenceWork?.(null);
+        const status = koreanMessage(message, task.responseLocale)
+          ? '첫 렌더 수정이 같은 지적에서 더 나아가지 못해 최선 버전을 복원하고 멈췄습니다. 검증을 통과한 결과는 아닙니다.'
+          : 'The first-render repair loop stalled and the best version is restored. This is not verified completion.';
+        return { message: { ...message, content: [...(message.content ?? []),
+          { type: 'text' as const, text: [status, ...work.problems, ...work.limitations].join('\n') }] } };
       }
       const stageQuestion = parseUserQuestion(result.text) ?? (work?.stage === 'reference-board' && work.referenceWork?.status === 'action'
         ? await readyBridgeQuestion(task.browserConsentHome, task.browserDoctor, work.referenceWork.workSha256, task.explicitUserBrowser) : null);
@@ -395,8 +410,8 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
         const korean = koreanMessage(message, task.responseLocale);
         const stallCode = decision.stalled && work.routeSha256 !== null && !askingForPlanning ? 'OMD_REPAIR_STALLED: Three consecutive completed repairs made no material progress.\n' : '';
         const status = korean
-          ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행하고 ${work.next}로 검증합니다.` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled && work.referenceWork !== null ? '수집된 실제 화면을 판단하고 아래 소유 작업을 완료해야 합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
-          : `OMD is incomplete at ${work.stage}. ${retry ? `Next, ${work.owner} performs ${work.action}, then validates with ${work.next}.` : questions ? 'User evidence is required for the planning statements below.' : decision.stalled && work.referenceWork !== null ? 'Inspect the acquired screen and complete the owned action below.' : decision.stalled ? 'Checks repeated without owned-artifact progress, so the loop stopped.' : 'Resolve the current stage inputs.'}`;
+          ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행${work.next ? `하고 ${work.next}로 검증합니다.` : '합니다.'}` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled && work.referenceWork !== null ? '수집된 실제 화면을 판단하고 아래 소유 작업을 완료해야 합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
+          : `OMD is incomplete at ${work.stage}. ${retry ? `Next, ${work.owner} performs ${work.action}${work.next ? `, then validates with ${work.next}` : ''}.` : questions ? 'User evidence is required for the planning statements below.' : decision.stalled && work.referenceWork !== null ? 'Inspect the acquired screen and complete the owned action below.' : decision.stalled ? 'Checks repeated without owned-artifact progress, so the loop stopped.' : 'Resolve the current stage inputs.'}`;
         return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
           { type: 'text', text: `${stallCode}${status}\n\n${questions || packet}` }] } };
       }
