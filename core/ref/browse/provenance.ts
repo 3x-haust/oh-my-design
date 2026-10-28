@@ -74,6 +74,14 @@ export function gotoFromSearchResults(url: string, events: readonly BrowseEvent[
     try { return typeof link === 'string' ? new URL(link).hostname.replace(/^www\./, '') : null; } catch { return null; }
   };
   const galleries = new Set(searched.flatMap(event => [hostOf(event.finalUrl), hostOf(event.url)].filter((item): item is string => item !== null)));
+  // A whole-site gallery's own page for one site (onepagelove.com/the-boat) is found by clicking it in that
+  // gallery's results; the page names the work, not the gallery, so the name checks below cannot find it.
+  const page = (link: unknown): string | null => {
+    try { if (typeof link !== 'string') return null; const target = new URL(link); return `${target.hostname.replace(/^www\./, '')}${target.pathname.replace(/\/$/, '')}`; } catch { return null; }
+  };
+  const destination = page(url);
+  if (galleries.has(host) && events.some(event => ['click', 'similar'].includes(event.action.verb) && page(event.finalUrl) === destination
+    && searched.some(search => search.seq < event.seq && [search.finalUrl, search.url].some(link => hostOf(link) === host)))) return true;
   return events.some(event => {
     const target = hostOf(event.action.verb === 'goto' ? event.action.url : null);
     const opened = target !== null && galleries.has(target);

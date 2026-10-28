@@ -110,10 +110,9 @@ async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<neve
   requireFinalEvidenceManifestAuthorization(invocation, process.cwd(), recordBytes);
   const record = JSON.parse(recordBytes.toString('utf8')) as unknown;
   if (!isRecord(record) || !isRecord(record.graph)) throw new Error('FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: final graph is required');
-  for (const lane of ['blindLane', 'fidelityLane', 'protocolLane']) {
-    const descriptor = record.graph[lane];
-    if (!isRecord(descriptor) || typeof descriptor.path !== 'string') throw new Error(`FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: ${lane} receipt is required`);
-    requireFinalReviewerLaneAuthorization(invocation, process.cwd(), readFileSync(resolve(process.cwd(), descriptor.path)));
+  const { finalReviewerLanePaths } = await import('../../core/completion/reviewer-lanes.ts');
+  for (const path of finalReviewerLanePaths(record.graph)) {
+    requireFinalReviewerLaneAuthorization(invocation, process.cwd(), readFileSync(resolve(process.cwd(), path)));
   }
   if (record.graph.schema !== 'final-evidence-v2-adaptive-omission-graph'
     && !(record.graph.schema === 'final-evidence-v2-workflow-graph-v1' && record.graph.productionSchema === 'final-evidence-v2-adaptive-omission-graph')) {

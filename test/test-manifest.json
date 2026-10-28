@@ -17,6 +17,7 @@
       "test/check-applicability.test.ts",
       "test/codex-search-policy.test.ts",
       "test/completeness.test.ts",
+      "test/completion-reviewer-lanes.test.ts",
       "test/concept-formation-policy.test.ts",
       "test/content-grain-fit.test.ts",
       "test/content-grain.test.ts",
