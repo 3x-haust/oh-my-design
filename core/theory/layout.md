@@ -92,6 +92,13 @@ fixed list of device labels. At each transition decide explicitly whether region
 - become horizontally scrollable because two-dimensional context is essential;
 - switch from simultaneous comparison to a staged flow.
 
+**When the brief names the device.** A request for a mobile interface, a phone app screen
+or a watch face asks for that device's interface. Design it at the device's width first. A
+wider browser viewport still presents that same interface, centred at the device width or in
+a quiet device frame, with calm surroundings; it is not re-composed into a desktop layout the
+brief did not ask for. A brief that asks for a website, a responsive product, or names no
+device recomposes across widths as described above.
+
 Test widths between named targets as well as the targets themselves. Fixed viewport renders
 show hierarchy and cropping; optional full-page renders show page continuity but cannot
 replace viewport evidence.

@@ -123,6 +123,18 @@ are hypotheses to render, not mandates: body text often begins around the mid-te
 pixels, compact UI may begin lower, and display roles may begin much larger. Adjust only from
 specimen evidence.
 
+**Fine print is a role, not a default.** Text a reader has to read to understand or act on
+(labels, metadata, helper and error text, card details, table cells, control text) is set at
+its reading size: on a desktop page that is usually 14 CSS px or more, 13px only on dense
+expert screens. 12px is the floor for incidental fine print such as legal lines, footnotes
+and secondary timestamps, never the size a recurring role settles at. When most of a view's
+characters sit below 14px, the page reads as gray dust at normal distance and in any reduced
+view of the whole page, however refined it looks at 100% zoom; measurement reports it as
+`SMALL_TEXT_DOMINANT`. Small size and low contrast compound: for meaningful text below 16px,
+aim for WCAG's enhanced 7:1 ([WCAG 1.4.6](https://www.w3.org/WAI/WCAG22/Understanding/contrast-enhanced.html));
+4.5:1 is the minimum, not the target. Make secondary text quieter through weight, position and
+grouping before taking away size or contrast.
+
 Line height is role-specific. Material's examples are roughly 1.2 for display/title roles
 and 1.5 for body/label; Butterick recommends 1.2–1.45 for general web text. OMD uses
 1.2–1.6 as an advisory body-review band because it contains those starting points; it is

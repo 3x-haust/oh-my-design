@@ -129,6 +129,12 @@ export function measureCaptures(captures: RetainedCapture[], scope: ViewSpec[], 
     const clipped = values['clipping-overflow'].subjects.filter(n => n.control && n.clipped.some(c => !c.scrollEscape));
     if (clipped.length) finding('REQUIRED_CONTROL_CLIPPED', metrics.get('clipping-overflow')!, clipped.map(c => c.subjectId), null, canonicalJson(clipped), 'accessibility', ['usability', 'responsiveCraft']);
     if (values['clipping-overflow'].documentOverflowX > 1) finding('MEASUREMENT_INCOMPLETE', metrics.get('clipping-overflow')!, [], null, 'Document has horizontal overflow; reflow needs repair or a scoped access contract', 'coverage', ['responsiveCraft']);
+    // Review convention (core/theory/typography.md "Fine print is a role, not a default"): 12 CSS px is the floor
+    // for incidental text, so a view where most characters sit below 14 px reads as fine print at normal distance.
+    const ladder = values['type-ladder'].clusters, fine = ladder.filter(c => c.maxSize < 14);
+    const characters = ladder.reduce((sum, c) => sum + c.graphemes, 0), fineCharacters = fine.reduce((sum, c) => sum + c.graphemes, 0);
+    if (characters >= 200 && fineCharacters * 2 > characters) finding('SMALL_TEXT_DOMINANT', metrics.get('type-ladder')!, fine.flatMap(c => c.subjectIds), null,
+      `${fineCharacters} of ${characters} visible characters are set below 14 CSS px`, 'heuristic', ['typography', 'hierarchy', 'usability'], 'advisory');
     if (values['text-minimum'].under12) finding('TEXT_UNDER_12', metrics.get('text-minimum')!, values['text-minimum'].small.map(s => s.subjectId), null, `${values['text-minimum'].under12} visible text roles below 12 CSS px`, 'heuristic', ['typography'], 'advisory');
     // A transformed, non-interactive node with no text of its own (a rotated logo piece, a tilted
     // decorative card) has no type, contrast or target to measure; its exclusion is reported but does
