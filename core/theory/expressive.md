@@ -197,6 +197,17 @@ same literalization. The reject list is an internal visual constraint, not copy:
 quote it, or turn it into user-facing negative instructions. A metaphor succeeds when its qualities
 shape the system while its obvious props are absent.
 
+## The payoff is visible at rest
+
+When the concept lives in an interaction (rotate the scene to find a hidden detail, drag to compare,
+hover to reveal), the view before anyone interacts must still show what the interaction gives. Many
+people never drag; a shared link, a thumbnail or a screenshot never can. Show the control together
+with one result of using it: a second angle as an inset, a revealed detail already marked, a
+before/after already split, a counter of what is left to find. This is feedforward: the at-rest view
+tells people what will happen and why it is worth doing
+([Djajadiningrat et al., "But how, Donald, tell us how?"](https://dl.acm.org/doi/10.1145/778712.778752)).
+Keep the full discovery for the interaction; give away one instance, not all of them.
+
 ## The restraint clause
 
 The techniques above are a catalogue, not a checklist. A showpiece site uses two or three of them, chosen because the concept requires them, and executes each one with precision. A site that uses eight of them is an effects catalogue, not a design. It is what the Awwwards guide calls "randomness without microinteractions" — stimulation without meaning.

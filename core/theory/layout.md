@@ -76,6 +76,13 @@ Map visual mass, not just element count. Large dark areas, saturated media, dens
 borders, and repeated cards can outweigh their semantic importance. Predict which regions
 dominate at desktop and mobile, render real copy/data, and correct accidental competition.
 
+Empty space is mass too, and it needs a job. Space that separates groups, frames a focal object or
+slows reading has one. A patch left over because one column ended earlier than its neighbour, or a
+side panel stretched to the height of the main column with nothing in it, has none, and it reads as
+unfinished. End side-by-side columns near each other: let the shorter one carry related secondary
+content, narrow it, or let the longer one wrap below. Likewise a welcome banner or promotional block
+on a task page should not take more of the first view than the task content it introduces.
+
 ## Responsive recomposition
 
 WCAG Reflow requires content to work without loss of information or functionality and
