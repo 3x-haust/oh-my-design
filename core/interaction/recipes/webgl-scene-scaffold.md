@@ -121,6 +121,13 @@ export function mountWebglScene(section, createScene) {
 }
 ```
 
+## Lighting for a readable subject
+
+The scaffold makes a scene safe; it does not make it legible. Light the subject so it separates
+from the ground by value, with a key light that leaves a shadow side and a contact shadow where it
+meets the floor, and check the rendered capture in greyscale before tuning colour. See
+[`theory/color.md` → Value structure in scenes and illustration](../../theory/color.md#value-structure-in-scenes-and-illustration).
+
 ## Non-canvas fallback
 
 The `.scene__content` DOM is the fallback and it is not optional. Everything the surface must

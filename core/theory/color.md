@@ -219,6 +219,25 @@ A proven visualization palette such as ColorBrewer can be a starting point, not 
 that it works in this chart. The number and area of marks, display conditions, and surrounding UI
 still determine the rendered result.
 
+## Value structure in scenes and illustration
+
+A rendered scene (a 3D model, an illustration, a product shot, a diorama) reads first as light and
+dark shapes, and only then as colour. The subject must separate from its ground by **value**
+(lightness), not by hue alone: a pale object on a pale ground of a different hue disappears as soon
+as the image is small, viewed quickly, or seen by someone with reduced colour vision. Pastel on
+pastel and light on light are the usual failure; so is a scene lit so evenly that nothing has a
+shadow side.
+
+Check it on the rendered capture, not in the code: view the scene in greyscale or squint at it. The
+subject should still be a distinct shape against the ground, and the most important part (the face,
+the product, the thing the user manipulates) should hold the strongest light–dark contrast in the
+frame. When it does not, give the ground a clear value step away from the subject, add a key light
+with a real shadow side and a contact shadow where the object meets the floor, or separate the
+silhouette with a rim light or outline. Keep the overall palette; change values, not the concept.
+([Figure–ground](https://en.wikipedia.org/wiki/Figure%E2%80%93ground_(perception)),
+[WCAG 1.4.11 Non-text Contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast) for
+the parts a user must identify to operate the scene)
+
 ---
 
 ## Sources
