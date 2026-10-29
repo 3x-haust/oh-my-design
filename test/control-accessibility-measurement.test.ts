@@ -55,3 +55,14 @@ test('Korean body tracking warns at 0.05em and ignores lower or Latin tracking',
   ].join(''));
   assert.equal(good.findings.some(finding => finding.code === 'KOREAN_BODY_TRACKING'), false);
 });
+
+test('a view whose text is mostly below 14px warns; fine print beside readable text does not', async t => {
+  const card = (size: number) => `<p style="font-size:${size}px;margin:4px 0">Order 4821 shipped from the Leeds warehouse on Tuesday and arrives within three working days.</p>`;
+  const bad = await measureFragment(t, `<section>${Array.from({ length: 6 }, () => card(12)).join('')}</section>`);
+  const dominant = bad.findings.filter(finding => finding.code === 'SMALL_TEXT_DOMINANT');
+  assert.equal(dominant.length > 0, true);
+  assert.ok(dominant.every(finding => finding.severity === 'advisory' && finding.basis === 'heuristic'));
+
+  const good = await measureFragment(t, `<section>${Array.from({ length: 6 }, () => card(16)).join('')}${card(12)}</section>`);
+  assert.equal(good.findings.some(finding => finding.code === 'SMALL_TEXT_DOMINANT'), false);
+});
