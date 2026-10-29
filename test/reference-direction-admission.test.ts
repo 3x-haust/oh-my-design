@@ -443,7 +443,7 @@ test('a later signed Eye batch retains an earlier approved direction', { timeout
   assert.equal(readAuthenticatedAdmissionHistory(f.root, f.sourceContractSha256).length, 2);
   assert.deepEqual(planReferenceDirectionReview(f.root, {
     sourceContractSha256: f.sourceContractSha256, task: f.task, references: [f.reference, reference],
-  }), { packet: null, selected: 0, pending: 0, carried: 2 });
+  }), { packet: null, selected: 0, pending: 0, carried: 2, oversized: [] });
   assert.deepEqual(readApprovedReferenceAppearanceIntent(f.root, f.reference),
     ['A focused primary work object with restrained supporting hierarchy.']);
   assert.equal(requireReferenceDirectionAdmission(f.root, reference, f.sourceContractSha256, 'support').verdict, 'support');
@@ -567,7 +567,7 @@ test('authenticated support candidates retain exact evidence without authorizing
   assert.equal(referenceDiscoveryWork(f.root, readPersistedRoute(f.root, f.invocation)).progress.designFamilies, 0);
   assert.deepEqual(planReferenceDirectionReview(f.root, {
     sourceContractSha256: f.sourceContractSha256, task: f.task, references: [reference],
-  }), { packet: null, selected: 0, pending: 0, carried: 1 });
+  }), { packet: null, selected: 0, pending: 0, carried: 1, oversized: [] });
 });
 
 test('quarantined full-resolution candidates promote authenticated Eye directions and keep rejects quarantined', { timeout: 45_000 }, async t => {
@@ -603,7 +603,7 @@ test('quarantined full-resolution candidates promote authenticated Eye direction
   assert.equal(existsSync(rejected.finalImage), false);
   assert.deepEqual(planReferenceDirectionReview(f.root, {
     sourceContractSha256: f.sourceContractSha256, task: f.task, references: [rejected.reference],
-  }), { packet: null, selected: 0, pending: 0, carried: 1 });
+  }), { packet: null, selected: 0, pending: 0, carried: 1, oversized: [] });
   const revised: Reference = { ...rejected.reference,
     capturedAt: new Date(Date.parse(rejected.reference.capturedAt) + 1000).toISOString(),
     principles: ['A different captured work-object hierarchy.'] };
@@ -611,7 +611,7 @@ test('quarantined full-resolution candidates promote authenticated Eye direction
   assert.notEqual(hash(readFileSync(join(f.root, revisedCandidate.path))), hash(readFileSync(join(f.root, rejected.candidate.path))));
   assert.deepEqual({ ...planReferenceDirectionReview(f.root, {
     sourceContractSha256: f.sourceContractSha256, task: f.task, references: [revised],
-  }), packet: null }, { packet: null, selected: 1, pending: 0, carried: 0 },
+  }), packet: null }, { packet: null, selected: 1, pending: 0, carried: 0, oversized: [] },
   'the same PNG with a different staged capture needs its own review');
 
   const approved = stage('https://visual.example/complete-task', 'approved-screen', 23);
@@ -644,7 +644,7 @@ test('quarantined full-resolution candidates promote authenticated Eye direction
   } finally { writeFileSync(approved.finalImage, approved.image); }
 });
 
-test('Eye packet batches count serialized bytes and refuse oversized originals', t => {
+test('Eye packet batches count serialized bytes and set aside originals too large to review', t => {
   const f = fixture(t);
   const padded = (png: Buffer, length: number): Buffer => {
     const type = Buffer.from('tEXt');
@@ -682,9 +682,24 @@ test('Eye packet batches count serialized bytes and refuse oversized originals',
   const oversized: Reference = { ...first, acquisition: { ...first.acquisition!, imageSha256: hash(tooLarge) } };
   saveRef(f.root, oversized, f.writer);
   writeFileSync(f.imagePath, tooLarge);
-  assert.throws(() => planReferenceDirectionReview(f.root, {
+  // A capture too large to review even alone is set aside, never admitted, and does not block the reviewable one.
+  writeFileSync(secondPath, f.png);
+  const reviewable: Reference = { ...second, acquisition: { ...second.acquisition!, imageSha256: hash(f.png) } };
+  saveRef(f.root, reviewable, f.writer);
+  const aside = planReferenceDirectionReview(f.root, {
+    sourceContractSha256: f.sourceContractSha256, task: f.task, references: [oversized, reviewable],
+  });
+  assert.equal(aside.selected, 1);
+  assert.equal(aside.pending, 0);
+  assert.deepEqual(aside.oversized, [{ source: oversized.source, component: oversized.component }]);
+  const reviewed = JSON.parse(aside.packet!.toString('utf8')) as { evidence: { referenceRenders: { sourceId: string }[] } };
+  assert.deepEqual(reviewed.evidence.referenceRenders.map(row => row.sourceId), [refIdentity(source, component)]);
+  const alone = planReferenceDirectionReview(f.root, {
     sourceContractSha256: f.sourceContractSha256, task: f.task, references: [oversized],
-  }), /REFERENCE_DIRECTION_CAPTURE_TOO_LARGE/);
+  });
+  assert.equal(alone.packet, null);
+  assert.equal(alone.selected, 0);
+  assert.equal(alone.oversized.length, 1);
   assert.equal(existsSync(join(f.root, REFERENCE_DIRECTION_ADMISSION_POINTER)), false);
 });
 

@@ -86,6 +86,11 @@ async function cmdRefDirectionReview(opts: Opts): Promise<never> {
     references,
   });
   const packet = plan.packet;
+  const setAside = plan.oversized.length === 0 ? {} : {
+    setAside: plan.oversized,
+    setAsideReason: `too large to review (one review holds 8 MB), so never admitted as a direction: cite other `
+      + 'captures, or keep a viewport-size shot of the same page instead of its full-length image',
+  };
   if (packet === null) {
     process.stdout.write(`${JSON.stringify({
       path: '.omd/reference-direction-admission.json',
@@ -94,6 +99,7 @@ async function cmdRefDirectionReview(opts: Opts): Promise<never> {
       pending: 0,
       complete: true,
       packetBytes: 0,
+      ...setAside,
     }, null, opts.json ? undefined : 2)}\n`);
     process.exit(0);
   }
@@ -123,6 +129,7 @@ async function cmdRefDirectionReview(opts: Opts): Promise<never> {
     directions: record.admissions.filter(item => item.verdict === 'direction').length,
     supports: record.admissions.filter(item => item.verdict === 'support').length,
     rejected: record.admissions.filter(item => item.verdict === 'reject').length,
+    ...setAside,
     // One packet holds only so many captures; the rest wait for the next run.
     ...(plan.pending > 0 ? { next: `${plan.pending} kept reference(s) still wait for review: run omd ref direction-review --json again` } : {}),
   }, null, opts.json ? undefined : 2)}\n`);
