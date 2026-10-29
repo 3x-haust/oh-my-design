@@ -291,3 +291,14 @@ test('a site the project\'s own README links is its material, not a memory pick'
   assert.equal(userNamedSite(root, 'https://3x-haust.github.io/oh-my-design/'), true);
   assert.equal(userNamedSite(root, 'https://www.raycast.com/'), false, 'dependency READMEs are not the project material');
 });
+
+test('the results page of a discovering search is found; another query on that gallery is not', () => {
+  const search = { seq: 1, action: { verb: 'search', provider: 'onepagelove', query: 'finance' }, url: 'https://www.lapa.ninja/category/finance/',
+    finalUrl: 'https://onepagelove.com/?s=finance', observation: { sha256: 's' } } as unknown as BrowseEvent;
+  const observations = new Map([['s', { title: 'Search Results finance', text: 'Midday', linkClaims: [] } as unknown as BrowseObservation]]);
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/?s=finance', [search], observations), true);
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/?s=crypto', [search], observations), false);
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/', [search], observations), false, 'the gallery home is not the results page');
+  const remembered = { ...search, action: { verb: 'search', provider: 'onepagelove', query: 'onepagelove' }, finalUrl: 'https://onepagelove.com/?s=onepagelove' } as unknown as BrowseEvent;
+  assert.equal(gotoFromSearchResults('https://onepagelove.com/?s=onepagelove', [remembered], observations), false, 'a query naming the site discovers nothing');
+});

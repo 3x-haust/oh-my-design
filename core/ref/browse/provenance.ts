@@ -80,6 +80,8 @@ export function gotoFromSearchResults(url: string, events: readonly BrowseEvent[
     try { if (typeof link !== 'string') return null; const target = new URL(link); return `${target.hostname.replace(/^www\./, '')}${target.pathname.replace(/\/$/, '')}`; } catch { return null; }
   };
   const destination = page(url);
+  // The results page a discovering search produced is the search itself (a card kept straight from it).
+  if (searched.some(search => page(search.finalUrl) === destination && typeof search.finalUrl === 'string' && new URL(search.finalUrl).search === parsed.search)) return true;
   if (galleries.has(host) && events.some(event => ['click', 'similar'].includes(event.action.verb) && page(event.finalUrl) === destination
     && searched.some(search => search.seq < event.seq && [search.finalUrl, search.url].some(link => hostOf(link) === host)))) return true;
   return events.some(event => {

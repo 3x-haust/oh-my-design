@@ -55,3 +55,19 @@ test('challenge actions refuse ordinary pages, so they cannot fill forms or clic
   assert.equal(await isChallengePage(page), false);
   await assert.rejects(() => executeBrowseAction(page, challenge({ method: 'type', text: 'abc' }), start, observed(page.url()), 5000), /BROWSE_CHALLENGE_ABSENT/);
 });
+
+test('a hand-written href selector is refused with the recorded controls that lead there', { timeout: 60_000 }, async t => {
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+  await page.setContent('<a href="https://gallery.example/works/midday"><img alt="Midday"></a><a href="https://gallery.example/works/midday">Midday</a>');
+  const control = (selector: string, label: string) => ({ selector, tag: 'a', role: 'link', label, href: 'https://gallery.example/works/midday',
+    type: null, expanded: null, controls: null, download: false, box: { x: 0, y: 0, w: 10, h: 10 } });
+  const prior = { ...observed(page.url(), 1), controls: [control('a >> nth=0', 'Midday screenshot'), control('a >> nth=1', 'Midday')] } as unknown as BrowseObservation;
+  const click = parseBrowseCommand(['click', '--selector', "a[href='https://gallery.example/works/midday']"]).action;
+  await assert.rejects(executeBrowseAction(page, click, start, prior, 5000),
+    (error: Error) => /BROWSE_TARGET/.test(error.message) && error.message.includes('--selector "a >> nth=0"') && error.message.includes('--selector "a >> nth=1"'));
+  const unrelated = parseBrowseCommand(['click', '--selector', '#nowhere']).action;
+  await assert.rejects(executeBrowseAction(page, unrelated, start, prior, 5000),
+    (error: Error) => /BROWSE_TARGET/.test(error.message) && !error.message.includes('recorded controls that match'));
+});
