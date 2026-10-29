@@ -58,10 +58,18 @@ async function executeChallenge(page: Page, action: Extract<BrowseAction, { verb
   return null;
 }
 
+/** A selector written by hand (an href, a label) names no recorded control; point at the recorded ones it meant. */
+function targetCandidates(prior: BrowseObservation, action: { selector: string | null; text: string | null }): string {
+  const href = action.selector?.match(/href\s*[*^$~|]?=\s*["']?([^"'\]\s]+)/)?.[1] ?? null;
+  const wanted = (action.text ?? '').trim().toLowerCase();
+  const matches = prior.controls.filter(control => href !== null ? control.href?.includes(href) : wanted !== '' && control.label.toLowerCase().includes(wanted)).slice(0, 6);
+  return matches.length ? ` (a selector is used exactly as the last observation records it; recorded controls that match: ${matches.map(control => `--selector ${JSON.stringify(control.selector)} "${control.label.slice(0, 40)}"`).join(', ')})`
+    : ' (a selector is used exactly as the last observation records it)';
+}
 async function exactTarget(page: Page, action: { selector: string | null; text: string | null }, prior: BrowseObservation | null): Promise<BrowseControl> {
   if (!prior || prior.url !== page.url()) browseFail('BROWSE_STALE_OBSERVATION', 'take a shot before acting on unobserved page state');
   const controls = prior.controls.filter(control => action.selector ? control.selector === action.selector : control.label === action.text);
-  if (controls.length !== 1) browseFail('BROWSE_TARGET', 'target must name exactly one control in the recorded visible snapshot; gallery result cards that are not links are kept with shot --selector <that item\'s img>');
+  if (controls.length !== 1) browseFail('BROWSE_TARGET', `target must name exactly one control in the recorded visible snapshot${targetCandidates(prior, action)}; gallery result cards that are not links are kept with shot --selector <that item's img>`);
   const target = controls[0]!;
   const fresh = (await inspectVisible(page)).controls.find(control => control.selector === target.selector);
   if (!fresh || canonicalJson(fresh) !== canonicalJson(target)) browseFail('BROWSE_STALE_TARGET', 'target changed since observation; take a fresh shot');
