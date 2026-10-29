@@ -323,7 +323,7 @@ export function buildReferenceDirectionReviewerPacket(root: string, input: Reado
 
 export function planReferenceDirectionReview(root: string, input: Readonly<{
   sourceContractSha256: string; task: string; references: readonly Reference[];
-}>): Readonly<{ packet: Buffer | null; selected: number; pending: number; carried: number }> {
+}>): Readonly<{ packet: Buffer | null; selected: number; pending: number; carried: number; oversized: readonly Readonly<{ source: string; component: string }>[] }> {
   const history = authenticatedHistoryForReview(root, input.sourceContractSha256, input.task);
   const candidates = loadDesignCandidates(root);
   const prior = history.filter(item => item.record.schema === RECORD_SCHEMA_V4).flatMap(item => item.admissions);
@@ -341,21 +341,27 @@ export function planReferenceDirectionReview(root: string, input: Readonly<{
   // Finished-site pages are the primary candidates, so they are reviewed first when one packet cannot hold everything.
   }).sort((a, b) => Number(a.kind === 'image') - Number(b.kind === 'image')
     || refIdentity(a.source, a.component).localeCompare(refIdentity(b.source, b.component)));
-  const selected: Reference[] = [];
+  const selected: Reference[] = [], oversized: Reference[] = [];
   let packet: Buffer | null = null;
   for (const reference of fresh) {
     const candidate = buildReferenceDirectionReviewerPacket(root, {
       ...input, references: [...selected, reference], previousAdmissionSha256: history[0]?.sha256 ?? null,
     });
-    if (candidate.byteLength > MAX_INLINE_EVIDENCE_BYTES) {
-      if (selected.length === 0) fail('REFERENCE_DIRECTION_CAPTURE_TOO_LARGE');
-      break;
+    if (candidate.byteLength <= MAX_INLINE_EVIDENCE_BYTES) {
+      selected.push(reference);
+      packet = candidate;
+      continue;
     }
-    selected.push(reference);
-    packet = candidate;
+    // A capture too large to review even alone can never be admitted; it is set aside instead of blocking the rest.
+    if (selected.length === 0) {
+      oversized.push(reference);
+      continue;
+    }
+    break;
   }
-  return { packet, selected: selected.length, pending: fresh.length - selected.length,
-    carried: input.references.length - fresh.length };
+  return { packet, selected: selected.length, pending: fresh.length - selected.length - oversized.length,
+    carried: input.references.length - fresh.length,
+    oversized: oversized.map(reference => ({ source: reference.source, component: reference.component })) };
 }
 
 function requirePacketCurrent(root: string, packet: ReviewerPacket): void {
