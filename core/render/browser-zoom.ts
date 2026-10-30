@@ -50,6 +50,8 @@ export async function ensureMeasuredLayoutZoom(page: Page, viewport: { width: nu
 /** A disposable extension owns automatic per-tab browser zoom. DPR, pinch and CSS zoom are not substitutes. */
 export async function withZoomedLocalView<T>(root: string, entry: string, viewport: { width: number; height: number }, state: ViewState | undefined, inspect: (page: Page) => Promise<T>): Promise<T> {
   const profile = mkdtempSync(join(tmpdir(), 'omd-measure-zoom-'));
+  let step = 'launching the browser for';
+  const describe = () => `${step} ${entry} at 200% zoom (${viewport.width}x${viewport.height})${state ? ` in state ${state.name}` : ''}`;
   try {
     return await inspectionDeadline(async own => {
       const extension = fileURLToPath(new URL('./zoom-extension', import.meta.url));
@@ -61,6 +63,7 @@ export async function withZoomedLocalView<T>(root: string, entry: string, viewpo
       await context.route('**/*', route => { if (!['GET', 'HEAD'].includes(route.request().method()) || new URL(route.request().url()).origin !== origin) { blocked.push(route.request().url()); return route.abort(); } return route.continue(); });
       await context.routeWebSocket('**/*', socket => socket.close());
       const page = context.pages()[0] ?? await context.newPage();
+      step = 'loading';
       await page.goto(served.url, { waitUntil: 'load' });
       await ensureMeasuredLayoutZoom(page, viewport);
       if (state) {
@@ -70,10 +73,11 @@ export async function withZoomedLocalView<T>(root: string, entry: string, viewpo
         await assertViewState(page, state.assertions);
         if (pageRoute(page) !== state.route) throw new Error('zoom state route mismatch');
       }
+      step = 'inspecting';
       const result = await inspect(page);
       if (state) await assertViewState(page, state.assertions);
       if (blocked.length) throw new Error('zoom capture attempted external or write request');
       served.assertSourceCurrent(); return result;
-    }, 30000);
+    }, 30000, describe);
   } finally { rmSync(profile, { recursive: true, force: true }); }
 }
