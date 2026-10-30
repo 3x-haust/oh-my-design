@@ -6,6 +6,7 @@ import { parseSlopScope } from '../core/slop/review.ts';
 import { browserDeadline, inspectionDeadline } from '../core/render/stateful.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { MAX_INSPECTION_VIEWS } from '../core/render/view-capacity.ts';
+import { completionErrorDiagnostic } from '../core/runtime/model-led-diagnostics.ts';
 
 const view = { id: 'entry', page: 'dist/index.html', viewport: { width: 240, height: 2560 } };
 const step = { screenId: 'entry', state: 'entry', clicks: [], assertions: [{ selector: 'h1', state: 'visible' }] };
@@ -57,6 +58,18 @@ test('overall browser deadline closes real stalled navigation and font waits', a
       assert.ok(Date.now() - start < 5000);
     }
   });
+});
+
+test('a deadline names the step that was running, and its repair diagnostic says what to make lighter', async () => {
+  let step = 'serving';
+  await assert.rejects(() => inspectionDeadline(async () => { step = 'inspecting'; await new Promise(() => {}); }, 40, () => `${step} dist/index.html at 1280x900`),
+    /^Error: BROWSER_DEADLINE: exceeded 40ms while inspecting dist\/index.html at 1280x900; no completed observation published$/);
+  await assert.rejects(() => inspectionDeadline(async () => { await new Promise(() => {}); }, 40), /^Error: BROWSER_DEADLINE: exceeded 40ms; no completed observation published$/);
+  const deadline = completionErrorDiagnostic('browser', new Error('BROWSER_DEADLINE: exceeded 30000ms while inspecting dist/index.html at 1280x900 with reduced motion; no completed observation published'));
+  assert.equal(deadline.code, 'BROWSER_DEADLINE');
+  assert.match(deadline.message, /while inspecting dist\/index\.html .*retrying the same build gives the same result.*prefers-reduced-motion/);
+  const other = completionErrorDiagnostic('browser', new Error('FINAL_BEHAVIOR_FAILED: assertion missing'));
+  assert.equal(other.message, 'FINAL_BEHAVIOR_FAILED: assertion missing');
 });
 
 test('absolute deadline bounds stalled acquisition and teardown; late resources close exactly once', async () => {

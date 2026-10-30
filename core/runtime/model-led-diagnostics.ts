@@ -24,6 +24,9 @@ const phaseCategory: Record<CompletionPhase, CompletionDiagnostic['category']> =
   seal: 'bookkeeping', review: 'review', publication: 'bookkeeping', completion: 'bookkeeping', complete: 'bookkeeping',
 };
 
+/** The deadline alone kept being read as a flaky check and retried unchanged. */
+const BROWSER_DEADLINE_HINT = 'The built page did not finish that step within the inspection budget, and retrying the same build gives the same result. Usual causes: a render loop (canvas, WebGL, requestAnimationFrame) that keeps the main thread busy, including under prefers-reduced-motion where it should draw one still frame; heavy synchronous work or asset decoding on load; web fonts or media that never finish loading. Make that step lighter in the source, rebuild, then finish again.';
+
 export function completionErrorDiagnostic(phase: CompletionPhase, error: unknown): CompletionDiagnostic {
   const message = error instanceof Error ? error.message : String(error);
   const field = typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : undefined;
@@ -33,7 +36,8 @@ export function completionErrorDiagnostic(phase: CompletionPhase, error: unknown
     : code === 'NATIVE_PI_AUTHORITY' || code === 'NATIVE_EVALUATION_BUILD_MISMATCH' ? 'authority'
     : ['NATIVE_EVALUATION_MANIFEST_MISMATCH', 'NATIVE_EVALUATION_OUTCOME_BINDING_INVALID', 'NATIVE_EVALUATION_PLAN_CHANGED'].includes(code) ? 'proposal'
     : code === 'NATIVE_EVALUATION_DECISION_GRAPH_INVALID' ? 'bookkeeping' : phaseCategory[phase];
-  return { schema: 'native-workflow-diagnostic-v1', phase, category, code, message,
+  return { schema: 'native-workflow-diagnostic-v1', phase, category, code,
+    message: code === 'BROWSER_DEADLINE' ? `${message}. ${BROWSER_DEADLINE_HINT}` : message,
     next: category === 'authority' || category === 'cancelled' ? null
       : category === 'proposal' ? 'omd schema trusted-lifecycle-manifest --json' : 'omd stage next --json',
     evidencePaths: [] };

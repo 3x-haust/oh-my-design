@@ -72,15 +72,16 @@ export function pageRoute(page: Page): string { const url = new URL(page.url());
 
 type InspectionResource = { close(): Promise<void> };
 /** One absolute budget owns acquisition, work and teardown. Late acquisitions are closed, never
- * used after expiry. A timeout allows at most two additional seconds for best-effort cleanup. */
-export async function inspectionDeadline<T>(operation: (own: <R extends InspectionResource>(resource: Promise<R>) => Promise<R>) => Promise<T>, timeoutMs: number): Promise<T> {
+ * used after expiry. A timeout allows at most two additional seconds for best-effort cleanup.
+ * `describe` names what was running when the budget ran out, so the refusal says what to make lighter. */
+export async function inspectionDeadline<T>(operation: (own: <R extends InspectionResource>(resource: Promise<R>) => Promise<R>) => Promise<T>, timeoutMs: number, describe?: () => string): Promise<T> {
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120000) return fail('invalid browser deadline');
   let timer: ReturnType<typeof setTimeout> | undefined;
   let expired = false;
   const endsAt = Date.now() + timeoutMs;
   const resources: InspectionResource[] = [];
   const closing = new Map<InspectionResource, Promise<void>>();
-  const deadlineError = () => new Error(`BROWSER_DEADLINE: exceeded ${timeoutMs}ms; no completed observation published`);
+  const deadlineError = () => new Error(`BROWSER_DEADLINE: exceeded ${timeoutMs}ms${describe ? ` while ${describe()}` : ''}; no completed observation published`);
   const close = (resource: InspectionResource): Promise<void> => {
     if (!closing.has(resource)) closing.set(resource, Promise.resolve().then(() => resource.close()));
     return closing.get(resource)!;
@@ -114,6 +115,8 @@ export async function browserDeadline<T>(context: BrowserContext, operation: () 
 
 /** Exact local build bytes; fresh context; no account cookies, remote API writes or navigation. */
 export async function withLocalView<T>(browser: Browser, root: string, view: { page: string; viewport: { width: number; height: number }; state?: ViewState; reducedMotion?: 'reduce' }, inspect: (page: Page) => Promise<T>): Promise<T> {
+  let step = 'serving';
+  const describe = () => `${step} ${view.page} at ${view.viewport.width}x${view.viewport.height}${view.reducedMotion ? ' with reduced motion' : ''}${view.state ? ` in state ${view.state.name}` : ''}`;
   return inspectionDeadline(async own => {
     const served = await own(serveProjectEntry(root, view.page, { spa: view.state !== undefined }));
     const origin = new URL(served.url).origin;
@@ -131,15 +134,19 @@ export async function withLocalView<T>(browser: Browser, root: string, view: { p
     });
     await context.routeWebSocket('**/*', socket => socket.close());
     const page = await context.newPage();
+    step = 'loading';
     const response = await page.goto(view.state ? `${origin}${view.state.startRoute}` : served.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     if (response?.status() !== 200) return fail('local entry did not return HTTP 200');
+    step = 'waiting for the web fonts of';
     await waitForDocumentFonts(page);
     if (view.state) {
+      step = 'running the state actions on';
       await performViewActions(page, view.state.actions);
       await assertViewState(page, view.state.assertions);
       if (pageRoute(page) !== view.state.route) return fail(`expected route ${view.state.route}, observed ${pageRoute(page)}`);
     }
     if (blocked.length) return fail('local view attempted external networking or a non-read-only request; use a bundled local fixture, not production APIs');
+    step = 'inspecting';
     const result = await inspect(page);
     if (view.state) {
       await assertViewState(page, view.state.assertions);
@@ -148,7 +155,7 @@ export async function withLocalView<T>(browser: Browser, root: string, view: { p
     if (blocked.length) return fail('blocked network request during capture');
     served.assertSourceCurrent();
     return result;
-  }, 30000);
+  }, 30000, describe);
 }
 
 /** No hover/tab probes: they would disturb the exact opened modal/tab state. */
