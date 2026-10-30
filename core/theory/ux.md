@@ -44,6 +44,51 @@ error is purchasing the wrong product, the design needs a clear change-of-mind p
 and after checkout — not just a confirm dialog. If the most frequent action is search, the
 search field must reach the top of the page at every viewport, not hide behind a menu.
 
+**Fold a requirement into an existing action before adding one.** Before a requirement becomes a
+new button or view, ask whether it can fall out of something the user already does: confirming a
+plan can share it, finishing a step can notify the people waiting on it. A field that asks the user
+to summarise each item, or a button that asks them to send or tidy something, is a new chore and the
+last resort. Work that messenger, map, booking, or payment apps already do is linked to, not rebuilt.
+
+---
+
+## People, entering questions, and breakdown moments
+
+The three frame questions name one task. Most products are opened by people in different
+situations, and each arrives with different questions. Write a short situation card for each
+situation the brief or evidence supports, usually one to three, chosen because the journey differs
+most between them rather than by demographic segment:
+
+- the situation in one line and why the person arrives now;
+- three to five things they want to know when they open the product, in their words — questions,
+  not feature names — each naming the view where its answer appears;
+- what success looks like for them, and the views they mainly use.
+
+Use the brief's own user groups and names when it has them. Everything else is an assumption and is
+recorded as one: never invent quotes, interview findings, preferences, or demographic detail
+(`protocol/design-practice.md` §Frame from people and material). Age, nationality, or gender enters
+only when the brief supplies it or it changes the design, such as who appears in photography.
+
+**The question sets the hierarchy of the view that answers it.** The answer to an entering question
+is the first and largest thing in that view's first viewport, and the view's information order
+follows the person's question order rather than the feature list. A list row or card carries the
+facts that answer the question (for someone comparing, how similar this item is, when, and what it
+used). Questions are not composition units: one block per question with the question as its
+heading turns the view into a questionnaire. Answer through where the data sits and how large it is
+inside an ordinary feed, list, timeline, or card; one curated group on a home view may carry a
+question-like title.
+
+**Breakdown moments become states.** Walk each situation before, during, and after use and note
+where the person gets stuck: nobody has responded, a deadline passed, every option is unavailable,
+a request was refused, the action failed. Each moment leads to a view or state that resolves it.
+This derives the reachable states of §Flows from the journey instead of a generic checklist, and a
+state no journey reaches is not owed.
+
+**The card is not a reason to add features.** It changes what a view shows first and how it speaks
+to the person using it. The brief's flows, scope, and order stay as they are. Write calmly to the
+person who arrives anxious or lost; an expert dashboard voice fails them.
+([NN/g journey mapping](https://www.nngroup.com/articles/journey-mapping-101/))
+
 ---
 
 ## Surface types: a work surface is not a landing page
@@ -195,6 +240,37 @@ and Freedom, is the formal statement: users need a clearly marked emergency exit
 unwanted states without going through a lengthy process. Undo and Redo support at the
 system level; a Cancel or Back button at the screen level; a clearly labeled dismiss action
 at the modal level — these are not polish, they are load-bearing elements of any flow.
+
+**Every object has a start and an end.** For each object the user makes or changes (`ia-methods.md`
+§Start with the object model), name the view where it is first created starting from empty, where it
+is seen, where it is changed, removed, or cancelled, and the result after the action: a confirmation
+or the changed result made visible, not a silent return to the list. A missing start or end is the
+most severe flow gap: the user cannot begin, or cannot tell it worked. Only the change step may be
+marked not applicable, with a reason.
+
+**Every verb in the brief has a control, drawn to its start.** When the brief says people add, edit,
+reorder, split, remove, invite, or share, the interface shows the means: an add row at the end of the
+list, a drag handle, a remove action in the edit view. A view does not stop at showing that items
+exist. An add or new control leads to a real view or sheet, never back to itself, and when people
+choose from categories they create (groups, folders, tags) there is a place to create and rename
+them.
+
+**One-time and outgoing actions show both sides.** A row action done once (write a review, check
+in, confirm) becomes a disabled after-state in the same place, and the before and after labels keep
+the same frame so only the last word changes: `리뷰 작성` → `리뷰 완료`, `대기 신청` → `신청 완료`.
+An action that sends something out (create a link, invite, share) or a one-tap request shows its
+state before and after, with a way to undo. A permission request or bulk import records what happens
+on refusal and while pending.
+
+**An error changes the element at fault.** The error state is the same view with the same elements;
+only the faulty field, row, or item changes. Do not append a new block to announce it.
+
+**Facts are set once.** Dates, times, counts, membership, overlaps, and status names that appear on
+more than one view come from one table written before the views, filled with realistic names,
+places, and dates from the brief's context. Every view quotes that table and invents none: a heading
+that promises `23명` lists those 23, and a remaining count or price is the same wherever it appears.
+A status names the object's state, not the viewer's relation to it — `답 기다림` cannot mean my turn
+on one view and someone else's on another. Heuristic 4, consistency, covers data as well as words.
 
 **Reachable states need distinct treatment.** Where a task can load, complete with no
 content, fail, or succeed, those states must not share one unexplained blank panel or one

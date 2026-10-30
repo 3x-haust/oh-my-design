@@ -52,6 +52,15 @@ operations in a labeled section after ordinary settings. Separation improves sca
 mustn't make the action hard to find. Use the error or danger color at the final trigger, not as a
 large decorative panel. Color is redundant with an explicit label and consequence text.
 
+**Pinned bottom actions.** A bottom-pinned action bar belongs to views that end in a commitment:
+forms, confirmation, decision, and result views. A home or tab root view has no single commitment to
+pin, so contextual actions there sit inline in the block they act on, and only while there is
+something to do. The pinned label is the committing verb (`저장`, `보내기`, `예약하기`); `~보기`
+opens something and is styled as a link. Reserve space equal to the bar's height at the end of the
+content so the last item is never hidden under it at the end of the scroll, and check that position,
+not only the top of the page.
+([WCAG 2.4.11](https://www.w3.org/WAI/WCAG22/Understanding/focus-not-obscured-minimum.html))
+
 Condition -> choice -> reason: rank actions by what happens after activation. Use visual priority
 to express task progression, equality, mode, reversibility, and risk. Don't enforce one filled
 button per entire view when the view contains several independent contexts.
@@ -94,6 +103,8 @@ small set of stable peer destinations is used frequently, but that does not make
 universal product pattern. Use bottom tabs when labels fit, destinations are stable peers, and the
 screen cost is justified. Use a menu, section index, search, or object-local navigation for one
 dominant flow, dynamic modules, long labels, or infrequent destinations.
+A bottom tab bar needs at least three stable destinations. With fewer, enter each from a block on one
+home view.
 
 Condition → choice → reason: choose mobile navigation from frequency, peer status, label fit,
 permission variance, and task recovery. Keep secondary settings and rare destinations available
@@ -237,6 +248,10 @@ with nothing to do. The zero-results state should explain why there are no resul
 causes: typo, too-specific query, out-of-scope category) and offer a path forward (suggested
 queries, a broader search, a direct contact option). A zero-results page that says only
 "No results found" has told the user that their query failed without helping them succeed.
+
+**Scale calls for search.** When a list holds dozens of items — a guest list of ninety, a class
+roster, a catalog — put a search field and filter chips at its top rather than leaving the user to
+scroll.
 
 ---
 
@@ -384,6 +399,8 @@ low-risk toggle.
 **Anatomy:** group label, two to five adjacent segments, selection indicator, and optional icons.
 Use for peer modes or a compact single-choice filter whose effects are immediate. Don't use for
 page navigation with independent destinations, long labels, or more than five choices.
+Selecting a segment replaces what is below it with that segment's content. Stacking every segment's
+section one after another under the control is a defect: the control then changes nothing.
 
 **Keyboard:** when it changes a value, use the APG radio-group model with one Tab stop and arrow-key
 selection. When it changes views with tab panels, use the tabs pattern instead. Don't invent a
@@ -636,6 +653,13 @@ spacing; don't force all chips to equal width.
 
 **Do:** make removal names specific, such as `aria-label="디자인 태그 삭제"`. **Don't:** encode
 status only through chip color.
+
+**One status table per product.** Declare the status tags once and use only those: each meaning has
+one colour and each colour one meaning, for example brand for confirmed or key, warning for changed,
+due, or conflicting, danger only for failure or impossible, info for requests, success for done, and
+neutral for candidates. Something not yet decided (recommended, candidate) never takes the confirmed
+colour. Time and order — now, next, until Friday — are text, not tags. All selected states (chips,
+segments, checkboxes, switches) share one selection treatment rather than mixing black and brand.
 
 ### Stepper
 

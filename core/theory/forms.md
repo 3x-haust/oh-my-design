@@ -29,6 +29,10 @@ when their relationship is obvious, their labels remain readable, and narrow ref
 that relationship. Do not turn “single column” into a ban on compact date parts, paired ranges,
 or short fields that are understood together.
 
+Order inputs by dependency. A choice that changes the rules of later inputs (one-to-one or group,
+who is coming) comes first, required inputs sit above the action that submits them, and a set of
+options includes a way out such as `다 안 돼요` when none may fit.
+
 ## Field state table
 
 | State | Entry condition | What the UI shows | Validation and announcement |

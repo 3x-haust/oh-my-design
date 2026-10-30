@@ -95,6 +95,12 @@ copy source; a work surface without designed states has an incomplete spine. Do 
 a persuasion ladder for a tool: a hero section above a queue is a grammar defect, not a
 style choice.
 
+For a `product` surface, ground the loop in `theory/ux.md` §People, entering questions, and
+breakdown moments: list each situation card's entering questions with the region that answers
+each one in its first viewport, add every breakdown moment as a state entry with the view that
+resolves it, and name the single fact table that every view quotes. For each object the user
+makes or changes, record its start (created from empty), view, change, and after-result entries.
+
 ## Section dependency
 
 Run the reorder/removal test. If adjacent sections can swap or disappear without weakening
