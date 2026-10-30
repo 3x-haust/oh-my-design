@@ -33,5 +33,7 @@ test('first-render task history preserves every signed task generation', () => {
   assert.equal(firstRenderReviewTaskForSchema('first-render-review-v8'), FIRST_RENDER_REVIEW_TASK);
   assert.ok(FIRST_RENDER_REVIEW_TASK.startsWith(LEGACY_FIRST_RENDER_REVIEW_TASK_V7));
   assert.match(FIRST_RENDER_REVIEW_TASK, /judgmentChecks/);
+  assert.match(FIRST_RENDER_REVIEW_TASK, /SMALL_TEXT_DOMINANT, TEXT_UNDER_12 and low contrast/);
+  assert.match(FIRST_RENDER_REVIEW_TASK, /request names a device/);
   assert.equal(firstRenderReviewTaskForSchema('first-render-review-v2'), null);
 });
