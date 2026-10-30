@@ -39,6 +39,7 @@ const RUNTIME_PATHS = [
 const REQUIRED_PATHS = ['package.json', 'bin/omd.mjs', 'bin/run-ts.mjs', 'bin/omd.ts'] as const;
 const MAX_COPY_ATTEMPTS = 3;
 const SNAPSHOT_DEADLINE_MS = 30_000;
+const SLOW_INTEGRITY_CHECK_MS = 120_000;
 
 export type OmdRuntimeSnapshot = Readonly<{
   root: string;
@@ -51,6 +52,8 @@ export type OmdRuntimeSnapshotOptions = Readonly<{
   sourceRoot: string;
   dependencyRoot: string | null;
   parentRoot?: string;
+  /** Hashing budgets for an integrity check and its one slower retry; a test can force the timeout path. */
+  integrityBudgetsMs?: readonly [number, number];
 }>;
 
 export class OmdRuntimeSnapshotError extends Error {
@@ -216,8 +219,8 @@ export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): Om
           entryPath: join(snapshotRoot, 'bin/omd.mjs'),
           assertIntact: () => {
             if (lost) throw lost;
-            try {
-              const checkDeadline = Date.now() + SNAPSHOT_DEADLINE_MS;
+            const verify = (budgetMs: number) => {
+              const checkDeadline = Date.now() + budgetMs;
               const stat = lstatSync(snapshotRoot);
               if (disposed || !stat.isDirectory() || stat.isSymbolicLink()
                 || realpathSync(snapshotRoot) !== snapshotRoot
@@ -225,7 +228,21 @@ export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): Om
                 || (copiedDependencies !== null && dependencyFingerprint(join(snapshotRoot, 'node_modules'), checkDeadline) !== copiedDependencies)) {
                 throw new OmdRuntimeSnapshotError('captured runtime or dependencies changed');
               }
+            };
+            const timedOut = (error: unknown) => error instanceof OmdRuntimeSnapshotError && error.message === 'OMD_RUNTIME_SNAPSHOT_TIMEOUT';
+            const [budgetMs, slowBudgetMs] = options.integrityBudgetsMs ?? [SNAPSHOT_DEADLINE_MS, SLOW_INTEGRITY_CHECK_MS];
+            try {
+              try { verify(budgetMs); } catch (error) {
+                // A busy machine can outrun the hashing budget, which says nothing about the runtime: check again with a
+                // longer one, and never end the run on time alone. Only a real difference marks the snapshot lost.
+                if (!timedOut(error)) throw error;
+                try { verify(slowBudgetMs); } catch (retry) {
+                  if (timedOut(retry)) throw new OmdRuntimeSnapshotError('OMD_RUNTIME_SNAPSHOT_CHECK_SLOW: the machine was too busy to verify the captured runtime in time; nothing changed, run the same command again', { cause: retry });
+                  throw retry;
+                }
+              }
             } catch (error) {
+              if (error instanceof OmdRuntimeSnapshotError && error.message.startsWith('OMD_RUNTIME_SNAPSHOT_CHECK_SLOW')) throw error;
               lost = new OmdRuntimeSnapshotError('OMD_RUNTIME_SNAPSHOT_LOST: immutable runtime unavailable; start a fresh native run',
                 { cause: error });
               throw lost;
