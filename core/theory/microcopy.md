@@ -78,6 +78,11 @@ Reject the automatic formula of a title followed by a muted explanatory subtitle
 
 Supporting copy earns space when it adds a constraint, consequence, evidence, or recovery cue: `초대 링크는 24시간 뒤 만료돼요.` Otherwise record it as `none`, not as a slot waiting for filler.
 
+An interface that needs explanatory copy to be understood has not been designed yet. Each view gets
+one core message and at most one supporting note. A card that explains how to operate the view
+(`~를 누르면 ~돼요`) signals a control that is not self-evident; fix the control instead of repeating
+the explanation from view to view.
+
 ## Voice and grammar defaults
 
 Choose Korean speech level from the voice contract. Examples below use compact noun labels, direct action verbs, and 해요체 messages where a sentence is needed. A formal service may choose 합니다체 and keep the same information structure.

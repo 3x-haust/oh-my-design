@@ -153,6 +153,10 @@ Permissions change what a person can reach, but shouldn't make the product feel 
 
 Don't show disabled global navigation as a catalog of forbidden modules unless discovering and requesting access is itself a real task.
 
+Don't label people by passive roles such as view-only, read-only, or guest. Everyone sees the same
+base view and permission adds elements to it; draw a view whose elements depend on permission both
+without and with that permission.
+
 ## Deep links and URL state
 
 Every durable view should have a durable address.
