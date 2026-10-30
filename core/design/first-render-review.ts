@@ -147,23 +147,28 @@ export function baselineRenders(root: string, baselines: readonly FirstRenderBas
   });
 }
 
+/** Context images left out, in this order, while the packet exceeds what the reviewer transport carries: the maker's
+ * page ideas, reference states deferred to the final review, supplemental references, designer case renders. The
+ * current, prior, previous-iteration, motion and feedback renders and the primary reference are evidence and stay. */
+const TRANSPORT_SHED_LEVELS = 4;
+
 function prepareFirstRenderReviewPacket(
   root: string,
   invocation: ProjectRunInvocation,
   previous: ReturnType<typeof readReviewRecord>,
-  withIdeas = true,
 ): ReturnType<typeof preparePacket> {
-  // The maker's drafts are context, not evidence: when they would push the packet past what the reviewer transport
-  // carries, the review goes ahead without them rather than not at all.
-  const prepared = preparePacket(root, invocation, previous, withIdeas);
-  return withIdeas && prepared.packet.byteLength > MAX_BROKERED_EVIDENCE_BYTES ? preparePacket(root, invocation, previous, false) : prepared;
+  // Context, not evidence, gives way first: the review goes ahead without it rather than not at all.
+  for (let shed = 0; ; shed++) {
+    const prepared = preparePacket(root, invocation, previous, shed);
+    if (prepared.packet.byteLength <= MAX_BROKERED_EVIDENCE_BYTES || shed === TRANSPORT_SHED_LEVELS) return prepared;
+  }
 }
 
 function preparePacket(
   root: string,
   invocation: ProjectRunInvocation,
   previous: ReturnType<typeof readReviewRecord>,
-  withIdeas: boolean,
+  shed: number,
 ) {
   const current = checkFirstRenderEvidence(root, 'review', invocation);
   if (current === null || !['first-render-check-v3', 'first-render-check-v4'].includes(current.schema)) return fail('capture both fixed viewports first');
@@ -177,7 +182,12 @@ function preparePacket(
   const judgments = designerJudgmentProjection();
   const brief = readDesignBrief(root);
   const motion = firstRenderMotionProjection(root, piDigest(current.reportSha256, 'report-sha'));
-  const ideas = withIdeas ? pageIdeaRenders(root) : [];
+  const ideas = shed < 1 ? pageIdeaRenders(root) : [];
+  const keptReference = (render: { state: string; referenceRole: string }) =>
+    (shed < 2 || render.state === 'default') && (shed < 3 || render.referenceRole === 'primary');
+  const referenceRenders = (consulted?.renders ?? []).filter(keptReference);
+  const omittedReferences = (consulted?.renders ?? []).filter(render => !keptReference(render)).map(render => render.captureSha256);
+  const omitCases = cases !== null && shed >= 4;
   const captures: unknown = current.captures;
   if (!Array.isArray(captures) || captures.length !== 2) return fail('captures missing');
   const renders = captures.map((item, index) => {
@@ -191,7 +201,7 @@ function preparePacket(
   const priorCriteria: readonly FirstRenderFinding[] = previous?.findings ?? [];
   const priorBaselines = previous?.baselines ?? [];
   const priorRenders = baselineRenders(root, priorBaselines, priorCriteria);
-  const referenceCaptures = (consulted?.renders ?? []).filter(render => render.state === 'default')
+  const referenceCaptures = referenceRenders.filter(render => render.state === 'default')
     .map(({ captureSha256, referenceRole }) => ({ captureSha256, referenceRole }));
   const comparisons = referenceComparisonBindings(referenceCaptures, renders);
   const measurement = loadMeasurement(root, current.measurements[0]!);
@@ -207,7 +217,7 @@ function preparePacket(
     ...(unchanged ? { unchangedSinceRetainedReview: { reviewSha256: previous!.sha256, captures: renders.map(({ viewport, captureSha256 }) => ({ viewport, captureSha256 })) } } : {}),
     measurementDiagnostics: measurement.findings,
     templateTells: tells,
-    ...(cases === null ? {} : { designerCases: cases.context, designerCaseRenders: cases.renders }),
+    ...(cases === null ? {} : { designerCases: cases.context, ...(omitCases ? {} : { designerCaseRenders: cases.renders }) }),
     designerJudgments: judgments,
     ...(brief === null ? {} : { designBrief: brief }),
     ...(motion === null ? {} : { motion: motion.context, motionRenders: motion.renders }),
@@ -215,13 +225,17 @@ function preparePacket(
     ...(feedback === null ? {} : { reportedFeedback: feedback.context, feedbackRenders: feedback.renders }),
     ...(consulted === null ? {} : {
       consultedReferences: consulted.context,
-      consultedReferenceRenders: consulted.renders,
+      consultedReferenceRenders: referenceRenders,
       referenceComparisonScope: {
         productionState: 'default',
         deferredToFinal: consulted.renders.filter(render => render.state !== 'default')
           .map(({ captureSha256, component, state }) => ({ captureSha256, component, state })),
       },
     }),
+    ...(omittedReferences.length || omitCases ? { transportOmissions: {
+      consultedReferenceRenders: omittedReferences, designerCaseRenders: omitCases,
+      reason: 'the complete packet exceeds the reviewer transport; these context images were left out and are not evidence for or against the page',
+    } } : {}),
     scope: 'early-representative-viewports-not-final' };
   const route = context.schema === 'model-led-first-render-context-v1'
     ? readPersistedRoute(root, invocation) : null;
@@ -323,6 +337,11 @@ function pageIdeaRenders(root: string) {
 
 export function firstRenderReviewPacket(root: string, invocation: ProjectRunInvocation) {
   return prepareFirstRenderReviewPacket(root, invocation, readCurrentFirstRenderReview(root, invocation));
+}
+
+/** The packet at one shedding level, whatever its size: lets tests reach the levels without 16 MB of images. */
+export function firstRenderReviewPacketAtShedLevel(root: string, invocation: ProjectRunInvocation, shed: number) {
+  return preparePacket(root, invocation, readCurrentFirstRenderReview(root, invocation), shed);
 }
 
 export function requireRetainedFirstRenderReview(root: string, invocation: ProjectRunInvocation) {
