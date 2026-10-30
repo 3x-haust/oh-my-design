@@ -125,6 +125,26 @@ test('private cached snapshot survives temp cleanup and detects damage without r
   assert.throws(() => snapshot.assertIntact(), /OMD_RUNTIME_SNAPSHOT_LOST/);
 });
 
+test('a slow integrity check retries with a longer budget and never marks an unchanged snapshot lost', t => {
+  const directory = mkdtempSync(join(tmpdir(), 'omd-snapshot-slow-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const sourceRoot = join(directory, 'source');
+  for (const path of ['package.json', 'bin/omd.mjs', 'bin/run-ts.mjs', 'bin/omd.ts', 'src/skills/omd-ultradesign/SKILL.md']) {
+    mkdirSync(dirname(join(sourceRoot, path)), { recursive: true });
+    writeFileSync(join(sourceRoot, path), path === 'package.json' ? '{}' : 'fixture');
+  }
+  const parentRoot = join(directory, 'cache');
+  const retried = createOmdRuntimeSnapshot({ sourceRoot, dependencyRoot: null, parentRoot, integrityBudgetsMs: [-1, 30_000] });
+  t.after(() => retried.dispose());
+  retried.assertIntact();
+  const slow = createOmdRuntimeSnapshot({ sourceRoot, dependencyRoot: null, parentRoot, integrityBudgetsMs: [-1, -1] });
+  t.after(() => slow.dispose());
+  assert.throws(() => slow.assertIntact(), /OMD_RUNTIME_SNAPSHOT_CHECK_SLOW/);
+  assert.throws(() => slow.assertIntact(), /OMD_RUNTIME_SNAPSHOT_CHECK_SLOW/);
+  rmSync(join(retried.root, 'package.json'));
+  assert.throws(() => retried.assertIntact(), /OMD_RUNTIME_SNAPSHOT_LOST/);
+});
+
 test('first OMD command survives checkout removal after Pi activation', t => {
   const pluginRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-plugin-'));
   const targetRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-target-'));
