@@ -72,6 +72,18 @@ export function assertReviewerContextBudget(packet: Buffer, contextWindow: unkno
   }
 }
 
+/** Context images the first-render packet left out to fit the transport (see first-render-review.ts). */
+function firstRenderTransportOmissions(evidence: Record<string, unknown>, lane: string): Readonly<{ consultedReferenceRenders: readonly string[]; designerCaseRenders: boolean }> {
+  if (evidence.transportOmissions === undefined) return { consultedReferenceRenders: [], designerCaseRenders: false };
+  if (lane !== 'firstRender') throw new PiReviewerError('packet-transport-omissions');
+  const row = piRecord(evidence.transportOmissions, 'transport-omissions');
+  const shas = row.consultedReferenceRenders;
+  if (Object.keys(row).sort().join() !== 'consultedReferenceRenders,designerCaseRenders,reason' || !Array.isArray(shas)
+    || typeof row.designerCaseRenders !== 'boolean' || typeof row.reason !== 'string'
+    || shas.length === 0 && !row.designerCaseRenders) throw new PiReviewerError('packet-transport-omissions');
+  return { consultedReferenceRenders: shas.map(sha => piDigest(sha, 'omitted-reference-sha')), designerCaseRenders: row.designerCaseRenders };
+}
+
 function packetContract(input: PiReviewerLaneInput): Readonly<{
   packetSha256: string; evidenceSha256: string; browserSha256: string; imageCount: number;
   handbackSchema: unknown; fixedBindings: Record<string, unknown>;
@@ -155,15 +167,21 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{
   if (evidence.temporalRenders !== undefined && input.lane !== 'protocolLane' && input.lane !== 'blindLane') {
     throw new PiReviewerError('packet-temporal-renders');
   }
+  const omissions = firstRenderTransportOmissions(evidence, input.lane);
   const consultedImages = input.lane === 'firstRender' ? (() => {
     const reported = consultedReferenceProjection(input.root,
       existsSync(join(input.root, '.omd/route.json'))
         ? piHash(readPersistedRoute(input.root, input.invocation).request) : undefined);
+    // Only context may be left out for transport: a deferred state or a supplemental reference, never the primary default.
+    const all = reported?.renders ?? [];
+    if (omissions.consultedReferenceRenders.some(sha => !all.some(render => render.captureSha256 === sha
+      && (render.state !== 'default' || render.referenceRole !== 'primary')))) throw new PiReviewerError('packet-consulted-reference-omission');
+    const kept = all.filter(render => !omissions.consultedReferenceRenders.includes(render.captureSha256));
     if (fixed.consultedReferencesSha256 !== reported?.context.sha256
       || canonicalJson(evidence.consultedReferences ?? null) !== canonicalJson(reported?.context ?? null)
-      || canonicalJson(evidence.consultedReferenceRenders ?? []) !== canonicalJson(reported?.renders ?? []))
+      || canonicalJson(evidence.consultedReferenceRenders ?? []) !== canonicalJson(kept))
       throw new PiReviewerError('packet-consulted-reference-drift');
-    return reported?.renders ?? [];
+    return kept;
   })() : [];
   const designerCaseImages = input.lane === 'firstRender' ? (() => {
     const cases = consultedDesignerCases(input.root,
@@ -171,10 +189,11 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{
         ? piHash(readPersistedRoute(input.root, input.invocation).request) : undefined);
     if (fixed.designerCasesSha256 !== cases?.context.sha256
       || canonicalJson(evidence.designerCases ?? null) !== canonicalJson(cases?.context ?? null)
-      || canonicalJson(evidence.designerCaseRenders ?? []) !== canonicalJson(cases?.renders ?? [])) {
+      || canonicalJson(evidence.designerCaseRenders ?? []) !== canonicalJson(omissions.designerCaseRenders ? [] : cases?.renders ?? [])
+      || omissions.designerCaseRenders && cases === null) {
       throw new PiReviewerError('packet-designer-case-drift');
     }
-    return cases?.renders ?? [];
+    return omissions.designerCaseRenders ? [] : cases?.renders ?? [];
   })() : [];
   if (input.lane === 'firstRender') {
     const judgments = designerJudgmentProjection();

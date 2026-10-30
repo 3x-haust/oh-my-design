@@ -11,6 +11,7 @@ import { publishDesignJudgment } from '../core/design/judgment-files.ts';
 import { checkFirstRenderEvidence, publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import {
   firstRenderReviewPacket,
+  firstRenderReviewPacketAtShedLevel,
   readFirstRenderReview,
   requireRetainedFirstRenderReview,
   runFirstRenderReview,
@@ -202,6 +203,34 @@ test('native early review repairs and recaptures without final evidence and reus
   await assert.rejects(() => runPiFirstRenderReviewer({
     root, invocation, packet: Buffer.from(JSON.stringify(forgedOriginal)), signal: t.signal,
   }), /consulted-reference/);
+  // Past the transport limit, context gives way in a fixed order; the reviewer accepts only declared omissions of context.
+  const supplementalPng = (JSON.parse(prepared.packet.toString('utf8')).evidence.renders as { pngBase64: string }[])
+    .map(row => Buffer.from(row.pngBase64, 'base64')).find(bytes => hash(bytes) !== hash(reportedPng))!;
+  writeFileSync(join(root, '.omd/.cache/supplemental.png'), supplementalPng);
+  const primaryInput = { path: '.omd/.cache/reported.png', sha256: hash(reportedPng), sourceUrl: 'https://example.com/portrait-original', role: 'primary' };
+  publishConsultedReferences(root, { schema: 'consulted-references-input-v1', requestSha256: hash('reading task'), images: [primaryInput,
+    { path: '.omd/.cache/supplemental.png', sha256: hash(supplementalPng), sourceUrl: 'https://example.com/supplemental', role: 'supplemental' }] }, writer);
+  assert.equal(JSON.parse(firstRenderReviewPacketAtShedLevel(root, invocation, 0).packet.toString('utf8')).evidence.consultedReferenceRenders.length, 2);
+  const shedPacket = firstRenderReviewPacketAtShedLevel(root, invocation, 3).packet;
+  const shed = JSON.parse(shedPacket.toString('utf8'));
+  assert.deepEqual(shed.evidence.consultedReferenceRenders.map((row: { captureSha256: string }) => row.captureSha256), [hash(reportedPng)]);
+  assert.deepEqual(shed.evidence.transportOmissions.consultedReferenceRenders, [hash(supplementalPng)]);
+  assert.equal(shed.evidence.transportOmissions.designerCaseRenders, false);
+  await runPiFirstRenderReviewer({ root, invocation, packet: shedPacket, signal: t.signal });
+  const reseal = (forged: { evidence: unknown; evidenceSha256: string; outputContract: { fixedBindings: { evidenceSha256: string } } }) => {
+    forged.evidenceSha256 = hash(canonicalJson(forged.evidence));
+    forged.outputContract.fixedBindings.evidenceSha256 = forged.evidenceSha256;
+    return Buffer.from(JSON.stringify(forged));
+  };
+  const droppedPrimary = JSON.parse(shedPacket.toString('utf8'));
+  droppedPrimary.evidence.transportOmissions.consultedReferenceRenders = [hash(reportedPng)];
+  droppedPrimary.evidence.consultedReferenceRenders = JSON.parse(firstRenderReviewPacketAtShedLevel(root, invocation, 0).packet.toString('utf8'))
+    .evidence.consultedReferenceRenders.filter((row: { captureSha256: string }) => row.captureSha256 === hash(supplementalPng));
+  await assert.rejects(() => runPiFirstRenderReviewer({ root, invocation, packet: reseal(droppedPrimary), signal: t.signal }), /packet-consulted-reference-omission/);
+  const undeclared = JSON.parse(shedPacket.toString('utf8'));
+  delete undeclared.evidence.transportOmissions;
+  await assert.rejects(() => runPiFirstRenderReviewer({ root, invocation, packet: reseal(undeclared), signal: t.signal }), /packet-consulted-reference-drift/);
+  publishConsultedReferences(root, { schema: 'consulted-references-input-v1', requestSha256: hash('reading task'), images: [primaryInput] }, writer);
   const forgedDiagnostics = JSON.parse(prepared.packet.toString('utf8'));
   forgedDiagnostics.evidence.measurementDiagnostics = [];
   forgedDiagnostics.evidenceSha256 = hash(canonicalJson(forgedDiagnostics.evidence));
