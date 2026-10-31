@@ -212,8 +212,9 @@ function preparePacket(
   // reviewer keeps that verdict for them and judges only what changed, instead of re-litigating the same pixels.
   const unchanged = previous?.decision === 'retain' && renders.every(render => previous.captures.some(capture =>
     capture.viewport === render.viewport && capture.captureSha256 === render.captureSha256));
+  // The reviewer judges task fit against the user's own words; taskContext is only the maker's summary of them.
   const evidence = { ...(context.schema === 'model-led-first-render-context-v1'
-    ? { taskContext: context } : { hypothesis: context.hypothesis }), renders, priorCriteria, priorBaselines, priorRenders,
+    ? { userRequest: readPersistedRoute(root, invocation).request, taskContext: context } : { hypothesis: context.hypothesis }), renders, priorCriteria, priorBaselines, priorRenders,
     ...(unchanged ? { unchangedSinceRetainedReview: { reviewSha256: previous!.sha256, captures: renders.map(({ viewport, captureSha256 }) => ({ viewport, captureSha256 })) } } : {}),
     measurementDiagnostics: measurement.findings,
     templateTells: tells,

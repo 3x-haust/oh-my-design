@@ -148,6 +148,8 @@ test('native early review repairs and recaptures without final evidence and reus
   writeFileSync(join(root, '.omd/ideas/hero-1.json'), JSON.stringify({ prompt: 'hero composition', kind: 'page', references: [] }));
   const ideaPacket = firstRenderReviewPacket(root, invocation).packet;
   const ideaEvidence = JSON.parse(ideaPacket.toString('utf8')).evidence;
+  // A hypothesis-led packet has no route request to show; only model-led packets carry userRequest.
+  assert.equal(ideaEvidence.userRequest, undefined);
   assert.deepEqual(ideaEvidence.pageIdeas.map((row: { path: string; role: string }) => [row.role, row.path]), [['page-idea', '.omd/ideas/hero-1.png']]);
   process.env.PI_REVIEWER_FIXTURE_MODE = 'success';
   await runPiFirstRenderReviewer({ root, invocation, packet: ideaPacket, signal: t.signal });
