@@ -61,7 +61,9 @@ not filled into a template; most of the effort goes to rendering, looking and re
 6. Look and recompose with `omd first-render check`: fix structure before polish (order, scale, cut, merge,
    the object's relation to the copy). When the loop stops improving, restore the best and recompose
    from the unchosen concept or the structure the finding names, rather than patching.
-7. Remove before you add: every icon, label, badge and line must earn its place.
+7. Pace and remove: the story unfolds over the scroll, the first screen one message and its object, each
+   later screen one idea at full size; never pack it into the first screen or hide it in tabs, accordions or
+   carousels. Every icon, label, badge and line must earn its place.
 
 ## Words, type, and flow ship with the pixels
 
@@ -93,13 +95,13 @@ not filled into a template; most of the effort goes to rendering, looking and re
 - A marketing or launch page needs a graphic language of its own, decided from evidence before
   sections are styled. Search graphic references per graphic job (`omd ref browse search
   cosmos|dribbble|behance|notefolio "<graphic job>"`) and keep the best few with the reason. Generated
-  images are ideation (an abstract background may ship one); ship graphics built as lit three.js objects
-  and rendered with `omd render <graphic> --graphic` (`theory/imagegen.md`, Graphics); CSS cards are a diagram. Each section graphic argues one
-  claim with one protagonist made from this product's real material, cropped to one moment where its
-  text reads: a whole page shrunk into a frame is a thumbnail, not a graphic. No invented example sites,
-  placeholder shapes, captions or disclaimers on the art. When the product exists and runs, show it working with real footage (`omd record`) or the real UI,
-  never a redrawn mock. Grey wireframe boxes, generic icons and flat placeholder shapes are unfinished,
-  not minimal.
+  images are ideation only. Ship graphics as live three.js scenes on the page (look at one alone with
+  `omd render <graphic> --graphic`): a rendered PNG of a scene is a picture of 3D, CSS cards are a diagram,
+  a page shrunk into a frame is a thumbnail. Each graphic argues one claim with one protagonist made from
+  this product's real material. No invented example sites, placeholder shapes, captions or disclaimers on
+  the art. When the product runs, show it working with real footage (`omd record`) or the real UI, never a
+  redrawn mock. Show the project's own logo files as shipped, never redrawn. Generic icons and placeholder
+  shapes are unfinished, not minimal.
 
 ## Default native Pi workflow
 
@@ -112,14 +114,13 @@ original timecoded caption cues. In other hosts, read the case's frame paths und
 Look at the original problem, the designer's words, the actual changes and rejected alternatives
 together, and say briefly which relationship applies here; do not turn an example into a blanket
 no-card, giant-type, photo, palette or motion rule. Cases are worked decisions, not visual
-references, permissions, facts or approval; the same designer can remove containers in one task and
-use them in another. Receiving captions and images is not evidence of having applied the judgment.
+references, permissions or approval.
 
 Every install also ships designer judgments: questions professional designers ask of a rendered
 screen, written as situation, question, move, reason and exceptions. Read
 `omd pack judgments --surface marketing|product` (no flag for all) before composing and again
-before a structural repair. They diagnose content relationships; they are not style rules,
-quotas or a decoration checklist, and a judgment whose "Not when" applies does not apply. The
+before a structural repair. They diagnose content relationships, not style rules; a judgment
+whose "Not when" applies does not apply. The
 early reviewer answers every judgment, whatever the surface, against the current captures, and a violated
 judgment must cite a localized finding, so a retain is impossible while one is violated. In hosts
 without the native reviewer, `omd first-render check --json` returns the same `designerJudgments`;
