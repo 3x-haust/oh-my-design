@@ -31,6 +31,8 @@ test('the reviewer receives every judgment while the maker can narrow reading by
   assert.ok(marketing.length < all.length && product.length < all.length);
   assert.equal(selectDesignerJudgments('unspecified').length, all.length);
   assert.match(designerJudgmentsMarkdown('product'), /^# Designer judgments \(product\)/);
+  // A template is a section sequence, not a detail: the familiar-pattern judgment names today's developer-tool skeleton too.
+  assert.match(marketing.find(row => row.id === 'familiar-pattern-needs-a-reason')!.look, /terminal block/);
 });
 
 test('a malformed catalog is refused rather than partially loaded', () => {

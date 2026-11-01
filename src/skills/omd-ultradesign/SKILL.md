@@ -152,9 +152,12 @@ The host defaults to model-led design. Understand the whole request, inspect the
 inspect strong finished-product visual references before inventing a new visual direction,
 use domain research where it helps, then build with ordinary scoped tools.
 Discover broadly before narrowing: use multiple queries and source families, then inspect
-the actual complete screens behind promising leads. Do not stop at the first three or four
-results or equate functional similarity with a visual direction. Compare materially different
-content-to-form relationships, not recolors of one familiar SaaS layout. Widen the search when
+the actual complete screens behind promising leads. Do not stop at the first few
+results. Compare materially different
+content-to-form relationships, not recolors of one familiar SaaS layout. One category's references,
+and gallery shots titled after it, share its default section sequence; take direction
+from finished sites whose craft this offer must show (a design tool: studios, foundries, editorial
+sites). Widen the search when
 the candidates repeat the same generic composition. Narrow only after you can explain the
 winner's task fit and visible character against real alternatives; use the existing discovery
 records and normal working notes, not a new approval form or a universal candidate quota.
@@ -173,7 +176,7 @@ deliberately without importing source branding, copy or product capabilities.
 Resolve a coherent primary visual direction from complete, task-fit finished surfaces before
 styling. Give supplemental references limited named jobs; do not average incompatible
 palettes, density, shapes and control systems. Prefer complementary states within the same
-system when available. Domain similarity alone does not establish aesthetic fit.
+system when available.
 Cover the kinds of sources, not a few famous sites; a model-led route has no discovery stage, so
 research runs through `omd ref browse`: the domain lane (`--lane domain`) for real services in the
 same category and market (Korean services first for a Korean brief: `search naver "<category>"`); the
@@ -192,8 +195,8 @@ itself: `omd ref browse start --lane design --json`, then
 cards are not links, as on Cosmos, `shot --selector <the item's img>` keeps the item directly),
 `keep --role component-support --reason "..."`. Search wide in this brief's own words, not example terms:
 many queries across galleries, far more candidates than you use, compared side by side with
-`omd ref browse contact-sheet --session <id> --json`; `end` files the keeps in `.omd/refs`. Browsing is available even when the route
-skipped discovery. Choose against the current direction
+`omd ref browse contact-sheet --session <id> --json`; `end` files the keeps in `.omd/refs`.
+Choose against the current direction
 and the existing UI, not by novelty. Take what designers take: padding, spacing rhythm, hierarchy
 (size steps, grouping, what leads) and control anatomy; leave colour, branding and copy behind.
 When two references solve different parts of one component, combine them deliberately and say
