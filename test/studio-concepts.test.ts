@@ -60,13 +60,46 @@ async function anchorServer(t: { after: (fn: () => Promise<void>) => void }): Pr
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
+test('sketches copied from one another are refused as one concept; separately composed sketches render', async t => {
+  const { renderStudioConcepts, alikeStudioConcepts, studioConceptPages } = await import('../core/design/studio.ts');
+  const { root, writer } = project(t, 'new-marketing');
+  const base = '*{box-sizing:border-box}body{margin:0;background:#191714;color:#eee}nav{display:flex;padding:28px}main{padding:70px}'
+    + 'h1{font-size:60px}h2{font-size:38px}.split{display:grid;grid-template-columns:1fr 1fr}.object{width:250px;height:250px}';
+  const page = (css: string, body: string) => `<style>${css}</style><nav><b>OMD</b></nav><main>${body}</main>`;
+  sketch(root, 'core', page(base, '<div class="split"><h1>Think, then make</h1><div class="object"></div></div><section><h2>Install</h2></section>'));
+  sketch(root, 'lens', page(`${base}footer{padding:40px}`, '<div class="split"><div class="object"></div><h1>A second eye</h1></div><section><h2>Loop</h2></section>'));
+  sketch(root, 'orbit', page('body{margin:0;font:18px Georgia}header{height:100vh}ol{columns:3}figure{margin:0}.ring{border-radius:50%}'
+    + 'dl{display:grid}dt{font-weight:700}aside{position:sticky;top:0}', '<header><figure class="ring"></figure></header><ol><li>Read</li><li>Make</li><li>Look</li></ol><dl><dt>Pi</dt><dd>native</dd></dl>'));
+  const before = readFileSync(join(root, '.omd/studio/concepts/core/index.html'), 'utf8');
+  // core and lens are one stylesheet with the hero halves swapped; rendering refuses before any capture.
+  await assert.rejects(renderStudioConcepts(root, writer, fakeRender(root)), /STUDIO_CONCEPTS_ALIKE: core and lens share \d+% of their style rules\. .*blank file/);
+  assert.throws(() => readFileSync(join(root, '.omd/studio/concepts.json')));
+  assert.equal(readFileSync(join(root, '.omd/studio/concepts/core/index.html'), 'utf8'), before);
+  // The same markup restyled is still one composition.
+  const markup = '<header><h1>a</h1><p>b</p></header><section><h2>c</h2><p>d</p><p>e</p></section><section><h2>f</h2><ul><li>g</li><li>h</li></ul></section><footer><p>i</p></footer>';
+  sketch(root, 'lens', `<style>body{font:20px serif;background:#fff}h1{font-size:9vw}</style>${markup}`);
+  sketch(root, 'core', `<link rel="stylesheet" href="core.css">${markup}`);
+  writeFileSync(join(root, '.omd/studio/concepts/core/core.css'), 'body{margin:0}h1{letter-spacing:-.04em}');
+  assert.deepEqual(alikeStudioConcepts(root, studioConceptPages(root)), [{ left: 'core', right: 'lens', reason: 'have the same markup' }]);
+  // Written separately, with only a reset in common, the three render.
+  sketch(root, 'core', page('*{box-sizing:border-box}body{margin:0;background:#f4efe6}main{display:flex;flex-direction:column}h1{font-size:12vw}'
+    + 'canvas{width:100%;height:80vh}.index{columns:2}', '<canvas></canvas><h1>Think, then make</h1><p class="index">Read Make Look</p>'));
+  assert.equal((await renderStudioConcepts(root, writer, fakeRender(root))).concepts.length, 3);
+});
+
 test('a new surface renders three concepts and picks one blind before its first render', { timeout: 240_000 }, async t => {
   const { renderStudioConcepts, currentStudioConcepts } = await import('../core/design/studio.ts');
   const { requireStudioPick, runStudioPick, currentStudioPick } = await import('../core/design/studio-pick.ts');
   const { nextStageWork } = await import('../core/stage/next.ts');
+  const { checkProductionReadiness } = await import('../core/brief/production-readiness.ts');
+  const studioBlockers = (target: string) => checkProductionReadiness(root, invocation, packRoot, target).blockers.filter(blocker => blocker.startsWith('studio: '));
   const packRoot = fileURLToPath(new URL('../core', import.meta.url));
   const { root, invocation, writer, route } = project(t, 'new-marketing');
   assert.throws(() => requireStudioPick(root, route), /STUDIO_CONCEPTS_MISSING: .*omd studio concepts --json/);
+  // Writing the page's source waits for the pick; scaffolding the package does not.
+  assert.match(studioBlockers('src/App.tsx').join(), /STUDIO_CONCEPTS_MISSING/);
+  assert.match(studioBlockers('index.html').join(), /STUDIO_CONCEPTS_MISSING/);
+  assert.deepEqual(studioBlockers('package.json'), []);
   assert.equal(nextStageWork(root, packRoot, invocation).action, 'render-studio-concepts');
   sketch(root, 'atelier', 'a room the visitor walks through');
   sketch(root, 'journey', 'a route from request to page');
@@ -92,6 +125,7 @@ test('a new surface renders three concepts and picks one blind before its first 
     [['journey', 0, 2, 0], ['atelier', 1, 2, 1], ['specimen', 1, 2, 1]]);
   assert.match(picked.next, /^Build journey: judged AI-made in 0 of 2 blind trials \(next: atelier/);
   assert.equal(currentStudioPick(root)?.picked, 'journey');
+  assert.deepEqual(studioBlockers('src/App.tsx'), []);
   requireStudioPick(root, route);
   assert.notEqual(nextStageWork(root, packRoot, invocation).stage, 'concepts');
 
@@ -112,8 +146,11 @@ test('a new surface renders three concepts and picks one blind before its first 
 
 test('an existing-project route never waits for concepts or a pick', async t => {
   const { requireStudioPick } = await import('../core/design/studio-pick.ts');
-  const { root, route } = project(t, 'existing-product-change');
+  const { checkProductionReadiness } = await import('../core/brief/production-readiness.ts');
+  const { root, invocation, route } = project(t, 'existing-product-change');
   requireStudioPick(root, route);
+  const packRoot = fileURLToPath(new URL('../core', import.meta.url));
+  assert.ok(checkProductionReadiness(root, invocation, packRoot, 'src/App.tsx').blockers.every(blocker => !blocker.startsWith('studio: ')));
 });
 
 test('concept sketches and studio notes are authored directly; their renders and records are CLI-owned', t => {
