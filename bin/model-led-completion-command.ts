@@ -24,10 +24,12 @@ import {
 } from '../core/design/first-render-review.ts';
 import {
   firstRenderLoopState,
+  stallMessage,
   firstRenderReviewMatchesCurrentRoute,
 } from '../core/design/first-render-checkpoint.ts';
 import { requireConsultedPrimaryOriginal } from '../core/design/consulted-references.ts';
-import { requireConsultedReferences, requireDesignBrief, requireGraphicDecision, requireGraphicsStarted, requireNoticeableMotion } from '../core/design/new-surface-advisories.ts';
+import { newSurface, requireNoticeableMotion } from '../core/design/new-surface-advisories.ts';
+import { requireStudioConcepts } from '../core/design/studio.ts';
 import { REPAIR_KNOWLEDGE } from '../core/design/compose-guidance.ts';
 import { capturePageBasics } from '../core/design/page-basics.ts';
 import { requireReviewableSource } from '../core/design/source-readability.ts';
@@ -91,9 +93,9 @@ export async function runModelLedCompletion(input: Readonly<{
       if (figmaIssues.length > 0) {
         throw new CompletionStepError('FIGMA_TARGET_NOT_PROVEN', figmaIssues.map(issue => `${issue.code}: ${issue.message}`).join('; '));
       }
-    } else {
+    } else if (!newSurface(route)) {
+      // A new surface is judged on its rendered concept and recompositions, not on a reference ledger.
       requireConsultedPrimaryOriginal(input.root, route);
-      requireGraphicDecision(input.root, route, input.invocation.current.briefSha256);
     }
     const readiness = checkProductionReadiness(input.root, input.invocation, input.packRoot);
     if (!readiness.ok) throw new CompletionStepError('NATIVE_PRODUCTION_NOT_READY', readiness.blockers.join('; '));
@@ -124,10 +126,8 @@ export async function runModelLedCompletion(input: Readonly<{
     }
     cancelled();
     requireReviewableSource(input.root, route);
-    requireDesignBrief(input.root, route);
-    // The same entry conditions as omd first-render check: finish captures a first render too.
-    requireConsultedReferences(input.root, route);
-    requireGraphicsStarted(input.root, route);
+    // The same entry condition as omd first-render check: finish captures a first render too.
+    requireStudioConcepts(input.root, route);
     inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
     phase = 'review';
     const existingFirstRender = readFirstRenderReview(input.root);
@@ -148,7 +148,7 @@ export async function runModelLedCompletion(input: Readonly<{
         };
         const code = loop.stalled ? 'FIRST_RENDER_LOOP_STALLED' : 'FIRST_RENDER_REGRESSED';
         const message = loop.stalled
-          ? 'The first-render repair loop is stalled. Restore the best iteration and report the remaining findings with both captures to the user instead of continuing.'
+          ? stallMessage(loop)
           : loop.bestRestoreApplied
             ? 'The best first-render iteration is restored. Try a materially different approach before recapturing.'
             : `The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach. ${REPAIR_KNOWLEDGE}`;
@@ -201,7 +201,7 @@ export async function runModelLedCompletion(input: Readonly<{
       const code = stalled ? 'FIRST_RENDER_LOOP_STALLED'
         : regressed ? 'FIRST_RENDER_REGRESSED' : 'FIRST_RENDER_VISUAL_REPAIR';
       const message = stalled
-        ? 'The first-render repair loop stalled. Restore the best iteration and report the remaining findings with both captures to the user instead of continuing.'
+        ? early.diagnostic!.message
         : regressed
           ? `The latest first-render iteration regressed. Restore the best iteration before trying a materially different approach. ${REPAIR_KNOWLEDGE}`
           : `The isolated first-render reviewer requested visual repair. Inspect its current capture-bound findings before full behavior execution; do not replace a whole-system finding with an icon-library swap. ${REPAIR_KNOWLEDGE}`;

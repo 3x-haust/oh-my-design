@@ -6,7 +6,6 @@ import { projection, requireCopyToneReview } from '../design-language/index.ts';
 import { nativeReframeWork } from '../runtime/native-reframe.ts';
 import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ConfidenceDebt } from './confidence-debt.ts';
-import { newSurfaceAdvisories } from '../design/new-surface-advisories.ts';
 
 export type ProductionReadiness = Readonly<{
   schema: 'production-readiness-v1';
@@ -56,7 +55,6 @@ export function checkProductionReadiness(
     }
     const reframe = nativeReframeWork(root, invocation);
     if (reframe !== null) warnings.push(`${reframe.problems.join('; ')}; ${reframe.next}`);
-    warnings.push(...newSurfaceAdvisories(root, route));
   });
   const unique = [...new Set(blockers)];
   return {

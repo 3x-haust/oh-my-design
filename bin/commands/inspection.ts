@@ -455,11 +455,8 @@ async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<nev
   const { readPersistedRoute } = await import('../../core/route/index.ts');
   const route = readPersistedRoute(process.cwd(), invocation);
   requireReviewableSource(process.cwd(), route, 'first-render');
-  const { requireConsultedReferences, requireDesignBrief, requireGraphicsStarted, requirePageIdeas } = await import('../../core/design/new-surface-advisories.ts');
-  requireDesignBrief(process.cwd(), route);
-  requireConsultedReferences(process.cwd(), route);
-  requirePageIdeas(process.cwd(), route);
-  requireGraphicsStarted(process.cwd(), route);
+  const { requireStudioConcepts } = await import('../../core/design/studio.ts');
+  requireStudioConcepts(process.cwd(), route);
   const checked = await publishFirstRenderCheck(process.cwd(), opts.page, undefined, projectWriter(invocation), invocation);
   // The reviewer judges choreography from this observation; a capture failure leaves the review static, not blocked.
   const { captureFirstRenderMotion } = await import('../../core/design/first-render-motion.ts');

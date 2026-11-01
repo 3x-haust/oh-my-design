@@ -6,12 +6,11 @@ import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts
 import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
-import { COMPONENT_REFERENCE_GUIDANCE, referenceBreadth } from '../ref/component-references.ts';
-import { componentReferencesPending, designBriefPending, directionReviewPending, graphicDecisionPending, GRAPHIC_COMPARISON_GUIDANCE } from '../design/new-surface-advisories.ts';
-import { DESIGN_BRIEF_GUIDANCE } from '../design/design-brief.ts';
+import { STUDIO_CONCEPT_GUIDANCE, studioConceptsPending } from '../design/studio.ts';
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import {
   firstRenderLoopState,
+  stallMessage,
   firstRenderReviewMatchesCurrentRoute,
 } from '../design/first-render-checkpoint.ts';
 
@@ -71,44 +70,14 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       instruction: 'Repair the current authority, scope, design-language, or unresolved reframe blocker, then rerun the production guard.',
     };
   }
-  // New products and landings start from a written brief, then look for references in its words.
-  if (designBriefPending(root, route)) {
+  // A new product or landing is chosen among three rendered concepts before the page is built.
+  if (studioConceptsPending(root, route)) {
     return {
       ...base(routeSha256),
-      stage: 'brief',
-      action: 'write-design-brief',
-      next: 'omd schema design-brief',
-      instruction: DESIGN_BRIEF_GUIDANCE,
-    };
-  }
-  // New products and landings point to component references once.
-  if (componentReferencesPending(root, route)) {
-    return {
-      ...base(routeSha256),
-      stage: 'references',
-      action: 'gather-component-references',
-      next: 'omd ref browse start --lane design --json',
-      instruction: `${referenceBreadth(root)} ${COMPONENT_REFERENCE_GUIDANCE}`,
-    };
-  }
-  if (directionReviewPending(root, route)) {
-    return {
-      ...base(routeSha256),
-      stage: 'references',
-      action: 'review-reference-directions',
-      next: 'omd ref direction-review --json',
-      instruction: 'An isolated reviewer judges every kept page for craft and fit: direction, support or reject. Choose the primary '
-        + 'from the pages it marks direction and give support pages one named part each; if none is direction, keep better finished sites and review again.',
-    };
-  }
-  // The section graphics are designed before the page around them, as the brief's "shows" plans them.
-  if (graphicDecisionPending(root, route, invocation.current.briefSha256)) {
-    return {
-      ...base(routeSha256),
-      stage: 'graphics',
-      action: 'compare-section-graphics',
-      next: 'omd pack theory/imagegen.md',
-      instruction: GRAPHIC_COMPARISON_GUIDANCE,
+      stage: 'concepts',
+      action: 'render-studio-concepts',
+      next: 'omd studio concepts --json',
+      instruction: STUDIO_CONCEPT_GUIDANCE,
     };
   }
   // Until the first render exists, the work is composing the page; name the knowledge for that.
@@ -136,15 +105,14 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   if (firstRender !== null && firstRenderIsCurrent) {
     const loop = firstRenderLoopState(root, route);
     if (loop.stalled) {
+      const report = loop.exhausted && loop.bestRestored;
       return {
         ...base(routeSha256),
         stage: 'independent-review',
-        action: loop.bestRestored ? 'report-stalled-first-render' : 'restore-best-first-render',
+        action: report ? 'report-stalled-first-render' : loop.bestRestored ? 'recompose-from-restored-best' : 'restore-best-first-render',
         problems: ['FIRST_RENDER_LOOP_STALLED', ...loop.reasons],
         next: loop.bestRestored ? null : 'omd first-render restore --json',
-        instruction: loop.bestRestored
-          ? 'The first-render loop stalled and the best source is restored. Stop repairing; report the remaining localized findings and the current desktop/mobile captures to the user.'
-          : 'The first-render loop stalled. Restore the best checkpoint, then report the remaining localized findings and both current captures to the user instead of continuing repair.',
+        instruction: stallMessage(loop),
       };
     }
     if (firstRender.progress?.verdict === 'regressed'

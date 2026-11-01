@@ -43,6 +43,7 @@ import {
   firstRenderIterationForReport,
   firstRenderIterationRenders,
   firstRenderLoopState,
+  stallMessage,
   previousFirstRenderIteration,
   recordFirstRenderIterationReview,
   type FirstRenderLoopState,
@@ -389,7 +390,7 @@ export async function runFirstRenderReview(root: string, invocation: ProjectRunI
     const loop = firstRenderLoopState(run.projectRoot, route);
     const diagnostic = loop.stalled ? {
       code: 'FIRST_RENDER_LOOP_STALLED' as const,
-      message: 'First-render repair is no longer demonstrating improvement. Restore the best iteration and report the remaining findings with both captures to the user instead of continuing the loop.',
+      message: stallMessage(loop),
     } : review.progress?.verdict === 'regressed' ? {
       code: 'FIRST_RENDER_REGRESSED' as const,
       message: 'The latest first-render review regressed. Restore the best iteration before trying a different approach.',

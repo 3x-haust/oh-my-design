@@ -42,6 +42,7 @@ export function printUsage(exitCode = 1): never {
     '  imagegen --kind page --name <section> --prompt <exact copy, layout, type, proof> [--json]',
     '  scaffold [--json]',
     '  taste compare|graphic [--anchor <url>] [<rendered.png> --against <image.path>] [--skip <reason>] [--json]',
+    '  studio concepts [--json]',
     '  pack dir|list|<relpath> [--section <heading>]',
     '  doctor',
     '  browser setup|login|skip|status|forget',

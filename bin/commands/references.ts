@@ -171,17 +171,10 @@ export async function runReferences(args: string[]): Promise<never> {
     // Publishing references settles them: a browse session still open is ended first so its keeps are filed and citable.
     await endLiveBrowseSession(opts);
     const { requireKeptConsultedImages } = await import('../../core/ref/capture-intake.ts');
-    const { requireReferenceKinds, requireReviewedPrimary, requireSectionReferences } = await import('../../core/design/new-surface-advisories.ts');
     const cited: unknown = Reflect.get(input, 'images');
     const images = Array.isArray(cited) ? cited.map(image => ({
       sha256: String(Reflect.get(Object(image), 'sha256')), sourceUrl: String(Reflect.get(Object(image), 'sourceUrl')) })) : [];
     requireKeptConsultedImages(process.cwd(), invocation, images);
-    requireReferenceKinds(readPersistedRoute(process.cwd(), invocation), images);
-    requireSectionReferences(process.cwd(), readPersistedRoute(process.cwd(), invocation), Array.isArray(cited) ? cited.map(image => ({
-      component: String(Reflect.get(Object(image), 'component') ?? ''), role: String(Reflect.get(Object(image), 'role')),
-      sourceUrl: String(Reflect.get(Object(image), 'sourceUrl')), sha256: String(Reflect.get(Object(image), 'sha256')) })) : []);
-    requireReviewedPrimary(process.cwd(), readPersistedRoute(process.cwd(), invocation), Array.isArray(cited) ? cited.map(image => ({
-      sha256: String(Reflect.get(Object(image), 'sha256')), role: String(Reflect.get(Object(image), 'role')) })) : []);
     const published = publishConsultedReferences(process.cwd(), input, projectWriter(invocation));
     const { referenceBreadth } = await import('../../core/ref/component-references.ts');
     console.log(JSON.stringify({ ...published, references: referenceBreadth(process.cwd()) }));
