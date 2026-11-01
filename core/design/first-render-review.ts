@@ -11,6 +11,7 @@ import { firstRenderMotionProjection } from './first-render-motion.ts';
 import { attestedJudgmentIds, firstRenderTemplateTells } from './first-render-template-tells.ts';
 import { motionRequired } from './new-surface-advisories.ts';
 import { readDesignBrief } from './design-brief.ts';
+import { latestBlindComparison } from './taste-comparison-record.ts';
 import { ideaImages, pageIdeaPreview } from './idea-image.ts';
 import { MAX_BROKERED_EVIDENCE_BYTES } from '../runtime/evidence-proxy.ts';
 import { pageBasicsTells, proofShowsOutput, readPageBasics } from './page-basics.ts';
@@ -181,6 +182,7 @@ function preparePacket(
     existsSync(join(root, '.omd/route.json')) ? sha256(readPersistedRoute(root, invocation).request) : undefined);
   const judgments = designerJudgmentProjection();
   const brief = readDesignBrief(root);
+  const blind = latestBlindComparison(root);
   const motion = firstRenderMotionProjection(root, piDigest(current.reportSha256, 'report-sha'));
   const ideas = shed < 1 ? pageIdeaRenders(root) : [];
   const keptReference = (render: { state: string; referenceRole: string }) =>
@@ -218,6 +220,7 @@ function preparePacket(
     ...(unchanged ? { unchangedSinceRetainedReview: { reviewSha256: previous!.sha256, captures: renders.map(({ viewport, captureSha256 }) => ({ viewport, captureSha256 })) } } : {}),
     measurementDiagnostics: measurement.findings,
     templateTells: tells,
+    ...(blind === null ? {} : { blindComparison: blind }),
     ...(cases === null ? {} : { designerCases: cases.context, ...(omitCases ? {} : { designerCaseRenders: cases.renders }) }),
     designerJudgments: judgments,
     ...(brief === null ? {} : { designBrief: brief }),

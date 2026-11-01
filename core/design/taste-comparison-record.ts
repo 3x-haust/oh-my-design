@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { canonicalJson } from '../ref/canonical-json.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { verifySignedPiEyeRoleResult } from '../runtime/pi-role-receipt.ts';
@@ -166,4 +168,23 @@ export function tasteComparisonRecordBytes(root: string, body: TasteComparisonRe
     ...body,
     signature: signNativeObservation(root, TASTE_COMPARISON_RECORD_SCHEMA, sha256(canonicalJson(body))),
   })}\n`);
+}
+
+export type BlindComparisonProjection = Readonly<{ reviewSha256: string; judgedAi: number; trials: number;
+  captures: TasteComparisonRecordBody['firstRender']['captures']; recurringTells: TasteComparisonSummary['recurringTells'] }>;
+/** The latest comparison, when it still told the build apart from human work: its tells, not the trial packets. */
+export function blindComparisonProjection(records: readonly Pick<TasteComparisonRecord, 'createdAt' | 'firstRender' | 'summary' | 'sha256'>[]): BlindComparisonProjection | null {
+  const latest = [...records].sort((left, right) => left.createdAt.localeCompare(right.createdAt)).at(-1);
+  if (latest === undefined || latest.summary.verdict !== 'distinguishable') return null;
+  return { reviewSha256: latest.sha256, judgedAi: latest.summary.judgedAi, trials: latest.summary.trials,
+    captures: latest.firstRender.captures, recurringTells: latest.summary.recurringTells };
+}
+export function latestBlindComparison(root: string): BlindComparisonProjection | null {
+  let names: string[];
+  try { names = readdirSync(join(root, '.omd/taste/reviews')); } catch { return null; }
+  // A record that fails its signature or bindings is not evidence; the reviewer goes ahead without it.
+  return blindComparisonProjection(names.filter(name => /^[a-z0-9-]{1,64}\.json$/.test(name)).flatMap(name => {
+    try { const record = readTasteComparisonReview(root, name.slice(0, -5)); return record === null ? [] : [record]; }
+    catch { return []; }
+  }));
 }

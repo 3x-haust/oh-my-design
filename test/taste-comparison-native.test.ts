@@ -13,6 +13,7 @@ import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { publishDesignJudgment } from '../core/design/judgment-files.ts';
 import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import { readTasteComparisonReview, runTasteComparison } from '../core/design/taste-comparison.ts';
+import { blindComparisonProjection, latestBlindComparison } from '../core/design/taste-comparison-record.ts';
 import { TASTE_COMPARISON_REVIEW_TASK, parseTasteComparisonReview } from '../core/design/taste-comparison-contract.ts';
 import { DEFAULT_TASTE_ANCHORS, rotatedTasteAnchors } from '../core/design/taste-anchors.ts';
 
@@ -100,6 +101,9 @@ test('blind pairwise comparison records order-aware AI judgments behind neutral 
   const persisted = readTasteComparisonReview(root, picksA.id);
   assert.equal(persisted?.sha256, picksA.sha256);
   assert.equal(persisted?.trials.length, 8);
+  // The early reviewer receives the signed record's tells, bound to the captures they were judged on.
+  assert.deepEqual(latestBlindComparison(root), { reviewSha256: picksA.sha256, judgedAi: 4, trials: 8,
+    captures: persisted!.firstRender.captures, recurringTells: picksA.summary.recurringTells });
   assert.equal(readFileSync(join(root, '.omd/taste/anchors/.gitignore'), 'utf8'), '*\n');
   assert.equal(readdirSync(join(root, '.omd/taste/anchors')).filter(name => name.endsWith('.png')).length, 4);
 
@@ -121,6 +125,18 @@ test('blind pairwise comparison records order-aware AI judgments behind neutral 
   for (const trial of picksB.trials) assert.equal(trial.projectJudgedAi, trial.order === 'project-first');
   assert.equal(picksB.summary.judgedAi, 2);
   assert.equal(readdirSync(join(root, '.omd/taste/reviews')).length, 2);
+  assert.equal(latestBlindComparison(root)?.reviewSha256, picksB.summary.verdict === 'distinguishable' ? picksB.sha256 : undefined);
+});
+
+test('only the latest comparison reaches the reviewer, and only while it still tells the build apart', () => {
+  const record = (createdAt: string, verdict: 'distinguishable' | 'not-distinguishable') => ({ createdAt, sha256: hash(createdAt),
+    firstRender: { reportSha256: hash('report'), captures: [] },
+    summary: { judgedAi: 8, trials: 8, rate: 1, verdict, recurringTells: { desktop: ['familiar hero formula'], mobile: [] } } });
+  assert.equal(blindComparisonProjection([]), null);
+  assert.equal(blindComparisonProjection([record('2026-01-01T00:00:00.000Z', 'distinguishable'),
+    record('2026-01-02T00:00:00.000Z', 'not-distinguishable')]), null);
+  assert.equal(blindComparisonProjection([record('2026-01-02T00:00:00.000Z', 'distinguishable'),
+    record('2026-01-01T00:00:00.000Z', 'not-distinguishable')])?.reviewSha256, hash('2026-01-02T00:00:00.000Z'));
 });
 
 test('a malformed taste handback is refused after its correction turn and writes no record', { timeout: 240_000 }, async t => {
