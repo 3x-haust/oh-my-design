@@ -40,6 +40,29 @@ before choosing the work; never ask the user which mode to use.
 Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`,
 `guides/figma.md`, `guides/copy.md`, `guides/code.md`, `guides/landing-basics.md` (basics designers keep), `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
 
+## New pages: work like a studio
+
+A new product or landing (taskNeed `new-product` or `new-marketing`) is designed the way a studio works,
+not filled into a template; most of the effort goes to rendering, looking and recomposing.
+1. Truth: read the project and write `.omd/studio/brief.md` in plain words: what it really does (from its
+   files), for whom, the one message, claims you cannot verify (leave them out), and the user's exact asks
+   word for word. Keep everything the user did not ask you to remove.
+2. References: browse widely (below) and note in `.omd/studio/references.md` what each kept page does well
+   and the principle you translate, never its layout wholesale.
+3. Copy first: `.omd/studio/copy.md` holds the real copy per section, each with one claim and the visual
+   evidence that proves it, plus a cut list. Never add a section because landings usually have one.
+4. Concepts: three quick full-page HTML sketches at `.omd/studio/concepts/<name>/index.html` with the real
+   copy, each with its own navigation noun (what the visitor moves through), protagonist object and verb.
+   Run `omd studio concepts --json`, look at every render, choose the one that best carries the message
+   and say why the others lost.
+5. Build the chosen concept in the project. For 3D, first write its scene contract (the object, what it
+   proves, how the visitor reveals it, the fallback), then build it in three.js with real materials,
+   environment light and colour management, never a screenshot on a tilted plane.
+6. Look and recompose with `omd first-render check`: fix structure before polish (order, scale, cut, merge,
+   the object's relation to the copy). When the loop stops improving, restore the best and recompose
+   from the unchosen concept or the structure the finding names, rather than patching.
+7. Remove before you add: every icon, label, badge and line must earn its place.
+
 ## Words, type, and flow ship with the pixels
 
 - Labels state the immediate next step and true commitment; never call a preview a booking,
@@ -67,8 +90,6 @@ Internal guides, read only when they apply (`omd pack <path>`): `guides/referenc
   marketing copy → `omd pack theory/web-copy.md`.
   Motion that materially affects the task or identity → `omd pack theory/motion.md`;
   inspect only the matching `motion/recipes/<name>.md` mechanism, not an effects checklist.
-- Draft a new landing's hero and unclear sections as page ideas before building them
-  (`omd imagegen --kind page`; `theory/imagegen.md`).
 - A marketing or launch page needs a graphic language of its own, decided from evidence before
   sections are styled. Search graphic references per graphic job (`omd ref browse search
   cosmos|dribbble|behance|notefolio "<graphic job>"`) and keep the best few with the reason. Generated
@@ -76,9 +97,7 @@ Internal guides, read only when they apply (`omd pack <path>`): `guides/referenc
   and rendered with `omd render <graphic> --graphic` (`theory/imagegen.md`, Graphics); CSS cards are a diagram. Each section graphic argues one
   claim with one protagonist made from this product's real material, cropped to one moment where its
   text reads: a whole page shrunk into a frame is a thumbnail, not a graphic. No invented example sites,
-  placeholder shapes, captions or disclaimers on the art. Judge each graphic blind beside a kept one with
-  `omd taste graphic <png> --against <kept image.path>` and rework its named tells until it passes or
-  three rounds end. When the product exists and runs, show it working with real footage (`omd record`) or the real UI,
+  placeholder shapes, captions or disclaimers on the art. When the product exists and runs, show it working with real footage (`omd record`) or the real UI,
   never a redrawn mock. Grey wireframe boxes, generic icons and flat placeholder shapes are unfinished,
   not minimal.
 
@@ -91,15 +110,10 @@ choosing a visual composition or attempting a structural repair, open applicable
 original timecoded caption cues. In other hosts, read the case's frame paths under
 `$OMD_DESIGNER_CASES_DIR` (or `cases/` under `omd pack dir`) with the host image reader.
 Look at the original problem, the designer's words, the actual changes and rejected alternatives
-together. Keep analyst explanation separate from the native source. Explain briefly which
-relationship applies to the current content and what does not; do not turn an example into a
-blanket no-card, giant-type, photo, palette or motion rule. No extra design document is required.
-These are worked decision examples, not the new product's visual references, permissions,
-verified business facts or approval. Inspect the opposite example when a treatment looks like a
-universal rule: the same designer can remove containers in one task and use them for another.
-A case about making an action visible does not settle a product's visual identity. Identify the
-actual design question it helps answer; use another relevant original when the needed judgment
-is outside that case. Receiving captions and images is not evidence of having applied the judgment.
+together, and say briefly which relationship applies here; do not turn an example into a blanket
+no-card, giant-type, photo, palette or motion rule. Cases are worked decisions, not visual
+references, permissions, facts or approval; the same designer can remove containers in one task and
+use them in another. Receiving captions and images is not evidence of having applied the judgment.
 
 Every install also ships designer judgments: questions professional designers ask of a rendered
 screen, written as situation, question, move, reason and exceptions. Read
@@ -112,9 +126,7 @@ without the native reviewer, `omd first-render check --json` returns the same `d
 give them to the independent eye with both captures and require one not-applicable, holds or
 violated answer per judgment, with each violation repaired as a finding.
 
-Before references or styling, a new surface gets its design brief (`omd schema design-brief`,
-`omd brief --input`): audience, the visitor's questions, one message, one named section per question (its references cited under that name),
-what is cut and why, and a concept from the product's own material. Existing work states its task
+Existing work states its task
 contract: audience/expertise, task frequency, input modes, density need, locale, representative content. When structure is uncertain, explore
 alternatives that differ in information structure or interaction model, not recolors.
 Build with realistic fixtures first: long names and strings, empty/error/loading states,
@@ -140,9 +152,8 @@ scroll. Build from `motion/recipes/hero-intro-sequence.md` and `motion/recipes/s
 than a uniform fade on every block, and compare your timeline with the observed reference. A
 requested choreography that ships as one simultaneous fade is unfinished, not restrained.
 `omd first-render check` records the same observation and the early reviewer judges it. After a regressed review, run
-`omd first-render restore --json` instead of patching forward. If the loop reports
-`FIRST_RENDER_LOOP_STALLED`, restore the best iteration, stop repairing, and report the
-remaining findings with both captures. Details: `omd pack protocol/first-render-repair-loop.md`.
+`omd first-render restore --json` instead of patching forward. On
+`FIRST_RENDER_LOOP_STALLED`, follow its instruction: restore the best, then recompose, or report once it says the loop stops. Details: `omd pack protocol/first-render-repair-loop.md`.
 After the first-render review is retained, run `omd taste compare --json`: blind A/B trials against captured human-made pages.
 When its verdict is `distinguishable`, treat the recurring aiTells as repair targets for the whole visible system, not by
 imitating an anchor page and never by adding annotation decorations; re-run the first-render check, then compare again. It is advisory and
@@ -161,11 +172,8 @@ sites). Widen the search when
 the candidates repeat the same generic composition. Narrow only after you can explain the
 winner's task fit and visible character against real alternatives; use the existing discovery
 records and normal working notes, not a new approval form or a universal candidate quota.
-The retained reference set can be small after broad exploration. Do not average the larger
-discovery pool into an incoherent product.
-Failed URLs and challenge pages are acquisition failures, not evaluated design alternatives.
-Recover a working discovery route or source family rather than guessing links until one opens;
-keep the limits visible when comparison remains narrow.
+Do not average the discovery pool into an incoherent product.
+Failed URLs and challenge pages are acquisition failures, not alternatives; recover a working source family.
 Match references to the requested surface: populated task screens for product UI,
 finished service websites for marketing/landing work, and populated reading/browsing
 surfaces for content work. A marketing shell does not prove a product workflow, and an
@@ -184,9 +192,8 @@ design lane for Korean (`notefolio`, `nook`), graphic (`cosmos`, `dribbble`, `be
 (`landbook`, `awwwards`, `lapaninja`) galleries; and `omd render <reference-url> --motion` where
 motion matters. One session at a time lasts 10 minutes: `end` it and start the next per lane or
 kind of source, or pass `--budget-minutes` (up to 30). Record a source you could not use and why.
-Then work component by component, the way designers do. For each element that needs a decision
-(a filter, a pricing card, a hero, a step list), search the component galleries with the element
-itself: `omd ref browse start --lane design --json`, then
+For each element that needs a decision (a filter, a pricing card, a hero), search the galleries
+with the element itself: `omd ref browse start --lane design --json`, then
 `omd ref browse search dribbble "<words from this brief>" --session <id> --json` (providers `dribbble`,
 `behance`, `notefolio` (Korean queries), `cosmos` (graphics and visuals), `refero` (app screens),
 `componentgallery <name>` (one component across real design systems), `21st` (coded components),
@@ -196,18 +203,11 @@ cards are not links, as on Cosmos, `shot --selector <the item's img>` keeps the 
 `keep --role component-support --reason "..."`. Search wide in this brief's own words, not example terms:
 many queries across galleries, far more candidates than you use, compared side by side with
 `omd ref browse contact-sheet --session <id> --json`; `end` files the keeps in `.omd/refs`.
-Choose against the current direction
-and the existing UI, not by novelty. Take what designers take: padding, spacing rhythm, hierarchy
-(size steps, grouping, what leads) and control anatomy; leave colour, branding and copy behind.
-When two references solve different parts of one component, combine them deliberately and say
-which part came from which. Record each kept component original as a supplemental image whose
-`component` names the element and what was taken.
-If a search lands on a captcha, look at the screenshot rather than the tree: `omd ref browse
-challenge checkbox`, or read the letters, tiles or slider gap from the screenshot and answer with
-`challenge type --text`, `challenge click --x --y [--submit]` or `challenge drag`. Two honest
-submissions, then hand it to the person or switch provider; a gallery search rarely needs Google.
-When you consult external originals, preserve those exact whole PNGs through
-`omd ref context --input <json> --json` before the first-render check:
+Take what designers take: spacing rhythm, hierarchy (size steps, grouping, what leads) and control
+anatomy; leave colour, branding and copy behind, and say which part came from which reference.
+If a search lands on a captcha, switch provider or hand it to the person.
+When you consult external originals for existing work, preserve those exact whole PNGs through
+`omd ref context --input <json> --json` before the first-render check (optional for a new page):
 `{schema:"consulted-references-input-v2",requestSha256:<original route request digest>,
 images:[{path:<whole PNG>,sha256:<exact file digest>,sourceUrl:<actual source URL>,
 role:"primary"|"supplemental",component:<the destination element it was compared for, a short name such as "hero", "install command" or "히어로" — never the reason, which belongs in browse keep>,
@@ -217,7 +217,7 @@ Capture reference interaction states with `omd ref add <url> --as <component> --
 delete, download or navigate away), one whole capture per state. For every primary state,
 author a matching `hover`/`focus`/`press-start` action with `captureState` in the
 trusted lifecycle manifest so the final review compares the same component and state.
-Completion refuses without a request-scoped primary original unless the request links a
+Completion refuses without a request-scoped primary original unless the page is new or the request links a
 Figma target, which is proven by its own frame diffs instead. This lightweight reported comparison context is not
 reference admission, candidate selection or approval; do not create a board merely to use it.
 The harness delivers these exact originals privately to contextual early/fidelity review,
@@ -249,9 +249,8 @@ Inspect inputs as complete systems: borders, inner
 spacing, focus/disabled states, resizing, overflow and adjacent actions. Native resizing
 must be deliberate; an accidental grip is not finished craft. Preserve keyboard access,
 visible focus, content recovery and usable multiline entry when refining controls.
-Present the actual consulted originals and source URLs alongside generated desktop/mobile
-screens. Identify the transferred structure and its limits. If none were inspected, say so;
-do not attach references retrospectively or ship their pixels as product assets.
+Present the consulted originals and source URLs beside the desktop/mobile screens and name what
+transferred; never attach references retrospectively or ship their pixels.
 Preserve exact user rejection and the rejected renders as the next comparison baseline.
 A broad aesthetic rejection calls for reconsidering the integrated direction and craft,
 not merely hiding the one highlighted edge or changing an accent color. Do not invent a

@@ -22,7 +22,20 @@ export type FirstRenderLoopState = Readonly<{
   currentProgress: FirstRenderProgress['verdict'] | null;
   bestRestored: boolean;
   bestRestoreApplied: boolean;
+  /** Past the review ceiling a stall is reported instead of answered with another recomposition. */
+  exhausted: boolean;
 }>;
+
+/** Reviews after which a stalled loop stops and reports; designers' iterations run five to fifteen rounds, not four. */
+export const FIRST_RENDER_REVIEW_CEILING = 12;
+
+export const STALL_PIVOT_MESSAGE = 'First-render repair stopped improving. Restore the best iteration, then recompose instead of patching: '
+  + 'build the strongest concept you did not choose, or change the macro structure the persistent finding points at (section order, '
+  + 'the protagonist\'s scale, what to cut or merge), and check again.';
+export const STALL_REPORT_MESSAGE = `After ${FIRST_RENDER_REVIEW_CEILING} reviews the loop stops: restore the best iteration and report the remaining `
+  + 'findings with both captures to the user instead of continuing.';
+export const stallMessage = (loop: Pick<FirstRenderLoopState, 'exhausted'>): string =>
+  loop.exhausted ? STALL_REPORT_MESSAGE : STALL_PIVOT_MESSAGE;
 
 /** Reviews after which an unresolved finding is reported even while each round still improves. */
 const PERSISTENT_REVIEW_CEILING = 6;
@@ -82,5 +95,6 @@ export function firstRenderLoopState(root: string, route: AdaptiveRouteRecord): 
       : sourceCheckpointMatchesCurrent(root, route,
         readFirstRenderSourceCheckpoint(root, best.checkpointSha256)),
     bestRestoreApplied,
+    exhausted: history.iterations.filter(iteration => iteration.reviewSha256 !== null).length >= FIRST_RENDER_REVIEW_CEILING,
   });
 }

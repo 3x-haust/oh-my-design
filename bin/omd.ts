@@ -33,6 +33,7 @@ async function main(): Promise<never> {
     return (await import('./commands/figma.ts')).runFigma(args);
   }
   if (command === 'taste') return (await import('./commands/taste.ts')).runTaste(args);
+  if (command === 'studio') return (await import('./commands/studio.ts')).runStudio(args);
   if (command === 'scaffold') return (await import('./commands/scaffold.ts')).runScaffold(args);
   if (command === 'brief') return (await import('./commands/scaffold.ts')).runBrief(args);
   if (command === 'imagegen') return (await import('./commands/scaffold.ts')).runImagegen(args);

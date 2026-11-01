@@ -38,6 +38,7 @@ export {
 } from './first-render-iteration-history.ts';
 export {
   firstRenderLoopState,
+  stallMessage,
   type FirstRenderLoopState,
 } from './first-render-loop-state.ts';
 export {

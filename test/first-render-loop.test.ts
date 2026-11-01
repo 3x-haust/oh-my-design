@@ -85,6 +85,9 @@ test('four comparable non-improving reviews stop the loop with a distinct diagno
   assert.ok(latest.loop);
   assert.equal(latest.loop.stalled, true);
   assert.deepEqual(latest.loop.reasons, ['four-non-improving-reviews']);
+  // Below the review ceiling a stall asks for a recomposition from the best iteration, not a report.
+  assert.equal(latest.loop.exhausted, false);
+  assert.match(latest.diagnostic?.message ?? '', /recompose instead of patching/);
   const route = (await import('../core/route/adaptive-route-persistence.ts'))
     .readPersistedRoute(root, invocation);
   const history = readFirstRenderIterationHistory(root, route);
@@ -101,4 +104,11 @@ test('four comparable non-improving reviews stop the loop with a distinct diagno
   assert.notEqual(completion.diagnostic?.code, 'FIRST_RENDER_REGRESSED');
   assert.notEqual(completion.diagnostic?.code, 'FIRST_RENDER_LOOP_STALLED');
   assert.notEqual(completion.diagnostic?.next, 'omd first-render restore --json');
+});
+
+test('past the review ceiling a stall is reported instead of answered with another recomposition', async () => {
+  const { FIRST_RENDER_REVIEW_CEILING, stallMessage } = await import('../core/design/first-render-loop-state.ts');
+  assert.ok(FIRST_RENDER_REVIEW_CEILING > 4);
+  assert.match(stallMessage({ exhausted: false }), /build the strongest concept you did not choose/);
+  assert.match(stallMessage({ exhausted: true }), new RegExp(`After ${FIRST_RENDER_REVIEW_CEILING} reviews the loop stops`));
 });

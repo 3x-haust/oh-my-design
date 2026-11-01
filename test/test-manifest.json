@@ -285,6 +285,7 @@
       "test/source-readability.test.ts",
       "test/source-seal.test.ts",
       "test/stack.test.ts",
+      "test/studio-concepts.test.ts",
       "test/target.test.ts",
       "test/task-evidence.test.ts",
       "test/task-flow-benchmark.test.ts",
