@@ -39,6 +39,7 @@ test('first-render task history preserves every signed task generation', () => {
   assert.match(FIRST_RENDER_REVIEW_TASK, /does not turn a named device into a desktop product/);
   assert.match(FIRST_RENDER_REVIEW_TASK, /Judge the macro composition before the details/);
   assert.match(FIRST_RENDER_REVIEW_TASK, /report at most three, the biggest first/);
+  assert.match(FIRST_RENDER_REVIEW_TASK, /packs its story into the first screen, or hides it in tabs, accordions or carousels/);
   assert.match(FIRST_RENDER_REVIEW_TASK, /It outweighs unchangedSinceRetainedReview/);
   assert.equal(firstRenderReviewTaskForSchema('first-render-review-v2'), null);
 });
