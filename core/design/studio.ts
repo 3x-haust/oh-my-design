@@ -1,11 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { readPersistedRoute } from '../route/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import { newSurface } from './new-surface-advisories.ts';
-
-type Route = ReturnType<typeof readPersistedRoute>;
 
 export const STUDIO_DIR = '.omd/studio';
 export const STUDIO_CONCEPTS_DIR = `${STUDIO_DIR}/concepts`;
@@ -18,7 +14,7 @@ const VIEWPORTS = [{ viewport: 'desktop', width: 1280, height: 900 }, { viewport
 export const STUDIO_CONCEPT_GUIDANCE = 'A new page starts as three concepts, not one draft. Write each as a quick full-page HTML sketch at '
   + `${STUDIO_CONCEPTS_DIR}/<name>/index.html with the real copy: a different navigation noun (what the visitor moves through), a different `
   + 'protagonist object and a different verb, so the section order differs, not the colours. If two sketches survive swapping their sections, they '
-  + 'are one concept. Then run omd studio concepts --json and look at every render before choosing.';
+  + 'are one concept. Then run omd studio concepts --json, look at every render, and run omd studio pick --json.';
 
 export type StudioConcept = Readonly<{ name: string; sourceSha256: string;
   captures: readonly Readonly<{ viewport: 'desktop' | 'mobile'; path: string; sha256: string }>[] }>;
@@ -77,14 +73,4 @@ export function currentStudioConcepts(root: string): readonly StudioConcept[] {
         && concept.captures.every(capture => sha256(readFileSync(join(root, capture.path))) === capture.sha256);
     } catch { return false; }
   });
-}
-
-export const studioConceptsPending = (root: string, route: Route): boolean =>
-  newSurface(route) && currentStudioConcepts(root).length < STUDIO_MIN_CONCEPTS;
-
-/** Refusal boundary at the first render: a new surface is built from a concept chosen among rendered alternatives. */
-export function requireStudioConcepts(root: string, route: Route): void {
-  if (!studioConceptsPending(root, route)) return;
-  throw Object.assign(new Error(`STUDIO_CONCEPTS_MISSING: render three concept sketches before the page. ${STUDIO_CONCEPT_GUIDANCE}`),
-    { code: 'STUDIO_CONCEPTS_MISSING' });
 }

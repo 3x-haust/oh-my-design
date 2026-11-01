@@ -192,7 +192,10 @@ function handback(packet) {
     };
   }
   if (contract.lane === 'tasteComparison') {
-    const human = mode === 'taste-picks-b' ? 'B' : mode === 'taste-malformed-human' ? 'C' : 'A';
+    // A capture listed as human-made is chosen wherever exactly one of the pair is listed; otherwise the mode decides.
+    const humanShas = (process.env.PI_REVIEWER_FIXTURE_HUMAN_SHAS ?? '').split(',').filter(Boolean);
+    const favoured = (packet.evidence.renders ?? []).filter(render => humanShas.includes(render.captureSha256)).map(render => render.label);
+    const human = favoured.length === 1 ? favoured[0] : mode === 'taste-picks-b' ? 'B' : mode === 'taste-malformed-human' ? 'C' : 'A';
     const other = human === 'A' ? 'B' : 'A';
     return {
       schema: contract.schema, fixedBindings: contract.fixedBindings, human,
