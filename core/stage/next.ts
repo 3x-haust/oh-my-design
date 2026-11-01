@@ -6,7 +6,8 @@ import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts
 import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
-import { STUDIO_CONCEPT_GUIDANCE, studioConceptsPending } from '../design/studio.ts';
+import { STUDIO_CONCEPT_GUIDANCE } from '../design/studio.ts';
+import { STUDIO_PICK_GUIDANCE, studioPending } from '../design/studio-pick.ts';
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import {
   firstRenderLoopState,
@@ -70,14 +71,15 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       instruction: 'Repair the current authority, scope, design-language, or unresolved reframe blocker, then rerun the production guard.',
     };
   }
-  // A new product or landing is chosen among three rendered concepts before the page is built.
-  if (studioConceptsPending(root, route)) {
+  // A new product or landing is chosen blind among three rendered concepts before the page is built.
+  const studio = studioPending(root, route);
+  if (studio !== null) {
     return {
       ...base(routeSha256),
       stage: 'concepts',
-      action: 'render-studio-concepts',
-      next: 'omd studio concepts --json',
-      instruction: STUDIO_CONCEPT_GUIDANCE,
+      action: studio === 'concepts' ? 'render-studio-concepts' : 'pick-studio-concept',
+      next: studio === 'concepts' ? 'omd studio concepts --json' : 'omd studio pick --json',
+      instruction: studio === 'concepts' ? STUDIO_CONCEPT_GUIDANCE : STUDIO_PICK_GUIDANCE,
     };
   }
   // Until the first render exists, the work is composing the page; name the knowledge for that.

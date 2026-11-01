@@ -29,7 +29,7 @@ import {
 } from '../core/design/first-render-checkpoint.ts';
 import { requireConsultedPrimaryOriginal } from '../core/design/consulted-references.ts';
 import { newSurface, requireNoticeableMotion } from '../core/design/new-surface-advisories.ts';
-import { requireStudioConcepts } from '../core/design/studio.ts';
+import { requireStudioPick } from '../core/design/studio-pick.ts';
 import { REPAIR_KNOWLEDGE } from '../core/design/compose-guidance.ts';
 import { capturePageBasics } from '../core/design/page-basics.ts';
 import { requireReviewableSource } from '../core/design/source-readability.ts';
@@ -127,7 +127,7 @@ export async function runModelLedCompletion(input: Readonly<{
     cancelled();
     requireReviewableSource(input.root, route);
     // The same entry condition as omd first-render check: finish captures a first render too.
-    requireStudioConcepts(input.root, route);
+    requireStudioPick(input.root, route);
     inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
     phase = 'review';
     const existingFirstRender = readFirstRenderReview(input.root);

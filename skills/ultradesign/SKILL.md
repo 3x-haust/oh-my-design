@@ -53,8 +53,8 @@ not filled into a template; most of the effort goes to rendering, looking and re
    evidence that proves it, plus a cut list. Never add a section because landings usually have one.
 4. Concepts: three quick full-page HTML sketches at `.omd/studio/concepts/<name>/index.html` with the real
    copy, each with its own navigation noun (what the visitor moves through), protagonist object and verb.
-   Run `omd studio concepts --json`, look at every render, choose the one that best carries the message
-   and say why the others lost.
+   Run `omd studio concepts --json`, look at every render, then `omd studio pick --json`: reviewers judge
+   each blind beside human-made pages. Build the pick.
 5. Build the chosen concept in the project. For 3D, first write its scene contract (the object, what it
    proves, how the visitor reveals it, the fallback), then build it in three.js with real materials,
    environment light and colour management, never a screenshot on a tilted plane.
