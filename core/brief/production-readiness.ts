@@ -5,6 +5,7 @@ import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { projection, requireCopyToneReview } from '../design-language/index.ts';
 import { nativeReframeWork } from '../runtime/native-reframe.ts';
 import { isModelLedProcess } from '../route/process-policy.ts';
+import { requireStudioPick, studioPageSource } from '../design/studio-pick.ts';
 import type { ConfidenceDebt } from './confidence-debt.ts';
 
 export type ProductionReadiness = Readonly<{
@@ -52,6 +53,10 @@ export function checkProductionReadiness(
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         }
       }
+    }
+    // A new page is built from the concept picked among three; writing its source first turns the concepts into copies of it.
+    if (targets.some(studioPageSource)) {
+      try { requireStudioPick(root, route); } catch (error) { blockers.push(`studio: ${error instanceof Error ? error.message : String(error)}`); }
     }
     const reframe = nativeReframeWork(root, invocation);
     if (reframe !== null) warnings.push(`${reframe.problems.join('; ')}; ${reframe.next}`);

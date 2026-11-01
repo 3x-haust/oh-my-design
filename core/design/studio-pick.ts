@@ -156,7 +156,13 @@ export function studioPending(root: string, route: Route): 'concepts' | 'pick' |
   return currentStudioPick(root) === null ? 'pick' : null;
 }
 
-/** Refusal boundary at the first render and at finish: a new surface is built from a concept picked blind among rendered alternatives. */
+/** The page's own source; a package manifest, config or font may be scaffolded before the pick. */
+export function studioPageSource(path: string): boolean {
+  const normalized = path.replace(/^\.\//, '').replace(/\\/g, '/');
+  return normalized === 'index.html' || (normalized.startsWith('src/') && /\.(?:tsx?|jsx?|css|html)$/.test(normalized));
+}
+
+/** Refusal boundary at page-source writes, the first render and finish: a new surface is built from a concept picked blind among rendered alternatives. */
 export function requireStudioPick(root: string, route: Route): void {
   const pending = studioPending(root, route);
   if (pending === 'concepts') {
