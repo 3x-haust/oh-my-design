@@ -25,7 +25,6 @@ const sketch = (root: string, name: string, body: string) => {
 };
 // Stands in for the browser: the capture's bytes follow the sketch, so an edited sketch is a different render.
 const fakeRender = (root: string) => async (page: string, viewport: { width: number }, out: string) => {
-  mkdirSync(join(root, '.omd/studio/renders'), { recursive: true });
   writeFileSync(join(root, out), `${viewport.width}:${readFileSync(page, 'utf8')}`);
 };
 

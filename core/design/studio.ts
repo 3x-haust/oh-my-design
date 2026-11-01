@@ -44,6 +44,7 @@ export async function renderStudioConcepts(root: string, writer: ProjectWriteAda
     throw Object.assign(new Error(`STUDIO_CONCEPTS_MISSING: found ${pages.length} concept sketch${pages.length === 1 ? '' : 'es'}. ${STUDIO_CONCEPT_GUIDANCE}`),
       { code: 'STUDIO_CONCEPTS_MISSING' });
   }
+  writer.mkdir(`${STUDIO_DIR}/renders`);
   const concepts: StudioConcept[] = [];
   for (const { name, page } of pages) {
     const captures = [];
