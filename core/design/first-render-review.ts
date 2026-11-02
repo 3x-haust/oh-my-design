@@ -15,6 +15,7 @@ import { latestBlindComparison } from './taste-comparison-record.ts';
 import { ideaImages, pageIdeaPreview } from './idea-image.ts';
 import { currentStudioPick } from './studio-pick.ts';
 import { currentStudioConcepts } from './studio.ts';
+import { STUDIO_COMP_REVIEW_WIDTH } from './studio-comps.ts';
 import { MAX_BROKERED_EVIDENCE_BYTES } from '../runtime/evidence-proxy.ts';
 import { pageBasicsTells, proofShowsOutput, readPageBasics } from './page-basics.ts';
 import { parseReferenceCaptures, referenceComparisonBindings } from './first-render-reference-comparison.ts';
@@ -230,7 +231,8 @@ function preparePacket(
     ...(brief === null ? {} : { designBrief: brief }),
     ...(motion === null ? {} : { motion: motion.context, motionRenders: motion.renders }),
     ...(ideas.length ? { pageIdeas: ideas } : {}),
-    ...(comp === null ? {} : { studioComp: comp }),
+    // A one-row image field, so the transport delivers it as an image like every other render.
+    ...(comp === null ? {} : { studioComp: [comp] }),
     ...(feedback === null ? {} : { reportedFeedback: feedback.context, feedbackRenders: feedback.renders }),
     ...(consulted === null ? {} : {
       consultedReferences: consulted.context,
@@ -336,7 +338,6 @@ function preparePacket(
 
 /** The latest page idea of each section (up to four), with its prompt: the maker's drafts made before building. */
 /** The comp the new page was picked from and is built to, narrowed for review; null for a sketched or unpicked concept. */
-const STUDIO_COMP_REVIEW_WIDTH = 800;
 function pickedStudioComp(root: string) {
   const pick = currentStudioPick(root);
   const concept = pick === null ? undefined : currentStudioConcepts(root).find(item => item.name === pick.picked);

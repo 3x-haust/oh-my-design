@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { PNG } from 'pngjs';
-import { captureStudioReferences, compFirstScreen, compInstruction, generateStudioComps, studioReferenceImages } from '../core/design/studio-comps.ts';
+import { captureStudioReferences, codexSessionId, compFirstScreen, compInstruction, generateStudioComps, sessionImage, studioReferenceImages } from '../core/design/studio-comps.ts';
 import { currentStudioConcepts, renderStudioConcepts, studioConceptPages } from '../core/design/studio.ts';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
@@ -46,6 +46,20 @@ test('the comp instruction carries the brief, copy, logo and reference craft, an
   assert.ok(text.includes('A design harness for coding agents.') && text.includes('사람처럼 디자인합니다.') && text.includes('Editorial, one object.'));
   const bare = compInstruction({ brief: 'b', copy: '', concept: 'c', logo: false, references: 0 });
   assert.ok(!/project's logo|finished sites|Copy:/.test(bare));
+});
+
+test('a comp is read from its own Codex session, never the newest image of a comp running beside it', t => {
+  const home = project(t);
+  const header = 'OpenAI Codex v0.166.0\n--------\nworkdir: /tmp/x\nsession id: 01a19aaa-a72b-7a93-b95b-c0e92017c447\n--------\nuser\n';
+  assert.equal(codexSessionId(header), '01a19aaa-a72b-7a93-b95b-c0e92017c447');
+  assert.equal(codexSessionId('no header here'), undefined);
+  mkdirSync(join(home, 'generated_images/01a19aaa-a72b-7a93-b95b-c0e92017c447'), { recursive: true });
+  mkdirSync(join(home, 'generated_images/01a19aab-0000-7000-8000-000000000000'), { recursive: true });
+  writeFileSync(join(home, 'generated_images/01a19aaa-a72b-7a93-b95b-c0e92017c447/exec-own.png'), solid(4, 4, 1));
+  // A neighbour finishing later writes a newer image into its own session.
+  writeFileSync(join(home, 'generated_images/01a19aab-0000-7000-8000-000000000000/exec-other.png'), solid(4, 4, 2));
+  assert.match(sessionImage('01a19aaa-a72b-7a93-b95b-c0e92017c447', home) ?? '', /exec-own\.png$/);
+  assert.equal(sessionImage('01a19aac-0000-7000-8000-000000000000', home), undefined);
 });
 
 test('a comp\'s first screen is cut at the 1440×1013 desktop ratio and narrowed to 1280×900', () => {

@@ -22,8 +22,14 @@ export function modelLedCompletionFingerprint(root: string, manifest?: unknown):
     .map(path => [path, sha(read(path))]);
   // A new page has no browser plan; its fingerprint is the source alone.
   const planPath = '.omd/.cache/trusted-lifecycle-manifest.json';
-  const plan = manifest ?? (existsSync(resolve(root, planPath)) ? JSON.parse(read(planPath).toString('utf8')) : null);
-  return sha(Buffer.from(canonicalJson({ files, manifest: plan === null ? null : sha(trustedEvaluationPlanBytes(parseTrustedLifecycleManifest(plan))),
+  const planBytes = manifest === undefined && existsSync(resolve(root, planPath)) ? read(planPath) : null;
+  // A plan that does not parse still fingerprints by its bytes: finish names the malformed plan, the fingerprint never throws on it.
+  const planSha = (() => {
+    if (manifest === undefined && planBytes === null) return null;
+    try { return sha(trustedEvaluationPlanBytes(parseTrustedLifecycleManifest(manifest ?? JSON.parse(planBytes!.toString('utf8'))))); }
+    catch (error) { if (planBytes !== null) return sha(planBytes); throw error; }
+  })();
+  return sha(Buffer.from(canonicalJson({ files, manifest: planSha,
     consultedReferencesSha256: consultedReferenceProjection(root)?.context.sha256 ?? null })));
 }
 
