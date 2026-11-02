@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -342,6 +342,24 @@ test('non-git scope evidence fails closed on symlinks even inside an allowed pat
     () => changedPathsForAdaptiveRoute(root, record, adaptiveRouteRecordSha256(record), invocation),
     /cannot verify symlink path/,
   );
+});
+
+test('non-git scope records a link that was already in the project by its target, without following it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-route-material-link-'));
+  // A repository read as material keeps its own links, such as a test fixture pointing at a sibling file.
+  mkdirSync(join(root, 'material', 'test'), { recursive: true });
+  writeFileSync(join(root, 'material', 'test', 'global_git_config'), '[user]\n');
+  symlinkSync('global_git_config', join(root, 'material', 'test', '.gitconfig'));
+  const invocation = publishAuthorized(root, 'copy-only', 'scope-material-link');
+  mkdirSync(join(root, 'src', 'copy'), { recursive: true });
+  writeFileSync(join(root, 'src', 'copy', 'index.ts'), 'export const ready = true;\n');
+  const record = readPersistedRoute(root, invocation);
+  const changed = () => changedPathsForAdaptiveRoute(root, record, adaptiveRouteRecordSha256(record), invocation);
+  assert.deepEqual(changed(), ['src/copy/index.ts']);
+  // Retargeting the link during the run is a change the scan cannot verify.
+  rmSync(join(root, 'material', 'test', '.gitconfig'));
+  symlinkSync('../../src/copy/index.ts', join(root, 'material', 'test', '.gitconfig'));
+  assert.throws(changed, /cannot verify symlink path: material\/test\/\.gitconfig/);
 });
 
 test('non-git scope ignores only validated npm dependencies and Vite output', () => {
