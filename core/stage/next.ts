@@ -7,7 +7,13 @@ import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
 import { STUDIO_CONCEPT_GUIDANCE } from '../design/studio.ts';
-import { STUDIO_PICK_GUIDANCE, studioPending } from '../design/studio-pick.ts';
+import { currentStudioPick, STUDIO_PICK_GUIDANCE, studioPending } from '../design/studio-pick.ts';
+import { currentStudioConcepts } from '../design/studio.ts';
+
+const pickedCompPath = (root: string): string | undefined => {
+  const pick = currentStudioPick(root);
+  return pick === null ? undefined : currentStudioConcepts(root).find(concept => concept.name === pick.picked)?.comp?.path;
+};
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import { newSurface } from '../design/new-surface-advisories.ts';
 import { currentStudioDelivery, STUDIO_DELIVER_MESSAGE, STUDIO_REVIEW_ROUNDS, studioReviewRounds } from '../design/studio-delivery.ts';
@@ -91,7 +97,7 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       stage: 'production',
       action: 'compose-first-render',
       next: 'omd guard production --json',
-      instruction: composeGuidance(route),
+      instruction: composeGuidance(route, pickedCompPath(root)),
     };
   }
   // A new page is delivered from its build and a few review rounds: no browser plan, no final evidence chain.

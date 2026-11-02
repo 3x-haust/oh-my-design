@@ -8,12 +8,16 @@ type Route = ReturnType<typeof readPersistedRoute>;
  * the agent opens only what the skill names unconditionally, and the copy, layout, colour, composition and motion
  * packs stay unread while the page fills with explanations.
  */
-export function composeGuidance(route: Route): string {
+export function composeGuidance(route: Route, comp?: string): string {
   const korean = /[ㄱ-ㆎ가-힣]/.test(route.request);
   // A new page already has its structure in the picked concept; building it is the work, not more reading.
   if (newSurface(route)) {
-    return `${route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : ''}Build the picked concept in the project as `
-      + 'components: keep its structure, carry the strengths the pick named and drop the tells it named. omd pack guides/landing-basics.md '
+    const target = comp === undefined
+      ? 'Build the picked concept in the project as components: keep its structure, carry the strengths the pick named and drop the tells it named. '
+      : `Build the picked comp (${comp}) in the project as components: it is the target. Open it and match its section order, composition, `
+        + 'type scale, spacing, palette and its small exact details; build its 3D object as a lit three.js scene with real materials, and use the '
+        + 'real copy and the real logo file where the comp shows them. ';
+    return `${route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : ''}${target}omd pack guides/landing-basics.md `
       + 'once for the basics a designer keeps (a header in reach, plain-word navigation, one primary action, real head metadata, no dead '
       + `links or invented proof). ${korean ? 'Korean text: omd pack theory/typography-korean.md. ' : ''}Then build and run omd lifecycle finish --json.`;
   }

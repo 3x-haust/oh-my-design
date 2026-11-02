@@ -5,6 +5,7 @@ const REVIEWED = new Set(['first-render check', 'first-render review', 'taste gr
 export const omdCliBudgetMs = (args: readonly string[]): number =>
   args[0] === 'browser' && ['setup', 'login'].includes(args[1] ?? '') ? 660_000
     : args[0] === 'lifecycle' && args[1] === 'finish' ? 2_700_000
-    : REVIEWED.has(`${args[0] ?? ''} ${args[1] ?? ''}`) ? 1_200_000
+    // Drawing three comps waits on image generation, up to fifteen minutes each and run side by side.
+    : REVIEWED.has(`${args[0] ?? ''} ${args[1] ?? ''}`) || (args[0] === 'studio' && args[1] === 'concepts') ? 1_200_000
     : args[0] === 'ref' && ['advance', 'navigate', 'add', 'add-batch', 'discover-batch', 'search', 'leads'].includes(args[1] ?? '')
     ? 300_000 : 600_000;
