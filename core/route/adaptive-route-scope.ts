@@ -71,7 +71,11 @@ function projectPath(root: string, path: string): string {
   return absolute;
 }
 
-/** Captures regular project files without following links; OMD's own audit tree is scope-exempt. */
+/**
+ * Captures regular project files without following links; OMD's own audit tree is scope-exempt. A link is recorded by
+ * its target, never followed: real repositories carry links among the material a page is made from, and an unchanged
+ * link is no change. A link that appears or changes during the run fails the scope check instead.
+ */
 function filesystemSnapshot(rootInput: string): readonly ScopeEntry[] {
   const root = canonicalRoot(rootInput);
   try { validateFixedDerivedProjectRoots(root); }
@@ -88,7 +92,10 @@ function filesystemSnapshot(rootInput: string): readonly ScopeEntry[] {
       const path = relativeDirectory === '' ? name : `${relativeDirectory}/${name}`;
       const absolute = projectPath(root, path);
       const stat = lstatSync(absolute);
-      if (stat.isSymbolicLink()) return fail(`scope scan cannot verify symlink path: ${path}`);
+      if (stat.isSymbolicLink()) {
+        entries.push(Object.freeze({ path, sha256: hash(Buffer.from(`symlink\0${readlinkSync(absolute)}`)), mode: stat.mode & 0o7777 }));
+        continue;
+      }
       const derivedRoot = relativeDirectory === '' ? fixedDerivedProjectRoot(path) : undefined;
       if (stat.isDirectory() && derivedRoot !== undefined) {
         continue;
@@ -285,5 +292,8 @@ export function changedPathsForAdaptiveRoute(
     if (previous === undefined || previous.sha256 !== entry.sha256 || previous.mode !== entry.mode) changed.add(path);
   }
   for (const path of baseline.keys()) if (!current.has(path)) changed.add(path);
+  for (const path of changed) {
+    if (current.has(path) && lstatSync(projectPath(root, path)).isSymbolicLink()) return fail(`scope scan cannot verify symlink path: ${path}`);
+  }
   return Object.freeze([...changed].sort((left, right) => left.localeCompare(right, 'en')));
 }
