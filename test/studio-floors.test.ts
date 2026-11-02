@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { observeStudioFloors, projectBrandMarks, requestsThreeD, studioFloorFailures } from '../core/design/studio-floors.ts';
+import { observeStudioFloors, projectBrandMarks, readmeLogos, requestsThreeD, studioFloorFailures } from '../core/design/studio-floors.ts';
 
 const MARK_PATH = 'M10 10h108v108H10z M32 32h64v64H32z M44 44h40v40H44z';
 const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><path fill="#ff5a1f" d="${MARK_PATH}"/></svg>`;
@@ -29,6 +29,36 @@ test('the project ships its marks in a brand folder or as logo files; icons and 
   const marks = projectBrandMarks(root);
   assert.deepEqual(marks.map(mark => mark.path).sort(), ['company-logo.png', join('source', 'brand', 'mark.svg')]);
   assert.deepEqual(marks.find(mark => mark.path.endsWith('mark.svg'))?.pathData, [MARK_PATH]);
+});
+
+test('the README names the logo: its header picture counts, a single-colour fallback or a README screenshot does not', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-floor-readme-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, 'acme/brand/readme'), { recursive: true });
+  const header = markSvg.replace('#ff5a1f', 'url(#g)');
+  writeFileSync(join(root, 'acme/package.json'), JSON.stringify({ name: '@team/acme-kit' }));
+  writeFileSync(join(root, 'acme/brand/readme/header-light.svg'), header);
+  writeFileSync(join(root, 'acme/brand/readme/header-light.png'), 'png of the header');
+  writeFileSync(join(root, 'acme/brand/readme/header-dark.svg'), header.replace('viewBox', 'class="dark" viewBox'));
+  writeFileSync(join(root, 'acme/brand/readme/result.png'), 'a screenshot of a result');
+  writeFileSync(join(root, 'acme/brand/mark-black.svg'), markSvg.replace('#ff5a1f', '#000'));
+  writeFileSync(join(root, 'acme/README.md'), `<p align="center"><picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/readme/header-dark.svg">
+  <img alt="Acme Kit" src="brand/readme/header-light.svg" width="560"></picture></p>
+
+# Acme Kit
+<p align="center"><img src="brand/readme/result.png" alt="A page made with the kit"></p>
+![badge](https://img.shields.io/badge/x-y)`);
+  const logos = readmeLogos(root);
+  assert.deepEqual(logos.map(logo => logo.path), ['header-dark.svg', 'header-light.png', 'header-light.svg'].map(file => join('acme', 'brand', 'readme', file)));
+  const observed = (sources: string[], inlinePathData: string[] = []) =>
+    ({ sources, inlinePathData, sceneShare: 0, firstScreenSceneShare: 0, servedFrom: 'http://127.0.0.1:1/' });
+  const dataUri = (svg: string) => `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  const target = join(root, 'index.html');
+  assert.deepEqual(studioFloorFailures(logos, false, target, observed([dataUri(markSvg.replace('#ff5a1f', '#000'))]), true).map(failure => failure.code), ['BRAND_MARK_NOT_SHOWN']);
+  assert.match(studioFloorFailures(logos, false, target, observed([]), true)[0]?.message ?? '', /README shows its logo .*single-colour/);
+  assert.deepEqual(studioFloorFailures(logos, false, target, observed([dataUri(header)]), true), []);
+  assert.deepEqual(studioFloorFailures(logos, false, target, observed([], [MARK_PATH]), true), []);
 });
 
 test('a redrawn logo and a picture of a scene are refused; the shipped mark and a live scene pass', { timeout: 120_000 }, async t => {

@@ -138,6 +138,18 @@ async function cmdGuard(mode: string | undefined, opts: Opts): Promise<never> {
     else console.log(result.ok ? 'ok — selected pre-production inputs are current; this is not completion' : result.blockers.join('\n'));
     process.exit(result.ok ? 0 : 1);
   }
+  // A new page's terminal evidence is its studio delivery, not the final evidence chain of existing work.
+  const { readPersistedRoute } = await import('../../core/route/index.ts');
+  const { newSurface } = await import('../../core/design/new-surface-advisories.ts');
+  const route = existsSync(join(process.cwd(), '.omd', 'route.json')) ? readPersistedRoute(process.cwd(), invocation) : null;
+  if (route !== null && newSurface(route)) {
+    const { requireStudioDelivery } = await import('../../core/design/studio-delivery.ts');
+    const delivery = requireStudioDelivery(process.cwd(), route);
+    const limitations = delivery.review.openFindings.map(id => ({ stage: 'first-render', reason: `open after ${delivery.review.rounds} review rounds: ${id}` }));
+    if (opts.json) process.stdout.write(JSON.stringify({ ok: true, delivery: '.omd/studio/delivery.json', limitations }));
+    else console.log(`ok — the page is delivered\n${limitations.map(item => `limitation (${item.stage}): ${item.reason}`).join('\n')}`);
+    process.exit(0);
+  }
   // Process reviews are advisory; terminal evidence and independent outcome review remain authoritative.
   return cmdCompletion('preflight', opts);
 }

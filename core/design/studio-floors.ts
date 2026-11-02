@@ -55,6 +55,58 @@ export function projectBrandMarks(root: string): readonly BrandMark[] {
   return marks;
 }
 
+const imageAttribute = (tag: string, name: string): string | undefined =>
+  new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag)?.[1];
+const nameKey = (value: string): string => value.toLowerCase().replace(/^@[^/]+\//, '').replace(/[^a-z0-9]/g, '');
+
+/**
+ * The logo a project's README shows as its identity: a local image whose alt text is the project's name or whose file
+ * is named as a logo, with the light/dark sources of the same picture and the same image in other formats. When a
+ * README shows one, that is the mark the page owes; a single-colour fallback or a retyped wordmark is not it.
+ */
+export function readmeLogos(root: string): readonly BrandMark[] {
+  const readmes: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    if (depth > 2) return;
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      if (SKIPPED.has(entry.name)) continue;
+      if (entry.isDirectory()) walk(join(dir, entry.name), depth + 1);
+      else if (entry.isFile() && /^readme(?:\.[a-z-]+)?\.md$/i.test(entry.name)) readmes.push(join(dir, entry.name));
+    }
+  };
+  walk(root, 0);
+  const files = new Set<string>();
+  for (const readme of readmes) {
+    const text = readFileSync(readme, 'utf8');
+    const dir = dirname(readme);
+    let packageName = '';
+    try { packageName = String(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).name ?? ''); } catch { /* no package */ }
+    const names = new Set([packageName, /^#\s+(.+)$/m.exec(text)?.[1] ?? '', dir.split(/[\\/]/).pop() ?? ''].map(nameKey).filter(Boolean));
+    const isLogo = (src: string, alt: string) => !/^[a-z]+:/i.test(src) && /\.(?:svg|png)$/i.test(src)
+      && (names.has(nameKey(alt)) || /(?:logo|lockup|wordmark|brandmark|emblem)/i.test(src.split('/').pop() ?? ''));
+    const pictures = [...text.matchAll(/<picture[\s\S]*?<\/picture>/gi)].map(match => match[0]);
+    const groups = [
+      ...pictures.map(picture => ({ tags: [...picture.matchAll(/<(?:img|source)\b[^>]*>/gi)].map(match => match[0]) })),
+      ...[...text.replace(/<picture[\s\S]*?<\/picture>/gi, '').matchAll(/<img\b[^>]*>/gi)].map(match => ({ tags: [match[0]] })),
+    ];
+    for (const { tags } of groups) {
+      const image = tags.find(tag => /^<img/i.test(tag));
+      const srcs = tags.flatMap(tag => (imageAttribute(tag, 'src') ?? imageAttribute(tag, 'srcset') ?? '').split(',').map(part => part.trim().split(/\s+/)[0] ?? ''));
+      if (image && isLogo(imageAttribute(image, 'src') ?? '', imageAttribute(image, 'alt') ?? '')) for (const src of srcs) if (src) files.add(resolve(dir, src));
+    }
+    for (const match of text.matchAll(/!\[([^\]]*)\]\(([^)\s]+)/g)) if (isLogo(match[2] ?? '', match[1] ?? '')) files.add(resolve(dir, match[2] ?? ''));
+  }
+  // The same image in its other format (header-light.svg beside header-light.png) is the same logo.
+  for (const file of [...files]) for (const ext of ['.svg', '.png']) files.add(file.replace(/\.(?:svg|png)$/i, ext));
+  return [...files].filter(file => existsSync(file) && statSync(file).isFile() && statSync(file).size <= 2_000_000).sort().map(file => {
+    const bytes = readFileSync(file);
+    const pathData = /\.svg$/i.test(file) ? [...bytes.toString('utf8').matchAll(/\sd="([^"]{40,})"/g)].map(match => normalizedPathData(match[1] ?? '')) : [];
+    return { path: relative(root, file), sha256: sha256(bytes), pathData };
+  });
+}
+
 export type StudioFloorObservation = Readonly<{
   /** Image, background and embedded sources the page shows, and the vector paths drawn inline. */
   sources: readonly string[];
@@ -137,8 +189,9 @@ function sourceBytes(target: string, servedFrom: string, src: string): Buffer | 
 
 export type StudioFloorFailure = Readonly<{ code: 'BRAND_MARK_NOT_SHOWN' | 'THREE_D_NOT_LIVE'; message: string }>;
 
+/** `marks` from the README's logo when it shows one (`readme`), otherwise every mark the project ships. */
 export function studioFloorFailures(marks: readonly BrandMark[], wantsThreeD: boolean, target: string,
-  observed: StudioFloorObservation & Readonly<{ servedFrom: string }>): readonly StudioFloorFailure[] {
+  observed: StudioFloorObservation & Readonly<{ servedFrom: string }>, readme = false): readonly StudioFloorFailure[] {
   const failures: StudioFloorFailure[] = [];
   if (marks.length > 0) {
     const shas = new Set(marks.map(mark => mark.sha256));
@@ -147,9 +200,13 @@ export function studioFloorFailures(marks: readonly BrandMark[], wantsThreeD: bo
       || observed.inlinePathData.some(d => vectors.has(normalizedPathData(d)));
     if (!shown) {
       const named = marks.slice(0, 4).map(mark => mark.path).join(', ');
-      failures.push({ code: 'BRAND_MARK_NOT_SHOWN', message: `BRAND_MARK_NOT_SHOWN: the project ships its mark (${named}${marks.length > 4 ? ', …' : ''}) `
-        + 'but the page shows none of those files. Use the file itself wherever the brand appears (copy it into public/ or import it, '
-        + 'or inline its exact SVG); never redraw it in CSS or retype it as text.' });
+      failures.push({ code: 'BRAND_MARK_NOT_SHOWN', message: readme
+        ? `BRAND_MARK_NOT_SHOWN: the project's README shows its logo as ${named} but the page does not show that file. Use it as the `
+          + 'README does wherever the brand appears (copy it into public/ or import it, or inline its exact SVG); a single-colour '
+          + 'fallback, another mark from the kit, a redrawn shape or the name retyped in a page font is not the logo.'
+        : `BRAND_MARK_NOT_SHOWN: the project ships its mark (${named}${marks.length > 4 ? ', …' : ''}) `
+          + 'but the page shows none of those files. Use the file itself wherever the brand appears (copy it into public/ or import it, '
+          + 'or inline its exact SVG); never redraw it in CSS or retype it as text.' });
     }
   }
   if (wantsThreeD && observed.sceneShare < LIVE_SCENE_SHARE) {
@@ -160,12 +217,13 @@ export function studioFloorFailures(marks: readonly BrandMark[], wantsThreeD: bo
   return failures;
 }
 
-/** Refusal boundary at the first render of a new page: its mark is the shipped file and asked-for 3D is live. */
+/** Refusal boundary at the first render of a new page: its mark is the README's logo file (or a shipped mark) and asked-for 3D is live. */
 export async function requireStudioFloors(root: string, route: Route, target: string): Promise<void> {
   if (!newSurface(route)) return;
-  const marks = projectBrandMarks(root);
+  const logos = readmeLogos(root);
+  const marks = logos.length > 0 ? logos : projectBrandMarks(root);
   const wantsThreeD = requestsThreeD(route.request);
   if (marks.length === 0 && !wantsThreeD) return;
-  const failures = studioFloorFailures(marks, wantsThreeD, target, await observeStudioFloors(target));
+  const failures = studioFloorFailures(marks, wantsThreeD, target, await observeStudioFloors(target), logos.length > 0);
   if (failures.length > 0) throw Object.assign(new Error(failures.map(failure => failure.message).join('\n')), { code: failures[0]!.code });
 }

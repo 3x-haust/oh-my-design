@@ -9,6 +9,8 @@ import { readFirstRenderReview } from '../design/first-render-review.ts';
 import { STUDIO_CONCEPT_GUIDANCE } from '../design/studio.ts';
 import { STUDIO_PICK_GUIDANCE, studioPending } from '../design/studio-pick.ts';
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
+import { newSurface } from '../design/new-surface-advisories.ts';
+import { currentStudioDelivery, STUDIO_DELIVER_MESSAGE, STUDIO_REVIEW_ROUNDS, studioReviewRounds } from '../design/studio-delivery.ts';
 import {
   firstRenderLoopState,
   stallMessage,
@@ -90,6 +92,28 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       action: 'compose-first-render',
       next: 'omd guard production --json',
       instruction: composeGuidance(route),
+    };
+  }
+  // A new page is delivered from its build and a few review rounds: no browser plan, no final evidence chain.
+  if (newSurface(route)) {
+    if (currentStudioDelivery(root, route) !== null) {
+      return {
+        ...base(routeSha256),
+        stage: null,
+        action: 'report-completion',
+        next: 'omd guard completion --json',
+        instruction: 'The page is delivered. Run the completion guard, then report it with its open findings and both captures.',
+      };
+    }
+    const rounds = studioReviewRounds(root, route);
+    return {
+      ...base(routeSha256),
+      stage: 'independent-review',
+      action: 'finish-model-led',
+      next: 'omd lifecycle finish --json',
+      instruction: rounds >= STUDIO_REVIEW_ROUNDS ? STUDIO_DELIVER_MESSAGE
+        : `Review round ${rounds + 1} of ${STUDIO_REVIEW_ROUNDS}: omd lifecycle finish builds the page, checks its floors and reviews the `
+          + `render; recompose for what the review names (structure before polish), rebuild and finish again. ${REPAIR_KNOWLEDGE}`,
     };
   }
   if (!existsSync(resolve(root, '.omd/.cache/trusted-lifecycle-manifest.json'))) {

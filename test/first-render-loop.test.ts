@@ -58,6 +58,8 @@ test('four comparable non-improving reviews stop the loop with a distinct diagno
     },
   });
   const input = modelLedInput(request);
+  // Existing work keeps the long repair loop; a new page's few studio rounds are tested in studio-delivery.
+  (input.referenceDiscovery as Record<string, unknown>).taskNeed = 'existing-product-change';
   input.allowedPaths = ['index.html'];
   publishAdaptiveRoute(root, input, writer, invocation);
   const html = (round: number) => `<!doctype html><html><style>

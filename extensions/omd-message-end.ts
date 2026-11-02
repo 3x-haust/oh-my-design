@@ -240,7 +240,12 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
             const diagnostic = Reflect.get(result, 'diagnostic');
             const category = typeof diagnostic === 'object' && diagnostic !== null ? Reflect.get(diagnostic, 'category') : null;
             const canRepair = !complete && category !== 'authority' && category !== 'cancelled';
-            visible = koreanMessage(message, task.responseLocale)
+            const delivery = Reflect.get(result, 'studioDeliveryPath');
+            visible = typeof delivery === 'string' && complete
+              ? koreanMessage(message, task.responseLocale)
+                ? `페이지를 빌드하고 로고·3D 확인과 독립 모델 검토를 거쳐 전달했습니다. 사람의 미적 평가를 받은 것은 아닙니다.\n기록: ${delivery}`
+                : `The page is built, its floors checked and its render reviewed by an isolated model, and delivered. This is not human aesthetic approval.\nRecord: ${delivery}`
+              : koreanMessage(message, task.responseLocale)
               ? complete
                 ? `구현과 실제 브라우저 동작, 독립 모델 검토가 완료됐습니다. 사람의 미적 평가를 받은 것은 아닙니다.\n결과: ${String(Reflect.get(result, 'finalEvidencePath'))}`
                 : `자동 검증의 ${String(Reflect.get(result, 'phase'))} 단계에서 문제가 확인됐습니다. ${canRepair ? '실제 결과와 검증 내용을 비교해 수정을 이어갑니다.' : '권한 또는 중단 상태를 해결하기 전에는 완료를 주장하지 않습니다.'}`

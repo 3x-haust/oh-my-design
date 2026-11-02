@@ -1,4 +1,5 @@
 import type { readPersistedRoute } from '../route/index.ts';
+import { newSurface } from './new-surface-advisories.ts';
 
 type Route = ReturnType<typeof readPersistedRoute>;
 
@@ -8,8 +9,15 @@ type Route = ReturnType<typeof readPersistedRoute>;
  * packs stay unread while the page fills with explanations.
  */
 export function composeGuidance(route: Route): string {
-  const marketing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const korean = /[ㄱ-ㆎ가-힣]/.test(route.request);
+  // A new page already has its structure in the picked concept; building it is the work, not more reading.
+  if (newSurface(route)) {
+    return `${route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : ''}Build the picked concept in the project as `
+      + 'components: keep its structure, carry the strengths the pick named and drop the tells it named. omd pack guides/landing-basics.md '
+      + 'once for the basics a designer keeps (a header in reach, plain-word navigation, one primary action, real head metadata, no dead '
+      + `links or invented proof). ${korean ? 'Korean text: omd pack theory/typography-korean.md. ' : ''}Then build and run omd lifecycle finish --json.`;
+  }
+  const marketing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const start = route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : '';
   const words = marketing
     ? 'Write the words before the layout, from the brief: omd pack theory/web-copy.md (lead with the reader\'s decision) and '

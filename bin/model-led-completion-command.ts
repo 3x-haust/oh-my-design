@@ -4,6 +4,7 @@ import { checkProductionReadiness } from '../core/brief/production-readiness.ts'
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
 import { readContainedRegularFile } from '../core/ref/reference-selection.ts';
 import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { adaptiveRouteRecordSha256 } from '../core/route/index.ts';
 import { isModelLedProcess } from '../core/route/process-policy.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { checkNativeBrowserEvidence } from '../core/stage/native-completion.ts';
@@ -29,7 +30,10 @@ import {
 } from '../core/design/first-render-checkpoint.ts';
 import { requireConsultedPrimaryOriginal } from '../core/design/consulted-references.ts';
 import { newSurface, requireNoticeableMotion } from '../core/design/new-surface-advisories.ts';
-import { requireStudioPick } from '../core/design/studio-pick.ts';
+import { currentStudioPick, requireStudioPick } from '../core/design/studio-pick.ts';
+import { requireStudioFloors } from '../core/design/studio-floors.ts';
+import { readFirstRenderIterationHistory } from '../core/design/first-render-iteration-history.ts';
+import { STUDIO_DELIVERY_RECORD, STUDIO_REVIEW_ROUNDS, studioEntry, studioReviewRounds, writeStudioDelivery } from '../core/design/studio-delivery.ts';
 import { REPAIR_KNOWLEDGE } from '../core/design/compose-guidance.ts';
 import { capturePageBasics } from '../core/design/page-basics.ts';
 import { requireReviewableSource } from '../core/design/source-readability.ts';
@@ -53,6 +57,8 @@ export type ModelLedCompletionResult = Readonly<{
   evaluation?: EvaluationSummary;
   firstRender?: FirstRenderSummary;
   finalEvidencePath?: string;
+  /** A new surface ends in a studio delivery instead of the final evidence chain. */
+  studioDeliveryPath?: string;
   designEvidence?: 'isolated-model-proxy';
   limitations?: readonly Readonly<{ stage: string; reason: string }>[];
   diagnostic?: CompletionDiagnostic;
@@ -99,13 +105,18 @@ export async function runModelLedCompletion(input: Readonly<{
     }
     const readiness = checkProductionReadiness(input.root, input.invocation, input.packRoot);
     if (!readiness.ok) throw new CompletionStepError('NATIVE_PRODUCTION_NOT_READY', readiness.blockers.join('; '));
-    phase = 'plan';
-    const path = '.omd/.cache/trusted-lifecycle-manifest.json';
-    if (input.manifest === undefined && !existsSync(resolve(input.root, path))) {
-      throw new CompletionStepError('NATIVE_BROWSER_PLAN_REQUIRED', 'Author one outcome-bound plan from the actual implementation: omd schema trusted-lifecycle-manifest --json');
+    // A new page is delivered from its build, floors and review rounds; it owes no browser plan.
+    const studio = figmaTargets.length === 0 && newSurface(route);
+    let manifest: ReturnType<typeof parseTrustedLifecycleManifest> | undefined;
+    if (!studio) {
+      phase = 'plan';
+      const path = '.omd/.cache/trusted-lifecycle-manifest.json';
+      if (input.manifest === undefined && !existsSync(resolve(input.root, path))) {
+        throw new CompletionStepError('NATIVE_BROWSER_PLAN_REQUIRED', 'Author one outcome-bound plan from the actual implementation: omd schema trusted-lifecycle-manifest --json');
+      }
+      manifest = parseTrustedLifecycleManifest(input.manifest
+        ?? JSON.parse(readContainedRegularFile(input.root, path, 'browser plan').toString('utf8')));
     }
-    const manifest = parseTrustedLifecycleManifest(input.manifest
-      ?? JSON.parse(readContainedRegularFile(input.root, path, 'browser plan').toString('utf8')));
     phase = 'verification';
     if (existsSync(resolve(input.root, 'package.json'))) {
       const pkg: unknown = JSON.parse(readContainedRegularFile(input.root, 'package.json', 'package manifest').toString('utf8'));
@@ -128,6 +139,18 @@ export async function runModelLedCompletion(input: Readonly<{
     requireReviewableSource(input.root, route);
     // The same entry condition as omd first-render check: finish captures a first render too.
     requireStudioPick(input.root, route);
+    if (studio) {
+      phase = 'review';
+      const delivered = await deliverStudioPage(input, route, verification);
+      if ('diagnostic' in delivered) {
+        if (delivered.firstRender !== undefined) firstRender = delivered.firstRender;
+        return { ...result(false, phase), diagnostic: delivered.diagnostic };
+      }
+      firstRender = delivered.firstRender;
+      return { ...result(true, 'complete'), studioDeliveryPath: STUDIO_DELIVERY_RECORD, designEvidence: 'isolated-model-proxy',
+        limitations: delivered.openFindings.map(id => ({ stage: 'first-render', reason: `open after ${STUDIO_REVIEW_ROUNDS} review rounds: ${id}` })) };
+    }
+    if (manifest === undefined) throw new CompletionStepError('NATIVE_BROWSER_PLAN_REQUIRED');
     inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
     phase = 'review';
     const existingFirstRender = readFirstRenderReview(input.root);
@@ -236,4 +259,73 @@ export async function runModelLedCompletion(input: Readonly<{
   } catch (error) {
     return { ...result(false, phase), diagnostic: completionErrorDiagnostic(phase, error) };
   }
+}
+
+type StudioInput = Readonly<{ root: string; invocation: ProjectRunInvocation; signal?: AbortSignal }>;
+type StudioRoute = ReturnType<typeof readPersistedRoute>;
+const firstRenderSummary = (review: Readonly<FirstRenderSummary>): FirstRenderSummary => ({ decision: review.decision, findings: review.findings,
+  qualityAssessments: review.qualityAssessments, path: review.path, sha256: review.sha256, progress: review.progress, captures: review.captures });
+const reviewDiagnostic = (code: string, message: string, next: string | null, review: FirstRenderSummary): CompletionDiagnostic => ({
+  ...completionErrorDiagnostic('review', new CompletionStepError(code, message)), next,
+  evidencePaths: [review.path, ...review.captures.map(capture => `.omd/first-render/captures/${capture.captureSha256}.png`)] });
+
+/**
+ * Deliver a new page: the floors on the real build, then the current render's review. A retained review delivers;
+ * otherwise each round asks for a recomposition until the rounds are spent, and then the best iteration is delivered
+ * with its open findings named, as a studio ships on a deadline instead of reviewing forever.
+ */
+async function deliverStudioPage(input: StudioInput, route: StudioRoute, verification: readonly Verification[]): Promise<
+  Readonly<{ firstRender: FirstRenderSummary; openFindings: readonly string[] }>
+  | Readonly<{ firstRender?: FirstRenderSummary; diagnostic: CompletionDiagnostic }>> {
+  const entry = studioEntry(input.root);
+  const target = resolve(input.root, entry);
+  await requireStudioFloors(input.root, route, target);
+  const writer = createProjectWriteAdapter(input.root, input.invocation);
+  const checked = await publishFirstRenderCheck(input.root, entry, undefined, writer, input.invocation);
+  if (firstRenderMotionProjection(input.root, checked.reportSha256) === null) {
+    await captureFirstRenderMotion(input.root, target, checked.reportSha256, writer).catch(() => undefined);
+  }
+  await capturePageBasics(input.root, target, checked.reportSha256, writer).catch(() => undefined);
+  const spent = studioReviewRounds(input.root, route) >= STUDIO_REVIEW_ROUNDS;
+  const retained = (() => { try { return requireRetainedFirstRenderReview(input.root, input.invocation); } catch { return null; } })();
+  let review: FirstRenderSummary;
+  if (retained !== null) review = firstRenderSummary({ ...retained, path: FIRST_RENDER_REVIEW_PATH });
+  else if (spent) {
+    const loop = firstRenderLoopState(input.root, route);
+    const latest = readFirstRenderReview(input.root);
+    if (latest === null) throw new CompletionStepError('FIRST_RENDER_REVIEW_REQUIRED');
+    review = firstRenderSummary({ ...latest, path: FIRST_RENDER_REVIEW_PATH });
+    if (!loop.bestRestored) {
+      return { firstRender: review, diagnostic: reviewDiagnostic('FIRST_RENDER_RESTORE_BEFORE_DELIVERY',
+        `${STUDIO_REVIEW_ROUNDS} review rounds are spent and the current page is not the best iteration. Restore it, rebuild, and finish again.`,
+        'omd first-render restore --json', review) };
+    }
+  } else {
+    const early = await runFirstRenderReview(input.root, input.invocation, input.signal);
+    review = firstRenderSummary(early);
+    if (early.decision !== 'retain') {
+      const rounds = studioReviewRounds(input.root, route);
+      if (rounds < STUDIO_REVIEW_ROUNDS) {
+        const regressed = early.diagnostic?.code === 'FIRST_RENDER_REGRESSED';
+        return { firstRender: review, diagnostic: reviewDiagnostic(regressed ? 'FIRST_RENDER_REGRESSED' : 'FIRST_RENDER_VISUAL_REPAIR',
+          `Review round ${rounds} of ${STUDIO_REVIEW_ROUNDS}: ${regressed ? 'this round is worse than the best; restore it and try a different structure.'
+            : 'recompose for the findings, structure before polish, then rebuild and finish again.'} ${REPAIR_KNOWLEDGE}`,
+          regressed ? 'omd first-render restore --json' : 'omd lifecycle finish --json', review) };
+      }
+      if (!firstRenderLoopState(input.root, route).bestRestored) {
+        return { firstRender: review, diagnostic: reviewDiagnostic('FIRST_RENDER_RESTORE_BEFORE_DELIVERY',
+          `${STUDIO_REVIEW_ROUNDS} review rounds are spent and this round is not the best. Restore the best iteration, rebuild, and finish again.`,
+          'omd first-render restore --json', review) };
+      }
+    }
+  }
+  const history = readFirstRenderIterationHistory(input.root, route);
+  const best = history.iterations.find(iteration => iteration.id === history.bestIterationId) ?? history.iterations.at(-1);
+  const openFindings = review.decision === 'retain' ? [] : [...(best?.findingIds ?? review.findings.map(finding => finding.id))];
+  writeStudioDelivery(input.root, writer, {
+    routeSha256: adaptiveRouteRecordSha256(route), entryPath: entry, picked: currentStudioPick(input.root)?.picked ?? '',
+    verification: verification.map(checkedCommand => checkedCommand.command.join(' ')),
+    review: { sha256: review.sha256, decision: review.decision, rounds: studioReviewRounds(input.root, route), openFindings },
+  });
+  return { firstRender: review, openFindings };
 }
