@@ -19,7 +19,10 @@ images; generated images only explore their ideas (see
 
 ## Draft seeding and the shipped surface
 
-Raw gallery pixels are reference evidence, not generator input. An image-first draft may be seeded
+Raw gallery pixels are reference evidence, not generator input, with one exception: a new page's studio comps
+(`omd studio refs`, `omd studio concepts`) attach the bodies of whole finished sites so the comp takes their craft
+(hierarchy, spacing, the small exact details that carry substance), under an instruction that leaves their branding,
+colours, copy and layout behind; the comp never ships. An image-first draft may be seeded
 from what the kept references show (`omd ref context`), described rather than pasted, a project rough
 built on the committed design system, and project-owned concept material (the brief, real product
 content, committed palette/type/material, and local design decisions). The references supply measured

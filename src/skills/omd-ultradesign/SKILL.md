@@ -47,13 +47,15 @@ flow" and the graphic bullet only. The rest of this file (reference ledgers, `re
 lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and recomposing.
 1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, the
    one message, and the user's exact asks word for word. Keep the README's logo and everything not asked away.
-2. References: one `omd ref browse` session on whole-site and graphic galleries; one line each in
-   `.omd/studio/references.md` on the principle you take, never a layout wholesale.
+2. References: find three to five finished sites whose craft this page must show (one `omd ref browse` session
+   will do), capture them with `omd studio refs <url>... --json`, and note what each does well in `references.md`.
 3. Copy: `.omd/studio/copy.md` holds the real copy per screen, one claim each, and a cut list.
-4. Concepts: three full-page HTML sketches at `.omd/studio/concepts/<name>/index.html`, each from a blank file
-   with its own structure, protagonist object and verb. Run `omd studio concepts --json`, look at every render,
-   then `omd studio pick --json` (reviewers judge each blind beside human-made pages). Build the pick.
-5. Build it in the project. 3D is a three.js scene with real materials, environment light and colour management.
+4. Comps: three art directions at `.omd/studio/concepts/<name>/prompt.md`, each a different page (composition,
+   protagonist object, material and light, palette, type). `omd studio concepts --json` draws each as a full-page
+   comp from the brief, copy, README logo and references; look at every comp, then `omd studio pick --json`
+   (blind beside human-made pages). Without Codex, sketch `index.html` instead.
+5. Build the picked comp in the project: it is the target. Match its composition, type scale, spacing and detail;
+   3D is a three.js scene with real materials, environment light and colour management.
 6. Finish: `omd lifecycle finish --json` builds, checks the logo and 3D on the real page and reviews the render.
    Recompose for what it names (order, scale, cut, merge, the object's relation to the copy), never patch, and
    finish again. After three rounds the best render ships with its open findings, so make each round count.

@@ -39,7 +39,7 @@ export function ideationRecorded(root: string, kind: IdeaKind = 'graphic'): bool
   return ideationUnavailable(root) || ideaImages(root).some(idea => idea.kind === kind);
 }
 
-/** Returns the generated image when the runner can find it without the model copying it (see runCodex). */
+/** Returns the generated image when the runner can find it without the model copying it (see codexImageRunner). */
 export type IdeaImageRunner = (directory: string, instruction: string, references: readonly string[]) => string | void;
 
 /** Codex keeps each generated image under $CODEX_HOME/generated_images/<session>/; the newest one since `since`. */
@@ -53,7 +53,7 @@ function newestGeneratedImage(since: number): string | undefined {
   return files.sort((left, right) => right.time - left.time)[0]?.path;
 }
 
-const runCodex: IdeaImageRunner = (directory, instruction, references) => {
+export const codexImageRunner: IdeaImageRunner = (directory, instruction, references) => {
   const started = Date.now() - 1_000;
   const result = spawnSync('codex', ['exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', directory,
     ...references.flatMap(path => ['-i', path]), '-'], { input: instruction, encoding: 'utf8', timeout: 600_000, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -74,7 +74,7 @@ export type IdeaImageResult = Readonly<{ path: string; prompt: string; reference
 
 export function generateIdeaImage(root: string, writer: ProjectWriteAdapter,
   input: Readonly<{ name: string; prompt: string; references?: readonly string[]; kind?: IdeaKind }>,
-  run: IdeaImageRunner = runCodex): IdeaImageResult {
+  run: IdeaImageRunner = codexImageRunner): IdeaImageResult {
   const prompt = input.prompt.trim(), kind = input.kind ?? 'graphic';
   if (prompt.length < 20) {
     throw new Error(kind === 'page'
@@ -138,10 +138,10 @@ export function generateIdeaImage(root: string, writer: ProjectWriteAdapter,
 export const PAGE_IDEA_PREVIEW_WIDTH = 1024;
 
 /** A deterministic, narrower copy of a page idea for review (box-averaged); an image already narrow enough is returned as is. */
-export function pageIdeaPreview(bytes: Buffer): Buffer {
+export function pageIdeaPreview(bytes: Buffer, previewWidth = PAGE_IDEA_PREVIEW_WIDTH): Buffer {
   const source = PNG.sync.read(bytes);
-  if (source.width <= PAGE_IDEA_PREVIEW_WIDTH) return bytes;
-  const scale = source.width / PAGE_IDEA_PREVIEW_WIDTH, width = PAGE_IDEA_PREVIEW_WIDTH, height = Math.max(1, Math.round(source.height / scale));
+  if (source.width <= previewWidth) return bytes;
+  const scale = source.width / previewWidth, width = previewWidth, height = Math.max(1, Math.round(source.height / scale));
   const target = new PNG({ width, height });
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const x0 = Math.floor(x * scale), x1 = Math.max(x0 + 1, Math.floor((x + 1) * scale)), y0 = Math.floor(y * scale), y1 = Math.max(y0 + 1, Math.floor((y + 1) * scale));

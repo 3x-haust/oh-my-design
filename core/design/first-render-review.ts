@@ -13,6 +13,8 @@ import { motionRequired } from './new-surface-advisories.ts';
 import { readDesignBrief } from './design-brief.ts';
 import { latestBlindComparison } from './taste-comparison-record.ts';
 import { ideaImages, pageIdeaPreview } from './idea-image.ts';
+import { currentStudioPick } from './studio-pick.ts';
+import { currentStudioConcepts } from './studio.ts';
 import { MAX_BROKERED_EVIDENCE_BYTES } from '../runtime/evidence-proxy.ts';
 import { pageBasicsTells, proofShowsOutput, readPageBasics } from './page-basics.ts';
 import { parseReferenceCaptures, referenceComparisonBindings } from './first-render-reference-comparison.ts';
@@ -186,6 +188,7 @@ function preparePacket(
   const blind = latestBlindComparison(root);
   const motion = firstRenderMotionProjection(root, piDigest(current.reportSha256, 'report-sha'));
   const ideas = shed < 1 ? pageIdeaRenders(root) : [];
+  const comp = pickedStudioComp(root);
   const keptReference = (render: { state: string; referenceRole: string }) =>
     (shed < 2 || render.state === 'default') && (shed < 3 || render.referenceRole === 'primary');
   const referenceRenders = (consulted?.renders ?? []).filter(keptReference);
@@ -227,6 +230,7 @@ function preparePacket(
     ...(brief === null ? {} : { designBrief: brief }),
     ...(motion === null ? {} : { motion: motion.context, motionRenders: motion.renders }),
     ...(ideas.length ? { pageIdeas: ideas } : {}),
+    ...(comp === null ? {} : { studioComp: comp }),
     ...(feedback === null ? {} : { reportedFeedback: feedback.context, feedbackRenders: feedback.renders }),
     ...(consulted === null ? {} : {
       consultedReferences: consulted.context,
@@ -331,6 +335,17 @@ function preparePacket(
 }
 
 /** The latest page idea of each section (up to four), with its prompt: the maker's drafts made before building. */
+/** The comp the new page was picked from and is built to, narrowed for review; null for a sketched or unpicked concept. */
+const STUDIO_COMP_REVIEW_WIDTH = 800;
+function pickedStudioComp(root: string) {
+  const pick = currentStudioPick(root);
+  const concept = pick === null ? undefined : currentStudioConcepts(root).find(item => item.name === pick.picked);
+  if (concept?.comp === undefined) return null;
+  const bytes = pageIdeaPreview(readFileSync(join(root, concept.comp.path)), STUDIO_COMP_REVIEW_WIDTH);
+  return { role: 'studio-comp' as const, concept: concept.name, path: concept.comp.path, sourceSha256: concept.comp.sha256,
+    captureSha256: sha256(bytes), pngBase64: bytes.toString('base64') };
+}
+
 function pageIdeaRenders(root: string) {
   const latest = new Map<string, ReturnType<typeof ideaImages>[number]>();
   for (const idea of ideaImages(root).filter(idea => idea.kind === 'page')) latest.set(idea.path.replace(/-\d+\.png$/, ''), idea);
