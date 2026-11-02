@@ -18,6 +18,8 @@ import { consultedDesignerCases } from '../core/design/designer-cases.ts';
 import { designerJudgmentProjection } from '../core/design/designer-judgments.ts';
 import { firstRenderMotionProjection } from '../core/design/first-render-motion.ts';
 import { ideaImages, pageIdeaPreview } from '../core/design/idea-image.ts';
+import { currentStudioConcepts } from '../core/design/studio.ts';
+import { STUDIO_COMP_REVIEW_WIDTH } from '../core/design/studio-comps.ts';
 import { nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
 import { REFERENCE_DIRECTION_REVIEWER_TASK } from '../core/ref/reference-direction-admission.ts';
 import { REFERENCE_ZONE_REVIEWER_TASK, REFERENCE_ZONE_REVIEWER_TRANSPORT_SCHEMA,
@@ -224,6 +226,19 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{
     if (row.role !== 'page-idea' || !recordedIdeas.has(path) || piHash(bytes) !== piDigest(row.captureSha256, 'page-idea-sha')
       || piHash(source) !== row.sourceSha256 || piHash(pageIdeaPreview(source)) !== row.captureSha256) throw new PiReviewerError('packet-page-idea-drift');
   }
+  // The picked studio comp is delivered as an image; its bytes must be the narrowed comp of a current concept.
+  const studioCompImages = evidence.studioComp === undefined ? []
+    : input.lane !== 'firstRender' || !Array.isArray(evidence.studioComp) || evidence.studioComp.length !== 1
+    ? (() => { throw new PiReviewerError('packet-studio-comp'); })() : (() => {
+      const row = piRecord(evidence.studioComp[0], 'studio-comp');
+      const path = piText(row.path, 'studio-comp-path');
+      const bytes = Buffer.from(piText(row.pngBase64, 'studio-comp-png'), 'base64');
+      const source = readFileSync(join(input.root, path));
+      if (row.role !== 'studio-comp' || !currentStudioConcepts(input.root).some(concept => concept.comp?.path === path)
+        || piHash(bytes) !== piDigest(row.captureSha256, 'studio-comp-sha') || piHash(source) !== row.sourceSha256
+        || piHash(pageIdeaPreview(source, STUDIO_COMP_REVIEW_WIDTH)) !== row.captureSha256) throw new PiReviewerError('packet-studio-comp-drift');
+      return [row];
+    })();
   const feedbackImages = evidence.feedbackRenders === undefined ? [] : evidence.feedbackRenders;
   if (!Array.isArray(feedbackImages)) throw new PiReviewerError('packet-feedback-images');
   if (feedbackImages.length > 0) {
@@ -263,7 +278,7 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{
     }
   }
   const images = [evidence.renders, evidence.referenceRenders, evidence.priorRenders,
-    previousIterationImages, feedbackImages, consultedImages, designerCaseImages, motionImages, pageIdeaImages, temporalImages].flatMap(rows => rows === undefined ? []
+    previousIterationImages, feedbackImages, consultedImages, designerCaseImages, motionImages, pageIdeaImages, studioCompImages, temporalImages].flatMap(rows => rows === undefined ? []
     : Array.isArray(rows) ? rows : (() => { throw new PiReviewerError('packet-renders'); })());
   for (const image of images) piText(piRecord(image, 'packet-render').pngBase64, 'packet-png');
   if (input.lane === 'blindLane' && images.length - temporalImages.length < 2
@@ -280,7 +295,7 @@ function packetContract(input: PiReviewerLaneInput): Readonly<{
     }
     const pairs = [evidence.renders];
     if (images.length !== pairs.length * 2 + baselineImages + previousIterationImages.length
-      + feedbackImages.length + consultedImages.length + designerCaseImages.length + motionImages.length + pageIdeaImages.length || pairs.some(pair => !Array.isArray(pair) || pair.length !== 2
+      + feedbackImages.length + consultedImages.length + designerCaseImages.length + motionImages.length + pageIdeaImages.length + studioCompImages.length || pairs.some(pair => !Array.isArray(pair) || pair.length !== 2
       || pair.some((image, index) => {
         const row = piRecord(image, 'first-render-image');
         return row.viewport !== (index === 0 ? 'desktop' : 'mobile')

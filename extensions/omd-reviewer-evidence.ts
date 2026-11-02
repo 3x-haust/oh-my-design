@@ -174,10 +174,10 @@ export async function consumePiReviewerEvidence(configInput: unknown, signal?: A
         && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT) throw new PiReviewerError('opaque-designer-case-renders');
       if (evidence.motionRenders !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
         throw new PiReviewerError('opaque-motion-renders');
-      if (evidence.pageIdeas !== undefined && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
+      if ((evidence.pageIdeas !== undefined || evidence.studioComp !== undefined) && packet.schema !== FIRST_RENDER_REVIEW_TRANSPORT)
         throw new PiReviewerError('opaque-page-ideas');
       for (const field of ['renders', 'referenceRenders', 'priorRenders', 'previousIterationRenders',
-        'feedbackRenders', 'consultedReferenceRenders', 'designerCaseRenders', 'motionRenders', 'pageIdeas', 'temporalRenders']) {
+        'feedbackRenders', 'consultedReferenceRenders', 'designerCaseRenders', 'motionRenders', 'pageIdeas', 'studioComp', 'temporalRenders']) {
         const rows = evidence[field];
         if (rows === undefined) continue;
         if (!Array.isArray(rows)) throw new PiReviewerError('opaque-renders');

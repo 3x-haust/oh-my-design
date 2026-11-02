@@ -23,6 +23,8 @@ const COMP_PREVIEW_WIDTH = 1280;
 /** The first screen of a 1440-wide comp, as a 1280×900 capture beside the anchors' first screens in the blind pick. */
 const COMP_FIRST_SCREEN = { width: 1440, height: 1013 } as const;
 export const COMP_TIMEOUT_MS = 900_000;
+/** The width the picked comp is shown to the first-render reviewer at: its whole scroll readable beside the page's own captures. */
+export const STUDIO_COMP_REVIEW_WIDTH = 800;
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const slug = (url: string): string => new URL(url).hostname.replace(/^www\./, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
@@ -102,26 +104,29 @@ export function compLogo(root: string): string | null {
 
 export type CompRunner = (directory: string, instruction: string, attachments: readonly string[]) => Promise<string | void>;
 
-/** Codex keeps generated images under $CODEX_HOME/generated_images/<session>/; the newest one since `since`, in sessions not seen before. */
-function newestGenerated(since: number, seen: ReadonlySet<string>): string | undefined {
-  const root = join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'generated_images');
-  if (!existsSync(root)) return undefined;
-  return readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory()).flatMap(entry =>
-    readdirSync(join(root, entry.name)).filter(name => name.endsWith('.png')).map(name => join(root, entry.name, name)))
-    .filter(path => !seen.has(path)).map(path => ({ path, time: statSync(path).mtimeMs })).filter(file => file.time >= since)
-    .sort((left, right) => right.time - left.time)[0]?.path;
+/** Codex keeps a session's generated images under $CODEX_HOME/generated_images/<session id>/; the newest one of this session. */
+export function sessionImage(sessionId: string, codexHome = process.env.CODEX_HOME ?? join(homedir(), '.codex')): string | undefined {
+  const dir = join(codexHome, 'generated_images', sessionId);
+  if (!existsSync(dir)) return undefined;
+  return readdirSync(dir).filter(name => name.endsWith('.png')).map(name => join(dir, name))
+    .map(path => ({ path, time: statSync(path).mtimeMs })).sort((left, right) => right.time - left.time)[0]?.path;
 }
 
-// Comps run at once; an image taken from Codex's store belongs to one comp only.
-const claimed = new Set<string>();
+/** The session id `codex exec` prints in its header, which names where that run's images are stored. */
+export const codexSessionId = (output: string): string | undefined => /^session id:\s*([0-9a-f-]{36})\s*$/im.exec(output)?.[1];
 
-/** Runs comps concurrently, so three comps take the time of one; the image is read from the work folder or where Codex stored it. */
+/**
+ * Runs one comp; comps run side by side, so three take the time of one. The image is read from the work folder or from
+ * this run's own session in Codex's store, never the newest image overall, which may belong to a comp running beside it.
+ */
 export const codexCompRunner: CompRunner = (directory, instruction, attachments) => new Promise((done, failed) => {
-  const started = Date.now() - 1_000;
   const child = spawn('codex', ['exec', '-s', 'workspace-write', '--skip-git-repo-check', '-C', directory,
     ...attachments.flatMap(path => ['-i', path]), '-'], { stdio: ['pipe', 'ignore', 'pipe'] });
-  let stderr = '';
-  child.stderr.on('data', chunk => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
+  let head = '', stderr = '';
+  child.stderr.on('data', chunk => {
+    if (head.length < 4000) head = `${head}${String(chunk)}`.slice(0, 4000);
+    stderr = `${stderr}${String(chunk)}`.slice(-4000);
+  });
   const timer = setTimeout(() => child.kill('SIGTERM'), COMP_TIMEOUT_MS);
   child.on('error', error => { clearTimeout(timer); failed(error); });
   child.on('close', code => {
@@ -132,9 +137,8 @@ export const codexCompRunner: CompRunner = (directory, instruction, attachments)
       return;
     }
     const local = readdirSync(directory).filter(name => name.endsWith('.png')).map(name => join(directory, name))[0];
-    const stored = local === undefined ? newestGenerated(started, claimed) : undefined;
-    if (stored !== undefined) claimed.add(stored);
-    done(local ?? stored);
+    const session = codexSessionId(head);
+    done(local ?? (session === undefined ? undefined : sessionImage(session)));
   });
   child.stdin.end(instruction);
 });

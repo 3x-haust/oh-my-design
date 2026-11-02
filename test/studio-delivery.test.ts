@@ -12,6 +12,7 @@ import { runModelLedCompletion } from '../bin/model-led-completion-command.ts';
 import { publishAdaptiveRoute } from '../core/route/adaptive-route-persistence.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { nextStageWork } from '../core/stage/next.ts';
+import { modelLedCompletionFingerprint } from '../core/runtime/model-led-execution.ts';
 import { renderStudioConcepts } from '../core/design/studio.ts';
 import { runStudioPick } from '../core/design/studio-pick.ts';
 import { stallMessage } from '../core/design/first-render-loop-state.ts';
@@ -114,6 +115,14 @@ test('a new page is delivered after its review rounds with the open findings nam
   assert.equal(delivery.review.rounds, 3);
   assert.equal(delivery.picked.length > 0, true);
   assert.equal(nextStageWork(root, packRoot, invocation).action, 'report-completion');
+  // A browser plan the maker wrote by hand is no part of a new page: a malformed one never breaks the completion
+  // fingerprint the end-of-turn check takes, it only changes it.
+  const unplanned = modelLedCompletionFingerprint(root);
+  mkdirSync(join(root, '.omd/.cache'), { recursive: true });
+  writeFileSync(join(root, '.omd/.cache/trusted-lifecycle-manifest.json'), JSON.stringify({ scripts: [{}, { assertions: [{}] }] }));
+  assert.notEqual(modelLedCompletionFingerprint(root), unplanned);
+  assert.equal(nextStageWork(root, packRoot, invocation).action, 'report-completion');
+  rmSync(join(root, '.omd/.cache/trusted-lifecycle-manifest.json'));
 
   // An edit after delivery is not the delivered page: the guard refuses it, and with the rounds spent
   // finish asks for the best iteration back instead of reviewing a fourth time.
