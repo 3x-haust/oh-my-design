@@ -42,25 +42,21 @@ Internal guides, read only when they apply (`omd pack <path>`): `guides/referenc
 
 ## New pages: work like a studio
 
-A new product or landing (taskNeed `new-product` or `new-marketing`) is designed the way a studio works,
-not filled into a template; most of the effort goes to rendering, looking and recomposing.
-1. Truth: read the project and write `.omd/studio/brief.md` in plain words: what it really does (from its
-   files), for whom, the one message, claims you cannot verify (leave them out), and the user's exact asks
-   word for word. Keep everything the user did not ask you to remove.
-2. References: browse widely (below) and note in `.omd/studio/references.md` what each kept page does well
-   and the principle you translate, never its layout wholesale.
-3. Copy first: `.omd/studio/copy.md` holds the real copy per section, each with one claim and the visual
-   evidence that proves it, plus a cut list. Never add a section because landings usually have one.
-4. Concepts: three quick full-page HTML sketches at `.omd/studio/concepts/<name>/index.html` with the real
-   copy, each with its own navigation noun (what the visitor moves through), protagonist object and verb.
-   Run `omd studio concepts --json`, look at every render, then `omd studio pick --json`: reviewers judge
-   each blind beside human-made pages. Build the pick.
-5. Build the chosen concept in the project. For 3D, first write its scene contract (the object, what it
-   proves, how the visitor reveals it, the fallback), then build it in three.js with real materials,
-   environment light and colour management, never a screenshot on a tilted plane.
-6. Look and recompose with `omd first-render check`: fix structure before polish (order, scale, cut, merge,
-   the object's relation to the copy). When the loop stops improving, restore the best and recompose
-   from the unchosen concept or the structure the finding names, rather than patching.
+A new product or landing (taskNeed `new-product` or `new-marketing`) follows this section, "Words, type, and
+flow" and the graphic bullet only. The rest of this file (reference ledgers, `ref context`, cases and judgments,
+lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and recomposing.
+1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, the
+   one message, and the user's exact asks word for word. Keep the README's logo and everything not asked away.
+2. References: one `omd ref browse` session on whole-site and graphic galleries; one line each in
+   `.omd/studio/references.md` on the principle you take, never a layout wholesale.
+3. Copy: `.omd/studio/copy.md` holds the real copy per screen, one claim each, and a cut list.
+4. Concepts: three full-page HTML sketches at `.omd/studio/concepts/<name>/index.html`, each from a blank file
+   with its own structure, protagonist object and verb. Run `omd studio concepts --json`, look at every render,
+   then `omd studio pick --json` (reviewers judge each blind beside human-made pages). Build the pick.
+5. Build it in the project. 3D is a three.js scene with real materials, environment light and colour management.
+6. Finish: `omd lifecycle finish --json` builds, checks the logo and 3D on the real page and reviews the render.
+   Recompose for what it names (order, scale, cut, merge, the object's relation to the copy), never patch, and
+   finish again. After three rounds the best render ships with its open findings, so make each round count.
 7. Pace and remove: the story unfolds over the scroll, the first screen one message and its object, each
    later screen one idea at full size; never pack it into the first screen or hide it in tabs, accordions or
    carousels. Every icon, label, badge and line must earn its place.
@@ -100,7 +96,7 @@ not filled into a template; most of the effort goes to rendering, looking and re
   a page shrunk into a frame is a thumbnail. Each graphic argues one claim with one protagonist made from
   this product's real material. No invented example sites, placeholder shapes, captions or disclaimers on
   the art. When the product runs, show it working with real footage (`omd record`) or the real UI, never a
-  redrawn mock. Show the project's own logo files as shipped, never redrawn. Generic icons and placeholder
+  redrawn mock. Show the logo the README shows, as shipped, never redrawn. Generic icons and placeholder
   shapes are unfinished, not minimal.
 
 ## Default native Pi workflow

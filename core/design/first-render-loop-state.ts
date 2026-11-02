@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import type { AdaptiveRouteRecord } from '../route/index.ts';
 import type { FirstRenderProgress } from './first-render-review-contract.ts';
+import { newSurface } from './new-surface-advisories.ts';
+import { STUDIO_DELIVER_MESSAGE, STUDIO_REVIEW_ROUNDS } from './studio-delivery.ts';
 import { checkpointRecord } from './first-render-checkpoint-common.ts';
 import {
   readFirstRenderSourceCheckpoint,
@@ -16,7 +18,7 @@ import {
 
 export type FirstRenderLoopState = Readonly<{
   stalled: boolean;
-  reasons: readonly ('four-non-improving-reviews' | 'persistent-findings')[];
+  reasons: readonly ('four-non-improving-reviews' | 'persistent-findings' | 'rounds-spent')[];
   bestIterationId: string | null;
   currentIterationId: string | null;
   currentProgress: FirstRenderProgress['verdict'] | null;
@@ -24,6 +26,8 @@ export type FirstRenderLoopState = Readonly<{
   bestRestoreApplied: boolean;
   /** Past the review ceiling a stall is reported instead of answered with another recomposition. */
   exhausted: boolean;
+  /** A new surface: its ceiling is the studio's few rounds, after which the best render is delivered. */
+  studio: boolean;
 }>;
 
 /** Reviews after which a stalled loop stops and reports; designers' iterations run five to fifteen rounds, not four. */
@@ -34,13 +38,13 @@ export const STALL_PIVOT_MESSAGE = 'First-render repair stopped improving. Resto
   + 'the protagonist\'s scale, what to cut or merge), and check again.';
 export const STALL_REPORT_MESSAGE = `After ${FIRST_RENDER_REVIEW_CEILING} reviews the loop stops: restore the best iteration and report the remaining `
   + 'findings with both captures to the user instead of continuing.';
-export const stallMessage = (loop: Pick<FirstRenderLoopState, 'exhausted'>): string =>
-  loop.exhausted ? STALL_REPORT_MESSAGE : STALL_PIVOT_MESSAGE;
+export const stallMessage = (loop: Pick<FirstRenderLoopState, 'exhausted'> & Partial<Pick<FirstRenderLoopState, 'studio'>>): string =>
+  loop.exhausted ? loop.studio ? STUDIO_DELIVER_MESSAGE : STALL_REPORT_MESSAGE : STALL_PIVOT_MESSAGE;
 
 /** Reviews after which an unresolved finding is reported even while each round still improves. */
 const PERSISTENT_REVIEW_CEILING = 6;
 
-export function loopReasons(iterations: readonly FirstRenderIteration[]): FirstRenderLoopState['reasons'] {
+export function loopReasons(iterations: readonly FirstRenderIteration[]): readonly ('four-non-improving-reviews' | 'persistent-findings')[] {
   const reviewed = iterations.filter(iteration => iteration.reviewSha256 !== null);
   const four = reviewed.slice(-4);
   const nonImproving = four.length === 4 && four.every(iteration =>
@@ -66,7 +70,11 @@ export function firstRenderLoopState(root: string, route: AdaptiveRouteRecord): 
   const current = history.iterations.at(-1) ?? null;
   const best = history.bestIterationId === null ? null
     : history.iterations.find(iteration => iteration.id === history.bestIterationId) ?? null;
-  const reasons = loopReasons(history.iterations);
+  const studio = newSurface(route);
+  const reviewed = history.iterations.filter(iteration => iteration.reviewSha256 !== null).length;
+  const exhausted = reviewed >= (studio ? STUDIO_REVIEW_ROUNDS : FIRST_RENDER_REVIEW_CEILING);
+  const reasons = studio && exhausted && history.iterations.at(-1)?.decision !== 'retain'
+    ? Object.freeze([...new Set([...loopReasons(history.iterations), 'rounds-spent' as const])]) : loopReasons(history.iterations);
   const bestRestoreApplied = (() => {
     const path = firstRenderRestorePath(route);
     if (best === null || current === null || current.reviewSha256 === null
@@ -95,6 +103,7 @@ export function firstRenderLoopState(root: string, route: AdaptiveRouteRecord): 
       : sourceCheckpointMatchesCurrent(root, route,
         readFirstRenderSourceCheckpoint(root, best.checkpointSha256)),
     bestRestoreApplied,
-    exhausted: history.iterations.filter(iteration => iteration.reviewSha256 !== null).length >= FIRST_RENDER_REVIEW_CEILING,
+    exhausted,
+    studio,
   });
 }

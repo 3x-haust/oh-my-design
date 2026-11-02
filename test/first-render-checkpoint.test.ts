@@ -44,6 +44,8 @@ function fixture(t: TestContext) {
   mkdirSync(join(root, 'src'), { recursive: true });
   writeFileSync(join(root, 'src/app.ts'), 'export const state = "initial";\n');
   const input = modelLedInput('Build a checkpointed interface.');
+  // Existing work keeps the long repair loop; a new page's few studio rounds are tested in studio-delivery.
+  (input.referenceDiscovery as Record<string, unknown>).taskNeed = 'existing-product-change';
   input.allowedPaths = ['src/**', 'dist/**'];
   const { invocation, writer } = publishModelLedRoute(root, input);
   const route = readPersistedRoute(root, invocation);

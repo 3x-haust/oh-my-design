@@ -20,8 +20,10 @@ export function modelLedCompletionFingerprint(root: string, manifest?: unknown):
   const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
   const files = [...listProductionSourceFiles(root), '.omd/route.json']
     .map(path => [path, sha(read(path))]);
-  const plan = manifest ?? JSON.parse(read('.omd/.cache/trusted-lifecycle-manifest.json').toString('utf8'));
-  return sha(Buffer.from(canonicalJson({ files, manifest: sha(trustedEvaluationPlanBytes(parseTrustedLifecycleManifest(plan))),
+  // A new page has no browser plan; its fingerprint is the source alone.
+  const planPath = '.omd/.cache/trusted-lifecycle-manifest.json';
+  const plan = manifest ?? (existsSync(resolve(root, planPath)) ? JSON.parse(read(planPath).toString('utf8')) : null);
+  return sha(Buffer.from(canonicalJson({ files, manifest: plan === null ? null : sha(trustedEvaluationPlanBytes(parseTrustedLifecycleManifest(plan))),
     consultedReferencesSha256: consultedReferenceProjection(root)?.context.sha256 ?? null })));
 }
 
