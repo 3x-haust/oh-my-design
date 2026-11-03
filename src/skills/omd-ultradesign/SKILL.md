@@ -51,10 +51,10 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
 2. Study: two or three finished sites in the project's spirit, `omd studio refs <url>... --json`; look at each
    first screen, full page and section crop beside its measured `study.json`.
 3. System: borrow ONE site's measured system in `.omd/studio/system.md` (type ramp, at most three weights,
-   rhythm, how it frames its product, its signature) with identity from the project's logo and voice, and
+   rhythm, product framing, motion, its signature) with identity from the project's logo and voice, and
    `.omd/studio/system.json` `{"reference", "sizes", "weights"}`. Every size and weight comes from it.
-4. Key visual first: the product's real look made in code, large and crisp, moving with real input; never a
-   recording with a player bar. Look at it alone and refine until it could sit on the reference.
+4. Key visual first: the product's real look made in code (`data-product`), large and crisp, playing its real
+   flow on its own; never a recording. Look at it alone and refine until it could sit on the reference.
 5. Build at the reference's rhythm and depth, compositions varied, real logo in the header. Subtract with
    `omd studio check`; compare your page beside the reference and fix the biggest differences, three passes at most.
 6. Finish: `omd lifecycle finish --json` builds, measures logo, 3D and system on the real page and compares the

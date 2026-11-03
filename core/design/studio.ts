@@ -49,7 +49,10 @@ export const STUDIO_STUDY_GUIDANCE = 'A new page starts from finished sites, stu
 export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${STUDIO_SYSTEM_NOTES}: the type ramp you take from its measurements `
   + '(five or six sizes, at most three weights, tracking, line heights), container width, section rhythm, how it frames product visuals, its '
   + 'button; then what comes from the project instead: accent colours and character from its logo, voice from its README. Name the reference\'s '
-  + 'signature (the one or two moves that make it feel made by a person) and this project\'s own equivalent. Then write '
+  + 'signature (the one or two moves that make it feel made by a person) and this project\'s own equivalent: a move only this project could make, '
+  + 'in its own material or vocabulary, never the reference\'s look restated. Then its motion, from study.json motion and the intro-N.png frames: '
+  + 'how the first screen arrives (what leads, from what, how long, which curve), how sections reveal on scroll, what keeps moving inside its '
+  + 'product visuals, hover timing; write the durations and curves you take. Then write '
   + `${STUDIO_SYSTEM_RECORD} as {"reference": "<primary url>", "sizes": [px...], "weights": [n...]}; every size and weight the page renders comes from it.`;
 
 export type StudioStudy = Readonly<{ url: string; dir: string; firstScreen: string; full: string; sha256: string }>;
@@ -138,6 +141,70 @@ function crop(full: PNG, top: number, height: number): Buffer {
 }
 
 /** Capture and measure finished sites: the first screen, the whole page, each section on its own, and the numbers behind them. */
+/**
+ * Installed before any page script: records every animation the page starts (CSS, transitions, Web Animations) with when, where
+ * and how, and every change made inside a [data-product] visual or to a first-screen element's style during the intro, so motion
+ * driven by script counts too.
+ */
+const recordMotion = browserCallback((): void => {
+  type Entry = { t: number; scrollY: number; target: string; top: number; firstScreen: boolean; product: boolean; duration: number; delay: number;
+    loop: boolean; easing: string; props: string[]; from: Record<string, string> };
+  const state = { animations: [] as Entry[], productChanges: [] as number[], introStyleChanges: 0 };
+  Reflect.set(window, '__omdMotion', state);
+  const seen = new WeakSet<Animation>();
+  const describe = (element: Element) => {
+    const text = (element.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+    return `${element.tagName.toLowerCase()}${text ? ` "${text}"` : ''}`;
+  };
+  const poll = () => {
+    for (const animation of document.getAnimations()) {
+      if (seen.has(animation)) continue;
+      seen.add(animation);
+      const effect = animation.effect as KeyframeEffect | null, target = effect?.target;
+      if (!effect || !(target instanceof Element) || state.animations.length >= 400) continue;
+      const timing = effect.getComputedTiming(), frames = effect.getKeyframes(), easing = String(effect.getTiming().easing);
+      const props = [...new Set(frames.flatMap(frame => Object.keys(frame).filter(key => !['offset', 'computedOffset', 'easing', 'composite'].includes(key))))];
+      const box = target.getBoundingClientRect();
+      state.animations.push({ t: Math.round(performance.now()), scrollY: Math.round(window.scrollY), target: describe(target),
+        top: Math.round(box.top + window.scrollY), firstScreen: window.scrollY === 0 && box.top < window.innerHeight, product: target.closest('[data-product]') !== null,
+        duration: Math.round(Number(timing.duration) || 0), delay: Math.round(timing.delay ?? 0), loop: timing.iterations === Infinity,
+        easing: (easing === 'linear' && typeof frames[0]?.easing === 'string' ? String(frames[0].easing) : easing).slice(0, 60),
+        props, from: Object.fromEntries(props.map(key => [key, String(frames[0]?.[key] ?? '').slice(0, 50)])) });
+    }
+    requestAnimationFrame(poll);
+  };
+  requestAnimationFrame(poll);
+  const observe = () => new MutationObserver(records => {
+    for (const record of records) {
+      const element = record.target instanceof Element ? record.target : record.target.parentElement;
+      if (element === null) continue;
+      if (element.closest('[data-product]') !== null) state.productChanges.push(Math.round(performance.now()));
+      else if (record.attributeName === 'style' && window.scrollY === 0 && performance.now() < 3000 && element.getBoundingClientRect().top < window.innerHeight) state.introStyleChanges += 1;
+    }
+  }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'd', 'transform'] });
+  if (document.documentElement) observe(); else document.addEventListener('DOMContentLoaded', observe);
+});
+
+type MotionRecord = Readonly<{
+  animations: readonly Readonly<{ t: number; scrollY: number; target: string; top: number; firstScreen: boolean; product: boolean; duration: number;
+    delay: number; loop: boolean; easing: string; props: readonly string[]; from: Readonly<Record<string, string>> }>[];
+  productChanges: readonly number[]; introStyleChanges: number;
+}>;
+const readMotion = browserCallback((): MotionRecord => Reflect.get(window, '__omdMotion') as MotionRecord);
+
+/** How a studied site moves, in the terms a designer would write down: the intro, what each scroll reveals, what keeps moving, the curves. */
+function motionSummary(record: MotionRecord, introEnd: number) {
+  const tally = (values: readonly (string | number)[]) => Object.entries(values.reduce<Record<string, number>>((counts, value) => ({ ...counts, [value]: (counts[value] ?? 0) + 1 }), {}))
+    .sort((a, b) => b[1] - a[1]).slice(0, 6).map(([value, count]) => ({ value, count }));
+  const intro = record.animations.filter(item => item.t <= introEnd), revealed = record.animations.filter(item => item.t > introEnd);
+  const sample = (items: MotionRecord['animations']) => items.filter((item, index, list) => index === 0 || item.target !== list[index - 1]!.target || item.top !== list[index - 1]!.top)
+    .slice(0, 16).map(({ t, scrollY, target, duration, delay, easing, from, loop, product }) => ({ t, scrollY, target, duration, delay, easing, from, loop, product }));
+  return { intro: intro.length, onScroll: revealed.length, loops: record.animations.filter(item => item.loop).length,
+    productChanges: record.productChanges.length, durations: tally(record.animations.filter(item => !item.loop).map(item => item.duration)),
+    easings: tally(record.animations.map(item => item.easing)), properties: tally(record.animations.flatMap(item => item.props)),
+    introSequence: sample(intro), scrollSamples: sample(revealed) };
+}
+
 export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: readonly string[]): Promise<Readonly<{
   studied: readonly Readonly<{ url: string; dir: string; screens: number; sections: number; weights: readonly number[] }>[];
   skipped: readonly Readonly<{ url: string; reason: string }>[] }>> {
@@ -149,12 +216,19 @@ export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: r
       if (!/^https?:\/\//i.test(url)) { skipped.push({ url, reason: 'not an http(s) URL' }); continue; }
       const page = await browser.newPage({ viewport: STUDY_VIEWPORT });
       try {
-        const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => null);
+        await page.addInitScript(recordMotion);
+        const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch(() => null);
         if (response !== null && response.status() >= 400) { skipped.push({ url, reason: `HTTP ${response.status()}` }); continue; }
-        await page.waitForTimeout(1500);
+        // The first screen as it arrives: what leads, what follows, when it settles.
+        const intro: Buffer[] = [];
+        for (const wait of [300, 500, 900]) { await page.waitForTimeout(wait); intro.push(await page.screenshot()); }
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
+        await page.waitForTimeout(1200);
+        const introEnd = await page.evaluate(() => Math.round(performance.now()));
         const height = Math.min(await page.evaluate(() => document.documentElement.scrollHeight), STUDY_VIEWPORT.height * STUDY_MAX_SCREENS);
-        // Lazy sections load only once scrolled past.
-        for (let y = 0; y < height; y += 700) { await page.evaluate(top => window.scrollTo(0, top), y); await page.waitForTimeout(200); }
+        // Scroll like a reader, a screen at a time with a pause, so lazy sections load and scroll reveals fire and finish.
+        for (let y = 0; y < height; y += 700) { await page.mouse.wheel(0, 700); await page.waitForTimeout(450); }
+        const motion = motionSummary(await page.evaluate(readMotion), introEnd);
         await page.evaluate(() => window.scrollTo(0, 0));
         await page.waitForTimeout(800);
         const measured = await page.evaluate(measurePage);
@@ -163,6 +237,7 @@ export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: r
         const dir = `${STUDIO_REFS_DIR}/${slug(url)}`;
         writer.mkdir(dir);
         writer.write(`${dir}/first-screen.png`, firstScreen);
+        intro.forEach((frame, index) => writer.write(`${dir}/intro-${index + 1}.png`, pageIdeaPreview(frame, STUDY_PREVIEW_WIDTH)));
         writer.write(`${dir}/full.png`, pageIdeaPreview(fullShot, STUDY_PREVIEW_WIDTH));
         const full = PNG.sync.read(fullShot);
         const sections = measured.sections.slice(0, STUDY_MAX_SECTIONS).map((section, index) => {
@@ -172,7 +247,7 @@ export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: r
           writer.write(`${dir}/${name}`, pageIdeaPreview(crop(full, section.top, cut), STUDY_PREVIEW_WIDTH));
           return { ...section, crop: name };
         });
-        writer.write(`${dir}/study.json`, `${JSON.stringify({ ...measured, requested: url, sections }, null, 1)}\n`);
+        writer.write(`${dir}/study.json`, `${JSON.stringify({ ...measured, requested: url, sections, motion }, null, 1)}\n`);
         studied.push({ url, dir, screens: measured.screens, sections: sections.length, weights: measured.weights });
       } catch (error) {
         skipped.push({ url, reason: error instanceof Error ? error.message.split('\n')[0]!.slice(0, 160) : String(error) });
@@ -281,6 +356,12 @@ export type SystemDriftObservation = Readonly<{
   offSystemWeights: readonly Readonly<{ weight: number; example: string }>[];
   arrows: readonly string[];
   playerControls: number;
+  /** Desktop only: the first screen holds a key visual built in code. */
+  keyVisual?: boolean;
+  /** Desktop only: something in the first screen animates as the page loads. */
+  arrives?: boolean;
+  /** Desktop only: the key visual keeps changing on its own after the page has loaded. */
+  performs?: boolean;
 }>;
 
 const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number }>): Omit<SystemDriftObservation, 'viewport'> => {
@@ -305,6 +386,32 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ 
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length };
 });
 
+// The key visual a designer builds first: marked data-product, at least half the width, in the first screen, made of live text or a
+// large drawn canvas/svg. A recording or screenshot dropped into a frame is the product's footage, not its look made for the page.
+const observeKeyVisual = browserCallback((): boolean => [...document.querySelectorAll('[data-product]')].some(element => {
+  const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+  if (box.width < window.innerWidth * 0.5 || box.top >= window.innerHeight || box.bottom <= 0 || style.visibility === 'hidden' || style.display === 'none') return false;
+  const lines = [...element.querySelectorAll('*')]
+    .filter(child => [...child.childNodes].some(node => node.nodeType === 3 && (node.textContent ?? '').trim().length > 0)).length;
+  const drawn = [...element.querySelectorAll('canvas, svg')].some(child => child.getBoundingClientRect().width >= window.innerWidth * 0.4);
+  return lines >= 8 || drawn;
+}));
+
+const PERFORM_WINDOW_MS = 3500;
+
+/** The first screen arrives (an intro animation, or script-driven style changes in its first seconds) and the key visual keeps performing. */
+async function observeFirstScreenMotion(page: import('playwright').Page, keyVisual: boolean): Promise<Pick<SystemDriftObservation, 'keyVisual' | 'arrives' | 'performs'>> {
+  await page.waitForTimeout(300);
+  const settled = await page.evaluate(readMotion);
+  await page.waitForTimeout(PERFORM_WINDOW_MS);
+  const later = await page.evaluate(readMotion);
+  const arrives = later.animations.some(item => item.firstScreen && !item.loop && item.t < 4000) || later.introStyleChanges > 0;
+  const settledAt = settled.animations.at(-1)?.t ?? 0;
+  const performs = later.productChanges.length > settled.productChanges.length
+    || later.animations.some(item => item.product && (item.loop || item.t > settledAt));
+  return { keyVisual, arrives, performs };
+}
+
 /** Measure the build against its system at desktop and mobile, scrolled through so revealed sections are seen. */
 export async function observeSystemDrift(target: string, system: StudioSystem): Promise<readonly SystemDriftObservation[]> {
   const { chromium } = await import('playwright');
@@ -315,10 +422,12 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
     for (const [viewport, size] of [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]] as const) {
       const page = await browser.newPage({ viewport: size });
       try {
+        if (viewport === 'desktop') await page.addInitScript(recordMotion);
         await page.goto(resolved.url, { waitUntil: 'networkidle', timeout: 30_000 }).catch(() => undefined);
+        const keyVisual = viewport === 'desktop' ? await observeFirstScreenMotion(page, await page.evaluate(observeKeyVisual)) : {};
         const height = await page.evaluate(() => document.documentElement.scrollHeight);
         for (let y = 0; y < Math.min(height, 30_000); y += size.height) { await page.evaluate(top => window.scrollTo(0, top), y); await page.waitForTimeout(150); }
-        observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE }) });
+        observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE }), ...keyVisual });
       } finally { await page.close(); }
     }
     return observations;
@@ -328,10 +437,13 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
   }
 }
 
-/** What a designer would mark up on the build: type outside the promised system, arrow glyphs on links and buttons, player chrome. */
+/** What a designer would mark up on the build: no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome. */
 export function systemDriftFailures(observations: readonly SystemDriftObservation[]): readonly string[] {
   const failures: string[] = [];
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, keyVisual, arrives, performs } of observations) {
+    if (arrives === false) failures.push(`${viewport}: the first screen does not arrive: nothing in it animates as the page loads (take the reference's intro: what leads, from what, how long, which curve)`);
+    if (keyVisual === true && performs === false) failures.push(`${viewport}: the key visual stands still: nothing inside data-product changes on its own in the ${PERFORM_WINDOW_MS / 1000}s after load (play the product's real flow in it: states change, rows arrive, a cursor works; rest under prefers-reduced-motion)`);
+    if (keyVisual === false) failures.push(`${viewport}: no key visual built in code in the first screen (an element marked data-product, at least half the width, made of the product's live interface or a large drawn canvas/svg; a recording or screenshot in a frame is not one)`);
     if (offSystemSizes.length > 0) failures.push(`${viewport}: sizes outside the system ${offSystemSizes.slice(0, 6).map(item => `${item.size}px ("${item.example}")`).join(', ')}`);
     if (offSystemWeights.length > 0) failures.push(`${viewport}: weights outside the system ${offSystemWeights.slice(0, 4).map(item => `${item.weight} ("${item.example}")`).join(', ')}`);
     if (arrows.length > 0) failures.push(`${viewport}: arrow glyphs on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
@@ -347,7 +459,8 @@ export async function requireStudioSystemHeld(root: string, route: Route, target
   if (system === null) return;
   const failures = systemDriftFailures(await observeSystemDrift(target, system));
   if (failures.length > 0) {
-    throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. Set each `
+    throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. Build the `
+      + 'key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving with real input, marked data-product. Set each '
       + 'element in one of the system\'s sizes and weights (or widen the system in its notes when the reference really has that step); a link '
       + 'or button says where it goes in words, without arrow glyphs; a demo video plays muted and looped with no player chrome. A recreated '
       + 'product interface marked data-product keeps its own sizes.'), { code: 'STUDIO_SYSTEM_DRIFT' });
