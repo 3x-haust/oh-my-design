@@ -15,7 +15,9 @@ const VIEWPORTS = [{ viewport: 'desktop', width: 1280, height: 900 }, { viewport
 export const STUDIO_CONCEPT_GUIDANCE = 'A new page starts as three comps, not one draft. First capture whole finished sites whose craft this page '
   + 'must show with omd studio refs <url> <url> <url> --json. Then write each concept as an art direction at '
   + `${STUDIO_CONCEPTS_DIR}/<name>/prompt.md: its own composition, protagonist object, material and light, palette and type, so the pages differ in `
-  + 'structure, not colour. omd studio concepts --json draws each as a full-page comp from the brief, the copy, the README logo and the references. '
+  + 'structure, not colour. Each takes its identity from the project, not from the references: name what in the repository it grows from (the '
+  + 'logo\'s colours and character, the README\'s voice, the product\'s own visuals) and the one bold idea it carries; at least one concept leans '
+  + 'all the way into that personality. omd studio concepts --json draws each as a full-page comp from the brief, the copy, the README logo and the references. '
   + 'Look at every comp, then run omd studio pick --json. Without a usable Codex CLI, write a full-page HTML sketch (index.html) per concept instead.';
 
 export type StudioConcept = Readonly<{ name: string; sourceSha256: string;
@@ -64,9 +66,14 @@ export async function renderStudioConcepts(root: string, writer: ProjectWriteAda
       + 'direction: the composition, the protagonist object, its material and light, the palette and type, what this page does that the others do not.'),
     { code: 'STUDIO_COMP_PROMPT' });
   }
+  const drawing = await import('./studio-comps.ts');
+  if (prompts.length > 0 && drawing.compLogoMissing(root)) {
+    throw Object.assign(new Error(`STUDIO_COMP_LOGO: no logo file was found for the comps to place, and the README links its logo from the web. `
+      + `Save the project's logo exactly as published to ${drawing.STUDIO_LOGO} (PNG), then run again; a project with no logo writes an empty `
+      + `${drawing.STUDIO_NO_LOGO} instead.`), { code: 'STUDIO_COMP_LOGO' });
+  }
   // Comps are drawn before anything is written, so a failed drawing leaves the previous record as it was.
-  const comps = prompts.length === 0 ? [] : await (draw ?? (async concepts =>
-    (await import('./studio-comps.ts')).generateStudioComps(root, concepts)))(prompts);
+  const comps = prompts.length === 0 ? [] : await (draw ?? (concepts => drawing.generateStudioComps(root, concepts)))(prompts);
   writer.mkdir(`${STUDIO_DIR}/renders`);
   const concepts: StudioConcept[] = [];
   for (const { name, comp, firstScreen } of comps) {

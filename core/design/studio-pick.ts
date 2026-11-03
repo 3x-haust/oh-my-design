@@ -67,14 +67,16 @@ export async function runStudioPick(root: string, invocation: ProjectRunInvocati
     explicit.length > 0 ? explicit.length : TASTE_ANCHORS_PER_RUN);
   if (anchors.used.length === 0) return fail(`no human-made page could be captured (${anchors.skipped.map(item => `${item.url}: ${item.reason}`).join('; ')})`);
   const size = TASTE_VIEWPORTS.desktop;
-  const plans = concepts.flatMap(concept => {
+  const plans = concepts.flatMap((concept, conceptIndex) => {
     const capture = concept.captures.find(item => item.viewport === 'desktop')!;
     const shot = readContainedRegularFile(run.projectRoot, capture.path, 'concept render');
     if (sha256(shot) !== capture.sha256) return fail(`${capture.path} changed; run omd studio concepts again`);
-    return anchors.used.flatMap(anchor => {
+    return anchors.used.flatMap((anchor, anchorIndex) => {
       const anchorCapture = anchor.captures.find(item => item.viewport === 'desktop') ?? fail('anchor capture missing');
       const anchorShot = readContainedRegularFile(run.projectRoot, anchorCapture.path, 'anchor capture');
-      return ORDERS.map(order => {
+      // Position bias cancels across anchors, so each anchor is shown once in alternating order; a lone anchor is shown both ways.
+      const orders = anchors.used.length === 1 ? ORDERS : [ORDERS[(anchorIndex + conceptIndex) % ORDERS.length]!];
+      return orders.map(order => {
         const renders = (order === 'project-first' ? [shot, anchorShot] : [anchorShot, shot]).map((bytes, index) => ({
           label: TASTE_LABELS[index]!, ...size, captureSha256: sha256(bytes), pngBase64: bytes.toString('base64') }));
         const evidence = { renders };
@@ -98,16 +100,16 @@ export async function runStudioPick(root: string, invocation: ProjectRunInvocati
       });
     });
   });
-  // One concept's trials at a time: a provider hiccup voids one batch, not all of them, and fewer reviewers run at once.
-  const trials: StudioPickTrial[] = [];
-  for (const concept of concepts) {
+  // Every concept's trials run at once, each concept as its own batch: a provider hiccup voids one batch, and the pick takes the time of
+  // one concept instead of three.
+  const batches = await Promise.all(concepts.map(async concept => {
     const batch = plans.filter(plan => plan.concept === concept.name);
     const roleResults = await runPiTasteComparisonReviewers({
       root: run.projectRoot, invocation, ...(options.signal === undefined ? {} : { signal: options.signal }),
       trials: batch.map(plan => ({ packet: plan.packet,
         validateHandback: (final: string) => { parseTasteComparisonReview(piParse(final, 'taste-handback'), plan.bindings); } })),
     });
-    batch.forEach((plan, index) => {
+    return batch.map((plan, index): StudioPickTrial => {
       const verified = verifySignedPiEyeRoleResult(roleResults[index], run.projectRoot);
       if (verified.receipt.taskSha256 !== sha256(TASTE_COMPARISON_REVIEW_TASK)
         || verified.receipt.reviewerEvidence.packetSha256 !== sha256(plan.packet)
@@ -115,10 +117,11 @@ export async function runStudioPick(root: string, invocation: ProjectRunInvocati
         || verified.receipt.provider !== run.host.provider || verified.receipt.model !== run.host.model) fail('review execution binding');
       const review = parseTasteComparisonReview(piParse(verified.finalMessage, 'taste-handback'), plan.bindings);
       const projectLabel: TasteLabel = plan.order === 'project-first' ? 'A' : 'B';
-      trials.push({ concept: plan.concept, anchorUrl: plan.anchorUrl, order: plan.order, projectLabel, human: review.human,
-        projectJudgedAi: review.human !== projectLabel, confidence: review.confidence, aiTells: review.aiTells, humanSignals: review.humanSignals });
+      return { concept: plan.concept, anchorUrl: plan.anchorUrl, order: plan.order, projectLabel, human: review.human,
+        projectJudgedAi: review.human !== projectLabel, confidence: review.confidence, aiTells: review.aiTells, humanSignals: review.humanSignals };
     });
-  }
+  }));
+  const trials = batches.flat();
   const scores = scoreStudioConcepts(concepts, trials);
   const body: StudioPickBody = { schema: STUDIO_PICK_SCHEMA, createdAt: new Date().toISOString(), buildSha256: invocation.current.buildSha256,
     anchors: anchors.used.map(anchor => anchor.url), concepts: scores, picked: scores[0]!.name, trials };
