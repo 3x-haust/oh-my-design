@@ -8,18 +8,22 @@ type Route = ReturnType<typeof readPersistedRoute>;
  * the agent opens only what the skill names unconditionally, and the copy, layout, colour, composition and motion
  * packs stay unread while the page fills with explanations.
  */
-export function composeGuidance(route: Route, comp?: string): string {
+export function composeGuidance(route: Route): string {
   const korean = /[ㄱ-ㆎ가-힣]/.test(route.request);
-  // A new page already has its structure in the picked concept; building it is the work, not more reading.
+  // A new page already has its system from the studied reference; building, looking and cutting is the work, not more reading.
   if (newSurface(route)) {
-    const target = comp === undefined
-      ? 'Build the picked concept in the project as components: keep its structure, carry the strengths the pick named and drop the tells it named. '
-      : `Build the picked comp (${comp}) in the project as components: it is the target. Open it and match its section order, composition, `
-        + 'type scale, spacing, palette and its small exact details; build its 3D object as a lit three.js scene with real materials, and use the '
-        + 'real copy and the real logo file where the comp shows them. ';
-    return `${route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : ''}${target}omd pack guides/landing-basics.md `
-      + 'once for the basics a designer keeps (a header in reach, plain-word navigation, one primary action, real head metadata, no dead '
-      + `links or invented proof). ${korean ? 'Korean text: omd pack theory/typography-korean.md. ' : ''}Then build and run omd lifecycle finish --json.`;
+    return `${route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : ''}Build the page in the project as components on `
+      + 'the system in .omd/studio/system.json. The key visual first: the one visual that carries the page, made in code at large size from the '
+      + 'product\'s real look (for software, its own interface recreated crisply in its real colours and moving with real input, marked '
+      + 'data-product); a screen recording with a player bar is not a key visual. Shoot it alone (omd render <page> --out <png>), look, and refine '
+      + 'until it could sit on the reference\'s site. Then the sections at the reference\'s rhythm and depth: as many as the project\'s real '
+      + 'material supports, one idea each at full size with its real demo (muted, looped, no player chrome), compositions varied (a full-bleed '
+      + 'moment, a cropped detail, a pair, a typographic statement); the header carries the project\'s real logo file where its detail stays legible. '
+      + 'Subtract: omd studio check --page <build>/index.html, and cut arrow glyphs, small uppercase labels, tiny captions, tabs and badges that '
+      + 'do no job. Compare: shoot the page (--full-page) and put it beside the reference\'s first-screen.png and full.png; fix the biggest '
+      + 'differences in scale, whitespace, type, the visual, rhythm and finish, at most three passes. omd pack guides/landing-basics.md once for '
+      + 'the basics a designer keeps (a header in reach, plain-word navigation, one primary action, real head metadata, no dead links or invented '
+      + `proof). ${korean ? 'Korean text: omd pack theory/typography-korean.md. ' : ''}Then build and run omd lifecycle finish --json.`;
   }
   const marketing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const start = route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : '';

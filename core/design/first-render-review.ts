@@ -13,9 +13,7 @@ import { motionRequired } from './new-surface-advisories.ts';
 import { readDesignBrief } from './design-brief.ts';
 import { latestBlindComparison } from './taste-comparison-record.ts';
 import { ideaImages, pageIdeaPreview } from './idea-image.ts';
-import { currentStudioPick } from './studio-pick.ts';
-import { currentStudioConcepts } from './studio.ts';
-import { STUDIO_COMP_REVIEW_WIDTH } from './studio-comps.ts';
+import { primaryStudy, STUDIO_REFERENCE_REVIEW_WIDTH } from './studio.ts';
 import { MAX_BROKERED_EVIDENCE_BYTES } from '../runtime/evidence-proxy.ts';
 import { pageBasicsTells, proofShowsOutput, readPageBasics } from './page-basics.ts';
 import { parseReferenceCaptures, referenceComparisonBindings } from './first-render-reference-comparison.ts';
@@ -189,7 +187,7 @@ function preparePacket(
   const blind = latestBlindComparison(root);
   const motion = firstRenderMotionProjection(root, piDigest(current.reportSha256, 'report-sha'));
   const ideas = shed < 1 ? pageIdeaRenders(root) : [];
-  const comp = pickedStudioComp(root);
+  const reference = studioReferenceRender(root);
   const keptReference = (render: { state: string; referenceRole: string }) =>
     (shed < 2 || render.state === 'default') && (shed < 3 || render.referenceRole === 'primary');
   const referenceRenders = (consulted?.renders ?? []).filter(keptReference);
@@ -232,7 +230,7 @@ function preparePacket(
     ...(motion === null ? {} : { motion: motion.context, motionRenders: motion.renders }),
     ...(ideas.length ? { pageIdeas: ideas } : {}),
     // A one-row image field, so the transport delivers it as an image like every other render.
-    ...(comp === null ? {} : { studioComp: [comp] }),
+    ...(reference === null ? {} : { studioReference: [reference] }),
     ...(feedback === null ? {} : { reportedFeedback: feedback.context, feedbackRenders: feedback.renders }),
     ...(consulted === null ? {} : {
       consultedReferences: consulted.context,
@@ -337,13 +335,12 @@ function preparePacket(
 }
 
 /** The latest page idea of each section (up to four), with its prompt: the maker's drafts made before building. */
-/** The comp the new page was picked from and is built to, narrowed for review; null for a sketched or unpicked concept. */
-function pickedStudioComp(root: string) {
-  const pick = currentStudioPick(root);
-  const concept = pick === null ? undefined : currentStudioConcepts(root).find(item => item.name === pick.picked);
-  if (concept?.comp === undefined) return null;
-  const bytes = pageIdeaPreview(readFileSync(join(root, concept.comp.path)), STUDIO_COMP_REVIEW_WIDTH);
-  return { role: 'studio-comp' as const, concept: concept.name, path: concept.comp.path, sourceSha256: concept.comp.sha256,
+/** The finished site the new page took its system from, its whole page narrowed for review; null before a system exists. */
+function studioReferenceRender(root: string) {
+  const study = primaryStudy(root);
+  if (study === null) return null;
+  const bytes = pageIdeaPreview(readFileSync(join(root, study.full)), STUDIO_REFERENCE_REVIEW_WIDTH);
+  return { role: 'studio-reference' as const, url: study.url, path: study.full, sourceSha256: study.sha256,
     captureSha256: sha256(bytes), pngBase64: bytes.toString('base64') };
 }
 

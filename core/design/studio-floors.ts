@@ -20,6 +20,10 @@ export const LIVE_SCENE_SHARE = 0.25;
 const MAX_SCREENS = 10;
 const SKIPPED = new Set(['node_modules', '.git', '.omd', '.omc', 'dist', 'build', 'coverage', '.next', 'out']);
 
+/** Where the agent saves the project's logo when the README only links it from the web, or says it has none. */
+export const STUDIO_LOGO = '.omd/studio/logo.png';
+export const STUDIO_NO_LOGO = '.omd/studio/no-logo';
+
 /** The request asks to see something in 3D. */
 export function requestsThreeD(request: string): boolean {
   return /(?:^|[^a-z0-9])3d(?![a-z0-9])|three\.?js|webgl|입체|3차원/i.test(request);
@@ -220,7 +224,9 @@ export function studioFloorFailures(marks: readonly BrandMark[], wantsThreeD: bo
 /** Refusal boundary at the first render of a new page: its mark is the README's logo file (or a shipped mark) and asked-for 3D is live. */
 export async function requireStudioFloors(root: string, route: Route, target: string): Promise<void> {
   if (!newSurface(route)) return;
-  const logos = readmeLogos(root);
+  const saved = existsSync(join(root, STUDIO_LOGO))
+    ? [{ path: STUDIO_LOGO, sha256: sha256(readFileSync(join(root, STUDIO_LOGO))), pathData: [] }] : [];
+  const logos = saved.length > 0 ? saved : readmeLogos(root);
   const marks = logos.length > 0 ? logos : projectBrandMarks(root);
   const wantsThreeD = requestsThreeD(route.request);
   if (marks.length === 0 && !wantsThreeD) return;

@@ -1,171 +1,355 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { join } from 'node:path';
+import { PNG } from 'pngjs';
+import { browserCallback } from '../ref/browser-evaluation.ts';
+import { resolveRenderTarget } from '../render/serve.ts';
+import type { readPersistedRoute } from '../route/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import type { GeneratedComp } from './studio-comps.ts';
+import { pageIdeaPreview } from './idea-image.ts';
+import { newSurface } from './new-surface-advisories.ts';
+import { projectBrandMarks, readmeLogos, STUDIO_LOGO, STUDIO_NO_LOGO } from './studio-floors.ts';
 
+type Route = ReturnType<typeof readPersistedRoute>;
+
+/**
+ * A new page is made the way a designer makes one: study finished sites by measurement, borrow one site's system and
+ * give it the project's own identity, spend the effort on the key visual, then cut. The page is held to the system it
+ * promised by measuring the build, and compared with the site it learned from once at the end.
+ */
 export const STUDIO_DIR = '.omd/studio';
-export const STUDIO_CONCEPTS_DIR = `${STUDIO_DIR}/concepts`;
-export const STUDIO_CONCEPTS_RECORD = `${STUDIO_DIR}/concepts.json`;
-export const STUDIO_CONCEPTS_SCHEMA = 'omd-studio-concepts-v1';
-/** A choice needs real alternatives; three is the exploration floor, not a statistic about designers. */
-export const STUDIO_MIN_CONCEPTS = 3;
-const VIEWPORTS = [{ viewport: 'desktop', width: 1280, height: 900 }, { viewport: 'mobile', width: 390, height: 844 }] as const;
+export const STUDIO_REFS_DIR = `${STUDIO_DIR}/refs`;
+export const STUDIO_SYSTEM_RECORD = `${STUDIO_DIR}/system.json`;
+export const STUDIO_SYSTEM_NOTES = `${STUDIO_DIR}/system.md`;
 
-export const STUDIO_CONCEPT_GUIDANCE = 'A new page starts as three comps, not one draft. First capture whole finished sites whose craft this page '
-  + 'must show with omd studio refs <url> <url> <url> --json. Then write each concept as an art direction at '
-  + `${STUDIO_CONCEPTS_DIR}/<name>/prompt.md: its own composition, protagonist object, material and light, palette and type, so the pages differ in `
-  + 'structure, not colour. Each takes its identity from the project, not from the references: name what in the repository it grows from (the '
-  + 'logo\'s colours and character, the README\'s voice, the product\'s own visuals) and the one bold idea it carries; at least one concept leans '
-  + 'all the way into that personality. omd studio concepts --json draws each as a full-page comp from the brief, the copy, the README logo and the references. '
-  + 'Look at every comp, then run omd studio pick --json. Without a usable Codex CLI, write a full-page HTML sketch (index.html) per concept instead.';
-
-export type StudioConcept = Readonly<{ name: string; sourceSha256: string;
-  captures: readonly Readonly<{ viewport: 'desktop' | 'mobile'; path: string; sha256: string }>[];
-  /** A drawn concept's full-page comp; a sketched concept has none. */
-  comp?: Readonly<{ path: string; sha256: string }> }>;
-export type StudioConceptsRecord = Readonly<{ schema: typeof STUDIO_CONCEPTS_SCHEMA; createdAt: string; concepts: readonly StudioConcept[] }>;
+const STUDY_VIEWPORT = { width: 1440, height: 900 } as const;
+const STUDY_MAX_SCREENS = 14;
+const STUDY_PREVIEW_WIDTH = 1000;
+const STUDY_MAX_SECTIONS = 12;
+/** Notes shorter than this cannot hold the measured numbers, the project's identity and the signature. */
+const MIN_SYSTEM_NOTES = 400;
+/** A system is a few deliberate steps: enough sizes for display, heading, body and detail, at most three weights. */
+export const STUDIO_SYSTEM_SIZES: readonly [number, number] = [4, 9];
+export const STUDIO_SYSTEM_WEIGHTS = 3;
+/** The width the primary reference is shown to the reviewer at: its whole scroll readable beside the page's own captures. */
+export const STUDIO_REFERENCE_REVIEW_WIDTH = 800;
+/** Rendered sizes within this distance of a system size are that size (rem rounding). */
+const SIZE_TOLERANCE = 0.6;
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+const slug = (url: string): string => {
+  const parsed = new URL(url);
+  return `${parsed.hostname.replace(/^www\./, '')}${parsed.pathname.replace(/\/+$/, '')}`.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+};
 
-/** Each concept folder holds an HTML sketch (index.html) or an art direction to draw (prompt.md); a sketch wins when both exist. */
-export function studioConceptPages(root: string): readonly Readonly<{ name: string; page: string; kind: 'sketch' | 'comp' }>[] {
-  const dir = join(root, STUDIO_CONCEPTS_DIR);
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && /^[a-z0-9][a-z0-9-]{0,40}$/.test(entry.name))
-    .flatMap((entry): Readonly<{ name: string; page: string; kind: 'sketch' | 'comp' }>[] => existsSync(join(dir, entry.name, 'index.html'))
-      ? [{ name: entry.name, page: `${STUDIO_CONCEPTS_DIR}/${entry.name}/index.html`, kind: 'sketch' as const }]
-      : existsSync(join(dir, entry.name, 'prompt.md'))
-        ? [{ name: entry.name, page: `${STUDIO_CONCEPTS_DIR}/${entry.name}/prompt.md`, kind: 'comp' as const }] : [])
-    .sort((left, right) => left.name.localeCompare(right.name));
-}
+export const STUDIO_STUDY_GUIDANCE = 'A new page starts from finished sites, studied the way a designer studies them. Pick two or three real sites in '
+  + 'this project\'s spirit whose craft you want, run omd studio refs <url> <url> --json, and look at each first-screen.png, full.png and '
+  + 'section crop under .omd/studio/refs/<site>/ beside its measured study.json (type ramp, weights, sections, how it frames its product).';
 
-export type CompDrawer = (concepts: readonly Readonly<{ name: string; prompt: string }>[]) => Promise<readonly GeneratedComp[]>;
+export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${STUDIO_SYSTEM_NOTES}: the type ramp you take from its measurements `
+  + '(five or six sizes, at most three weights, tracking, line heights), container width, section rhythm, how it frames product visuals, its '
+  + 'button; then what comes from the project instead: accent colours and character from its logo, voice from its README. Name the reference\'s '
+  + 'signature (the one or two moves that make it feel made by a person) and this project\'s own equivalent. Then write '
+  + `${STUDIO_SYSTEM_RECORD} as {"reference": "<primary url>", "sizes": [px...], "weights": [n...]}; every size and weight the page renders comes from it.`;
 
-export type ConceptRenderer = (page: string, viewport: Readonly<{ width: number; height: number }>, out: string) => Promise<void>;
+export type StudioStudy = Readonly<{ url: string; dir: string; firstScreen: string; full: string; sha256: string }>;
 
-export async function renderStudioConcepts(root: string, writer: ProjectWriteAdapter, render: ConceptRenderer,
-  now: () => Date = () => new Date(), draw?: CompDrawer): Promise<StudioConceptsRecord & Readonly<{ path: string }>> {
-  const pages = studioConceptPages(root);
-  if (pages.length < STUDIO_MIN_CONCEPTS) {
-    throw Object.assign(new Error(`STUDIO_CONCEPTS_MISSING: found ${pages.length} concept sketch${pages.length === 1 ? '' : 'es'}. ${STUDIO_CONCEPT_GUIDANCE}`),
-      { code: 'STUDIO_CONCEPTS_MISSING' });
+type Measured = Readonly<{
+  url: string; pageHeight: number; screens: number;
+  typeRamp: readonly Readonly<{ size: number; weight: number; tracking: string; lineHeight: string; family: string; count: number; example: string }>[];
+  weights: readonly number[];
+  sections: readonly Readonly<{ top: number; height: number; background: string; contentWidth: number | null; heading: string; largeMedia: number; words: number; crop?: string }>[];
+  visuals: readonly Readonly<{ tag: string; top: number; width: number; height: number; radius: string; shadow: string; playerControls: boolean }>[];
+  buttons: readonly Readonly<{ text: string; height: number; padding: string; radius: string; size: string; weight: string; background: string }>[];
+  backgrounds: readonly string[]; wordsPerScreen: number; arrows: number;
+}>;
+
+const measurePage = browserCallback((): Measured => {
+  const round = (value: number) => Math.round(value * 10) / 10;
+  const visible = (element: Element) => {
+    const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+    return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.05;
+  };
+  const all = [...document.querySelectorAll('body *')].filter(visible);
+  const texts = all.filter(element => [...element.childNodes].some(node => node.nodeType === 3 && (node.textContent ?? '').trim().length > 1));
+  const styles = new Map<string, { count: number; example: string }>();
+  for (const element of texts) {
+    const style = getComputedStyle(element);
+    const key = [round(parseFloat(style.fontSize)), style.fontWeight, style.letterSpacing === 'normal' ? '0' : style.letterSpacing,
+      style.lineHeight, (style.fontFamily.split(',')[0] ?? '').replace(/["']/g, '')].join('|');
+    const entry = styles.get(key) ?? { count: 0, example: (element.textContent ?? '').trim().slice(0, 50) };
+    entry.count += 1;
+    styles.set(key, entry);
   }
-  const sketches = pages.filter(page => page.kind === 'sketch'), drawn = pages.filter(page => page.kind === 'comp');
-  const alike = alikeStudioConcepts(root, sketches);
-  if (alike.length > 0) {
-    throw Object.assign(new Error(`STUDIO_CONCEPTS_ALIKE: ${alike.map(pair => `${pair.left} and ${pair.right} ${pair.reason}`).join('; ')}. `
-      + 'A concept edited from another is the same concept. Write each sketch from a blank file: its own layout and stylesheet, its own '
-      + 'section order and count, its own relation between the object and the copy, its own navigation.'), { code: 'STUDIO_CONCEPTS_ALIKE' });
+  const typeRamp = [...styles.entries()].map(([key, entry]) => {
+    const [size, weight, tracking, lineHeight, family] = key.split('|');
+    return { size: Number(size), weight: Number(weight), tracking: tracking ?? '0', lineHeight: lineHeight ?? '', family: family ?? '', ...entry };
+  }).filter(entry => entry.count >= 2 || entry.size >= 24).sort((a, b) => b.size - a.size || b.count - a.count).slice(0, 24);
+  const pageHeight = document.documentElement.scrollHeight;
+  const blocks = all.filter(element => { const box = element.getBoundingClientRect(); return box.width >= innerWidth * 0.8 && box.height >= 240 && box.height < pageHeight * 0.9; })
+    .map(element => ({ element, top: Math.round(element.getBoundingClientRect().top + scrollY), height: Math.round(element.getBoundingClientRect().height) }))
+    .sort((a, b) => a.top - b.top || b.height - a.height);
+  const sections: Measured['sections'][number][] = [];
+  for (const { element, top, height } of blocks) {
+    if (sections.some(section => top >= section.top && top + height <= section.top + section.height + 2)) continue;
+    const inner = [...element.querySelectorAll('*')].filter(visible).map(child => child.getBoundingClientRect().width).filter(width => width > 200 && width < innerWidth - 20);
+    sections.push({ top, height, background: getComputedStyle(element).backgroundColor, contentWidth: inner.length > 0 ? Math.round(Math.max(...inner)) : null,
+      heading: ([...element.querySelectorAll('h1,h2,h3')].find(visible)?.textContent ?? '').trim().slice(0, 60),
+      largeMedia: [...element.querySelectorAll('img,video,canvas,svg,picture')].filter(visible).filter(media => { const box = media.getBoundingClientRect(); return box.width * box.height > 60_000; }).length,
+      words: ((element as HTMLElement).innerText ?? '').split(/\s+/).filter(Boolean).length });
   }
-  const prompts = drawn.map(({ name, page }) => ({ name, prompt: readFileSync(join(root, page), 'utf8') }));
-  const short = prompts.filter(concept => concept.prompt.trim().length < 80);
-  if (short.length > 0) {
-    throw Object.assign(new Error(`STUDIO_COMP_PROMPT: ${short.map(concept => concept.name).join(', ')} ${short.length === 1 ? 'needs' : 'need'} a real art `
-      + 'direction: the composition, the protagonist object, its material and light, the palette and type, what this page does that the others do not.'),
-    { code: 'STUDIO_COMP_PROMPT' });
-  }
-  const drawing = await import('./studio-comps.ts');
-  if (prompts.length > 0 && drawing.compLogoMissing(root)) {
-    throw Object.assign(new Error(`STUDIO_COMP_LOGO: no logo file was found for the comps to place, and the README links its logo from the web. `
-      + `Save the project's logo exactly as published to ${drawing.STUDIO_LOGO} (PNG), then run again; a project with no logo writes an empty `
-      + `${drawing.STUDIO_NO_LOGO} instead.`), { code: 'STUDIO_COMP_LOGO' });
-  }
-  // Comps are drawn before anything is written, so a failed drawing leaves the previous record as it was.
-  const comps = prompts.length === 0 ? [] : await (draw ?? (concepts => drawing.generateStudioComps(root, concepts)))(prompts);
-  writer.mkdir(`${STUDIO_DIR}/renders`);
-  const concepts: StudioConcept[] = [];
-  for (const { name, comp, firstScreen } of comps) {
-    const compPath = `${STUDIO_CONCEPTS_DIR}/${name}/comp.png`, capturePath = `${STUDIO_DIR}/renders/${name}-desktop.png`;
-    writer.write(compPath, comp);
-    writer.write(capturePath, firstScreen);
-    concepts.push({ name, sourceSha256: sha256(readFileSync(join(root, STUDIO_CONCEPTS_DIR, name, 'prompt.md'))),
-      captures: [{ viewport: 'desktop', path: capturePath, sha256: sha256(firstScreen) }], comp: { path: compPath, sha256: sha256(comp) } });
-  }
-  for (const { name, page } of sketches) {
-    const captures = [];
-    for (const { viewport, width, height } of VIEWPORTS) {
-      const out = `${STUDIO_DIR}/renders/${name}-${viewport}.png`;
-      await render(join(root, page), { width, height }, out);
-      captures.push({ viewport, path: out, sha256: sha256(readFileSync(join(root, out))) });
-    }
-    concepts.push({ name, sourceSha256: sha256(readFileSync(join(root, page))), captures });
-  }
-  concepts.sort((left, right) => left.name.localeCompare(right.name));
-  const record: StudioConceptsRecord = { schema: STUDIO_CONCEPTS_SCHEMA, createdAt: now().toISOString(), concepts };
-  writer.write(STUDIO_CONCEPTS_RECORD, `${JSON.stringify(record, null, 2)}\n`);
-  return { ...record, path: STUDIO_CONCEPTS_RECORD };
-}
-
-// Below these sizes a sketch is too small to compare; a near-empty page says nothing about its composition.
-const MIN_COMPARED_RULES = 6;
-const MIN_COMPARED_ELEMENTS = 12;
-/** Share of style rules two sketches may hold in common; a shared reset is fine, a shared stylesheet is one layout. */
-export const STUDIO_CONCEPT_SHARED_RULES = 0.5;
-
-function conceptStyleRules(root: string, page: string, html: string): ReadonlySet<string> {
-  const sheets = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(match => match[1] ?? '');
-  for (const match of html.matchAll(/<link\b[^>]*rel=["']?stylesheet[^>]*>/gi)) {
-    const href = /href=["']?([^"'\s>]+)/i.exec(match[0])?.[1];
-    if (!href || /^[a-z]+:|^\/\//i.test(href)) continue;
-    const path = resolve(dirname(join(root, page)), href.split(/[?#]/)[0] ?? '');
-    if (!relative(root, path).startsWith('..') && existsSync(path)) sheets.push(readFileSync(path, 'utf8'));
-  }
-  const inline = [...html.matchAll(/\sstyle=["']([^"']*)["']/gi)].map(match => `[style]{${match[1] ?? ''}`);
-  return new Set([...sheets.join('}').replace(/\/\*[\s\S]*?\*\//g, '').split('}'), ...inline]
-    .map(rule => rule.replace(/\s+/g, ' ').trim()).filter(rule => rule.length > 0));
-}
-
-function conceptSkeleton(html: string): readonly string[] {
-  const body = /<body\b[^>]*>([\s\S]*)/i.exec(html)?.[1] ?? html;
-  return [...body.replace(/<!--[\s\S]*?-->|<(script|style)\b[\s\S]*?<\/\1>/gi, '').matchAll(/<([a-z][a-z0-9-]*)/gi)]
-    .map(match => (match[1] ?? '').toLowerCase()).filter(tag => !['html', 'head', 'body', 'meta', 'link', 'title', 'base'].includes(tag));
-}
-
-/** Pairs of sketches that are one concept: mostly the same stylesheet, or the same markup with new words. */
-export function alikeStudioConcepts(root: string, pages: readonly Readonly<{ name: string; page: string }>[]):
-  readonly Readonly<{ left: string; right: string; reason: string }>[] {
-  const read = pages.map(({ name, page }) => {
-    const html = readFileSync(join(root, page), 'utf8');
-    return { name, rules: conceptStyleRules(root, page, html), skeleton: conceptSkeleton(html) };
+  const visuals = all.filter(element => /^(IMG|VIDEO|CANVAS|SVG|PICTURE)$/i.test(element.tagName))
+    .map(element => ({ element, box: element.getBoundingClientRect() })).filter(({ box }) => box.width * box.height > 120_000).slice(0, 12)
+    .map(({ element, box }) => {
+      let frame: Element = element;
+      for (let depth = 0; depth < 4 && frame.parentElement; depth += 1) {
+        const style = getComputedStyle(frame);
+        if (style.borderRadius !== '0px' || style.boxShadow !== 'none') break;
+        frame = frame.parentElement;
+      }
+      const style = getComputedStyle(frame);
+      return { tag: element.tagName.toLowerCase(), top: Math.round(box.top + scrollY), width: Math.round(box.width), height: Math.round(box.height),
+        radius: style.borderRadius, shadow: style.boxShadow.slice(0, 100), playerControls: element instanceof HTMLVideoElement && element.controls };
+    });
+  const buttons = [...document.querySelectorAll('a,button')].filter(visible).filter(element => {
+    const style = getComputedStyle(element);
+    return style.backgroundColor !== 'rgba(0, 0, 0, 0)' || style.borderStyle !== 'none';
+  }).slice(0, 6).map(element => {
+    const style = getComputedStyle(element);
+    return { text: (element.textContent ?? '').trim().slice(0, 30), height: Math.round(element.getBoundingClientRect().height), padding: style.padding,
+      radius: style.borderRadius, size: style.fontSize, weight: style.fontWeight, background: style.backgroundColor };
   });
-  const alike = [];
-  for (let i = 0; i < read.length; i += 1) {
-    for (let j = i + 1; j < read.length; j += 1) {
-      const left = read[i]!, right = read[j]!;
-      if (left.rules.size >= MIN_COMPARED_RULES && right.rules.size >= MIN_COMPARED_RULES) {
-        const shared = [...left.rules].filter(rule => right.rules.has(rule)).length;
-        const share = shared / (left.rules.size + right.rules.size - shared);
-        if (share >= STUDIO_CONCEPT_SHARED_RULES) {
-          alike.push({ left: left.name, right: right.name, reason: `share ${Math.round(share * 100)}% of their style rules` });
-          continue;
-        }
-      }
-      if (left.skeleton.length >= MIN_COMPARED_ELEMENTS && left.skeleton.join() === right.skeleton.join()) {
-        alike.push({ left: left.name, right: right.name, reason: 'have the same markup' });
-      }
-    }
+  const areas = new Map<string, number>();
+  for (const element of all) {
+    const box = element.getBoundingClientRect(), color = getComputedStyle(element).backgroundColor;
+    if (color !== 'rgba(0, 0, 0, 0)' && box.width > 600) areas.set(color, (areas.get(color) ?? 0) + box.width * box.height);
   }
-  return alike;
+  const text = document.body.innerText;
+  return { url: location.href, pageHeight, screens: Math.round(pageHeight / innerHeight * 10) / 10, typeRamp,
+    weights: [...new Set(texts.map(element => Number(getComputedStyle(element).fontWeight)))].sort((a, b) => a - b), sections, visuals, buttons,
+    backgrounds: [...areas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([color]) => color),
+    wordsPerScreen: Math.round(text.split(/\s+/).filter(Boolean).length / (pageHeight / innerHeight)), arrows: (text.match(/[↗→↘]/g) ?? []).length };
+});
+
+function crop(full: PNG, top: number, height: number): Buffer {
+  const out = new PNG({ width: full.width, height });
+  PNG.bitblt(full, out, 0, top, full.width, height, 0, 0);
+  return PNG.sync.write(out);
 }
 
-export function readStudioConcepts(root: string): StudioConceptsRecord | null {
+/** Capture and measure finished sites: the first screen, the whole page, each section on its own, and the numbers behind them. */
+export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: readonly string[]): Promise<Readonly<{
+  studied: readonly Readonly<{ url: string; dir: string; screens: number; sections: number; weights: readonly number[] }>[];
+  skipped: readonly Readonly<{ url: string; reason: string }>[] }>> {
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  const studied = [], skipped: { url: string; reason: string }[] = [];
   try {
-    const value: unknown = JSON.parse(readFileSync(join(root, STUDIO_CONCEPTS_RECORD), 'utf8'));
-    if (typeof value !== 'object' || value === null || Reflect.get(value, 'schema') !== STUDIO_CONCEPTS_SCHEMA) return null;
-    const concepts = Reflect.get(value, 'concepts');
-    return Array.isArray(concepts) ? value as StudioConceptsRecord : null;
-  } catch { return null; }
+    for (const url of urls) {
+      if (!/^https?:\/\//i.test(url)) { skipped.push({ url, reason: 'not an http(s) URL' }); continue; }
+      const page = await browser.newPage({ viewport: STUDY_VIEWPORT });
+      try {
+        const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => null);
+        if (response !== null && response.status() >= 400) { skipped.push({ url, reason: `HTTP ${response.status()}` }); continue; }
+        await page.waitForTimeout(1500);
+        const height = Math.min(await page.evaluate(() => document.documentElement.scrollHeight), STUDY_VIEWPORT.height * STUDY_MAX_SCREENS);
+        // Lazy sections load only once scrolled past.
+        for (let y = 0; y < height; y += 700) { await page.evaluate(top => window.scrollTo(0, top), y); await page.waitForTimeout(200); }
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForTimeout(800);
+        const measured = await page.evaluate(measurePage);
+        const firstScreen = await page.screenshot();
+        const fullShot = await page.screenshot({ fullPage: true, clip: { x: 0, y: 0, width: STUDY_VIEWPORT.width, height } });
+        const dir = `${STUDIO_REFS_DIR}/${slug(url)}`;
+        writer.mkdir(dir);
+        writer.write(`${dir}/first-screen.png`, firstScreen);
+        writer.write(`${dir}/full.png`, pageIdeaPreview(fullShot, STUDY_PREVIEW_WIDTH));
+        const full = PNG.sync.read(fullShot);
+        const sections = measured.sections.slice(0, STUDY_MAX_SECTIONS).map((section, index) => {
+          const cut = Math.min(section.height, 1800, full.height - section.top);
+          if (cut <= 0) return section;
+          const name = `section-${String(index + 1).padStart(2, '0')}.png`;
+          writer.write(`${dir}/${name}`, pageIdeaPreview(crop(full, section.top, cut), STUDY_PREVIEW_WIDTH));
+          return { ...section, crop: name };
+        });
+        writer.write(`${dir}/study.json`, `${JSON.stringify({ ...measured, requested: url, sections }, null, 1)}\n`);
+        studied.push({ url, dir, screens: measured.screens, sections: sections.length, weights: measured.weights });
+      } catch (error) {
+        skipped.push({ url, reason: error instanceof Error ? error.message.split('\n')[0]!.slice(0, 160) : String(error) });
+      } finally { await page.close(); }
+    }
+  } finally { await browser.close(); }
+  return { studied, skipped };
 }
 
-/** Rendered concepts whose sketch or prompt, comp and captures are still the files on disk; an edited concept needs rendering again. */
-export function currentStudioConcepts(root: string): readonly StudioConcept[] {
-  return (readStudioConcepts(root)?.concepts ?? []).filter(concept => {
+/** The sites studied so far, by the URL each study was asked for. */
+export function studioStudies(root: string): readonly StudioStudy[] {
+  const base = join(root, STUDIO_REFS_DIR);
+  if (!existsSync(base)) return [];
+  return readdirSync(base, { withFileTypes: true }).filter(entry => entry.isDirectory()).flatMap(entry => {
+    const dir = `${STUDIO_REFS_DIR}/${entry.name}`;
     try {
-      return sha256(readFileSync(join(root, STUDIO_CONCEPTS_DIR, concept.name, concept.comp === undefined ? 'index.html' : 'prompt.md'))) === concept.sourceSha256
-        && (concept.comp === undefined || sha256(readFileSync(join(root, concept.comp.path))) === concept.comp.sha256)
-        && concept.captures.every(capture => sha256(readFileSync(join(root, capture.path))) === capture.sha256);
-    } catch { return false; }
-  });
+      const study: unknown = JSON.parse(readFileSync(join(root, dir, 'study.json'), 'utf8'));
+      const url = typeof study === 'object' && study !== null ? Reflect.get(study, 'requested') : undefined;
+      const firstScreen = `${dir}/first-screen.png`, full = `${dir}/full.png`;
+      if (typeof url !== 'string' || !existsSync(join(root, firstScreen)) || !existsSync(join(root, full))) return [];
+      return [{ url, dir, firstScreen, full, sha256: sha256(readFileSync(join(root, full))) }];
+    } catch { return []; }
+  }).sort((a, b) => a.dir.localeCompare(b.dir));
+}
+
+export type StudioSystem = Readonly<{ reference: string; sizes: readonly number[]; weights: readonly number[] }>;
+
+const sameSite = (left: string, right: string): boolean => {
+  try { return slug(left) === slug(right); } catch { return false; }
+};
+
+/** The study of the site the system was taken from, or null before there is one. */
+export function primaryStudy(root: string): StudioStudy | null {
+  let system: StudioSystem | null;
+  try { system = readStudioSystem(root); } catch { return null; }
+  return system === null ? null : studioStudies(root).find(study => sameSite(study.url, system.reference)) ?? null;
+}
+
+/** The system the page promised, or the reason it cannot be used; null when none is written yet. */
+export function readStudioSystem(root: string): StudioSystem | null {
+  if (!existsSync(join(root, STUDIO_SYSTEM_RECORD))) return null;
+  const invalid = (reason: string): never => {
+    throw Object.assign(new Error(`STUDIO_SYSTEM_INVALID: ${STUDIO_SYSTEM_RECORD} ${reason}. ${STUDIO_SYSTEM_GUIDANCE}`), { code: 'STUDIO_SYSTEM_INVALID' });
+  };
+  let value: unknown;
+  try { value = JSON.parse(readFileSync(join(root, STUDIO_SYSTEM_RECORD), 'utf8')); } catch { return invalid('is not JSON'); }
+  if (typeof value !== 'object' || value === null) return invalid('is not an object');
+  const reference = Reflect.get(value, 'reference'), sizes = Reflect.get(value, 'sizes'), weights = Reflect.get(value, 'weights');
+  if (typeof reference !== 'string') return invalid('names no primary reference');
+  const numbers = (list: unknown) => Array.isArray(list) && list.every(item => typeof item === 'number' && Number.isFinite(item) && item > 0);
+  if (!numbers(sizes) || new Set(sizes as number[]).size < STUDIO_SYSTEM_SIZES[0] || (sizes as number[]).length > STUDIO_SYSTEM_SIZES[1]) {
+    return invalid(`needs ${STUDIO_SYSTEM_SIZES[0]} to ${STUDIO_SYSTEM_SIZES[1]} distinct sizes in px`);
+  }
+  if (!numbers(weights) || (weights as number[]).length === 0 || new Set(weights as number[]).size > STUDIO_SYSTEM_WEIGHTS) {
+    return invalid(`needs one to ${STUDIO_SYSTEM_WEIGHTS} weights`);
+  }
+  return { reference, sizes: sizes as number[], weights: weights as number[] };
+}
+
+/** What a new surface still owes before its page is built: a study of finished sites, then the system taken from one of them. */
+export function studioPending(root: string, route: Route): 'study' | 'system' | null {
+  if (!newSurface(route)) return null;
+  const studies = studioStudies(root);
+  if (studies.length === 0) return 'study';
+  const system = readStudioSystem(root);
+  if (system === null || !studies.some(study => sameSite(study.url, system.reference))) return 'system';
+  const notes = existsSync(join(root, STUDIO_SYSTEM_NOTES)) ? readFileSync(join(root, STUDIO_SYSTEM_NOTES), 'utf8').trim() : '';
+  return notes.length < MIN_SYSTEM_NOTES || logoUnsaved(root) ? 'system' : null;
+}
+
+/**
+ * A project with a README nearly always has a logo, but many READMEs link it from the web (an uploaded image with no alt text),
+ * where no file check finds it; without the file the page gets a drawn substitute in place of the real mark.
+ */
+function logoUnsaved(root: string): boolean {
+  return readmeLogos(root).length === 0 && projectBrandMarks(root).length === 0 && !existsSync(join(root, STUDIO_LOGO))
+    && !existsSync(join(root, STUDIO_NO_LOGO)) && readdirSync(root).some(name => /^readme(?:\.[a-z-]+)?\.md$/i.test(name));
+}
+
+/** The page's own source; a package manifest, config or font may be scaffolded before the system. */
+export function studioPageSource(path: string): boolean {
+  const normalized = path.replace(/^\.\//, '').replace(/\\/g, '/');
+  if (normalized.startsWith('.omd/')) return false;
+  return /(?:^|\/)index\.html$/.test(normalized) || (/(?:^|\/)src\//.test(normalized) && /\.(?:tsx?|jsx?|css|html)$/.test(normalized));
+}
+
+/** Refusal boundary at page-source writes, the first render and finish: a new surface is built on a system taken from a studied site. */
+export function requireStudioSystem(root: string, route: Route): void {
+  const pending = studioPending(root, route);
+  if (pending === 'study') {
+    throw Object.assign(new Error(`STUDIO_STUDY_MISSING: study finished sites before the page. ${STUDIO_STUDY_GUIDANCE}`), { code: 'STUDIO_STUDY_MISSING' });
+  }
+  if (pending === 'system') {
+    const system = readStudioSystem(root);
+    const reason = system === null ? 'no system is written yet'
+      : !studioStudies(root).some(study => sameSite(study.url, system.reference)) ? `its reference ${system.reference} was not studied with omd studio refs`
+        : logoUnsaved(root) ? `no logo file was found and the README links its logo from the web: save the project's logo exactly as published to ${STUDIO_LOGO} (PNG), or write an empty ${STUDIO_NO_LOGO} when it has none`
+          : `${STUDIO_SYSTEM_NOTES} is missing or too thin to hold the measured system, the project's identity and the signature`;
+    throw Object.assign(new Error(`STUDIO_SYSTEM_MISSING: ${reason}. ${STUDIO_SYSTEM_GUIDANCE}`), { code: 'STUDIO_SYSTEM_MISSING' });
+  }
+}
+
+export type SystemDriftObservation = Readonly<{
+  viewport: 'desktop' | 'mobile';
+  offSystemSizes: readonly Readonly<{ size: number; example: string }>[];
+  offSystemWeights: readonly Readonly<{ weight: number; example: string }>[];
+  arrows: readonly string[];
+  playerControls: number;
+}>;
+
+const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number }>): Omit<SystemDriftObservation, 'viewport'> => {
+  const visible = (element: Element) => {
+    const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+    return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.05;
+  };
+  // A recreated product interface keeps its own sizes; the page marks it with data-product.
+  const texts = [...document.querySelectorAll('body *')].filter(visible).filter(element => element.closest('[data-product]') === null)
+    .filter(element => [...element.childNodes].some(node => node.nodeType === 3 && (node.textContent ?? '').trim().length > 0));
+  const example = (element: Element) => (element.textContent ?? '').trim().slice(0, 40);
+  const offSizes = new Map<number, string>(), offWeights = new Map<number, string>();
+  for (const element of texts) {
+    const style = getComputedStyle(element);
+    const size = Math.round(parseFloat(style.fontSize) * 10) / 10, weight = Number(style.fontWeight);
+    if (!sizes.some(value => Math.abs(value - size) <= tolerance) && !offSizes.has(size)) offSizes.set(size, example(element));
+    if (!weights.includes(weight) && !offWeights.has(weight)) offWeights.set(weight, example(element));
+  }
+  const arrows = [...document.querySelectorAll('a, button')].filter(visible).map(example).filter(text => /[↗→↘↙←↓↑]/.test(text));
+  return { offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
+    offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
+    arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length };
+});
+
+/** Measure the build against its system at desktop and mobile, scrolled through so revealed sections are seen. */
+export async function observeSystemDrift(target: string, system: StudioSystem): Promise<readonly SystemDriftObservation[]> {
+  const { chromium } = await import('playwright');
+  const resolved = await resolveRenderTarget(target);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const observations: SystemDriftObservation[] = [];
+    for (const [viewport, size] of [['desktop', { width: 1440, height: 900 }], ['mobile', { width: 390, height: 844 }]] as const) {
+      const page = await browser.newPage({ viewport: size });
+      try {
+        await page.goto(resolved.url, { waitUntil: 'networkidle', timeout: 30_000 }).catch(() => undefined);
+        const height = await page.evaluate(() => document.documentElement.scrollHeight);
+        for (let y = 0; y < Math.min(height, 30_000); y += size.height) { await page.evaluate(top => window.scrollTo(0, top), y); await page.waitForTimeout(150); }
+        observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE }) });
+      } finally { await page.close(); }
+    }
+    return observations;
+  } finally {
+    await browser.close();
+    await resolved.close();
+  }
+}
+
+/** What a designer would mark up on the build: type outside the promised system, arrow glyphs on links and buttons, player chrome. */
+export function systemDriftFailures(observations: readonly SystemDriftObservation[]): readonly string[] {
+  const failures: string[] = [];
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls } of observations) {
+    if (offSystemSizes.length > 0) failures.push(`${viewport}: sizes outside the system ${offSystemSizes.slice(0, 6).map(item => `${item.size}px ("${item.example}")`).join(', ')}`);
+    if (offSystemWeights.length > 0) failures.push(`${viewport}: weights outside the system ${offSystemWeights.slice(0, 4).map(item => `${item.weight} ("${item.example}")`).join(', ')}`);
+    if (arrows.length > 0) failures.push(`${viewport}: arrow glyphs on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
+    if (playerControls > 0) failures.push(`${viewport}: ${playerControls} video${playerControls === 1 ? '' : 's'} with visible player controls`);
+  }
+  return [...new Set(failures)];
+}
+
+/** Refusal boundary at the first render and finish of a new page: it renders the system it promised. */
+export async function requireStudioSystemHeld(root: string, route: Route, target: string): Promise<void> {
+  if (!newSurface(route)) return;
+  const system = readStudioSystem(root);
+  if (system === null) return;
+  const failures = systemDriftFailures(await observeSystemDrift(target, system));
+  if (failures.length > 0) {
+    throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. Set each `
+      + 'element in one of the system\'s sizes and weights (or widen the system in its notes when the reference really has that step); a link '
+      + 'or button says where it goes in words, without arrow glyphs; a demo video plays muted and looped with no player chrome. A recreated '
+      + 'product interface marked data-product keeps its own sizes.'), { code: 'STUDIO_SYSTEM_DRIFT' });
+  }
 }

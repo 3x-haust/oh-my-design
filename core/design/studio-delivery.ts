@@ -14,17 +14,17 @@ import { STUDIO_DIR } from './studio.ts';
 type Route = ReturnType<typeof readPersistedRoute>;
 
 /**
- * A new page is delivered the way a studio delivers on a deadline: the picked concept is built, its first render is
- * reviewed and recomposed for a few rounds, and the best render ships with the findings still open named to the
- * person. The long evidence chain of existing-product work (browser plans, final reviewer lanes, publication
- * graphs) is not asked of it; the build, the floors and the review rounds are.
+ * A new page is delivered the way a designer delivers: built on the system taken from a studied site, held to it by
+ * measurement, and compared once with that site by an independent reviewer; the page ships with whatever that look
+ * still names. Designers compare and cut while they build; an outside loop of rounds only sands a page toward average.
+ * The long evidence chain of existing-product work (browser plans, final reviewer lanes, publication graphs) is not
+ * asked of it.
  */
-export const STUDIO_REVIEW_ROUNDS = 3;
+export const STUDIO_REVIEW_ROUNDS = 1;
 export const STUDIO_DELIVERY_RECORD = `${STUDIO_DIR}/delivery.json`;
-export const STUDIO_DELIVERY_SCHEMA = 'omd-studio-delivery-v1';
-export const STUDIO_DELIVER_MESSAGE = `${STUDIO_REVIEW_ROUNDS} review rounds are spent. If a later round is worse, restore the best `
-  + 'iteration (omd first-render restore --json); then run omd lifecycle finish --json to deliver the best render and report the '
-  + 'findings still open to the user, without another round.';
+export const STUDIO_DELIVERY_SCHEMA = 'omd-studio-delivery-v2';
+export const STUDIO_DELIVER_MESSAGE = 'The page has had its comparison with the reference. Run omd lifecycle finish --json to deliver it and '
+  + 'report the findings still open to the user, without another round.';
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
@@ -50,7 +50,8 @@ export type StudioDeliveryBody = Readonly<{
   routeSha256: string;
   sourceSha256: string;
   entryPath: string;
-  picked: string;
+  /** The studied site whose system the page was built on. */
+  reference: string;
   verification: readonly string[];
   review: Readonly<{ sha256: string; decision: string; rounds: number; openFindings: readonly string[] }>;
 }>;

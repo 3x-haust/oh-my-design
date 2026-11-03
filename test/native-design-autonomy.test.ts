@@ -108,9 +108,9 @@ test('ordinary native production preserves outcomes and scope without intermedia
   assert.deepEqual(route.sourceContract.allowedPaths, input.allowedPaths);
   assert.equal(route.sourceContract.processPolicy?.schema, 'model-led-design-process-v1');
   const pack = fileURLToPath(new URL('../core', import.meta.url));
-  // The new page's own source waits only for its studio pick; no frame or composition record stands in front of it.
+  // The new page's own source waits only for its studied system; no frame or composition record stands in front of it.
   assert.deepEqual(checkProductionReadiness(f.root, f.invocation, pack, 'index.html').blockers.map(blocker => blocker.split(':').slice(0, 2).join(':')),
-    ['studio: STUDIO_CONCEPTS_MISSING']);
+    ['studio: STUDIO_STUDY_MISSING']);
   const readiness = checkProductionReadiness(f.root, f.invocation, pack);
   assert.deepEqual(readiness.blockers, []);
   assert.equal(readiness.ok, true);
