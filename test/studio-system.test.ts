@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { PNG } from 'pngjs';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
@@ -130,4 +132,11 @@ test('the build step names the designer method: system, key visual first, depth,
   assert.match(text, /omd studio check --page/);
   assert.match(text, /beside the reference's first-screen\.png and full\.png/);
   assert.match(text, /typography-korean\.md/);
+});
+
+test('the studio commands load from the CLI entry, whatever module the CLI imports first', () => {
+  const run = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/omd.ts', import.meta.url)), 'studio', 'refs', 'ftp://example.com', '--json'],
+    { encoding: 'utf8', timeout: 60_000 });
+  assert.doesNotMatch(`${run.stdout}${run.stderr}`, /before initialization/);
+  assert.deepEqual(JSON.parse(run.stdout).skipped, [{ url: 'ftp://example.com', reason: 'not an http(s) URL' }]);
 });
