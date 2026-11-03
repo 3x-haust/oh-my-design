@@ -9,7 +9,7 @@ import { signNativeObservation, verifyNativeObservation } from '../runtime/self-
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { listProductionSourceFiles } from '../source-seal/index.ts';
 import { readFirstRenderIterationHistory } from './first-render-iteration-history.ts';
-import { STUDIO_DIR } from './studio.ts';
+import { STUDIO_DIR } from './studio-paths.ts';
 
 type Route = ReturnType<typeof readPersistedRoute>;
 

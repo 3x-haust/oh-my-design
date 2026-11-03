@@ -9,6 +9,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { pageIdeaPreview } from './idea-image.ts';
 import { newSurface } from './new-surface-advisories.ts';
 import { projectBrandMarks, readmeLogos, STUDIO_LOGO, STUDIO_NO_LOGO } from './studio-floors.ts';
+import { STUDIO_DIR } from './studio-paths.ts';
 
 type Route = ReturnType<typeof readPersistedRoute>;
 
@@ -17,7 +18,6 @@ type Route = ReturnType<typeof readPersistedRoute>;
  * give it the project's own identity, spend the effort on the key visual, then cut. The page is held to the system it
  * promised by measuring the build, and compared with the site it learned from once at the end.
  */
-export const STUDIO_DIR = '.omd/studio';
 export const STUDIO_REFS_DIR = `${STUDIO_DIR}/refs`;
 export const STUDIO_SYSTEM_RECORD = `${STUDIO_DIR}/system.json`;
 export const STUDIO_SYSTEM_NOTES = `${STUDIO_DIR}/system.md`;
