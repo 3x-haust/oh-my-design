@@ -193,10 +193,11 @@ type MotionRecord = Readonly<{
 const readMotion = browserCallback((): MotionRecord => Reflect.get(window, '__omdMotion') as MotionRecord);
 
 /** How a studied site moves, in the terms a designer would write down: the intro, what each scroll reveals, what keeps moving, the curves. */
-function motionSummary(record: MotionRecord, introEnd: number) {
+function motionSummary(arrival: MotionRecord, reading: MotionRecord, introEnd: number) {
   const tally = (values: readonly (string | number)[]) => Object.entries(values.reduce<Record<string, number>>((counts, value) => ({ ...counts, [value]: (counts[value] ?? 0) + 1 }), {}))
     .sort((a, b) => b[1] - a[1]).slice(0, 6).map(([value, count]) => ({ value, count }));
-  const intro = record.animations.filter(item => item.t <= introEnd), revealed = record.animations.filter(item => item.t > introEnd);
+  const intro = arrival.animations, revealed = reading.animations.filter(item => item.t > introEnd);
+  const record = { animations: [...intro, ...revealed], productChanges: [...arrival.productChanges, ...reading.productChanges] };
   const sample = (items: MotionRecord['animations']) => items.filter((item, index, list) => index === 0 || item.target !== list[index - 1]!.target || item.top !== list[index - 1]!.top)
     .slice(0, 16).map(({ t, scrollY, target, duration, delay, easing, from, loop, product }) => ({ t, scrollY, target, duration, delay, easing, from, loop, product }));
   return { intro: intro.length, onScroll: revealed.length, loops: record.animations.filter(item => item.loop).length,
@@ -222,13 +223,21 @@ export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: r
         // The first screen as it arrives: what leads, what follows, when it settles.
         const intro: Buffer[] = [];
         for (const wait of [300, 500, 900]) { await page.waitForTimeout(wait); intro.push(await page.screenshot()); }
-        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => undefined);
-        await page.waitForTimeout(1200);
+        await page.waitForTimeout(1500);
+        const arrival = await page.evaluate(readMotion);
+        // The page is read from a settled load. Some sites split visitors between variants (zed.dev served a one-screen company
+        // portal about half the time); a one-screen read is loaded again as a new visitor, so a long product page is not studied as one screen.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await page.context().clearCookies();
+          await page.goto(url, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => null);
+          await page.waitForTimeout(1500);
+          if (await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight * 1.05)) break;
+        }
         const introEnd = await page.evaluate(() => Math.round(performance.now()));
         const height = Math.min(await page.evaluate(() => document.documentElement.scrollHeight), STUDY_VIEWPORT.height * STUDY_MAX_SCREENS);
         // Scroll like a reader, a screen at a time with a pause, so lazy sections load and scroll reveals fire and finish.
         for (let y = 0; y < height; y += 700) { await page.mouse.wheel(0, 700); await page.waitForTimeout(450); }
-        const motion = motionSummary(await page.evaluate(readMotion), introEnd);
+        const motion = motionSummary(arrival, await page.evaluate(readMotion), introEnd);
         await page.evaluate(() => window.scrollTo(0, 0));
         await page.waitForTimeout(800);
         const measured = await page.evaluate(measurePage);
@@ -242,7 +251,7 @@ export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: r
         const full = PNG.sync.read(fullShot);
         const sections = measured.sections.slice(0, STUDY_MAX_SECTIONS).map((section, index) => {
           const cut = Math.min(section.height, 1800, full.height - section.top);
-          if (cut <= 0) return section;
+          if (cut <= 0 || section.top < 0) return section;
           const name = `section-${String(index + 1).padStart(2, '0')}.png`;
           writer.write(`${dir}/${name}`, pageIdeaPreview(crop(full, section.top, cut), STUDY_PREVIEW_WIDTH));
           return { ...section, crop: name };
@@ -380,7 +389,11 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ 
     if (!sizes.some(value => Math.abs(value - size) <= tolerance) && !offSizes.has(size)) offSizes.set(size, example(element));
     if (!weights.includes(weight) && !offWeights.has(weight)) offWeights.set(weight, example(element));
   }
-  const arrows = [...document.querySelectorAll('a, button')].filter(visible).map(example).filter(text => /[↗→↘↙←↓↑]/.test(text));
+  // Arrows set as text or drawn with ::before/::after content.
+  const arrow = /[↗→↘↙←↓↑]/;
+  const arrows = [...document.querySelectorAll('a, button')].filter(visible)
+    .filter(element => arrow.test(example(element)) || ['::before', '::after'].some(pseudo => arrow.test(getComputedStyle(element, pseudo).content)))
+    .map(element => arrow.test(example(element)) ? example(element) : `${example(element)} ${getComputedStyle(element, '::after').content.replace(/^"|"$/g, '').trim()}`.trim());
   return { offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
     offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length };
