@@ -128,6 +128,12 @@ test('a new surface renders three concepts and picks one blind before its first 
   assert.deepEqual(studioBlockers('src/App.tsx'), []);
   requireStudioPick(root, route);
   assert.notEqual(nextStageWork(root, packRoot, invocation).stage, 'concepts');
+  // Beside two anchors each concept is shown once per anchor, in alternating order, and every batch runs at once.
+  const twice = await runStudioPick(root, invocation, { anchors: [`${origin}/a`, `${origin}/b`], signal: t.signal });
+  assert.equal(twice.picked, 'journey');
+  for (const concept of ['atelier', 'journey', 'specimen']) {
+    assert.deepEqual(twice.trials.filter(trial => trial.concept === concept).map(trial => trial.order).sort(), ['anchor-first', 'project-first']);
+  }
 
   // Editing a sketch after the pick makes its render and the pick stale until both are redone.
   sketch(root, 'journey', 'a different route');

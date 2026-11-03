@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -39,7 +39,9 @@ const noRender = async () => { throw new Error('a drawn concept is not rendered 
 test('the comp instruction carries the brief, copy, logo and reference craft, and the restraint rules', () => {
   const text = compInstruction({ brief: 'A design harness for coding agents.', copy: '사람처럼 디자인합니다.', concept: 'Editorial, one object.', logo: true, references: 3 });
   assert.match(text, /first attached image is the project's logo: place it exactly as it is/);
-  assert.match(text, /other attached images are the bodies of finished sites\. Take their craft/);
+  assert.match(text, /other attached images are the bodies of finished sites\. Take how they are made/);
+  assert.match(text, /identity comes from the project itself.*logo's own colours, shapes and character set the palette/);
+  assert.match(text, /could not pass for a documentation template/);
   assert.match(text, /Never take their branding, colours, copy, illustrations or layout wholesale/);
   assert.match(text, /appears below it at most once, smaller and quieter/);
   assert.match(text, /no small eyebrow label above every section/);
@@ -109,6 +111,31 @@ test('three art directions are drawn as comps with the README logo and the refer
   await assert.rejects(renderStudioConcepts(root, writer, noRender, () => new Date(0), concepts => generateStudioComps(root, concepts,
     async () => { throw new Error('exit 1: not logged in'); })), /STUDIO_COMP_UNAVAILABLE: atelier: exit 1: not logged in.*write each concept as a full-page HTML sketch/);
   assert.equal(readFileSync(join(root, '.omd/studio/concepts.json'), 'utf8'), before);
+});
+
+test('a README that links its logo from the web stops the comps until the logo is saved, or the project says it has none', async t => {
+  const root = project(t);
+  writeFileSync(join(root, 'README.md'), '<p align="center"><img width="536" src="https://user-images.example.com/174470852.png"></p>\n# Tool\n');
+  for (const name of ['atelier', 'journey', 'specimen']) prompt(root, name);
+  const writer = plainWriter(root);
+  let drawn = 0;
+  const draw = async (concepts: readonly Readonly<{ name: string; prompt: string }>[]) => generateStudioComps(root, concepts,
+    async (directory, _instruction, attachments) => { drawn += 1; seen.push(attachments); writeFileSync(join(directory, 'comp.png'), solid(1440, 3000, 40)); });
+  const seen: (readonly string[])[] = [];
+  await assert.rejects(renderStudioConcepts(root, writer, noRender, () => new Date(0), draw), /STUDIO_COMP_LOGO: .*\.omd\/studio\/logo\.png/);
+  assert.equal(drawn, 0);
+  assert.equal(existsSync(join(root, '.omd/studio/concepts.json')), false);
+  // The saved logo is the first attachment of every comp.
+  writeFileSync(join(root, '.omd/studio/logo.png'), solid(20, 20, 7));
+  await renderStudioConcepts(root, writer, noRender, () => new Date(0), draw);
+  assert.equal(drawn, 3);
+  assert.ok(seen.every(attachments => attachments[0] === join(root, '.omd/studio/logo.png')));
+  // A project without any logo says so and draws without one.
+  rmSync(join(root, '.omd/studio/logo.png'));
+  writeFileSync(join(root, '.omd/studio/no-logo'), '');
+  seen.length = 0;
+  await renderStudioConcepts(root, writer, noRender, () => new Date(0), draw);
+  assert.ok(seen.every(attachments => attachments.length === 0));
 });
 
 test('the build step points a picked comp out as the target; a sketched pick keeps the concept wording', () => {

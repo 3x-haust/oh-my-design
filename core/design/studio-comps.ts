@@ -83,10 +83,13 @@ export function compInstruction(input: Readonly<{ brief: string; copy: string; c
       + 'eyebrow label above every section, no generic split hero with a floating object, no icon grids or card grids, no gradient blobs, no app '
       + 'window screenshots or screens inside screens, no invented example results, testimonials, logos or numbers.',
     input.logo ? 'The first attached image is the project\'s logo: place it exactly as it is, never redrawn or restyled.' : '',
-    input.references > 0 ? `The ${input.logo ? 'other ' : ''}attached images are the bodies of finished sites. Take their craft: a clear two-level `
-      + 'hierarchy per section on one strict grid, substance shown through small exact details (real commands and their output, real file '
-      + 'names, short numbered steps, captions in a small text or mono size, thin rules), purposeful white space, type that steps down clearly. '
-      + 'Never take their branding, colours, copy, illustrations or layout wholesale.' : '',
+    'The page\'s identity comes from the project itself, as a designer finds it in the repository: the logo\'s own colours, shapes and '
+      + 'character set the palette and the mood, and the README\'s voice sets the tone. Never dress the project in a neutral palette it does not '
+      + 'have; a playful project looks playful, a severe one severe. Carry one bold idea from that identity through the whole page, so it is '
+      + 'remembered as this project\'s site and could not pass for a documentation template.',
+    input.references > 0 ? `The ${input.logo ? 'other ' : ''}attached images are the bodies of finished sites. Take how they are made: one strict `
+      + 'grid, a hierarchy that steps down clearly, the pacing between dense and open screens, substance shown through exact details, finish in '
+      + 'the small parts. Never take their branding, colours, copy, illustrations or layout wholesale.' : '',
     'The story unfolds over the scroll: the first screen carries one message and its object; each later screen one idea at full size; no '
       + 'tabs, accordions or carousels. A 3D object, when the page has one, is the first screen\'s protagonist and appears below it at most once, '
       + 'smaller and quieter; never repeat giant crops of it section after section.',
@@ -97,9 +100,24 @@ export function compInstruction(input: Readonly<{ brief: string; copy: string; c
   ].filter(Boolean).join('\n\n');
 }
 
-/** A PNG of the project's logo for the comp to place as is: the README logo's raster form, or a logo file the project ships. */
+/** Where the agent saves the project's logo when the README only links it from the web. */
+export const STUDIO_LOGO = '.omd/studio/logo.png';
+/** Written instead when the project has no logo at all. */
+export const STUDIO_NO_LOGO = '.omd/studio/no-logo';
+
+/** A PNG of the project's logo for the comp to place as is: one the agent saved, else the README logo's raster form. */
 export function compLogo(root: string): string | null {
+  if (existsSync(join(root, STUDIO_LOGO))) return STUDIO_LOGO;
   return readmeLogos(root).find(mark => mark.path.endsWith('.png'))?.path ?? null;
+}
+
+/**
+ * A project with a README nearly always has a logo, but many READMEs link it from the web (an uploaded image with no alt text), where
+ * no file check finds it. Drawing on without it gives comps a typed wordmark in place of the real mark, so the agent saves it first.
+ */
+export function compLogoMissing(root: string): boolean {
+  return compLogo(root) === null && !existsSync(join(root, STUDIO_NO_LOGO))
+    && readdirSync(root).some(name => /^readme(?:\.[a-z-]+)?\.md$/i.test(name));
 }
 
 export type CompRunner = (directory: string, instruction: string, attachments: readonly string[]) => Promise<string | void>;
