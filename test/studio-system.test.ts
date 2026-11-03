@@ -82,8 +82,15 @@ test('page source is any index.html or src file outside the design record, inclu
 
 test('a study keeps the first screen, the whole page, each section and the measured system; unusable URLs are skipped', { timeout: 120_000 }, async t => {
   const root = project(t);
+  let visits = 0;
   const server = createServer((request, response) => {
     if (request.url === '/missing') { response.writeHead(404); response.end('no'); return; }
+    // A site that serves its first visitors a one-screen variant: the study reads it again as a new visitor.
+    if (request.url === '/tools' && ++visits === 2) {
+      response.writeHead(200, { 'content-type': 'text/html' });
+      response.end('<body style="margin:0;height:100vh;overflow:hidden"><h1 style="font:600 40px Arial">Portal</h1></body>');
+      return;
+    }
     response.writeHead(200, { 'content-type': 'text/html' });
     response.end('<body style="margin:0;font:400 18px Arial">'
       + '<style>@keyframes rise{from{opacity:0;transform:translateY(20px)}}h1{animation:rise 700ms cubic-bezier(0.22,1,0.36,1) both}</style>'
@@ -101,6 +108,7 @@ test('a study keeps the first screen, the whole page, each section and the measu
   assert.equal(measured.requested, `${origin}/tools`);
   assert.ok(measured.typeRamp.some((style: { size: number; weight: number }) => style.size === 64 && style.weight === 600), JSON.stringify(measured.typeRamp));
   assert.ok(measured.sections.length >= 2);
+  assert.ok(measured.pageHeight > 2000 && visits >= 3, `${measured.pageHeight} after ${visits} visits`);
   assert.ok(existsSync(join(dir, measured.sections[0].crop)));
   assert.deepEqual([PNG.sync.read(readFileSync(join(dir, 'first-screen.png'))).width, PNG.sync.read(readFileSync(join(dir, 'full.png'))).width], [1440, 1000]);
   assert.equal(studioStudies(root)[0]?.url, `${origin}/tools`);
@@ -115,13 +123,15 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   const root = project(t);
   const page = join(root, 'index.html');
   writeFileSync(page, '<!doctype html><body style="margin:0;font:400 18px Arial"><h1 style="font:600 48px Arial">Quiet</h1>'
+    + '<style>.more::after{content:" →"}</style><a class="more" href="#b">More</a>'
     + '<p style="font-size:13px">tiny caption</p><a href="#a">Docs ↗</a><button style="font:700 18px Arial">Go</button>'
     + '<div data-product style="font:400 11px monospace">terminal row</div><video controls width="320" height="180"></video></body>');
   const observations = await observeSystemDrift(page, { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] });
   const desktop = observations.find(item => item.viewport === 'desktop')!;
   assert.deepEqual(desktop.offSystemSizes.map(item => item.size), [13]);
   assert.deepEqual(desktop.offSystemWeights.map(item => item.weight), [700]);
-  assert.deepEqual(desktop.arrows, ['Docs ↗']);
+  // An arrow drawn with ::after content is as much an arrow as one typed into the link.
+  assert.deepEqual(desktop.arrows, ['More →', 'Docs ↗']);
   assert.equal(desktop.playerControls, 1);
   // The recreated product above is one narrow row: no key visual. Nothing arrives either. Mobile is not asked.
   assert.equal(desktop.keyVisual, false);
@@ -129,7 +139,7 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   assert.equal(observations.find(item => item.viewport === 'mobile')!.keyVisual, undefined);
   const failures = systemDriftFailures(observations);
   assert.match(failures.join('\n'), /desktop: sizes outside the system 13px \("tiny caption"\)/);
-  assert.match(failures.join('\n'), /arrow glyphs on links or buttons "Docs ↗"/);
+  assert.match(failures.join('\n'), /arrow glyphs on links or buttons "More →", "Docs ↗"/);
   assert.match(failures.join('\n'), /1 video with visible player controls/);
   assert.match(failures.join('\n'), /desktop: no key visual built in code in the first screen/);
   assert.match(failures.join('\n'), /desktop: the first screen does not arrive/);
