@@ -40,28 +40,25 @@ before choosing the work; never ask the user which mode to use.
 Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`,
 `guides/figma.md`, `guides/copy.md`, `guides/code.md`, `guides/landing-basics.md` (basics designers keep), `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
 
-## New pages: work like a studio
+## New pages: work like a designer
 
 A new product or landing (taskNeed `new-product` or `new-marketing`) follows this section, "Words, type, and
 flow" and the graphic bullet only. The rest of this file (reference ledgers, `ref context`, cases and judgments,
-lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and recomposing.
-1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, the
-   one message, and the user's exact asks word for word. Keep the README's logo and everything not asked away.
-2. References: find three to five finished sites whose craft this page must show (one `omd ref browse` session
-   will do), capture them with `omd studio refs <url>... --json`, and note what each does well in `references.md`.
-3. Copy: `.omd/studio/copy.md` holds the real copy per screen, one claim each, and a cut list.
-4. Comps: three art directions at `.omd/studio/concepts/<name>/prompt.md`, each a different page (composition,
-   protagonist object, material and light, palette, type). `omd studio concepts --json` draws each as a full-page
-   comp from the brief, copy, README logo and references; look at every comp, then `omd studio pick --json`
-   (blind beside human-made pages). Without Codex, sketch `index.html` instead.
-5. Build the picked comp in the project: it is the target. Match its composition, type scale, spacing and detail;
-   3D is a three.js scene with real materials, environment light and colour management.
-6. Finish: `omd lifecycle finish --json` builds, checks the logo and 3D on the real page and reviews the render.
-   Recompose for what it names (order, scale, cut, merge, the object's relation to the copy), never patch, and
-   finish again. After three rounds the best render ships with its open findings, so make each round count.
-7. Pace and remove: the story unfolds over the scroll, the first screen one message and its object, each
-   later screen one idea at full size; never pack it into the first screen or hide it in tabs, accordions or
-   carousels. Every icon, label, badge and line must earn its place.
+lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and cutting.
+1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, its
+   personality (logo, README voice), the one message, the user's exact asks word for word. List every documented
+   capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away.
+2. Study: two or three finished sites in the project's spirit, `omd studio refs <url>... --json`; look at each
+   first screen, full page and section crop beside its measured `study.json`.
+3. System: borrow ONE site's measured system in `.omd/studio/system.md` (type ramp, at most three weights,
+   rhythm, how it frames its product, its signature) with identity from the project's logo and voice, and
+   `.omd/studio/system.json` `{"reference", "sizes", "weights"}`. Every size and weight comes from it.
+4. Key visual first: the product's real look made in code, large and crisp, moving with real input; never a
+   recording with a player bar. Look at it alone and refine until it could sit on the reference.
+5. Build at the reference's rhythm and depth, compositions varied, real logo in the header. Subtract with
+   `omd studio check`; compare your page beside the reference and fix the biggest differences, three passes at most.
+6. Finish: `omd lifecycle finish --json` builds, measures logo, 3D and system on the real page and compares the
+   render once with the reference; the page ships with what that look still names.
 
 ## Words, type, and flow ship with the pixels
 

@@ -26,8 +26,6 @@ import { usePrivateDesignerCaseFixture } from './helpers/designer-cases.ts';
 import { loadDesignerCase } from '../core/cases/index.ts';
 import { recordDesignerCaseConsultation } from '../core/design/designer-cases.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
-import { renderStudioConcepts } from '../core/design/studio.ts';
-import { STUDIO_PICK_RECORD, STUDIO_PICK_SCHEMA } from '../core/design/studio-pick.ts';
 import { piRoleReceiptDigest } from '../core/runtime/pi-role-receipt.ts';
 import {
   LEGACY_FIRST_RENDER_REVIEW_HANDBACK,
@@ -162,24 +160,20 @@ test('native early review repairs and recaptures without final evidence and reus
   smuggled.evidence.taskContext = { ...smuggled.evidence.taskContext, sketch: { pngBase64: ideaPng.toString('base64') } };
   await assert.rejects(() => runPiFirstRenderReviewer({ root, invocation, packet: Buffer.from(JSON.stringify(smuggled)), signal: t.signal }), /packet-undelivered-images/);
   rmSync(join(root, '.omd/ideas'), { recursive: true, force: true });
-  // The comp a new page was picked from reaches the reviewer as an image too, bound to the current drawn concept.
-  for (const name of ['atelier', 'journey', 'specimen']) {
-    mkdirSync(join(root, '.omd/studio/concepts', name), { recursive: true });
-    writeFileSync(join(root, '.omd/studio/concepts', name, 'prompt.md'), `${name}: one monumental object under warm studio light on a strict grid, big type.`);
-  }
-  const drawn = await renderStudioConcepts(root, writer, async () => { throw new Error('not rendered'); }, () => new Date(0),
-    async concepts => concepts.map(concept => ({ name: concept.name, comp: ideaPng, firstScreen: ideaPng })));
-  const pickBody = { schema: STUDIO_PICK_SCHEMA, createdAt: new Date(0).toISOString(), buildSha256: hash('build'), anchors: [],
-    concepts: drawn.concepts.map(concept => ({ name: concept.name, sourceSha256: concept.sourceSha256, trials: 0, judgedAi: 0 })), picked: 'journey', trials: [] };
-  writer.write(STUDIO_PICK_RECORD, `${canonicalJson({ ...pickBody, signature: signNativeObservation(root, STUDIO_PICK_SCHEMA, hash(canonicalJson(pickBody))) })}\n`);
-  const compPacket = firstRenderReviewPacket(root, invocation).packet;
-  const compEvidence = JSON.parse(compPacket.toString('utf8')).evidence;
-  assert.deepEqual(compEvidence.studioComp.map((row: { role: string; path: string }) => [row.role, row.path]),
-    [['studio-comp', '.omd/studio/concepts/journey/comp.png']]);
-  await runPiFirstRenderReviewer({ root, invocation, packet: compPacket, signal: t.signal });
-  const forgedComp = JSON.parse(compPacket.toString('utf8'));
-  forgedComp.evidence.studioComp[0].pngBase64 = Buffer.from('not the comp').toString('base64');
-  await assert.rejects(() => runPiFirstRenderReviewer({ root, invocation, packet: Buffer.from(JSON.stringify(forgedComp)), signal: t.signal }), /packet-studio-comp-drift/);
+  // The finished site a new page took its system from reaches the reviewer as an image too, bound to the current study.
+  mkdirSync(join(root, '.omd/studio/refs/quiet-tools'), { recursive: true });
+  writeFileSync(join(root, '.omd/studio/refs/quiet-tools/study.json'), JSON.stringify({ requested: 'https://quiet.tools/' }));
+  writeFileSync(join(root, '.omd/studio/refs/quiet-tools/first-screen.png'), ideaPng);
+  writeFileSync(join(root, '.omd/studio/refs/quiet-tools/full.png'), ideaPng);
+  writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: 'https://quiet.tools/', sizes: [14, 18, 24, 48], weights: [400, 600] }));
+  const referencePacket = firstRenderReviewPacket(root, invocation).packet;
+  const referenceEvidence = JSON.parse(referencePacket.toString('utf8')).evidence;
+  assert.deepEqual(referenceEvidence.studioReference.map((row: { role: string; path: string }) => [row.role, row.path]),
+    [['studio-reference', '.omd/studio/refs/quiet-tools/full.png']]);
+  await runPiFirstRenderReviewer({ root, invocation, packet: referencePacket, signal: t.signal });
+  const forgedReference = JSON.parse(referencePacket.toString('utf8'));
+  forgedReference.evidence.studioReference[0].pngBase64 = Buffer.from('not the reference').toString('base64');
+  await assert.rejects(() => runPiFirstRenderReviewer({ root, invocation, packet: Buffer.from(JSON.stringify(forgedReference)), signal: t.signal }), /packet-studio-reference-drift/);
   rmSync(join(root, '.omd/studio'), { recursive: true, force: true });
   assert.equal(existsSync(join(root, '.omd/first-render/review.json')), false);
   assert.equal(readFileSync(join(root, 'dist/index.html'), 'utf8'), html);

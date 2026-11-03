@@ -30,7 +30,7 @@ import {
 } from '../core/design/first-render-checkpoint.ts';
 import { requireConsultedPrimaryOriginal } from '../core/design/consulted-references.ts';
 import { newSurface, requireNoticeableMotion } from '../core/design/new-surface-advisories.ts';
-import { currentStudioPick, requireStudioPick } from '../core/design/studio-pick.ts';
+import { readStudioSystem, requireStudioSystem, requireStudioSystemHeld } from '../core/design/studio.ts';
 import { requireStudioFloors } from '../core/design/studio-floors.ts';
 import { readFirstRenderIterationHistory } from '../core/design/first-render-iteration-history.ts';
 import { STUDIO_DELIVERY_RECORD, STUDIO_REVIEW_ROUNDS, studioEntry, studioReviewRounds, writeStudioDelivery } from '../core/design/studio-delivery.ts';
@@ -138,7 +138,7 @@ export async function runModelLedCompletion(input: Readonly<{
     cancelled();
     requireReviewableSource(input.root, route);
     // The same entry condition as omd first-render check: finish captures a first render too.
-    requireStudioPick(input.root, route);
+    requireStudioSystem(input.root, route);
     if (studio) {
       phase = 'review';
       const delivered = await deliverStudioPage(input, route, verification);
@@ -148,7 +148,7 @@ export async function runModelLedCompletion(input: Readonly<{
       }
       firstRender = delivered.firstRender;
       return { ...result(true, 'complete'), studioDeliveryPath: STUDIO_DELIVERY_RECORD, designEvidence: 'isolated-model-proxy',
-        limitations: delivered.openFindings.map(id => ({ stage: 'first-render', reason: `open after ${STUDIO_REVIEW_ROUNDS} review rounds: ${id}` })) };
+        limitations: delivered.openFindings.map(id => ({ stage: 'first-render', reason: `open after the comparison with the reference: ${id}` })) };
     }
     if (manifest === undefined) throw new CompletionStepError('NATIVE_BROWSER_PLAN_REQUIRED');
     inputFingerprint = modelLedCompletionFingerprint(input.root, manifest);
@@ -280,6 +280,7 @@ async function deliverStudioPage(input: StudioInput, route: StudioRoute, verific
   const entry = studioEntry(input.root);
   const target = resolve(input.root, entry);
   await requireStudioFloors(input.root, route, target);
+  await requireStudioSystemHeld(input.root, route, target);
   const writer = createProjectWriteAdapter(input.root, input.invocation);
   const checked = await publishFirstRenderCheck(input.root, entry, undefined, writer, input.invocation);
   if (firstRenderMotionProjection(input.root, checked.reportSha256) === null) {
@@ -323,7 +324,7 @@ async function deliverStudioPage(input: StudioInput, route: StudioRoute, verific
   const best = history.iterations.find(iteration => iteration.id === history.bestIterationId) ?? history.iterations.at(-1);
   const openFindings = review.decision === 'retain' ? [] : [...(best?.findingIds ?? review.findings.map(finding => finding.id))];
   writeStudioDelivery(input.root, writer, {
-    routeSha256: adaptiveRouteRecordSha256(route), entryPath: entry, picked: currentStudioPick(input.root)?.picked ?? '',
+    routeSha256: adaptiveRouteRecordSha256(route), entryPath: entry, reference: readStudioSystem(input.root)?.reference ?? '',
     verification: verification.map(checkedCommand => checkedCommand.command.join(' ')),
     review: { sha256: review.sha256, decision: review.decision, rounds: studioReviewRounds(input.root, route), openFindings },
   });

@@ -281,14 +281,6 @@ function ideaScratchException(filePath: string, source: string, mutations: reado
   return 'disposable idea-image workspace (fixed OS temp prefix; project files written only through the guarded writer; exact directory removed in finally)';
 }
 
-function compScratchException(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): string | undefined {
-  if (filePath !== 'core/design/studio-comps.ts'
-    || mutations.map(m => m.operation).sort().join(',') !== 'mkdtempSync,rmSync'
-    || !source.includes("const work = mkdtempSync(join(tmpdir(), 'omd-comp-'));")
-    || !source.includes('rmSync(work, { recursive: true, force: true });')) return undefined;
-  return 'disposable studio-comp workspace (fixed OS temp prefix; the comp bytes are returned and written to the project only by the guarded writer in studio.ts; exact directory removed in finally)';
-}
-
 function sourcePath(repositoryRoot: string, absolutePath: string): string {
   return relative(repositoryRoot, absolutePath).split('\\').join('/');
 }
@@ -670,8 +662,7 @@ export function inventoryProjectRunMutations(
       ?? zoomProfileException(filePath, source, directMutations)
       ?? footageScratchException(filePath, source, directMutations)
       ?? scaffoldScratchException(filePath, source, directMutations)
-      ?? ideaScratchException(filePath, source, directMutations)
-      ?? compScratchException(filePath, source, directMutations);
+      ?? ideaScratchException(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')
       && source.includes('export function createExternalObservationDirectory');

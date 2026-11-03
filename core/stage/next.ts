@@ -6,14 +6,7 @@ import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts
 import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
-import { STUDIO_CONCEPT_GUIDANCE } from '../design/studio.ts';
-import { currentStudioPick, STUDIO_PICK_GUIDANCE, studioPending } from '../design/studio-pick.ts';
-import { currentStudioConcepts } from '../design/studio.ts';
-
-const pickedCompPath = (root: string): string | undefined => {
-  const pick = currentStudioPick(root);
-  return pick === null ? undefined : currentStudioConcepts(root).find(concept => concept.name === pick.picked)?.comp?.path;
-};
+import { STUDIO_STUDY_GUIDANCE, STUDIO_SYSTEM_GUIDANCE, studioPending } from '../design/studio.ts';
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import { newSurface } from '../design/new-surface-advisories.ts';
 import { currentStudioDelivery, STUDIO_DELIVER_MESSAGE, STUDIO_REVIEW_ROUNDS, studioReviewRounds } from '../design/studio-delivery.ts';
@@ -79,15 +72,15 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       instruction: 'Repair the current authority, scope, design-language, or unresolved reframe blocker, then rerun the production guard.',
     };
   }
-  // A new product or landing is chosen blind among three rendered concepts before the page is built.
+  // A new product or landing starts from studied finished sites and the system taken from one of them.
   const studio = studioPending(root, route);
   if (studio !== null) {
     return {
       ...base(routeSha256),
       stage: 'concepts',
-      action: studio === 'concepts' ? 'render-studio-concepts' : 'pick-studio-concept',
-      next: studio === 'concepts' ? 'omd studio concepts --json' : 'omd studio pick --json',
-      instruction: studio === 'concepts' ? STUDIO_CONCEPT_GUIDANCE : STUDIO_PICK_GUIDANCE,
+      action: studio === 'study' ? 'study-studio-references' : 'write-studio-system',
+      next: studio === 'study' ? 'omd studio refs <url> <url> --json' : 'omd guard production --json',
+      instruction: studio === 'study' ? STUDIO_STUDY_GUIDANCE : STUDIO_SYSTEM_GUIDANCE,
     };
   }
   // Until the first render exists, the work is composing the page; name the knowledge for that.
@@ -97,7 +90,7 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       stage: 'production',
       action: 'compose-first-render',
       next: 'omd guard production --json',
-      instruction: composeGuidance(route, pickedCompPath(root)),
+      instruction: composeGuidance(route),
     };
   }
   // A new page is delivered from its build and a few review rounds: no browser plan, no final evidence chain.
@@ -118,8 +111,9 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       action: 'finish-model-led',
       next: 'omd lifecycle finish --json',
       instruction: rounds >= STUDIO_REVIEW_ROUNDS ? STUDIO_DELIVER_MESSAGE
-        : `Review round ${rounds + 1} of ${STUDIO_REVIEW_ROUNDS}: omd lifecycle finish builds the page, checks its floors and reviews the `
-          + `render; recompose for what the review names (structure before polish), rebuild and finish again. ${REPAIR_KNOWLEDGE}`,
+        : 'omd lifecycle finish builds the page, checks its logo, 3D and system by measurement, and compares the render once with the '
+          + 'primary reference; fix what the measurement names before that. Compare and cut yourself while building (omd studio check), '
+          + `not after. ${REPAIR_KNOWLEDGE}`,
     };
   }
   if (!existsSync(resolve(root, '.omd/.cache/trusted-lifecycle-manifest.json'))) {

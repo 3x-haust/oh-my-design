@@ -117,7 +117,7 @@ test('the compose step names the copy, layout and motion knowledge for a landing
   }
   // A new page builds its picked concept and goes to finish; no hero-only review round, no composition catalogue.
   const studio = composeGuidance(route('new-marketing', '이 프로젝트를 소개하는 랜딩 페이지 만들어줘'));
-  assert.ok(studio.includes('omd scaffold') && studio.includes('picked concept') && studio.includes('omd lifecycle finish'));
+  assert.ok(studio.includes('omd scaffold') && studio.includes('system.json') && studio.includes('omd lifecycle finish'));
   assert.ok(!studio.includes('composition/') && !studio.includes('first-render check') && studio.includes('typography-korean'));
   const product = composeGuidance(route('existing-product-change', 'Add a settings page', 'existing'));
   assert.ok(product.includes('theory/ux.md') && !product.includes('omd scaffold') && !product.includes('typography-korean'));
