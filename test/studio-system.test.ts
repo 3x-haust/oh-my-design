@@ -10,8 +10,8 @@ import test from 'node:test';
 import { PNG } from 'pngjs';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
 import {
-  observeSystemDrift, readStudioSystem, requireStudioSystem, studioPageSource, studioPending, studioStudies, studyStudioReferences,
-  systemDriftFailures,
+  observeSystemDrift, readStudioSystem, requireStudioSystem, studioPageSource, studioPending, studioReferenceDepth, studioStudies,
+  studyStudioReferences, systemDriftFailures,
 } from '../core/design/studio.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 
@@ -177,4 +177,31 @@ test('the studio commands load from the CLI entry, whatever module the CLI impor
     { encoding: 'utf8', timeout: 60_000 });
   assert.doesNotMatch(`${run.stdout}${run.stderr}`, /before initialization/);
   assert.deepEqual(JSON.parse(run.stdout).skipped, [{ url: 'ftp://example.com', reason: 'not an http(s) URL' }]);
+});
+
+test("a page is held to its reference's depth and to revealing on scroll when the reference does", { timeout: 120_000 }, async t => {
+  const root = project(t);
+  study(root, 'https://quiet.tools/', 'quiet-tools');
+  writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] }));
+  assert.equal(studioReferenceDepth(root), null);
+  writeFileSync(join(root, '.omd/studio/refs/quiet-tools/study.json'), JSON.stringify({ requested: 'https://quiet.tools/', screens: 9.1, motion: { onScroll: 24 } }));
+  const reference = studioReferenceDepth(root)!;
+  assert.deepEqual(reference, { screens: 9.1, revealsOnScroll: true });
+  const page = join(root, 'index.html');
+  const sections = (count: number, reveal: boolean) => `<!doctype html><body style="margin:0;font:400 18px Arial">${reveal
+    ? '<style>.in{animation:rise .5s cubic-bezier(.16,1,.3,1) both}@keyframes rise{from{opacity:0;transform:translateY(24px)}}</style>' : ''}${
+    Array.from({ length: count }, (_, index) => `<section style="height:900px"><h2 style="font:600 48px Arial">Part ${index}</h2></section>`).join('')}${reveal
+    ? '<script>new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add("in"))).observe(document.querySelectorAll("section")[2])</script>' : ''}</body>`;
+  const system = { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] };
+  writeFileSync(page, sections(3, false));
+  const shallow = await observeSystemDrift(page, system);
+  const failures = systemDriftFailures(shallow, reference).join('\n');
+  assert.match(failures, /desktop: the page is 3(\.1)? screens against the reference's 9\.1/);
+  assert.match(failures, /desktop: nothing reveals as the page scrolls/);
+  // Without a reference to measure against, depth and reveals are not asked.
+  assert.doesNotMatch(systemDriftFailures(shallow).join('\n'), /screens against|reveals/);
+  writeFileSync(page, sections(6, true));
+  const deep = await observeSystemDrift(page, system);
+  assert.ok((deep.find(item => item.viewport === 'desktop')!.revealed ?? 0) > 0);
+  assert.doesNotMatch(systemDriftFailures(deep, reference).join('\n'), /screens against|reveals/);
 });
