@@ -64,8 +64,12 @@ test('a new page is held to its system, compared once with its reference and del
   publishAdaptiveRoute(root, input, writer, invocation);
   const route = readPersistedRoute(root, invocation);
   studied(root, 'https://quiet.tools/');
-  const page = (round: number, link = 'Start') => `<!doctype html><html><body style="font:400 18px Arial;margin:24px"><main>
-    <h1 style="font:700 32px Arial">Quiet tools</h1><p>Round ${round}</p><a href="#start">${link}</a></main></body></html>`;
+  // The first screen arrives with a rise and the recreated product keeps working on its own, as the floors ask of a new page.
+  const page = (round: number, link = 'Start') => `<!doctype html><html><head><style>@keyframes rise { from { opacity: 0; transform: translateY(16px) } }
+    h1 { animation: rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both }</style></head><body style="font:400 18px Arial;margin:24px"><main>
+    <h1 style="font:700 32px Arial">Quiet tools</h1><p>Round ${round}</p><a href="#start">${link}</a>
+    <div data-product style="width:900px;font:400 12px monospace">${Array.from({ length: 8 }, (_, line) => `<div>quiet ${line}</div>`).join('')}</div></main>
+    <script>let tick = 0; setInterval(() => { document.querySelector('[data-product] div').textContent = 'quiet ' + ++tick; }, 400);</script></body></html>`;
 
   // An arrow glyph on a link leaves the system: finish refuses before any review is spent.
   writeFileSync(join(root, 'index.html'), page(1, 'Start ↗'));

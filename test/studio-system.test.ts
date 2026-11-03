@@ -86,6 +86,7 @@ test('a study keeps the first screen, the whole page, each section and the measu
     if (request.url === '/missing') { response.writeHead(404); response.end('no'); return; }
     response.writeHead(200, { 'content-type': 'text/html' });
     response.end('<body style="margin:0;font:400 18px Arial">'
+      + '<style>@keyframes rise{from{opacity:0;transform:translateY(20px)}}h1{animation:rise 700ms cubic-bezier(0.22,1,0.36,1) both}</style>'
       + '<section style="height:900px;background:#eee"><h1 style="font:600 64px Arial;margin:0">Quiet tools</h1><p>One</p><p>Two</p></section>'
       + '<section style="height:1400px;background:#123;color:#fff"><h2 style="font:600 40px Arial">Detail</h2><p>Three</p><p>Four</p></section></body>');
   });
@@ -103,6 +104,11 @@ test('a study keeps the first screen, the whole page, each section and the measu
   assert.ok(existsSync(join(dir, measured.sections[0].crop)));
   assert.deepEqual([PNG.sync.read(readFileSync(join(dir, 'first-screen.png'))).width, PNG.sync.read(readFileSync(join(dir, 'full.png'))).width], [1440, 1000]);
   assert.equal(studioStudies(root)[0]?.url, `${origin}/tools`);
+  // How it moves: the headline's rise is in the intro, with its duration and curve, and the arriving first screen is kept as frames.
+  assert.equal(measured.motion.intro, 1);
+  assert.deepEqual(measured.motion.durations, [{ value: '700', count: 1 }]);
+  assert.equal(measured.motion.introSequence[0].easing, 'cubic-bezier(0.22, 1, 0.36, 1)');
+  assert.ok([1, 2, 3].every(index => existsSync(join(dir, `intro-${index}.png`))));
 });
 
 test('the build is measured against its system: off-system type, arrow glyphs and player chrome, never inside a recreated product', { timeout: 120_000 }, async t => {
@@ -117,18 +123,40 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   assert.deepEqual(desktop.offSystemWeights.map(item => item.weight), [700]);
   assert.deepEqual(desktop.arrows, ['Docs ↗']);
   assert.equal(desktop.playerControls, 1);
+  // The recreated product above is one narrow row: no key visual. Nothing arrives either. Mobile is not asked.
+  assert.equal(desktop.keyVisual, false);
+  assert.equal(desktop.arrives, false);
+  assert.equal(observations.find(item => item.viewport === 'mobile')!.keyVisual, undefined);
   const failures = systemDriftFailures(observations);
   assert.match(failures.join('\n'), /desktop: sizes outside the system 13px \("tiny caption"\)/);
   assert.match(failures.join('\n'), /arrow glyphs on links or buttons "Docs ↗"/);
   assert.match(failures.join('\n'), /1 video with visible player controls/);
+  assert.match(failures.join('\n'), /desktop: no key visual built in code in the first screen/);
+  assert.match(failures.join('\n'), /desktop: the first screen does not arrive/);
+  // The product's interface rebuilt at width in the first screen is the key visual; the same frame holding a recording is not.
+  const built = (inner: string) => `<!doctype html><body style="margin:0;font:400 18px Arial"><h1 style="font:600 48px Arial">Quiet</h1>`
+    + `<div data-product style="width:1000px;height:500px;font:400 11px monospace">${inner}</div></body>`;
+  const rows = Array.from({ length: 10 }, (_, line) => `<div>row ${line}</div>`).join('');
+  const system = { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] };
+  const desktopOf = async (html: string) => { writeFileSync(page, html); return (await observeSystemDrift(page, system)).find(item => item.viewport === 'desktop')!; };
+  // Built but still: a key visual that never changes on its own is named; one that keeps working, under a headline that rises in, passes.
+  const still = await desktopOf(built(rows));
+  assert.deepEqual([still.keyVisual, still.performs], [true, false]);
+  assert.match(systemDriftFailures([still]).join('\n'), /the key visual stands still/);
+  const alive = await desktopOf(built(rows).replace('<h1 ', '<style>@keyframes rise{from{opacity:0;transform:translateY(12px)}}h1{animation:rise .6s both}</style><h1 ')
+    + `<script>let n = 0; setInterval(() => { document.querySelector('[data-product] div').textContent = 'row ' + ++n; }, 300);</script>`);
+  assert.deepEqual([alive.keyVisual, alive.arrives, alive.performs], [true, true, true]);
+  assert.deepEqual(systemDriftFailures([alive]), []);
+  assert.equal((await desktopOf(built('<video muted loop width="1000" height="500"></video>'))).keyVisual, false);
   assert.deepEqual(systemDriftFailures([{ viewport: 'desktop', offSystemSizes: [], offSystemWeights: [], arrows: [], playerControls: 0 }]), []);
 });
 
 test('the build step names the designer method: system, key visual first, depth, subtraction and one comparison', () => {
   const text = composeGuidance(route('new-marketing', '랜딩 페이지 만들어줘'));
   assert.match(text, /on the system in \.omd\/studio\/system\.json/);
-  assert.match(text, /The key visual first: .*screen recording with a player bar is not a key visual/);
+  assert.match(text, /The key visual first: .*playing the product.s real flow on its own.*a screen recording is not a key visual/);
   assert.match(text, /reference's rhythm and depth/);
+  assert.match(text, /Motion is part of the system.*the first screen arrives.*prefers-reduced-motion/);
   assert.match(text, /omd studio check --page/);
   assert.match(text, /beside the reference's first-screen\.png and full\.png/);
   assert.match(text, /typography-korean\.md/);
