@@ -16,11 +16,11 @@ async function cmdStudioRefs(opts: Opts): Promise<never> {
 
 async function cmdStudioCheck(opts: Opts): Promise<never> {
   const page = typeof opts.page === 'string' ? opts.page : 'dist/index.html';
-  const { observeSystemDrift, readStudioSystem, systemDriftFailures, STUDIO_SYSTEM_GUIDANCE } = await import('../../core/design/studio.ts');
+  const { observeSystemDrift, readStudioSystem, studioReferenceDepth, systemDriftFailures, STUDIO_SYSTEM_GUIDANCE } = await import('../../core/design/studio.ts');
   const system = readStudioSystem(process.cwd());
   if (system === null) throw new Error(`STUDIO_SYSTEM_MISSING: no system is written yet. ${STUDIO_SYSTEM_GUIDANCE}`);
   const observations = await observeSystemDrift(page, system);
-  const failures = systemDriftFailures(observations);
+  const failures = systemDriftFailures(observations, studioReferenceDepth(process.cwd()));
   if (opts.json) await new Promise<void>(done => process.stdout.write(JSON.stringify({ page, system, observations, failures }), () => done()));
   else console.log(failures.length === 0 ? `${page} holds the system` : failures.join('\n'));
   process.exit(failures.length === 0 ? 0 : 1);

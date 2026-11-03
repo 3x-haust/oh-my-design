@@ -149,7 +149,7 @@ function crop(full: PNG, top: number, height: number): Buffer {
 const recordMotion = browserCallback((): void => {
   type Entry = { t: number; scrollY: number; target: string; top: number; firstScreen: boolean; product: boolean; duration: number; delay: number;
     loop: boolean; easing: string; props: string[]; from: Record<string, string> };
-  const state = { animations: [] as Entry[], productChanges: [] as number[], introStyleChanges: 0 };
+  const state = { animations: [] as Entry[], productChanges: [] as number[], introStyleChanges: 0, scrollStyleChanges: 0 };
   Reflect.set(window, '__omdMotion', state);
   const seen = new WeakSet<Animation>();
   const describe = (element: Element) => {
@@ -180,6 +180,7 @@ const recordMotion = browserCallback((): void => {
       if (element === null) continue;
       if (element.closest('[data-product]') !== null) state.productChanges.push(Math.round(performance.now()));
       else if (record.attributeName === 'style' && window.scrollY === 0 && performance.now() < 3000 && element.getBoundingClientRect().top < window.innerHeight) state.introStyleChanges += 1;
+      else if (record.attributeName === 'style' && window.scrollY > 0) state.scrollStyleChanges += 1;
     }
   }).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'class', 'd', 'transform'] });
   if (document.documentElement) observe(); else document.addEventListener('DOMContentLoaded', observe);
@@ -188,7 +189,7 @@ const recordMotion = browserCallback((): void => {
 type MotionRecord = Readonly<{
   animations: readonly Readonly<{ t: number; scrollY: number; target: string; top: number; firstScreen: boolean; product: boolean; duration: number;
     delay: number; loop: boolean; easing: string; props: readonly string[]; from: Readonly<Record<string, string>> }>[];
-  productChanges: readonly number[]; introStyleChanges: number;
+  productChanges: readonly number[]; introStyleChanges: number; scrollStyleChanges: number;
 }>;
 const readMotion = browserCallback((): MotionRecord => Reflect.get(window, '__omdMotion') as MotionRecord);
 
@@ -371,7 +372,26 @@ export type SystemDriftObservation = Readonly<{
   arrives?: boolean;
   /** Desktop only: the key visual keeps changing on its own after the page has loaded. */
   performs?: boolean;
+  /** Desktop only: page length in screens, and how many animations or script-driven style changes scrolling set off below the first screen. */
+  screens?: number;
+  revealed?: number;
 }>;
+
+/** What the primary reference sets for depth and scroll motion, from its study. */
+export type StudioReferenceDepth = Readonly<{ screens: number; revealsOnScroll: boolean }>;
+
+/** The primary study's length (capped at the study's own screen cap) and whether it reveals sections as it scrolls. */
+export function studioReferenceDepth(root: string): StudioReferenceDepth | null {
+  const study = primaryStudy(root);
+  if (study === null) return null;
+  try {
+    const measured: unknown = JSON.parse(readFileSync(join(root, study.dir, 'study.json'), 'utf8'));
+    const screens = Number(Reflect.get(measured as object, 'screens'));
+    const motion: unknown = Reflect.get(measured as object, 'motion');
+    const onScroll = typeof motion === 'object' && motion !== null ? Number(Reflect.get(motion, 'onScroll')) : 0;
+    return Number.isFinite(screens) && screens > 0 ? { screens: Math.min(screens, STUDY_MAX_SCREENS), revealsOnScroll: onScroll >= REVEALING_REFERENCE } : null;
+  } catch { return null; }
+}
 
 const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number }>): Omit<SystemDriftObservation, 'viewport'> => {
   const visible = (element: Element) => {
@@ -411,6 +431,10 @@ const observeKeyVisual = browserCallback((): boolean => [...document.querySelect
 }));
 
 const PERFORM_WINDOW_MS = 3500;
+/** A page shorter than this share of its reference has compressed what the reference shows at full size. */
+const DEPTH_SHARE = 0.5;
+/** A reference that starts this many animations as it is read reveals its sections on scroll. */
+const REVEALING_REFERENCE = 3;
 
 /** The first screen arrives (an intro animation, or script-driven style changes in its first seconds) and the key visual keeps performing. */
 async function observeFirstScreenMotion(page: import('playwright').Page, keyVisual: boolean): Promise<Pick<SystemDriftObservation, 'keyVisual' | 'arrives' | 'performs'>> {
@@ -439,8 +463,13 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
         await page.goto(resolved.url, { waitUntil: 'networkidle', timeout: 30_000 }).catch(() => undefined);
         const keyVisual = viewport === 'desktop' ? await observeFirstScreenMotion(page, await page.evaluate(observeKeyVisual)) : {};
         const height = await page.evaluate(() => document.documentElement.scrollHeight);
-        for (let y = 0; y < Math.min(height, 30_000); y += size.height) { await page.evaluate(top => window.scrollTo(0, top), y); await page.waitForTimeout(150); }
-        observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE }), ...keyVisual });
+        for (let y = 0; y < Math.min(height, 30_000); y += size.height) { await page.evaluate(top => window.scrollTo(0, top), y); await page.waitForTimeout(250); }
+        const reading = viewport === 'desktop' ? await page.evaluate(readMotion) : null;
+        const depth = reading === null ? {} : {
+          screens: Math.round(height / size.height * 10) / 10,
+          revealed: reading.animations.filter(item => item.scrollY > 0 && !item.loop).length + reading.scrollStyleChanges,
+        };
+        observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE }), ...keyVisual, ...depth });
       } finally { await page.close(); }
     }
     return observations;
@@ -450,10 +479,12 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
   }
 }
 
-/** What a designer would mark up on the build: no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome. */
-export function systemDriftFailures(observations: readonly SystemDriftObservation[]): readonly string[] {
+/** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome. */
+export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null): readonly string[] {
   const failures: string[] = [];
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, keyVisual, arrives, performs } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, keyVisual, arrives, performs, screens, revealed } of observations) {
+    if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give each documented capability in the brief its own section with its real demo at the reference's rhythm, not more whitespace`);
+    if (reference?.revealsOnScroll && revealed === 0) failures.push(`${viewport}: nothing reveals as the page scrolls, while the reference reveals its sections as they enter (take its distance, duration, curve and stagger; rest under prefers-reduced-motion)`);
     if (arrives === false) failures.push(`${viewport}: the first screen does not arrive: nothing in it animates as the page loads (take the reference's intro: what leads, from what, how long, which curve)`);
     if (keyVisual === true && performs === false) failures.push(`${viewport}: the key visual stands still: nothing inside data-product changes on its own in the ${PERFORM_WINDOW_MS / 1000}s after load (play the product's real flow in it: states change, rows arrive, a cursor works; rest under prefers-reduced-motion)`);
     if (keyVisual === false) failures.push(`${viewport}: no key visual built in code in the first screen (an element marked data-product, at least half the width, made of the product's live interface or a large drawn canvas/svg; a recording or screenshot in a frame is not one)`);
@@ -470,7 +501,7 @@ export async function requireStudioSystemHeld(root: string, route: Route, target
   if (!newSurface(route)) return;
   const system = readStudioSystem(root);
   if (system === null) return;
-  const failures = systemDriftFailures(await observeSystemDrift(target, system));
+  const failures = systemDriftFailures(await observeSystemDrift(target, system), studioReferenceDepth(root));
   if (failures.length > 0) {
     throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. Build the `
       + 'key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving with real input, marked data-product. Set each '
