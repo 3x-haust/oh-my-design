@@ -6,7 +6,7 @@ import { browserCallback } from '../ref/browser-evaluation.ts';
 import { resolveRenderTarget } from '../render/serve.ts';
 import type { readPersistedRoute } from '../route/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import { pageIdeaPreview } from './idea-image.ts';
+import { ideaImages, ideationUnavailable, pageIdeaPreview } from './idea-image.ts';
 import { newSurface } from './new-surface-advisories.ts';
 import { projectBrandMarks, readmeLogos, STUDIO_LOGO, STUDIO_NO_LOGO } from './studio-floors.ts';
 import { STUDIO_DIR } from './studio-paths.ts';
@@ -42,13 +42,17 @@ const slug = (url: string): string => {
   return `${parsed.hostname.replace(/^www\./, '')}${parsed.pathname.replace(/\/+$/, '')}`.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
 };
 
-export const STUDIO_STUDY_GUIDANCE = 'A new page starts from finished sites, studied the way a designer studies them. Pick two or three real sites in '
-  + 'this project\'s spirit whose craft you want, run omd studio refs <url> <url> --json, and look at each first-screen.png, full.png and '
+export const STUDIO_STUDY_GUIDANCE = 'A new page starts from finished sites, studied the way a designer studies them. First write the project\'s '
+  + 'character in .omd/studio/brief.md in a few words taken from its own material (its logo, its README\'s voice and humour, who uses it). Then look '
+  + 'broadly (omd ref browse search cosmos|dribbble|behance|notefolio "<that character>", and sites you know) for pages that share that character, '
+  + 'not the best-known site of the product\'s category: four lazygit runs all studied zed.dev and all came out alike. Pick two or three whose '
+  + 'craft you want, run omd studio refs <url> <url> --json, and look at each first-screen.png, full.png and '
   + 'section crop under .omd/studio/refs/<site>/ beside its measured study.json (type ramp, weights, sections, how it frames its product).';
 
 export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${STUDIO_SYSTEM_NOTES}: the type ramp you take from its measurements `
   + '(five or six sizes, at most three weights, tracking, line heights), container width, section rhythm, how it frames product visuals, its '
-  + 'button; then what comes from the project instead: accent colours sampled from its logo or product images (with no such material, from a '
+  + 'button; its devices beyond measurement (the ground or texture, the typeface\'s character such as serif, mono or grotesk, colour blocks, '
+  + 'illustration, how product images are cropped and framed) and which of them this page takes and how; then what comes from the project instead: accent colours sampled from its logo or product images (with no such material, from a '
   + 'studied reference\'s captures; never the muted green or blue a model reaches for by default), character from its logo, voice from its README. Name the reference\'s '
   + 'signature (the one or two moves that make it feel made by a person) and this project\'s own equivalent: a move only this project could make, '
   + 'in its own material or vocabulary, never the reference\'s look restated. Then its motion, from study.json motion and the intro-N.png frames: '
@@ -395,14 +399,23 @@ export function readStudioSystem(root: string): StudioSystem | null {
     colors: colors.map(color => ({ hex: String(Reflect.get(color, 'hex')).toLowerCase(), from: String(Reflect.get(color, 'from')) })) };
 }
 
-/** What a new surface still owes before its page is built: a study of finished sites, then the system taken from one of them. */
-export function studioPending(root: string, route: Route): 'study' | 'system' | null {
+/** Page ideas a new surface draws before its source, so the build starts from a chosen composition instead of a default one. */
+export const STUDIO_PAGE_IDEAS = 2;
+export const STUDIO_CONCEPT_GUIDANCE = `Before the page source, draw ${STUDIO_PAGE_IDEAS} or 3 ideas for the first screen: omd imagegen --kind page --name `
+  + 'hero-<n> --prompt "<the exact headline and copy, what sits where and how large, the key visual made from the product\'s real look, the '
+  + 'type and the devices the system takes, the sampled colours>". Make each a genuinely different composition (a different arrangement of '
+  + 'words, key visual and action, not a colour variant), look at them, choose one and write in system.md what must survive into the HTML. '
+  + 'The images are ideation only and never ship; where no image tool works, omd imagegen records that and the page proceeds.';
+
+/** What a new surface still owes before its page is built: a study of finished sites, the system taken from one of them, then page ideas. */
+export function studioPending(root: string, route: Route): 'study' | 'system' | 'concept' | null {
   if (!newSurface(route)) return null;
   const studies = studioStudies(root);
   if (studies.length === 0) return 'study';
   const system = readStudioSystem(root);
   if (system === null || !studies.some(study => sameSite(study.url, system.reference))) return 'system';
-  return notesThin(root) || logoUnsaved(root) || paletteIssue(root, system, studies) !== null ? 'system' : null;
+  if (notesThin(root) || logoUnsaved(root) || paletteIssue(root, system, studies) !== null) return 'system';
+  return ideationUnavailable(root) || ideaImages(root).filter(idea => idea.kind === 'page').length >= STUDIO_PAGE_IDEAS ? null : 'concept';
 }
 
 const notesThin = (root: string): boolean =>
@@ -438,6 +451,10 @@ export function requireStudioSystem(root: string, route: Route): void {
           : notesThin(root) ? `${STUDIO_SYSTEM_NOTES} is missing or too thin to hold the measured system, the project's identity and the signature`
             : paletteIssue(root, system) ?? 'the system is incomplete';
     throw Object.assign(new Error(`STUDIO_SYSTEM_MISSING: ${reason}. ${STUDIO_SYSTEM_GUIDANCE}`), { code: 'STUDIO_SYSTEM_MISSING' });
+  }
+  if (pending === 'concept') {
+    const drawn = ideaImages(root).filter(idea => idea.kind === 'page').length;
+    throw Object.assign(new Error(`STUDIO_CONCEPT_MISSING: ${drawn} of ${STUDIO_PAGE_IDEAS} page ideas drawn. ${STUDIO_CONCEPT_GUIDANCE}`), { code: 'STUDIO_CONCEPT_MISSING' });
   }
 }
 

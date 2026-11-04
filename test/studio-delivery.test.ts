@@ -45,6 +45,12 @@ const studied = (root: string, url: string) => {
   writeFileSync(join(root, '.omd/studio/mark.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#2f5bd3"/></svg>');
   writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: url, sizes: [14, 18, 24, 32], weights: [400, 700],
     colors: [{ hex: '#2f5bd3', from: '.omd/studio/mark.svg' }] }));
+  // Two first-screen page ideas drawn before the source.
+  mkdirSync(join(root, '.omd/ideas'), { recursive: true });
+  for (const name of ['hero-1', 'hero-2']) {
+    writeFileSync(join(root, `.omd/ideas/${name}.png`), PNG.sync.write(image));
+    writeFileSync(join(root, `.omd/ideas/${name}.json`), JSON.stringify({ prompt: 'first screen', kind: 'page' }));
+  }
   writeFileSync(join(root, '.omd/studio/system.md'), `${'Borrowed from Quiet Tools: 32/18 type, two weights, generous rhythm. '.repeat(8)}`);
 };
 const fixture = (t: { after: (fn: () => void) => void }, values: Record<string, string>) => {

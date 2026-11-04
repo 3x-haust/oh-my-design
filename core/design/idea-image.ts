@@ -32,7 +32,7 @@ export function ideaImages(root: string): IdeaRecord[] {
   });
 }
 
-const ideationUnavailable = (root: string): boolean => existsSync(join(root, IDEA_UNAVAILABLE_PATH));
+export const ideationUnavailable = (root: string): boolean => existsSync(join(root, IDEA_UNAVAILABLE_PATH));
 
 /** Ideation happened: an idea image of this kind exists, or generation was tried and is unavailable in this environment. */
 export function ideationRecorded(root: string, kind: IdeaKind = 'graphic'): boolean {

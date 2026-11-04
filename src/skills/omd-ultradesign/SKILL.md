@@ -48,11 +48,13 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
 1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, its
    personality (logo, README voice), the one message, the user's exact asks word for word. List every documented
    capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away.
-2. Study: two or three finished sites in the project's spirit, `omd studio refs <url>... --json`; look at each
-   first screen, full page and section crop beside its measured `study.json`.
+2. Study: name the project's character from its own material, look broadly for sites sharing it (not the
+   category's best-known site), study two or three with `omd studio refs <url>... --json`.
 3. System: borrow ONE site's measured system in `.omd/studio/system.md` (type ramp, at most three weights,
    rhythm, product framing, motion, its signature) with identity from the project's logo and voice, and
-   `.omd/studio/system.json` `{"reference", "sizes", "weights"}`. Every size and weight comes from it.
+   `.omd/studio/system.json` `{"reference", "sizes", "weights", "colors"}`, colours sampled from real images.
+   Concept: two or three first-screen page ideas (`omd imagegen --kind page`), truly different compositions;
+   choose one before writing source.
 4. Key visual first: the product's real look made in code (`data-product`), large and crisp, playing its real
    flow on its own; never a recording. Look at it alone and refine until it could sit on the reference.
 5. Build at the reference's rhythm and depth, compositions varied, real logo in the header. Subtract with

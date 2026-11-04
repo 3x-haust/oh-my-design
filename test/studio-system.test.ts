@@ -75,6 +75,22 @@ test('a new page waits for a study, then a system taken from a studied site with
   palette([{ hex: '#e0457b', from: 'https://quiet.tools/' }]);
   assert.throws(() => requireStudioSystem(root, landing), /the colour #e0457b is not in https:\/\/quiet\.tools\//);
   palette([{ hex: '#e0457b', from: 'mark.svg' }, { hex: '#ffcc00', from: 'mark.svg' }]);
+  // Then the first screen is drawn as page ideas before any source: one is not a choice; two are, or a recorded unavailability.
+  assert.equal(studioPending(root, landing), 'concept');
+  assert.throws(() => requireStudioSystem(root, landing), /STUDIO_CONCEPT_MISSING: 0 of 2 page ideas drawn\. .*omd imagegen --kind page/);
+  const idea = (name: string, kind: string) => {
+    mkdirSync(join(root, '.omd/ideas'), { recursive: true });
+    writeFileSync(join(root, `.omd/ideas/${name}.png`), PNG.sync.write(new PNG({ width: 2, height: 2 })));
+    writeFileSync(join(root, `.omd/ideas/${name}.json`), JSON.stringify({ prompt: 'hero', kind }));
+  };
+  idea('hero-1', 'page');
+  idea('mark-1', 'graphic');
+  assert.throws(() => requireStudioSystem(root, landing), /1 of 2 page ideas drawn/);
+  idea('hero-2', 'page');
+  assert.equal(studioPending(root, landing), null);
+  rmSync(join(root, '.omd/ideas'), { recursive: true });
+  mkdirSync(join(root, '.omd/ideas'));
+  writeFileSync(join(root, '.omd/ideas/unavailable.json'), '{"reason":"no image tool"}');
   assert.equal(studioPending(root, landing), null);
   // A README that links its logo from the web holds the page until the logo is saved, or the project says it has none.
   writeFileSync(join(root, 'README.md'), '<p align="center"><img width="536" src="https://user-images.example.com/174470852.png"></p>\n# Tool\n');
