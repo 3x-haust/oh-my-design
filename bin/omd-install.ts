@@ -8,6 +8,7 @@ import { install, uninstall, doctor } from '../core/install/install.ts';
 import { installBrowserRs, resolveBrowserRs, uninstallBrowserRs } from '../core/install/browser-rs.ts';
 import { doctorBrowserProvider } from '../core/install/browser-provider.ts';
 import { runBrowserRsSmoke } from '../core/install/browser-rs-smoke.ts';
+import { installChromeWithoutCodeSignClone } from '../core/install/chrome-code-sign-clone.ts';
 import { productionOwnerUsage } from '../adapters/production-owner-usage.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -101,6 +102,7 @@ async function runBrowserCommand(args: readonly string[]): Promise<number> {
   switch (command.kind) {
     case 'install': {
       const result = await installBrowserRs();
+      installChromeWithoutCodeSignClone(homedir());
       print(result, command.json, `browser-rs: ${result.kind}`);
       return result.kind === 'failed' ? 1 : 0;
     }

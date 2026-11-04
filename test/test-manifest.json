@@ -130,6 +130,7 @@
       "test/browser-observation-decision-links.test.ts",
       "test/capture-audit.test.ts",
       "test/check-json-output.test.ts",
+      "test/chrome-code-sign-clone.test.ts",
       "test/ci-coverage-merge.test.ts",
       "test/cli.test.ts",
       "test/coach-regression.test.ts",
