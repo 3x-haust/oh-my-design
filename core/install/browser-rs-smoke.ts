@@ -7,6 +7,7 @@ import { decodePng } from '../motion/energy.ts';
 import { BrowserRsStdioClient } from './browser-rs-stdio.ts';
 import { spawnBrowserRsProcessReaper } from './browser-rs-process-reaper.ts';
 import { createBrowserRsTemporaryResource, type BrowserRsTemporaryResource } from './browser-rs-temporary.ts';
+import { chromeWithoutCodeSignClone } from './chrome-code-sign-clone.ts';
 
 const REQUIRED_TOOLS = ['browser_navigate', 'browser_type', 'browser_click', 'browser_snapshot', 'browser_take_screenshot', 'browser_close'] as const;
 const DEFAULT_RESPONSE_TIMEOUT_MS = 5_000;
@@ -58,7 +59,7 @@ export async function runBrowserRsSmoke(options: BrowserRsSmokeOptions): Promise
     screenshotResource = await createBrowserRsTemporaryResource(temporaryDirectory, 'screenshot');
     screenshotDirectory = screenshotResource.path;
     const expectedScreenshotPath = join(screenshotDirectory, 'ab-p1.png');
-    client = new BrowserRsStdioClient((options.spawn ?? spawnBrowserRs)(options.binary, ['--headless', '--stealth', '--user-data-dir', profilePath], { ...process.env, TMPDIR: screenshotDirectory }), responseTimeoutMs);
+    client = new BrowserRsStdioClient((options.spawn ?? spawnBrowserRs)(options.binary, ['--headless', '--stealth', '--user-data-dir', profilePath], { ...chromeWithoutCodeSignClone(process.env), TMPDIR: screenshotDirectory }), responseTimeoutMs);
     const initialized = await client.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'oh-my-design', version: '0.16.1' } });
     initializedTools(initialized);
     client.notify('notifications/initialized', {});
