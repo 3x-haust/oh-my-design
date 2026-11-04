@@ -73,7 +73,7 @@ const slug = (value: string): string => value.toLowerCase().replace(/[^a-z0-9가
 export type IdeaImageResult = Readonly<{ path: string; prompt: string; references: readonly string[] }>;
 
 export function generateIdeaImage(root: string, writer: ProjectWriteAdapter,
-  input: Readonly<{ name: string; prompt: string; references?: readonly string[]; kind?: IdeaKind }>,
+  input: Readonly<{ name: string; prompt: string; references?: readonly string[]; kind?: IdeaKind; viewport?: 'desktop' | 'mobile' }>,
   run: IdeaImageRunner = codexImageRunner): IdeaImageResult {
   const prompt = input.prompt.trim(), kind = input.kind ?? 'graphic';
   if (prompt.length < 20) {
@@ -95,8 +95,12 @@ export function generateIdeaImage(root: string, writer: ProjectWriteAdapter,
   try {
     const attempt = (): string | void => run(work, (kind === 'page' ? [
       'Use your image generation tool to generate exactly one image, then stop. Do not run shell commands.',
-      'It is a designer\'s draft of one landing-page section seen flat at desktop width, a wide landscape frame, not a device mockup '
-        + 'and not a whole tall page: it will not ship, it settles the section\'s composition before it is built in HTML.',
+      // A mobile app is drafted at the size it is used: a landscape draft of a phone screen settles a layout the app never has.
+      input.viewport === 'mobile'
+        ? 'It is a designer\'s draft of one mobile app screen seen flat at phone width, a tall portrait frame about 390 by 844, not a device '
+          + 'mockup and not a desktop layout: it will not ship, it settles the screen\'s composition before it is built in HTML.'
+        : 'It is a designer\'s draft of one landing-page section seen flat at desktop width, a wide landscape frame, not a device mockup '
+          + 'and not a whole tall page: it will not ship, it settles the section\'s composition before it is built in HTML.',
       'Draw one composition only: when the description offers alternatives, draw the first; each other alternative is its own idea image.',
       'Set the given copy exactly, large enough to read, with real hierarchy between headline, body and actions.',
       `Section: ${prompt}`,

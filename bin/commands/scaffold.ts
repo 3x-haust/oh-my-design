@@ -48,20 +48,21 @@ export async function runScaffold(args: readonly string[]): Promise<never> {
 export async function runImagegen(args: readonly string[]): Promise<never> {
   const opts = parseArgs(args.slice(1));
   const usage = 'usage: omd imagegen --name <section> --prompt "<claim, protagonist object, material, light, framing>" [--reference <kept image path>]... [--json]\n'
-    + '       omd imagegen --kind page --name <section> --prompt "<exact copy, layout, type, graphic or proof and its place, palette>" [--json]';
+    + '       omd imagegen --kind page --name <section> --prompt "<exact copy, layout, type, graphic or proof and its place, palette>" [--viewport mobile] [--json]';
   if (opts.help) {
     console.log(`${usage}\n  Generates one idea image with the Codex CLI into .omd/ideas; ideation only. A graphic idea guides a graphic built in code; `
       + 'a page idea (--kind page) drafts one section\'s composition before the page is built in HTML.');
     process.exit(0);
   }
   const bag = opts as unknown as Record<string, unknown>;
-  const name = bag.name, prompt = bag.prompt, reference = bag.reference, kind = bag.kind ?? 'graphic';
-  if (typeof name !== 'string' || typeof prompt !== 'string' || (kind !== 'graphic' && kind !== 'page') || opts._.length) throw new Error(usage);
+  const name = bag.name, prompt = bag.prompt, reference = bag.reference, kind = bag.kind ?? 'graphic', viewport = bag.viewport ?? 'desktop';
+  if (typeof name !== 'string' || typeof prompt !== 'string' || (kind !== 'graphic' && kind !== 'page') || opts._.length
+    || (viewport !== 'desktop' && viewport !== 'mobile')) throw new Error(usage);
   const page = kind === 'page';
   const invocation = invocationFromActivation(opts, 'omd imagegen');
   const { generateIdeaImage } = await import('../../core/design/idea-image.ts');
   const references = reference === undefined ? [] : (Array.isArray(reference) ? reference : [reference]).map(String);
-  const result = generateIdeaImage(process.cwd(), projectWriter(invocation), { name, prompt, references, kind: page ? 'page' : 'graphic' });
+  const result = generateIdeaImage(process.cwd(), projectWriter(invocation), { name, prompt, references, kind: page ? 'page' : 'graphic', viewport });
   if (opts.json) process.stdout.write(`${JSON.stringify(result)}\n`);
   else console.log(page ? `page idea: ${result.path} (ideation only; build the section in HTML on the design system)`
     : `idea image: ${result.path} (ideation only; build the graphic in code and render it with omd render --graphic)`);

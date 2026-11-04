@@ -408,7 +408,7 @@ export const STUDIO_CONCEPT_GUIDANCE = `Before the page source, draw ${STUDIO_PA
   + 'hero-<n> --prompt "<the exact headline and copy, what sits where and how large, the key visual made from the product\'s real look, the '
   + 'type and the devices the system takes, the sampled colours>". Make each a genuinely different composition (a different arrangement of '
   + 'words, key visual and action, not a colour variant), look at them, choose one and write in system.md what must survive into the HTML. '
-  + 'The images are ideation only and never ship; where no image tool works, omd imagegen records that and the page proceeds.';
+  + 'A mobile app\'s ideas are its main screen at phone size: add --viewport mobile. The images are ideation only and never ship; where no image tool works, omd imagegen records that and the page proceeds.';
 
 /** What a new surface still owes before its page is built: a study of finished sites, the system taken from one of them, then page ideas. */
 export function studioPending(root: string, route: Route): 'study' | 'system' | 'concept' | null {
