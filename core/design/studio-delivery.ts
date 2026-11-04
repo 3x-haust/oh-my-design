@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { canonicalJson } from '../ref/canonical-json.ts';
 import type { readPersistedRoute } from '../route/index.ts';
@@ -28,8 +28,28 @@ export const STUDIO_DELIVER_MESSAGE = 'The page has had its comparison with the 
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
+const builtPage = (root: string, dir: string): string | null => {
+  for (const page of ['dist/index.html', 'index.html']) if (existsSync(join(root, dir, page))) return dir === '' ? page : `${dir}/${page}`;
+  return null;
+};
+
+/**
+ * The package and built page a new surface is delivered from. A page at the project root wins; otherwise a site kept in its own
+ * package one folder down (website/, docs/, site/: test-320 built oh-my-design's site in website/ while the root package is the
+ * plugin), the most recently built when there are several.
+ */
+export function studioSite(root: string): Readonly<{ dir: string; entry: string }> {
+  const atRoot = builtPage(root, '');
+  if (atRoot !== null) return { dir: '', entry: atRoot };
+  const sites = readdirSync(root, { withFileTypes: true })
+    .filter(item => item.isDirectory() && !item.name.startsWith('.') && item.name !== 'node_modules' && existsSync(join(root, item.name, 'package.json')))
+    .flatMap(item => { const entry = builtPage(root, item.name); return entry === null ? [] : [{ dir: item.name, entry }]; })
+    .sort((a, b) => statSync(join(root, b.entry)).mtimeMs - statSync(join(root, a.entry)).mtimeMs);
+  return sites[0] ?? { dir: '', entry: 'index.html' };
+}
+
 /** The built page a new surface is delivered from. */
-export const studioEntry = (root: string): string => existsSync(join(root, 'dist/index.html')) ? 'dist/index.html' : 'index.html';
+export const studioEntry = (root: string): string => studioSite(root).entry;
 
 /** Reviews already spent on this route's first render. */
 export function studioReviewRounds(root: string, route: Route): number {
