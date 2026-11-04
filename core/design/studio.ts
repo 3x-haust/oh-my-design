@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { extname, join, normalize } from 'node:path';
 import { PNG } from 'pngjs';
 import { browserCallback } from '../ref/browser-evaluation.ts';
 import { resolveRenderTarget } from '../render/serve.ts';
@@ -48,12 +48,15 @@ export const STUDIO_STUDY_GUIDANCE = 'A new page starts from finished sites, stu
 
 export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${STUDIO_SYSTEM_NOTES}: the type ramp you take from its measurements `
   + '(five or six sizes, at most three weights, tracking, line heights), container width, section rhythm, how it frames product visuals, its '
-  + 'button; then what comes from the project instead: accent colours and character from its logo, voice from its README. Name the reference\'s '
+  + 'button; then what comes from the project instead: accent colours sampled from its logo or product images (with no such material, from a '
+  + 'studied reference\'s captures; never the muted green or blue a model reaches for by default), character from its logo, voice from its README. Name the reference\'s '
   + 'signature (the one or two moves that make it feel made by a person) and this project\'s own equivalent: a move only this project could make, '
   + 'in its own material or vocabulary, never the reference\'s look restated. Then its motion, from study.json motion and the intro-N.png frames: '
   + 'how the first screen arrives (what leads, from what, how long, which curve), how sections reveal on scroll, what keeps moving inside its '
   + 'product visuals, hover timing; write the durations and curves you take. Then write '
-  + `${STUDIO_SYSTEM_RECORD} as {"reference": "<primary url>", "sizes": [px...], "weights": [n...]}; every size and weight the page renders comes from it.`;
+  + `${STUDIO_SYSTEM_RECORD} as {"reference": "<primary url>", "sizes": [px...], "weights": [n...], "colors": [{"hex": "#rrggbb", "from": "<PNG or SVG `
+  + 'in the project, or a studied reference url>"}...]}; every size and weight the page renders comes from it, and every accent from the family of a colour '
+  + 'sampled where its from says (a darker or lighter step of it for contrast is the same colour).';
 
 export type StudioStudy = Readonly<{ url: string; dir: string; firstScreen: string; full: string; sha256: string }>;
 
@@ -283,7 +286,75 @@ export function studioStudies(root: string): readonly StudioStudy[] {
   }).sort((a, b) => a.dir.localeCompare(b.dir));
 }
 
-export type StudioSystem = Readonly<{ reference: string; sizes: readonly number[]; weights: readonly number[] }>;
+export type StudioColor = Readonly<{ hex: string; from: string }>;
+export type StudioSystem = Readonly<{ reference: string; sizes: readonly number[]; weights: readonly number[]; colors?: readonly StudioColor[] }>;
+
+const STUDIO_MAX_COLORS = 6;
+/** How close (RGB distance) a sampled pixel must be to the recorded colour. */
+const SAMPLE_TOLERANCE = 28;
+/** Accents within this hue distance of a recorded colour belong to its family. */
+export const ACCENT_HUE_TOLERANCE = 20;
+
+const channels = (hex: string): readonly [number, number, number] =>
+  [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+
+/** Hue in degrees and HSL saturation and lightness (0..1). */
+export function hsl(hex: string): Readonly<{ hue: number; saturation: number; lightness: number }> {
+  const [r, g, b] = channels(hex).map(value => value / 255) as [number, number, number];
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), lightness = (max + min) / 2, delta = max - min;
+  if (delta === 0) return { hue: 0, saturation: 0, lightness };
+  const saturation = delta / (1 - Math.abs(2 * lightness - 1));
+  const hue = max === r ? ((g - b) / delta) % 6 : max === g ? (b - r) / delta + 2 : (r - g) / delta + 4;
+  return { hue: (hue * 60 + 360) % 360, saturation, lightness };
+}
+
+const sampleCache = new Map<string, boolean>();
+/** Whether the PNG or SVG at path holds the colour; null for any other kind of file. */
+function holdsColour(path: string, hex: string): boolean | null {
+  const kind = extname(path).toLowerCase();
+  if (kind !== '.png' && kind !== '.svg') return null;
+  const key = `${path}\0${hex}`;
+  const cached = sampleCache.get(key);
+  if (cached !== undefined) return cached;
+  const [r, g, b] = channels(hex);
+  const near = (red: number, green: number, blue: number) => Math.hypot(red - r, green - g, blue - b) <= SAMPLE_TOLERANCE;
+  let held = false;
+  if (kind === '.svg') {
+    const text = readFileSync(path, 'utf8');
+    held = [...text.matchAll(/#([0-9a-f]{6}|[0-9a-f]{3})\b/gi)].some(match => {
+      const value = match[1]!.length === 3 ? [...match[1]!].map(digit => digit + digit).join('') : match[1]!;
+      return near(...channels(`#${value}`));
+    });
+  } else {
+    const image = PNG.sync.read(readFileSync(path));
+    // Every pixel of a small mark; a page-length capture is sampled on a grid, which still finds any colour that covers an area.
+    const step = image.width * image.height > 2_000_000 ? 3 : 1;
+    for (let y = 0; y < image.height && !held; y += step) {
+      for (let x = 0; x < image.width; x += step) {
+        const at = (image.width * y + x) * 4;
+        if (image.data[at + 3]! >= 128 && near(image.data[at]!, image.data[at + 1]!, image.data[at + 2]!)) { held = true; break; }
+      }
+    }
+  }
+  sampleCache.set(key, held);
+  return held;
+}
+
+/** Why the system's palette is not yet sampled from real material, or null when every colour is found where its from says. */
+export function paletteIssue(root: string, system: StudioSystem, studies: readonly StudioStudy[] = studioStudies(root)): string | null {
+  const colors = system.colors ?? [];
+  if (colors.length === 0) return `${STUDIO_SYSTEM_RECORD} names no colors: sample the accents from the project's logo or product images, or from a studied reference's captures`;
+  for (const { hex, from } of colors) {
+    const study = studies.find(item => sameSite(item.url, from));
+    const files = study !== undefined ? [study.firstScreen, study.full] : [normalize(from)];
+    if (files.some(file => file.startsWith('..') || file.startsWith('/'))) return `the colour ${hex} names ${from}, outside the project`;
+    if (files.some(file => !existsSync(join(root, file)))) return `the colour ${hex} names ${from}, which is neither a file in the project nor a studied reference`;
+    const held = files.map(file => holdsColour(join(root, file), hex));
+    if (held.every(value => value === null)) return `the colour ${hex} names ${from}; sample from a PNG or SVG`;
+    if (!held.some(value => value === true)) return `the colour ${hex} is not in ${from}: sample it from the file's own pixels`;
+  }
+  return null;
+}
 
 const sameSite = (left: string, right: string): boolean => {
   try { return slug(left) === slug(right); } catch { return false; }
@@ -314,7 +385,14 @@ export function readStudioSystem(root: string): StudioSystem | null {
   if (!numbers(weights) || (weights as number[]).length === 0 || new Set(weights as number[]).size > STUDIO_SYSTEM_WEIGHTS) {
     return invalid(`needs one to ${STUDIO_SYSTEM_WEIGHTS} weights`);
   }
-  return { reference, sizes: sizes as number[], weights: weights as number[] };
+  const colors = Reflect.get(value, 'colors');
+  if (colors === undefined) return { reference, sizes: sizes as number[], weights: weights as number[] };
+  if (!Array.isArray(colors) || colors.length === 0 || colors.length > STUDIO_MAX_COLORS || !colors.every(color => typeof color === 'object' && color !== null
+    && typeof Reflect.get(color, 'hex') === 'string' && /^#[0-9a-f]{6}$/i.test(Reflect.get(color, 'hex')) && typeof Reflect.get(color, 'from') === 'string')) {
+    return invalid(`colors needs one to ${STUDIO_MAX_COLORS} {"hex": "#rrggbb", "from": "<file or studied url>"} entries`);
+  }
+  return { reference, sizes: sizes as number[], weights: weights as number[],
+    colors: colors.map(color => ({ hex: String(Reflect.get(color, 'hex')).toLowerCase(), from: String(Reflect.get(color, 'from')) })) };
 }
 
 /** What a new surface still owes before its page is built: a study of finished sites, then the system taken from one of them. */
@@ -324,9 +402,11 @@ export function studioPending(root: string, route: Route): 'study' | 'system' | 
   if (studies.length === 0) return 'study';
   const system = readStudioSystem(root);
   if (system === null || !studies.some(study => sameSite(study.url, system.reference))) return 'system';
-  const notes = existsSync(join(root, STUDIO_SYSTEM_NOTES)) ? readFileSync(join(root, STUDIO_SYSTEM_NOTES), 'utf8').trim() : '';
-  return notes.length < MIN_SYSTEM_NOTES || logoUnsaved(root) ? 'system' : null;
+  return notesThin(root) || logoUnsaved(root) || paletteIssue(root, system, studies) !== null ? 'system' : null;
 }
+
+const notesThin = (root: string): boolean =>
+  (existsSync(join(root, STUDIO_SYSTEM_NOTES)) ? readFileSync(join(root, STUDIO_SYSTEM_NOTES), 'utf8').trim() : '').length < MIN_SYSTEM_NOTES;
 
 /**
  * A project with a README nearly always has a logo, but many READMEs link it from the web (an uploaded image with no alt text),
@@ -355,7 +435,8 @@ export function requireStudioSystem(root: string, route: Route): void {
     const reason = system === null ? 'no system is written yet'
       : !studioStudies(root).some(study => sameSite(study.url, system.reference)) ? `its reference ${system.reference} was not studied with omd studio refs`
         : logoUnsaved(root) ? `no logo file was found and the README links its logo from the web: save the project's logo exactly as published to ${STUDIO_LOGO} (PNG), or write an empty ${STUDIO_NO_LOGO} when it has none`
-          : `${STUDIO_SYSTEM_NOTES} is missing or too thin to hold the measured system, the project's identity and the signature`;
+          : notesThin(root) ? `${STUDIO_SYSTEM_NOTES} is missing or too thin to hold the measured system, the project's identity and the signature`
+            : paletteIssue(root, system) ?? 'the system is incomplete';
     throw Object.assign(new Error(`STUDIO_SYSTEM_MISSING: ${reason}. ${STUDIO_SYSTEM_GUIDANCE}`), { code: 'STUDIO_SYSTEM_MISSING' });
   }
 }
@@ -370,6 +451,8 @@ export type SystemDriftObservation = Readonly<{
   stillVideos?: number;
   /** Visible h1/h2 texts outside data-product, for the paired-slogan check. */
   headings?: readonly string[];
+  /** Saturated colours the page paints its own links, buttons and headings in, outside data-product, as #rrggbb. */
+  accents?: readonly string[];
   /** Desktop only: the first screen holds a key visual built in code. */
   keyVisual?: boolean;
   /** Desktop only: something in the first screen animates as the page loads. */
@@ -432,7 +515,19 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ 
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length,
     stillVideos: [...document.querySelectorAll('video')].filter(video => visible(video) && !(video.autoplay && video.muted && video.loop)).length,
     headings: [...document.querySelectorAll('h1, h2')].filter(visible).filter(element => element.closest('[data-product]') === null)
-      .map(element => (element.textContent ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 40) };
+      .map(element => (element.textContent ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 40),
+    accents: [...new Set([...document.querySelectorAll('a, button, h1, h2, h3')].filter(visible).filter(element => element.closest('[data-product]') === null)
+      .flatMap(element => { const style = getComputedStyle(element); return [style.color, style.backgroundColor]; })
+      .flatMap(value => {
+        const match = /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(value);
+        if (match === null || Number(match[4] ?? 1) < 0.5) return [];
+        const [r, g, b] = [Number(match[1]), Number(match[2]), Number(match[3])].map(channel => channel / 255) as [number, number, number];
+        const max = Math.max(r, g, b), min = Math.min(r, g, b), lightness = (max + min) / 2;
+        const saturation = max === min ? 0 : (max - min) / (1 - Math.abs(2 * lightness - 1));
+        // An accent is a colour a visitor reads as a hue: neither near grey nor near black or white.
+        if (saturation < 0.3 || lightness < 0.12 || lightness > 0.9) return [];
+        return [`#${[match[1], match[2], match[3]].map(channel => Number(channel).toString(16).padStart(2, '0')).join('')}`];
+      }))].slice(0, 12) };
 });
 
 /**
@@ -507,9 +602,12 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
 }
 
 /** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome, a paired slogan for a headline. */
-export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null): readonly string[] {
+export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null,
+  palette: readonly StudioColor[] = []): readonly string[] {
   const failures: string[] = [];
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], keyVisual, arrives, performs, screens, revealed } of observations) {
+  const hues = palette.map(color => hsl(color.hex)).filter(color => color.saturation >= 0.2).map(color => color.hue);
+  const inFamily = (hex: string) => hues.some(hue => Math.min(Math.abs(hue - hsl(hex).hue), 360 - Math.abs(hue - hsl(hex).hue)) <= ACCENT_HUE_TOLERANCE);
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], keyVisual, arrives, performs, screens, revealed } of observations) {
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
     if (reference?.revealsOnScroll && revealed === 0) failures.push(`${viewport}: nothing reveals as the page scrolls, while the reference reveals its sections as they enter (take its distance, duration, curve and stagger; rest under prefers-reduced-motion)`);
     if (arrives === false) failures.push(`${viewport}: the first screen does not arrive: nothing in it animates as the page loads (take the reference's intro: what leads, from what, how long, which curve)`);
@@ -520,6 +618,8 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (arrows.length > 0) failures.push(`${viewport}: arrow glyphs or trailing icons on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
     if (playerControls > 0) failures.push(`${viewport}: ${playerControls} video${playerControls === 1 ? '' : 's'} with visible player controls`);
     if (stillVideos > 0) failures.push(`${viewport}: ${stillVideos} video${stillVideos === 1 ? ' waits' : 's wait'} for a click; a demo plays muted and looped on its own (autoplay muted loop playsinline), with no play button over it, and rests under prefers-reduced-motion`);
+    const offPalette = palette.length === 0 ? [] : accents.filter(hex => !inFamily(hex));
+    if (offPalette.length > 0) failures.push(`${viewport}: accents outside the sampled palette ${offPalette.slice(0, 4).join(', ')} (the system samples ${palette.map(color => `${color.hex} from ${color.from}`).join(', ')}); paint links, buttons and headings in a step of a sampled colour, or sample the colour you mean from real material`);
     const slogans = headings.filter(pairedSlogan);
     if (slogans.length > 0) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
   }
@@ -531,7 +631,7 @@ export async function requireStudioSystemHeld(root: string, route: Route, target
   if (!newSurface(route)) return;
   const system = readStudioSystem(root);
   if (system === null) return;
-  const failures = systemDriftFailures(await observeSystemDrift(target, system), studioReferenceDepth(root));
+  const failures = systemDriftFailures(await observeSystemDrift(target, system), studioReferenceDepth(root), system.colors ?? []);
   if (failures.length > 0) {
     throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. Build the `
       + 'key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving with real input, marked data-product. Set each '
