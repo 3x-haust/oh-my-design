@@ -26,7 +26,9 @@ export function composeGuidance(route: Route): string {
       + 'do no job. Compare: shoot the page (--full-page) and put it beside the reference\'s first-screen.png and full.png; fix the biggest '
       + 'differences in scale, whitespace, type, the visual, rhythm and finish, at most three passes. omd pack guides/landing-basics.md once for '
       + 'the basics a designer keeps (a header in reach, plain-word navigation, one primary action, real head metadata, no dead links or invented '
-      + `proof). ${korean ? 'Korean text: omd pack theory/typography-korean.md. ' : ''}Then build and run omd lifecycle finish --json.`;
+      + 'proof). Words in the project\'s own voice (its README\'s claims, wording and humour): each headline names a concrete thing the product '
+      + 'does or a real moment of using it, never a paired slogan of two parallel clauses or an abstract promise of ease, and the same cadence never '
+      + `repeats from section to section. ${korean ? 'Korean text: omd pack theory/typography-korean.md. ' : ''}Then build and run omd lifecycle finish --json.`;
   }
   const marketing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const start = route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : '';
