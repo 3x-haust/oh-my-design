@@ -6,7 +6,7 @@ import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts
 import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
-import { STUDIO_STUDY_GUIDANCE, STUDIO_SYSTEM_GUIDANCE, studioPending } from '../design/studio.ts';
+import { STUDIO_CONCEPT_GUIDANCE, STUDIO_STUDY_GUIDANCE, STUDIO_SYSTEM_GUIDANCE, studioPending } from '../design/studio.ts';
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import { newSurface } from '../design/new-surface-advisories.ts';
 import { currentStudioDelivery, STUDIO_DELIVER_MESSAGE, STUDIO_REVIEW_ROUNDS, studioReviewRounds } from '../design/studio-delivery.ts';
@@ -78,9 +78,10 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     return {
       ...base(routeSha256),
       stage: 'concepts',
-      action: studio === 'study' ? 'study-studio-references' : 'write-studio-system',
-      next: studio === 'study' ? 'omd studio refs <url> <url> --json' : 'omd guard production --json',
-      instruction: studio === 'study' ? STUDIO_STUDY_GUIDANCE : STUDIO_SYSTEM_GUIDANCE,
+      action: studio === 'study' ? 'study-studio-references' : studio === 'system' ? 'write-studio-system' : 'draw-page-ideas',
+      next: studio === 'study' ? 'omd studio refs <url> <url> --json' : studio === 'system' ? 'omd guard production --json'
+        : 'omd imagegen --kind page --name hero-1 --prompt "<composition>"',
+      instruction: studio === 'study' ? STUDIO_STUDY_GUIDANCE : studio === 'system' ? STUDIO_SYSTEM_GUIDANCE : STUDIO_CONCEPT_GUIDANCE,
     };
   }
   // Until the first render exists, the work is composing the page; name the knowledge for that.
