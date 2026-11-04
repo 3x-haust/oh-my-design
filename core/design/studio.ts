@@ -52,10 +52,13 @@ export const STUDIO_STUDY_GUIDANCE = 'A new page starts from finished sites, stu
 export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${STUDIO_SYSTEM_NOTES}: the type ramp you take from its measurements `
   + '(five or six sizes, at most three weights, tracking, line heights), container width, section rhythm, how it frames product visuals, its '
   + 'button; its devices beyond measurement (the ground or texture, the typeface\'s character such as serif, mono or grotesk, colour blocks, '
-  + 'illustration, how product images are cropped and framed) and which of them this page takes and how; then what comes from the project instead: accent colours sampled from its logo or product images (with no such material, from a '
+  + 'illustration, how product images are cropped and framed). Take at least one of those devices and carry it in this project\'s own material: '
+  + 'the reference\'s illustrated characters become this project\'s own logo character drawn through the page, its paper ground and serif become '
+  + 'the same ground and a serif chosen for this voice, its colour blocks are filled with this project\'s sampled colours. A system that excludes '
+  + 'every device keeps only the reference\'s numbers, and the page comes out generic. Then what comes from the project instead: accent colours sampled from its logo or product images (with no such material, from a '
   + 'studied reference\'s captures; never the muted green or blue a model reaches for by default), character from its logo, voice from its README. Name the reference\'s '
   + 'signature (the one or two moves that make it feel made by a person) and this project\'s own equivalent: a move only this project could make, '
-  + 'in its own material or vocabulary, never the reference\'s look restated. Then its motion, from study.json motion and the intro-N.png frames: '
+  + 'in its own material or vocabulary, never the reference\'s brand restated. Then its motion, from study.json motion and the intro-N.png frames: '
   + 'how the first screen arrives (what leads, from what, how long, which curve), how sections reveal on scroll, what keeps moving inside its '
   + 'product visuals, hover timing; write the durations and curves you take. Then write '
   + `${STUDIO_SYSTEM_RECORD} as {"reference": "<primary url>", "sizes": [px...], "weights": [n...], "colors": [{"hex": "#rrggbb", "from": "<PNG or SVG `
