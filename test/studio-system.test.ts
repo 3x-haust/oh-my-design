@@ -199,6 +199,8 @@ test("a page is held to its reference's depth and to revealing on scroll when th
   const shallow = await observeSystemDrift(page, system);
   const failures = systemDriftFailures(shallow, reference).join('\n');
   assert.match(failures, /desktop: the page is 3(\.1)? screens against the reference's 9\.1/);
+  // test-314 met the depth with ten identical text-beside-demo sections; depth asks for varied arrangements.
+  assert.match(failures, /never one text-beside-demo block repeated down the page/);
   assert.match(failures, /desktop: nothing reveals as the page scrolls/);
   // Without a reference to measure against, depth and reveals are not asked.
   assert.doesNotMatch(systemDriftFailures(shallow).join('\n'), /screens against|reveals/);
