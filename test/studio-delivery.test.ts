@@ -42,7 +42,9 @@ const studied = (root: string, url: string) => {
   const image = new PNG({ width: 4, height: 4 });
   writeFileSync(join(dir, 'first-screen.png'), PNG.sync.write(image));
   writeFileSync(join(dir, 'full.png'), PNG.sync.write(image));
-  writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: url, sizes: [14, 18, 24, 32], weights: [400, 700] }));
+  writeFileSync(join(root, '.omd/studio/mark.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#2f5bd3"/></svg>');
+  writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: url, sizes: [14, 18, 24, 32], weights: [400, 700],
+    colors: [{ hex: '#2f5bd3', from: '.omd/studio/mark.svg' }] }));
   writeFileSync(join(root, '.omd/studio/system.md'), `${'Borrowed from Quiet Tools: 32/18 type, two weights, generous rhythm. '.repeat(8)}`);
 };
 const fixture = (t: { after: (fn: () => void) => void }, values: Record<string, string>) => {

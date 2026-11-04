@@ -60,6 +60,21 @@ test('a new page waits for a study, then a system taken from a studied site with
   writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: 'https://quiet.tools', sizes: [72, 48, 24, 18, 14], weights: [400, 600] }));
   assert.throws(() => requireStudioSystem(root, landing), /system\.md is missing or too thin/);
   writeFileSync(join(root, '.omd/studio/system.md'), notes);
+  // The accents are sampled from real material: a colour that is not in the file it names, or a file that is no image, holds the page.
+  assert.throws(() => requireStudioSystem(root, landing), /system\.json names no colors/);
+  writeFileSync(join(root, 'mark.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4" fill="#E0457B"/><rect fill="#fc0"/></svg>');
+  const palette = (colors: readonly object[]) => writeFileSync(join(root, '.omd/studio/system.json'),
+    JSON.stringify({ reference: 'https://quiet.tools', sizes: [72, 48, 24, 18, 14], weights: [400, 600], colors }));
+  palette([{ hex: '#236747', from: 'mark.svg' }]);
+  assert.throws(() => requireStudioSystem(root, landing), /the colour #236747 is not in mark\.svg: sample it from the file's own pixels/);
+  palette([{ hex: '#e0457b', from: 'README.md' }]);
+  assert.throws(() => requireStudioSystem(root, landing), /names README\.md, which is neither|sample from a PNG or SVG/);
+  palette([{ hex: '#e0457b', from: '../mark.svg' }]);
+  assert.throws(() => requireStudioSystem(root, landing), /outside the project/);
+  // A studied reference's captures are material too (the fixture captures are transparent, so nothing is found in them).
+  palette([{ hex: '#e0457b', from: 'https://quiet.tools/' }]);
+  assert.throws(() => requireStudioSystem(root, landing), /the colour #e0457b is not in https:\/\/quiet\.tools\//);
+  palette([{ hex: '#e0457b', from: 'mark.svg' }, { hex: '#ffcc00', from: 'mark.svg' }]);
   assert.equal(studioPending(root, landing), null);
   // A README that links its logo from the web holds the page until the logo is saved, or the project says it has none.
   writeFileSync(join(root, 'README.md'), '<p align="center"><img width="536" src="https://user-images.example.com/174470852.png"></p>\n# Tool\n');
@@ -130,6 +145,12 @@ test('a headline of short sentences that end alike is named as a paired slogan; 
   assert.match(systemDriftFailures([{ ...observation, headings: ['Git은 강력하게. 작업은 간단하게.', '변경을 골라 커밋하세요.'] }]).join('\n'),
     /paired slogans "Git은 강력하게\. 작업은 간단하게\.": a headline names a concrete thing the product does/);
   assert.deepEqual(systemDriftFailures([{ ...observation, headings: ['변경을 골라 커밋하세요.'] }]), []);
+  // Accents stay in the family of a sampled colour: a darker step of the logo's magenta passes, the default forest green does not.
+  const palette = [{ hex: '#e0457b', from: 'mark.svg' }];
+  assert.deepEqual(systemDriftFailures([{ ...observation, accents: ['#a8264f'] }], null, palette), []);
+  assert.match(systemDriftFailures([{ ...observation, accents: ['#236747', '#a8264f'] }], null, palette).join('\n'),
+    /desktop: accents outside the sampled palette #236747 \(the system samples #e0457b from mark\.svg\)/);
+  assert.deepEqual(systemDriftFailures([{ ...observation, accents: ['#236747'] }]), [], 'a system without colors is not held to them');
 });
 
 test('the build is measured against its system: off-system type, arrow glyphs and player chrome, never inside a recreated product', { timeout: 120_000 }, async t => {
@@ -147,6 +168,8 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   assert.deepEqual(desktop.arrows, ['More →', 'Docs ↗']);
   assert.equal(desktop.playerControls, 1);
   assert.equal(desktop.stillVideos, 1);
+  // The unstyled links paint in the browser's own blue, which no sampled palette holds.
+  assert.deepEqual(desktop.accents, ['#0000ee']);
   assert.deepEqual(desktop.headings, ['Quiet']);
   // The recreated product above is one narrow row: no key visual. Nothing arrives either. Mobile is not asked.
   assert.equal(desktop.keyVisual, false);
