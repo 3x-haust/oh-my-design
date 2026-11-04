@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,7 @@ import { readPersistedRoute } from '../core/route/index.ts';
 import { nextStageWork } from '../core/stage/next.ts';
 import { modelLedCompletionFingerprint } from '../core/runtime/model-led-execution.ts';
 import { stallMessage } from '../core/design/first-render-loop-state.ts';
-import { currentStudioDelivery, requireStudioDelivery, STUDIO_REVIEW_ROUNDS } from '../core/design/studio-delivery.ts';
+import { currentStudioDelivery, requireStudioDelivery, STUDIO_REVIEW_ROUNDS, studioSite } from '../core/design/studio-delivery.ts';
 import { createModelLedRouteContext, modelLedInput } from './helpers/model-led.ts';
 
 const hash = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
@@ -121,4 +121,26 @@ test('a new page is held to its system, compared once with its reference and del
 test('past the studio rounds a stall says deliver; other routes keep their ceiling message', () => {
   assert.match(stallMessage({ exhausted: true, studio: true }), /comparison with the reference.*omd lifecycle finish/);
   assert.match(stallMessage({ exhausted: true }), /reviews the loop stops/);
+});
+
+test('a new page is delivered from the root build, or from the site package beside the project when the root builds no page', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-studio-site-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeFileSync(join(root, 'package.json'), '{}');
+  assert.deepEqual(studioSite(root), { dir: '', entry: 'index.html' });
+  // test-320: oh-my-design's site lives in website/; a folder without its own package is not a site.
+  for (const dir of ['website', 'docs', 'notes']) mkdirSync(join(root, dir, 'dist'), { recursive: true });
+  writeFileSync(join(root, 'website/package.json'), '{}');
+  writeFileSync(join(root, 'docs/package.json'), '{}');
+  writeFileSync(join(root, 'website/dist/index.html'), '<h1>site</h1>');
+  writeFileSync(join(root, 'notes/dist/index.html'), '<h1>notes</h1>');
+  assert.deepEqual(studioSite(root), { dir: 'website', entry: 'website/dist/index.html' });
+  // With two sites, the one just built.
+  writeFileSync(join(root, 'docs/index.html'), '<h1>docs</h1>');
+  utimesSync(join(root, 'website/dist/index.html'), new Date(1000), new Date(1000));
+  assert.deepEqual(studioSite(root), { dir: 'docs', entry: 'docs/index.html' });
+  // A page built at the root still wins.
+  mkdirSync(join(root, 'dist'));
+  writeFileSync(join(root, 'dist/index.html'), '<h1>root</h1>');
+  assert.deepEqual(studioSite(root), { dir: '', entry: 'dist/index.html' });
 });

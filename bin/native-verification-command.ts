@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
 import { readContainedRegularFile } from '../core/ref/reference-selection.ts';
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
@@ -12,6 +13,8 @@ class NativeVerificationError extends Error {
 export async function runNativeVerification(input: Readonly<{
   root: string; packRoot: string; invocation: ProjectRunInvocation; command: unknown;
   signal?: AbortSignal;
+  /** The package folder under the root that owns the delivered page; the root itself by default. */
+  packageDir?: string;
 }>) {
   if (input.signal?.aborted) throw new NativeVerificationError('NATIVE_VERIFICATION_CANCELLED');
   let args: readonly string[];
@@ -25,8 +28,9 @@ export async function runNativeVerification(input: Readonly<{
   const run = getNativePiRun(input.invocation, input.root);
   const readiness = checkProductionReadiness(input.root, input.invocation, input.packRoot);
   if (!readiness.ok) throw new NativeVerificationError('NATIVE_VERIFICATION_NOT_READY', readiness.blockers.join('; '));
-  readContainedRegularFile(input.root, 'package.json', 'verification package manifest');
-  const result = await runOwnedOmdProcess('npm', args, { cwd: input.root, env: { PLAYWRIGHT_SKIP_BROWSER_GC: '1' },
+  const packageDir = input.packageDir ?? '';
+  readContainedRegularFile(input.root, packageDir === '' ? 'package.json' : `${packageDir}/package.json`, 'verification package manifest');
+  const result = await runOwnedOmdProcess('npm', args, { cwd: resolve(input.root, packageDir), env: { PLAYWRIGHT_SKIP_BROWSER_GC: '1' },
     ...(input.signal === undefined ? {} : { signal: input.signal }) });
   return { schema: 'native-verification-result-v1' as const,
     meaning: 'execution-not-completion' as const, runId: run.runId,

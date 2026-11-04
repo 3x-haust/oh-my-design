@@ -33,7 +33,7 @@ import { newSurface, requireNoticeableMotion } from '../core/design/new-surface-
 import { readStudioSystem, requireStudioSystem, requireStudioSystemHeld } from '../core/design/studio.ts';
 import { requireStudioFloors } from '../core/design/studio-floors.ts';
 import { readFirstRenderIterationHistory } from '../core/design/first-render-iteration-history.ts';
-import { STUDIO_DELIVERY_RECORD, STUDIO_REVIEW_ROUNDS, studioEntry, studioReviewRounds, writeStudioDelivery } from '../core/design/studio-delivery.ts';
+import { STUDIO_DELIVERY_RECORD, STUDIO_REVIEW_ROUNDS, studioEntry, studioReviewRounds, studioSite, writeStudioDelivery } from '../core/design/studio-delivery.ts';
 import { REPAIR_KNOWLEDGE } from '../core/design/compose-guidance.ts';
 import { capturePageBasics } from '../core/design/page-basics.ts';
 import { requireReviewableSource } from '../core/design/source-readability.ts';
@@ -118,17 +118,20 @@ export async function runModelLedCompletion(input: Readonly<{
         ?? JSON.parse(readContainedRegularFile(input.root, path, 'browser plan').toString('utf8')));
     }
     phase = 'verification';
-    if (existsSync(resolve(input.root, 'package.json'))) {
-      const pkg: unknown = JSON.parse(readContainedRegularFile(input.root, 'package.json', 'package manifest').toString('utf8'));
+    // A new page is verified in the package that builds it, which may be a site folder beside the project's own package.
+    const packageDir = studio ? studioSite(input.root).dir : '';
+    const manifestPath = packageDir === '' ? 'package.json' : `${packageDir}/package.json`;
+    if (existsSync(resolve(input.root, manifestPath))) {
+      const pkg: unknown = JSON.parse(readContainedRegularFile(input.root, manifestPath, 'package manifest').toString('utf8'));
       if (!object(pkg) || (pkg.scripts !== undefined && !object(pkg.scripts))) throw new CompletionStepError('PROJECT_SCRIPTS_INVALID');
       const scripts = object(pkg.scripts) ? pkg.scripts : {};
       const actions: string[] = [];
-      if (!existsSync(resolve(input.root, 'node_modules'))
+      if (!existsSync(resolve(input.root, packageDir, 'node_modules'))
         && [pkg.dependencies, pkg.devDependencies].some(deps => object(deps) && Object.keys(deps).length > 0)) actions.push('install');
       actions.push(...['typecheck', 'test', 'build'].filter(action => typeof scripts[action] === 'string'));
       for (const command of actions) {
         cancelled();
-        const checked = await runNativeVerification({ ...input, command });
+        const checked = await runNativeVerification({ ...input, command, packageDir });
         verification.push(checked);
         if (checked.code !== 0 || checked.killed) {
           throw new CompletionStepError('PACKAGE_VERIFICATION_FAILED', `Project command failed: ${checked.command.join(' ')}; inspect its retained stdout, stderr and exit code.`);

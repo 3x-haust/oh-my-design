@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { runNativeVerification } from '../bin/native-verification-command.ts';
@@ -70,4 +70,16 @@ test('verification respects cancellation before any package script starts', asyn
   controller.abort();
   await assert.rejects(runNativeVerification({ ...f, command: 'build', signal: controller.signal }),
     /NATIVE_VERIFICATION_CANCELLED/);
+});
+
+test('native verification runs in the site package that owns the page, and refuses a folder outside the project', async t => {
+  const f = modelLedFixture(t);
+  // test-320: oh-my-design keeps its site in website/ while the root package is the plugin with its own long suite.
+  writeFileSync(join(f.root, 'package.json'), JSON.stringify({ private: true, scripts: { test: 'node -e "process.exit(9)"' } }));
+  mkdirSync(join(f.root, 'website'));
+  writeFileSync(join(f.root, 'website/package.json'), JSON.stringify({ private: true, scripts: { test: 'node -p "process.cwd()"' } }));
+  const result = await runNativeVerification({ ...f, command: 'test', packageDir: 'website' });
+  assert.equal(result.code, 0);
+  assert.equal(realpathSync(result.stdout.trim().split('\n').at(-1)!), realpathSync(join(f.root, 'website')));
+  await assert.rejects(runNativeVerification({ ...f, command: 'test', packageDir: '..' }));
 });
