@@ -100,6 +100,16 @@ test('an early semantic review can request a concrete repair independently of ad
   assert.deepEqual(review.findings, [finding]);
 });
 
+test('a repeated finding id is refused by name, so the reviewer can correct it in session', () => {
+  const qualityAssessments = assessments();
+  for (const row of qualityAssessments.filter(row => row.axis === 'usability')) Object.assign(row, { verdict: 'fail' });
+  const repeated = [finding, { ...finding, viewport: 'desktop' as const }];
+  assert.throws(() => parseFirstRenderReview(handback({ decision: 'revise', findings: repeated, qualityAssessments }), bindings, [], captures),
+    /duplicate finding primary-action: give each finding its own id; one problem seen on both viewports is one finding with viewport "both"/);
+  const merged = [{ ...finding, viewport: 'both' as const }];
+  assert.equal(parseFirstRenderReview(handback({ decision: 'revise', findings: merged, qualityAssessments }), bindings, [], captures).findings.length, 1);
+});
+
 test('fresh review explicitly resolves prior findings and cannot silently forget them', () => {
   assert.throws(() => parseFirstRenderReview(handback({}), bindings, [finding], captures), /reconciled/);
   const resolved = { id: finding.id, evidence: [{

@@ -184,7 +184,11 @@ export function parseFirstRenderFindings(value: unknown): readonly FirstRenderFi
       repairCriterion: piText(row.repairCriterion, 'finding-repair-criterion'),
     };
   });
-  if (new Set(findings.map(row => row.id)).size !== findings.length) return fail('duplicate finding');
+  const repeated = [...new Set(findings.map(row => row.id).filter((id, index, ids) => ids.indexOf(id) !== index))];
+  // Named, so the reviewer's one in-session correction knows what to change instead of guessing.
+  if (repeated.length > 0) {
+    return fail(`duplicate finding ${repeated.join(', ')}: give each finding its own id; one problem seen on both viewports is one finding with viewport "both"`);
+  }
   return findings;
 }
 
