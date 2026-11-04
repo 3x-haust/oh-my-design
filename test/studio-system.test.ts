@@ -170,6 +170,8 @@ test('the build step names the designer method: system, key visual first, depth,
   assert.match(text, /omd studio check --page/);
   assert.match(text, /beside the reference's first-screen\.png and full\.png/);
   assert.match(text, /typography-korean\.md/);
+  // Five lazygit runs converged on the same paired slogan; the reviewer named the cadence as machine-made.
+  assert.match(text, /never a paired slogan of two parallel clauses or an abstract promise of ease/);
 });
 
 test('the studio commands load from the CLI entry, whatever module the CLI imports first', () => {
