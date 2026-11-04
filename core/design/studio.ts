@@ -366,6 +366,8 @@ export type SystemDriftObservation = Readonly<{
   offSystemWeights: readonly Readonly<{ weight: number; example: string }>[];
   arrows: readonly string[];
   playerControls: number;
+  /** Visible h1/h2 texts outside data-product, for the paired-slogan check. */
+  headings?: readonly string[];
   /** Desktop only: the first screen holds a key visual built in code. */
   keyVisual?: boolean;
   /** Desktop only: something in the first screen animates as the page loads. */
@@ -416,8 +418,21 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ 
     .map(element => arrow.test(example(element)) ? example(element) : `${example(element)} ${getComputedStyle(element, '::after').content.replace(/^"|"$/g, '').trim()}`.trim());
   return { offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
     offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
-    arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length };
+    arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length,
+    headings: [...document.querySelectorAll('h1, h2')].filter(visible).filter(element => element.closest('[data-product]') === null)
+      .map(element => (element.textContent ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 40) };
 });
+
+/**
+ * A headline of two or three short sentences that end alike ("Git은 강력하게. 작업은 간단하게.", "Build faster. Ship faster.") is the
+ * paired slogan five of seven lazygit runs wrote and the reviewer named as machine-made. Narrow by design: only short sentences with the
+ * same closing character; a contrast pair with different endings is left to the prompt.
+ */
+export function pairedSlogan(text: string): boolean {
+  const sentences = text.split(/[.。!?！？]+/).map(part => part.replace(/[\s,·]/g, '')).filter(Boolean);
+  if (sentences.length < 2 || sentences.length > 3 || sentences.some(part => part.length < 3 || part.length > 16)) return false;
+  return sentences.every(part => part.slice(-1) === sentences[0]!.slice(-1));
+}
 
 // The key visual a designer builds first: marked data-product, at least half the width, in the first screen, made of live text or a
 // large drawn canvas/svg. A recording or screenshot dropped into a frame is the product's footage, not its look made for the page.
@@ -479,10 +494,10 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
   }
 }
 
-/** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome. */
+/** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome, a paired slogan for a headline. */
 export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null): readonly string[] {
   const failures: string[] = [];
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, keyVisual, arrives, performs, screens, revealed } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, headings = [], keyVisual, arrives, performs, screens, revealed } of observations) {
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
     if (reference?.revealsOnScroll && revealed === 0) failures.push(`${viewport}: nothing reveals as the page scrolls, while the reference reveals its sections as they enter (take its distance, duration, curve and stagger; rest under prefers-reduced-motion)`);
     if (arrives === false) failures.push(`${viewport}: the first screen does not arrive: nothing in it animates as the page loads (take the reference's intro: what leads, from what, how long, which curve)`);
@@ -492,6 +507,8 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (offSystemWeights.length > 0) failures.push(`${viewport}: weights outside the system ${offSystemWeights.slice(0, 4).map(item => `${item.weight} ("${item.example}")`).join(', ')}`);
     if (arrows.length > 0) failures.push(`${viewport}: arrow glyphs on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
     if (playerControls > 0) failures.push(`${viewport}: ${playerControls} video${playerControls === 1 ? '' : 's'} with visible player controls`);
+    const slogans = headings.filter(pairedSlogan);
+    if (slogans.length > 0) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
   }
   return [...new Set(failures)];
 }

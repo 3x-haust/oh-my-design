@@ -11,7 +11,7 @@ import { PNG } from 'pngjs';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
 import {
   observeSystemDrift, readStudioSystem, requireStudioSystem, studioPageSource, studioPending, studioReferenceDepth, studioStudies,
-  studyStudioReferences, systemDriftFailures,
+  pairedSlogan, studyStudioReferences, systemDriftFailures,
 } from '../core/design/studio.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 
@@ -119,6 +119,19 @@ test('a study keeps the first screen, the whole page, each section and the measu
   assert.ok([1, 2, 3].every(index => existsSync(join(dir, `intro-${index}.png`))));
 });
 
+test('a headline of short sentences that end alike is named as a paired slogan; a concrete headline or a contrast pair is not', () => {
+  // Five of seven lazygit runs wrote this headline; the reviewer named the cadence as machine-made.
+  for (const slogan of ['Git은 강력하게. 작업은 간단하게.', 'Build faster. Ship faster.', '더 빠르게. 더 쉽게. 더 가볍게.']) assert.equal(pairedSlogan(slogan), true, slogan);
+  for (const headline of ['변경을 골라 커밋하세요.', 'Git 명령어 대신, 변경 사항을 보면서 작업하세요.', '리베이스에 TODO 파일이 꼭 필요할까요?',
+    '명령어는 덜. 할 수 있는 일은 더.', 'Less noise. More signal.', '이 변경에서 한 줄만 커밋하고 싶다면. 스페이스 하나로 스테이징하세요.', 'Lazygit']) {
+    assert.equal(pairedSlogan(headline), false, headline);
+  }
+  const observation = { viewport: 'desktop' as const, offSystemSizes: [], offSystemWeights: [], arrows: [], playerControls: 0 };
+  assert.match(systemDriftFailures([{ ...observation, headings: ['Git은 강력하게. 작업은 간단하게.', '변경을 골라 커밋하세요.'] }]).join('\n'),
+    /paired slogans "Git은 강력하게\. 작업은 간단하게\.": a headline names a concrete thing the product does/);
+  assert.deepEqual(systemDriftFailures([{ ...observation, headings: ['변경을 골라 커밋하세요.'] }]), []);
+});
+
 test('the build is measured against its system: off-system type, arrow glyphs and player chrome, never inside a recreated product', { timeout: 120_000 }, async t => {
   const root = project(t);
   const page = join(root, 'index.html');
@@ -133,6 +146,7 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   // An arrow drawn with ::after content is as much an arrow as one typed into the link.
   assert.deepEqual(desktop.arrows, ['More →', 'Docs ↗']);
   assert.equal(desktop.playerControls, 1);
+  assert.deepEqual(desktop.headings, ['Quiet']);
   // The recreated product above is one narrow row: no key visual. Nothing arrives either. Mobile is not asked.
   assert.equal(desktop.keyVisual, false);
   assert.equal(desktop.arrives, false);
