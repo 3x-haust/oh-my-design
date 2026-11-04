@@ -77,7 +77,7 @@ test('a new page is held to its system, compared once with its reference and del
   assert.throws(() => requireStudioDelivery(root, route), /STUDIO_DELIVERY_REQUIRED/);
   const drifted = await runModelLedCompletion({ root, packRoot, invocation, signal: t.signal });
   assert.equal(drifted.ok, false);
-  assert.match(drifted.diagnostic?.message ?? '', /STUDIO_SYSTEM_DRIFT: .*arrow glyphs on links or buttons "Start ↗"/);
+  assert.match(drifted.diagnostic?.message ?? '', /STUDIO_SYSTEM_DRIFT: .*arrow glyphs or trailing icons on links or buttons "Start ↗"/);
   assert.equal(currentStudioDelivery(root, route), null);
 
   // Held to the system, the page gets its one comparison with the reference and ships with what it names.

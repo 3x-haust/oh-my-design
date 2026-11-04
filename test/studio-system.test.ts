@@ -146,6 +146,7 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   // An arrow drawn with ::after content is as much an arrow as one typed into the link.
   assert.deepEqual(desktop.arrows, ['More →', 'Docs ↗']);
   assert.equal(desktop.playerControls, 1);
+  assert.equal(desktop.stillVideos, 1);
   assert.deepEqual(desktop.headings, ['Quiet']);
   // The recreated product above is one narrow row: no key visual. Nothing arrives either. Mobile is not asked.
   assert.equal(desktop.keyVisual, false);
@@ -153,7 +154,7 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   assert.equal(observations.find(item => item.viewport === 'mobile')!.keyVisual, undefined);
   const failures = systemDriftFailures(observations);
   assert.match(failures.join('\n'), /desktop: sizes outside the system 13px \("tiny caption"\)/);
-  assert.match(failures.join('\n'), /arrow glyphs on links or buttons "More →", "Docs ↗"/);
+  assert.match(failures.join('\n'), /arrow glyphs or trailing icons on links or buttons "More →", "Docs ↗"/);
   assert.match(failures.join('\n'), /1 video with visible player controls/);
   assert.match(failures.join('\n'), /desktop: no key visual built in code in the first screen/);
   assert.match(failures.join('\n'), /desktop: the first screen does not arrive/);
@@ -172,6 +173,16 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   assert.deepEqual([alive.keyVisual, alive.arrives, alive.performs], [true, true, true]);
   assert.deepEqual(systemDriftFailures([alive]), []);
   assert.equal((await desktopOf(built('<video muted loop width="1000" height="500"></video>'))).keyVisual, false);
+  // test-317 drew its link arrows as 16px svgs after the words and held its demos behind a play button. A leading icon and a demo that plays
+  // muted and looped on its own pass.
+  const icon = '<svg width="16" height="16" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>';
+  const links = await desktopOf(`<!doctype html><body style="font:400 18px Arial"><a href="#d">Docs ${icon}</a><a href="#g">${icon} GitHub</a>`
+    + '<video width="320" height="180" poster="data:,"></video><video autoplay muted loop playsinline width="320" height="180"></video></body>');
+  assert.deepEqual(links.arrows, ['Docs [icon]']);
+  assert.equal(links.stillVideos, 1);
+  const named = systemDriftFailures([links]).join('\n');
+  assert.match(named, /arrow glyphs or trailing icons on links or buttons "Docs \[icon\]"/);
+  assert.match(named, /1 video waits for a click; a demo plays muted and looped on its own/);
   assert.deepEqual(systemDriftFailures([{ viewport: 'desktop', offSystemSizes: [], offSystemWeights: [], arrows: [], playerControls: 0 }]), []);
 });
 

@@ -366,6 +366,8 @@ export type SystemDriftObservation = Readonly<{
   offSystemWeights: readonly Readonly<{ weight: number; example: string }>[];
   arrows: readonly string[];
   playerControls: number;
+  /** Visible videos that wait for a click instead of playing muted and looped. */
+  stillVideos?: number;
   /** Visible h1/h2 texts outside data-product, for the paired-slogan check. */
   headings?: readonly string[];
   /** Desktop only: the first screen holds a key visual built in code. */
@@ -416,9 +418,19 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ 
   const arrows = [...document.querySelectorAll('a, button')].filter(visible)
     .filter(element => arrow.test(example(element)) || ['::before', '::after'].some(pseudo => arrow.test(getComputedStyle(element, pseudo).content)))
     .map(element => arrow.test(example(element)) ? example(element) : `${example(element)} ${getComputedStyle(element, '::after').content.replace(/^"|"$/g, '').trim()}`.trim());
+  // The same arrow drawn as a small icon after the words (test-317 swapped the glyph for a 16px svg).
+  for (const element of [...document.querySelectorAll('a, button')].filter(visible)) {
+    const icon = element.lastElementChild, words = example(element);
+    if (icon === null || words === '' || !['svg', 'img'].includes(icon.tagName.toLowerCase()) || (icon.textContent ?? '').trim() !== '') continue;
+    const box = icon.getBoundingClientRect();
+    const text = document.createRange();
+    text.selectNodeContents(element);
+    if (box.width > 0 && box.width <= 24 && box.height <= 24 && box.left >= text.getBoundingClientRect().left + 8 && !arrows.includes(words)) arrows.push(`${words} [icon]`);
+  }
   return { offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
     offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length,
+    stillVideos: [...document.querySelectorAll('video')].filter(video => visible(video) && !(video.autoplay && video.muted && video.loop)).length,
     headings: [...document.querySelectorAll('h1, h2')].filter(visible).filter(element => element.closest('[data-product]') === null)
       .map(element => (element.textContent ?? '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 40) };
 });
@@ -497,7 +509,7 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
 /** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome, a paired slogan for a headline. */
 export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null): readonly string[] {
   const failures: string[] = [];
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, headings = [], keyVisual, arrives, performs, screens, revealed } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], keyVisual, arrives, performs, screens, revealed } of observations) {
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
     if (reference?.revealsOnScroll && revealed === 0) failures.push(`${viewport}: nothing reveals as the page scrolls, while the reference reveals its sections as they enter (take its distance, duration, curve and stagger; rest under prefers-reduced-motion)`);
     if (arrives === false) failures.push(`${viewport}: the first screen does not arrive: nothing in it animates as the page loads (take the reference's intro: what leads, from what, how long, which curve)`);
@@ -505,8 +517,9 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (keyVisual === false) failures.push(`${viewport}: no key visual built in code in the first screen (an element marked data-product, at least half the width, made of the product's live interface or a large drawn canvas/svg; a recording or screenshot in a frame is not one)`);
     if (offSystemSizes.length > 0) failures.push(`${viewport}: sizes outside the system ${offSystemSizes.slice(0, 6).map(item => `${item.size}px ("${item.example}")`).join(', ')}`);
     if (offSystemWeights.length > 0) failures.push(`${viewport}: weights outside the system ${offSystemWeights.slice(0, 4).map(item => `${item.weight} ("${item.example}")`).join(', ')}`);
-    if (arrows.length > 0) failures.push(`${viewport}: arrow glyphs on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
+    if (arrows.length > 0) failures.push(`${viewport}: arrow glyphs or trailing icons on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
     if (playerControls > 0) failures.push(`${viewport}: ${playerControls} video${playerControls === 1 ? '' : 's'} with visible player controls`);
+    if (stillVideos > 0) failures.push(`${viewport}: ${stillVideos} video${stillVideos === 1 ? ' waits' : 's wait'} for a click; a demo plays muted and looped on its own (autoplay muted loop playsinline), with no play button over it, and rests under prefers-reduced-motion`);
     const slogans = headings.filter(pairedSlogan);
     if (slogans.length > 0) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
   }
