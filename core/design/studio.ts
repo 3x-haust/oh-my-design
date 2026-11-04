@@ -623,11 +623,13 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
 
 /** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome, a paired slogan for a headline. */
 export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null,
-  palette: readonly StudioColor[] = []): readonly string[] {
+  palette: readonly StudioColor[] = [], landing = true): readonly string[] {
   const failures: string[] = [];
   const hues = palette.map(color => hsl(color.hex)).filter(color => color.saturation >= 0.2).map(color => color.hue);
   const inFamily = (hex: string) => hues.some(hue => Math.min(Math.abs(hue - hsl(hex).hue), 360 - Math.abs(hue - hsl(hex).hue)) <= ACCENT_HUE_TOLERANCE);
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], keyVisual, arrives, performs, screens, revealed } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], ...shape } of observations) {
+    // Depth, a key visual, an arriving first screen and scroll reveals describe a landing; an app is held to its system, not made into one.
+    const { keyVisual, arrives, performs, screens, revealed } = landing ? shape : {};
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
     if (reference?.revealsOnScroll && revealed === 0) failures.push(`${viewport}: nothing reveals as the page scrolls, while the reference reveals its sections as they enter (take its distance, duration, curve and stagger; rest under prefers-reduced-motion)`);
     if (arrives === false) failures.push(`${viewport}: the first screen does not arrive: nothing in it animates as the page loads (take the reference's intro: what leads, from what, how long, which curve)`);
@@ -651,11 +653,13 @@ export async function requireStudioSystemHeld(root: string, route: Route, target
   if (!newSurface(route)) return;
   const system = readStudioSystem(root);
   if (system === null) return;
-  const failures = systemDriftFailures(await observeSystemDrift(target, system), studioReferenceDepth(root), system.colors ?? []);
+  const landing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
+  const failures = systemDriftFailures(await observeSystemDrift(target, system), studioReferenceDepth(root), system.colors ?? [], landing);
   if (failures.length > 0) {
-    throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. Build the `
-      + 'key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving with real input, marked data-product. Set each '
-      + 'element in one of the system\'s sizes and weights (or widen the system in its notes when the reference really has that step); a link '
+    const keyVisualFirst = landing ? 'Build the key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving '
+      + 'with real input, marked data-product. ' : '';
+    throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. ${keyVisualFirst}`
+      + 'Set each element in one of the system\'s sizes and weights (or widen the system in its notes when the reference really has that step); a link '
       + 'or button says where it goes in words, without arrow glyphs; a demo video plays muted and looped with no player chrome. A recreated '
       + 'product interface marked data-product keeps its own sizes.'), { code: 'STUDIO_SYSTEM_DRIFT' });
   }
