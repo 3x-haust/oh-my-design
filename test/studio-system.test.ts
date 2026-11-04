@@ -166,6 +166,9 @@ test('the build step names the designer method: system, key visual first, depth,
   assert.match(text, /on the system in \.omd\/studio\/system\.json/);
   assert.match(text, /The key visual first: .*playing the product.s real flow on its own.*a screen recording is not a key visual/);
   assert.match(text, /reference's rhythm and depth/);
+  // test-314/315 turned every README capability into the same demo block; the page leads with a few stories.
+  assert.match(text, /the few stories that make the case/);
+  assert.match(text, /remaining capabilities gathered densely in one place/);
   assert.match(text, /Motion is part of the system.*the first screen arrives.*prefers-reduced-motion/);
   assert.match(text, /omd studio check --page/);
   assert.match(text, /beside the reference's first-screen\.png and full\.png/);
@@ -200,7 +203,7 @@ test("a page is held to its reference's depth and to revealing on scroll when th
   const failures = systemDriftFailures(shallow, reference).join('\n');
   assert.match(failures, /desktop: the page is 3(\.1)? screens against the reference's 9\.1/);
   // test-314 met the depth with ten identical text-beside-demo sections; depth asks for varied arrangements.
-  assert.match(failures, /never one text-beside-demo block repeated down the page/);
+  assert.match(failures, /never one demo block repeated down the page/);
   assert.match(failures, /desktop: nothing reveals as the page scrolls/);
   // Without a reference to measure against, depth and reveals are not asked.
   assert.doesNotMatch(systemDriftFailures(shallow).join('\n'), /screens against|reveals/);
