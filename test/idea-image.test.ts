@@ -66,6 +66,10 @@ test('a page idea drafts a section flat at desktop width from words, and is told
   assert.equal(JSON.parse(readFileSync(join(root, '.omd/ideas/hero-1.json'), 'utf8')).kind, 'page');
   assert.equal(ideationRecorded(root, 'page'), true);
   assert.deepEqual(ideaImages(root).map(idea => [idea.path, idea.kind]), [[page.path, 'page'], ['.omd/ideas/review-1.png', 'graphic']]);
+  // A mobile app's screen is drafted at phone size.
+  generateIdeaImage(root, writer, { name: 'home', prompt, kind: 'page', viewport: 'mobile' }, run);
+  assert.match(seen.at(-1)!, /one mobile app screen seen flat at phone width, a tall portrait frame about 390 by 844/);
+  assert.doesNotMatch(seen.at(-1)!, /desktop width/);
 });
 
 test('a page idea travels to review as a deterministic narrower copy; a narrow one is sent as is', async () => {
