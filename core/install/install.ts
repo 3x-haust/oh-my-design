@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, rea
 import { join, dirname, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
 import { parse as parseToml } from 'smol-toml';
 import type { Detected } from './detect.ts';
 import { unpatchSettings, patchSettings, unpatchHooks } from './patch-claude.ts';
@@ -18,6 +19,7 @@ import {
   type BrowserRsInstallResult,
   type BrowserRsUninstallResult,
 } from './browser-rs.ts';
+import { installChromeWithoutCodeSignClone, uninstallChromeWithoutCodeSignClone } from './chrome-code-sign-clone.ts';
 import { doctorBrowserProvider, type BrowserProviderDoctorOptions, type BrowserProviderHealth } from './browser-provider.ts';
 
 // core/install/install.ts -> core/install -> core -> package root
@@ -326,6 +328,10 @@ export async function install(hosts: Detected[], options: InstallOptions = {}): 
   }
   if (options.cliBinDir !== undefined) linkCli(options.cliBinDir, changes);
   changes.push(browserInstallChange(await installBrowserRs(options.browser)));
+  // Only for the real home: injected browser dependencies describe a test home that must not gain files.
+  if (options.browser === undefined && installChromeWithoutCodeSignClone(homedir()) !== undefined) {
+    changes.push('browser-rs: Chrome launches without its app-bundle copy');
+  }
   return changes;
 }
 
@@ -421,7 +427,10 @@ export function uninstall(hosts: Detected[], options: UninstallOptions = {}): st
     else uninstallCodex(d, changes);
   }
   if (options.keepBrowser === true) changes.push('browser-rs: kept (other hosts still have OMD installed)');
-  else changes.push(browserUninstallChange(uninstallBrowserRs(options.browser)));
+  else {
+    changes.push(browserUninstallChange(uninstallBrowserRs(options.browser)));
+    if (options.browser === undefined) uninstallChromeWithoutCodeSignClone(homedir());
+  }
   return changes;
 }
 

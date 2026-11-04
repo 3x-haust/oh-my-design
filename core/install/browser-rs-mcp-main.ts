@@ -1,5 +1,5 @@
 import { BROWSER_RS_MCP_REAPER } from './browser-rs-mcp-reaper.ts';
-import { CHROME_WITHOUT_CODE_SIGN_CLONE } from './chrome-code-sign-clone.ts';
+import { chromeWithoutCodeSignCloneSource } from './chrome-code-sign-clone.ts';
 
 // Inlined into the standalone launcher; also exercised directly with a closing IPC channel.
 export const BROWSER_RS_MCP_CONTROL_SEND = String.raw`
@@ -43,7 +43,7 @@ const receiptSchema = ${JSON.stringify(receiptSchema)};
 const token = randomUUID();
 const EXIT_TIMEOUT_MS = 3000;
 ${BROWSER_RS_MCP_CONTROL_SEND}
-${CHROME_WITHOUT_CODE_SIGN_CLONE}
+${chromeWithoutCodeSignCloneSource()}
 
 function executable(path) {
   try { accessSync(path, constants.X_OK); return true; } catch { return false; }
