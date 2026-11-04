@@ -197,6 +197,11 @@ test('the build is measured against its system: off-system type, arrow glyphs an
   assert.match(failures.join('\n'), /1 video with visible player controls/);
   assert.match(failures.join('\n'), /desktop: no key visual built in code in the first screen/);
   assert.match(failures.join('\n'), /desktop: the first screen does not arrive/);
+  // test-328, a mobile app, was asked for seven screens, a key visual and an intro taken from its reference's marketing site.
+  // An app keeps the system checks and drops the landing ones.
+  const app = systemDriftFailures(observations, { screens: 7, revealsOnScroll: true }, [], false).join('\n');
+  assert.match(app, /desktop: sizes outside the system 13px/);
+  assert.doesNotMatch(app, /screens against|key visual|does not arrive|reveals as the page scrolls/);
   // The product's interface rebuilt at width in the first screen is the key visual; the same frame holding a recording is not.
   const built = (inner: string) => `<!doctype html><body style="margin:0;font:400 18px Arial"><h1 style="font:600 48px Arial">Quiet</h1>`
     + `<div data-product style="width:1000px;height:500px;font:400 11px monospace">${inner}</div></body>`;
