@@ -46,12 +46,13 @@ A new product or landing (taskNeed `new-product` or `new-marketing`) follows thi
 flow" and the graphic bullet only. The rest of this file (reference ledgers, `ref context`, cases and judgments,
 lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and cutting.
 1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, its
-   personality (logo, README voice), the one message, the user's exact asks word for word. List every documented
+   personality (logo, README voice), the one message (what it does, for whom, in concrete words, not two parallel clauses), the user's exact asks word for word. List every documented
    capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away.
 2. Study: name the project's character from its own material, look broadly for sites sharing it (not the
    category's best-known site), study two or three with `omd studio refs <url>... --json`.
 3. System: borrow ONE site's measured system in `.omd/studio/system.md` (type ramp, at most three weights,
-   rhythm, product framing, motion, its signature) with identity from the project's logo and voice, and
+   rhythm, product framing, motion, its signature) with identity from the project's logo and voice, carrying at
+   least one of its devices (ground, typeface character, colour blocks, illustration) in this project's material, and
    `.omd/studio/system.json` `{"reference", "sizes", "weights", "colors"}`, colours sampled from real images.
    Concept: two or three first-screen page ideas (`omd imagegen --kind page`), truly different compositions;
    choose one before writing source.
