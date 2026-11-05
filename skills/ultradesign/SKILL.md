@@ -73,6 +73,11 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
   another service's branded vocabulary or use 해요체 to pretend the service is human.
 - Remove filler and automatic title-plus-subtitle pairs; supporting copy must add a constraint,
   consequence, evidence, or recovery cue.
+- Instructions are for making, never for the page. No qualifier that restates a rule you were given
+  ("real demo", "original logo", "example data", "actual screen"), no caption explaining a design
+  choice, no planning word (message, proof, reference, concept) as a label. Alt text names the thing
+  ("Lazygit"), not the rule. Read every visible string, alt and aria label once as the visitor.
+  Leakage patterns → `omd pack theory/web-copy.md`.
 - Build semantic type roles from body text first with a compact scale and role-specific leading.
 - For Korean labels/headings prefer word-preserving wraps; judge prose measure in rendered pixels,
   do not apply Latin caps tracking to Hangul, and use tabular numerals where numbers compare.
