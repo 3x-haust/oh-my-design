@@ -295,32 +295,21 @@ async function deliverStudioPage(input: StudioInput, route: StudioRoute, verific
   let review: FirstRenderSummary;
   if (retained !== null) review = firstRenderSummary({ ...retained, path: FIRST_RENDER_REVIEW_PATH });
   else if (spent) {
-    const loop = firstRenderLoopState(input.root, route);
+    // The one comparison has been answered: the page as it stands is delivered without a second look.
     const latest = readFirstRenderReview(input.root);
     if (latest === null) throw new CompletionStepError('FIRST_RENDER_REVIEW_REQUIRED');
     review = firstRenderSummary({ ...latest, path: FIRST_RENDER_REVIEW_PATH });
-    if (!loop.bestRestored) {
-      return { firstRender: review, diagnostic: reviewDiagnostic('FIRST_RENDER_RESTORE_BEFORE_DELIVERY',
-        `${STUDIO_REVIEW_ROUNDS} review rounds are spent and the current page is not the best iteration. Restore it, rebuild, and finish again.`,
-        'omd first-render restore --json', review) };
-    }
   } else {
     const early = await runFirstRenderReview(input.root, input.invocation, input.signal);
     review = firstRenderSummary(early);
+    // A lead's critique is acted on before the page ships: the maker answers it once, and that answer is not reviewed
+    // again. test-330 delivered a reframe (one message lost to a logo, three identical slogan sections) untouched.
     if (early.decision !== 'retain') {
-      const rounds = studioReviewRounds(input.root, route);
-      if (rounds < STUDIO_REVIEW_ROUNDS) {
-        const regressed = early.diagnostic?.code === 'FIRST_RENDER_REGRESSED';
-        return { firstRender: review, diagnostic: reviewDiagnostic(regressed ? 'FIRST_RENDER_REGRESSED' : 'FIRST_RENDER_VISUAL_REPAIR',
-          `Review round ${rounds} of ${STUDIO_REVIEW_ROUNDS}: ${regressed ? 'this round is worse than the best; restore it and try a different structure.'
-            : 'recompose for the findings, structure before polish, then rebuild and finish again.'} ${REPAIR_KNOWLEDGE}`,
-          regressed ? 'omd first-render restore --json' : 'omd lifecycle finish --json', review) };
-      }
-      if (!firstRenderLoopState(input.root, route).bestRestored) {
-        return { firstRender: review, diagnostic: reviewDiagnostic('FIRST_RENDER_RESTORE_BEFORE_DELIVERY',
-          `${STUDIO_REVIEW_ROUNDS} review rounds are spent and this round is not the best. Restore the best iteration, rebuild, and finish again.`,
-          'omd first-render restore --json', review) };
-      }
+      return { firstRender: review, diagnostic: reviewDiagnostic('FIRST_RENDER_VISUAL_REPAIR',
+        `The comparison with the reference named ${review.findings.map(finding => finding.id).join(', ')}: recompose for them once, `
+          + 'structure before polish, keeping the page idea you chose. Rebuild and finish again; that finish delivers the page without '
+          + `another review. ${REPAIR_KNOWLEDGE}`,
+        'omd lifecycle finish --json', review) };
     }
   }
   const history = readFirstRenderIterationHistory(input.root, route);

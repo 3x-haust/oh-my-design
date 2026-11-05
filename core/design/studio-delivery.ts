@@ -15,16 +15,17 @@ type Route = ReturnType<typeof readPersistedRoute>;
 
 /**
  * A new page is delivered the way a designer delivers: built on the system taken from a studied site, held to it by
- * measurement, and compared once with that site by an independent reviewer; the page ships with whatever that look
- * still names. Designers compare and cut while they build; an outside loop of rounds only sands a page toward average.
+ * measurement, and compared once with that site by an independent reviewer; the maker answers what that look names once,
+ * and the page ships with it. Designers compare and cut while they build; an outside loop of rounds only sands a page
+ * toward average, but a lead's critique that nobody acts on changes nothing (test-330 shipped a reframe untouched).
  * The long evidence chain of existing-product work (browser plans, final reviewer lanes, publication graphs) is not
  * asked of it.
  */
 export const STUDIO_REVIEW_ROUNDS = 1;
 export const STUDIO_DELIVERY_RECORD = `${STUDIO_DIR}/delivery.json`;
 export const STUDIO_DELIVERY_SCHEMA = 'omd-studio-delivery-v2';
-export const STUDIO_DELIVER_MESSAGE = 'The page has had its comparison with the reference. Run omd lifecycle finish --json to deliver it and '
-  + 'report the findings still open to the user, without another round.';
+export const STUDIO_DELIVER_MESSAGE = 'The page has had its comparison with the reference. Answer what it named, once and structure first, '
+  + 'then run omd lifecycle finish --json: it delivers the page without another review. Report what you changed and what is still open.';
 
 const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 

@@ -61,7 +61,7 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
 5. Build at the reference's rhythm and depth, compositions varied, real logo in the header. Subtract with
    `omd studio check`; compare your page beside the reference and fix the biggest differences, three passes at most.
 6. Finish: `omd lifecycle finish --json` builds, measures logo, 3D and system on the real page and compares the
-   render once with the reference; the page ships with what that look still names.
+   render once with the reference. Answer what it names once, structure first, and finish again.
 
 ## Words, type, and flow ship with the pixels
 
