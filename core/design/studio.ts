@@ -561,6 +561,20 @@ export function pairedSlogan(text: string): boolean {
   return sentences.every(part => part.slice(-1) === sentences[0]!.slice(-1));
 }
 
+/**
+ * Headings that all take one two-part shape: two short halves cut by a comma or a full stop ("로고와 말투는, 원래 프로젝트에서.",
+ * "새로 만들 때도, 고쳐 만들 때도."). Once pairedSlogan named the full-stop pair, test-331 wrote all seven headings as comma couplets:
+ * the cadence moved to the next punctuation mark. One couplet can be a good line, so only the page's shape is named: three or more
+ * headings, more than half of them couplets.
+ */
+export function coupletHeadings(headings: readonly string[]): readonly string[] {
+  const couplets = headings.filter(text => {
+    const halves = text.split(/[,，.。!?！？]+/).map(part => part.replace(/\s/g, '')).filter(Boolean);
+    return halves.length === 2 && halves.every(part => part.length >= 2 && part.length <= 14);
+  });
+  return couplets.length >= 3 && couplets.length * 2 > headings.length ? couplets : [];
+}
+
 // The key visual a designer builds first: marked data-product, at least half the width, in the first screen, made of live text or a
 // large drawn canvas/svg. A recording or screenshot dropped into a frame is the product's footage, not its look made for the page.
 const observeKeyVisual = browserCallback((): boolean => [...document.querySelectorAll('[data-product]')].some(element => {
@@ -644,6 +658,10 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (offPalette.length > 0) failures.push(`${viewport}: accents outside the sampled palette ${offPalette.slice(0, 4).join(', ')} (the system samples ${palette.map(color => `${color.hex} from ${color.from}`).join(', ')}); paint links, buttons and headings in a step of a sampled colour, or sample the colour you mean from real material`);
     const slogans = headings.filter(pairedSlogan);
     if (slogans.length > 0) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
+    const couplets = coupletHeadings(headings);
+    if (couplets.length > 0) failures.push(`${couplets.length} of ${headings.length} headings take one two-part shape ${couplets.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
+      + 'read the headings in a row and let them differ the way a person explaining the product would: a plain statement of what happens, the command '
+      + 'typed, a number, the question the visitor has; keep one couplet at most');
   }
   return [...new Set(failures)];
 }

@@ -11,7 +11,7 @@ import { PNG } from 'pngjs';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
 import {
   observeSystemDrift, readStudioSystem, requireStudioSystem, studioPageSource, studioPending, studioReferenceDepth, studioStudies,
-  pairedSlogan, studyStudioReferences, systemDriftFailures,
+  coupletHeadings, pairedSlogan, studyStudioReferences, systemDriftFailures,
 } from '../core/design/studio.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 
@@ -161,6 +161,14 @@ test('a headline of short sentences that end alike is named as a paired slogan; 
   assert.match(systemDriftFailures([{ ...observation, headings: ['Git은 강력하게. 작업은 간단하게.', '변경을 골라 커밋하세요.'] }]).join('\n'),
     /paired slogans "Git은 강력하게\. 작업은 간단하게\.": a headline names a concrete thing the product does/);
   assert.deepEqual(systemDriftFailures([{ ...observation, headings: ['변경을 골라 커밋하세요.'] }]), []);
+  // test-331: with the full-stop pair named, every heading became a comma couplet. The page's shape is named, not one good line.
+  const couplets = ['로고와 말투는, 원래 프로젝트에서.', 'URL은 구현할 원본으로, 또는 참고할 영감으로.', 'Figma 프레임이 있다면, 그 프레임이 기준입니다.', '다음 디자인은, 여기서 시작하세요.'];
+  assert.deepEqual(coupletHeadings(couplets), couplets);
+  assert.match(systemDriftFailures([{ ...observation, headings: couplets }]).join('\n'),
+    /4 of 4 headings take one two-part shape "로고와 말투는, 원래 프로젝트에서\."/);
+  const varied = ['Git 명령어 대신, 변경 사항을 보면서 작업하세요.', '변경을 골라 커밋하세요.', '리베이스에 TODO 파일이 꼭 필요할까요?', 'brew install lazygit', '커밋 그래프'];
+  assert.deepEqual(coupletHeadings(varied), []);
+  assert.deepEqual(coupletHeadings(couplets.slice(0, 2)), []);
   // Accents stay in the family of a sampled colour: a darker step of the logo's magenta passes, the default forest green does not.
   const palette = [{ hex: '#e0457b', from: 'mark.svg' }];
   assert.deepEqual(systemDriftFailures([{ ...observation, accents: ['#a8264f'] }], null, palette), []);
