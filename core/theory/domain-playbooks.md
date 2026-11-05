@@ -1,6 +1,6 @@
 # Domain playbooks
 
-These playbooks turn a product noun into an operating model. They don't replace domain observation. Treat every object, state, and example below as a hypothesis until a real service, first-party artifact, or user confirms it. Example data is fictional but plausible and must stay marked as demo data.
+These playbooks turn a product noun into an operating model. They don't replace domain observation. Treat every object, state, and example below as a hypothesis until a real service, first-party artifact, or user confirms it. Example data is fictional but plausible and stays marked as demo data in the source and the handoff; on the page it is qualified only where a visitor could take it for a real claim, never as a standing banner or switch (`theory/web-copy.md`, keep the instructions out of the copy).
 
 ## How to use a playbook
 

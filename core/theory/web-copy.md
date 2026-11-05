@@ -144,6 +144,41 @@ W3C recommends descriptive headings, meaningful link text and clear instructions
 apply to visible text and its accessible semantics; a catchy CTA must still communicate
 its destination. [W3C](https://www.w3.org/WAI/tips/writing/)
 
+## Keep the instructions out of the copy
+
+Instruction-to-content leakage is a generated-content habit: a rule, correction or detail
+given to the maker turns up on the page as copy. Asked to use icons instead of text to cut
+clutter, a model adds a line saying "Clean icon design: we use icons to prevent visual
+clutter"; an image model writes the brief's own phrase into the picture. The writer of that
+report found the leak grows as the prompt gets sparser, which is exactly a one-line brief.
+[Holter](https://adam.holter.com/prompt-leakage/) Gonen et al. measured the same tendency,
+irrelevant prompt details steering a generation, across 13 flagship models and several
+languages. [Semantic leakage](https://arxiv.org/abs/2408.06518)
+
+The instructions this harness gives are the usual source. Seen in its own runs:
+
+- **A rule worn as a qualifier.** "Show the real product" became "커밋과 푸시 · 실제 Lazygit
+  데모"; "show the logo as shipped" became the alt text "원본 프로젝트 로고". A real site
+  says "Lazygit" and shows the demo; it does not certify that the demo is real.
+- **A process rule as a banner.** "Example data stays marked as demo" became a "예시 데이터"
+  switch and a notice on a budget app's first screen. Sample content belongs to the source
+  and the handoff; on the page, qualify it only where a visitor could take it for a real
+  claim (a metric, a quote), once, in the sentence that makes the claim.
+- **The rationale as a caption.** A line under the art or a section explaining the design
+  choice ("한눈에 보이도록 정리했습니다", "a frame mark that shows the selection") instead
+  of the thing it was chosen for.
+- **The brief's vocabulary verbatim.** Planning words (message, proof, persona, reference,
+  system, concept, section, first screen, verified) used as headings or labels, and the
+  brief's one message repeated in several places.
+- **An over-weighted detail.** One phrase from the request or a reference repeated in every
+  section, or a prohibition turned into a promise ("직접 만들지 않습니다", "never a mock").
+
+Before building, read every visible string, alt text, aria label and title in reading order
+and ask of each: was this written for the visitor, or for me? A line that only restates an
+instruction, a constraint or a design decision goes; a qualifier like real, actual,
+original, official, example or verified stays only when the visitor would otherwise be
+misled. Alt text names the thing ("Lazygit", "Oh My Design logo"), never the rule it follows.
+
 ## Apply a method where it changes a line
 
 Apply a method only where it changes an actual line or the order of information, for a

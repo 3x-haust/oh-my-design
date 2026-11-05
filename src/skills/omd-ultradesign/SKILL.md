@@ -14,8 +14,7 @@ for a new product; validate, classify, then run `omd stage next --json` for the 
 
 ## One entry: read the situation first
 
-`/ultradesign` is the only OMD entry point. Inspect the actual project and the full request
-before choosing the work; never ask the user which mode to use.
+Inspect the actual project and full request before choosing the work; never ask which mode to use.
 
 - **No product source yet (files to read are material):** greenfield. Build the complete requested product from
   scratch (route `projectMode: greenfield`): start with `omd scaffold` (the official React + Vite + strict
@@ -33,9 +32,8 @@ before choosing the work; never ask the user which mode to use.
   delivery target, inspiration, domain evidence or rejected result. A requested target governs
   fidelity; inspiration informs the new design; a rejected result is a comparison baseline, never
   a direction to reproduce. Never swap a usable user target for discovery, nor make every attachment a target.
-- **Interaction states matter as references:** hover, focus, pressed and open states of buttons,
-  rows, tabs, menus and inputs carry much of a reference's craft. Capture and compare them, not
-  only the resting screen.
+- **Interaction states** (hover, focus, pressed, open) carry much of a reference's craft: capture and
+  compare them, not only the resting screen.
 
 Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`,
 `guides/figma.md`, `guides/copy.md`, `guides/code.md`, `guides/landing-basics.md` (basics designers keep), `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
@@ -73,6 +71,9 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
   another service's branded vocabulary or use 해요체 to pretend the service is human.
 - Remove filler and automatic title-plus-subtitle pairs; supporting copy must add a constraint,
   consequence, evidence, or recovery cue.
+- Instructions are for making, not the page: no qualifier restating a rule ("real demo", "original
+  logo", "example data"), no caption explaining a choice; alt text names the thing. Read every string,
+  alt and aria label once as the visitor (leaks → `theory/web-copy.md`).
 - Build semantic type roles from body text first with a compact scale and role-specific leading.
 - For Korean labels/headings prefer word-preserving wraps; judge prose measure in rendered pixels,
   do not apply Latin caps tracking to Hangul, and use tabular numerals where numbers compare.
@@ -143,8 +144,7 @@ not a real-time smoothness, latency or reference-motion claim. For load and scro
 choreography, run `omd render <page-or-reference-url> --motion [--out .omd/motion/<name>]` on
 the live reference and on the build, then look at `contact-sheet.png` and `timeline.json`: lead,
 beats, stagger, easing shape, triggered vs scrubbed scroll motion, pinning, layout jumps and the
-reduced-motion pass. It is observation for comparison, not a quota or a pass. Report unobserved behavior
-honestly rather than adding an effect to satisfy a quota. A new landing or launch page moves (the request
+reduced-motion pass. It is observation, not a quota; report unobserved behavior honestly. A new landing or launch page moves (the request
 need not say so): choreograph it from the content before styling: which element carries the promise
 and leads, which follow in overlapping beats, and whether one idea genuinely unfolds in steps on
 scroll. Build from `motion/recipes/hero-intro-sequence.md` and `motion/recipes/scroll-scene-timeline.md` rather
@@ -162,8 +162,7 @@ The host defaults to model-led design. Understand the whole request, inspect the
 inspect strong finished-product visual references before inventing a new visual direction,
 use domain research where it helps, then build with ordinary scoped tools.
 Discover broadly before narrowing: use multiple queries and source families, then inspect
-the actual complete screens behind promising leads. Do not stop at the first few
-results. Compare materially different
+the actual complete screens behind promising leads. Compare materially different
 content-to-form relationships, not recolors of one familiar SaaS layout. One category's references,
 and gallery shots titled after it, share its default section sequence; take direction
 from finished sites whose craft this offer must show (a design tool: studios, foundries, editorial
