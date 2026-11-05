@@ -88,9 +88,19 @@ test('a new page is held to its system, compared once with its reference and del
   assert.match(drifted.diagnostic?.message ?? '', /STUDIO_SYSTEM_DRIFT: .*arrow glyphs or trailing icons on links or buttons "Start ↗"/);
   assert.equal(currentStudioDelivery(root, route), null);
 
-  // Held to the system, the page gets its one comparison with the reference and ships with what it names.
+  // Held to the system, the page gets its one comparison with the reference, and the maker answers what it names
+  // before the page ships.
   writeFileSync(join(root, 'index.html'), page(1));
   fixture(t, { PI_REVIEWER_FIXTURE_MODE: 'early-revise', PI_REVIEWER_FIXTURE_FINDING_ID: 'hero-crowded' });
+  const critiqued = await runModelLedCompletion({ root, packRoot, invocation, signal: t.signal });
+  assert.equal(critiqued.ok, false);
+  assert.equal(critiqued.diagnostic?.code, 'FIRST_RENDER_VISUAL_REPAIR');
+  assert.match(critiqued.diagnostic?.message ?? '', /named hero-crowded: recompose for them once.*without another review/);
+  assert.equal(currentStudioDelivery(root, route), null);
+  assert.match(nextStageWork(root, packRoot, invocation).instruction, /Answer what it named, once/);
+
+  // The answer ships without a second look.
+  writeFileSync(join(root, 'index.html'), page(2));
   const delivered = await runModelLedCompletion({ root, packRoot, invocation, signal: t.signal });
   assert.equal(delivered.ok, true, JSON.stringify(delivered.diagnostic));
   assert.equal(delivered.studioDeliveryPath, '.omd/studio/delivery.json');
@@ -109,17 +119,17 @@ test('a new page is held to its system, compared once with its reference and del
   assert.equal(nextStageWork(root, packRoot, invocation).action, 'report-completion');
   rmSync(join(root, '.omd/.cache/trusted-lifecycle-manifest.json'));
 
-  // An edit after delivery is not the delivered page: the guard refuses it, and finish asks for the compared page
-  // back instead of reviewing a second time.
-  writeFileSync(join(root, 'index.html'), page(2));
+  // An edit after delivery is not the delivered page: the guard refuses it, and finish delivers it again without
+  // reviewing a second time.
+  writeFileSync(join(root, 'index.html'), page(3));
   assert.equal(currentStudioDelivery(root, route), null);
   assert.throws(() => requireStudioDelivery(root, route), /STUDIO_DELIVERY_STALE/);
   assert.match(nextStageWork(root, packRoot, invocation).instruction, /has had its comparison with the reference/);
   const again = await runModelLedCompletion({ root, packRoot, invocation, signal: t.signal });
-  assert.equal(again.diagnostic?.code, 'FIRST_RENDER_RESTORE_BEFORE_DELIVERY');
+  assert.equal(again.ok, true, JSON.stringify(again.diagnostic));
+  assert.equal(requireStudioDelivery(root, route).review.rounds, STUDIO_REVIEW_ROUNDS);
 
   // A hand-edited delivery loses its signature.
-  writeFileSync(join(root, 'index.html'), page(1));
   const record = JSON.parse(readFileSync(join(root, '.omd/studio/delivery.json'), 'utf8'));
   assert.notEqual(currentStudioDelivery(root, route), null);
   writeFileSync(join(root, '.omd/studio/delivery.json'), JSON.stringify({ ...record, review: { ...record.review, openFindings: [] } }));
