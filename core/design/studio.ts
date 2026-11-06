@@ -56,7 +56,7 @@ export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${
   + 'the reference\'s illustrated characters become this project\'s own logo character drawn through the page, its paper ground and serif become '
   + 'the same ground and a serif chosen for this voice, its colour blocks are filled with this project\'s sampled colours. A system that excludes '
   + 'every device keeps only the reference\'s numbers, and the page comes out generic. Then what comes from the project instead: accent colours sampled from its logo or product images (with no such material, from a '
-  + 'studied reference\'s captures; never the muted green or blue a model reaches for by default), character from its logo, voice from its README. Name the reference\'s '
+  + 'graphic reference outside the category that carries the character, kept from the galleries, never a same-category site; never the muted green or blue a model reaches for by default), character from its logo, voice from its README. Name the reference\'s '
   + 'signature (the one or two moves that make it feel made by a person) and this project\'s own equivalent: a move only this project could make, '
   + 'in its own material or vocabulary, never the reference\'s brand restated. Then its motion, from study.json motion and the intro-N.png frames: '
   + 'how the first screen arrives (what leads, from what, how long, which curve), how sections reveal on scroll, what keeps moving inside its '
@@ -360,8 +360,17 @@ export function paletteIssue(root: string, system: StudioSystem, studies: readon
     if (held.every(value => value === null)) return `the colour ${hex} names ${from}; sample from a PNG or SVG`;
     if (!held.some(value => value === true)) return `the colour ${hex} is not in ${from}: sample it from the file's own pixels`;
   }
+  // With no logo to sample, the studied sites are the product's own category, and their colours make it a clone (test-334 took Spendee's green).
+  if (brandless(root) && colors.every(({ from }) => studies.some(item => sameSite(item.url, from)))) {
+    return 'the project has no logo or brand material, and every colour comes from a studied site, a service in its own category: decide the '
+      + 'product\'s character in words, find a graphic reference outside the category that carries it (omd ref browse search cosmos|behance|notefolio '
+      + '"<the character>", then keep it), and sample at least the accent from that saved PNG under .omd/refs; the studied sites give structure, not identity';
+  }
   return null;
 }
+
+const brandless = (root: string): boolean =>
+  readmeLogos(root).length === 0 && projectBrandMarks(root).length === 0 && !existsSync(join(root, STUDIO_LOGO));
 
 const sameSite = (left: string, right: string): boolean => {
   try { return slug(left) === slug(right); } catch { return false; }

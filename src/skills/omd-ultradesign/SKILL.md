@@ -45,8 +45,8 @@ flow" and the graphic bullet only. The rest of this file (reference ledgers, `re
 lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and cutting.
 1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, its
    personality (logo, README voice), the one message (what it does, for whom, in concrete words, not two parallel clauses), the user's exact asks word for word. List every documented
-   capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away. An empty project has no logo or voice: name the product and its
-   character as a person would for this audience, not the category's stock word.
+   capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away. An empty project has no logo or voice: list names, choose one
+   a person would remember, never your first or the category's stock word; say its character.
 2. Study: name the project's character from its own material, look broadly for sites sharing it (not the
    category's best-known site), study two or three with `omd studio refs <url>... --json`.
 3. System: borrow ONE site's measured system in `.omd/studio/system.md` (type ramp, at most three weights,
