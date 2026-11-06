@@ -45,11 +45,13 @@ flow" and the graphic bullet only. The rest of this file (reference ledgers, `re
 lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and cutting.
 1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, its
    personality (logo, README voice), the one message (what it does, for whom, in concrete words, not two parallel clauses), the user's exact asks word for word. List every documented
-   capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away.
+   capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away. An empty project has no logo or voice: name the product and its
+   character as a person would for this audience, not the category's stock word.
 2. Study: name the project's character from its own material, look broadly for sites sharing it (not the
    category's best-known site), study two or three with `omd studio refs <url>... --json`.
 3. System: borrow ONE site's measured system in `.omd/studio/system.md` (type ramp, at most three weights,
-   rhythm, product framing, motion, its signature) with identity from the project's logo and voice, carrying at
+   rhythm, product framing, motion, its signature) with identity from the project's logo and voice (empty project: from a reference outside the category that
+   carries the character, never a competitor's colours), carrying at
    least one of its devices (ground, typeface character, colour blocks, illustration) in this project's material, and
    `.omd/studio/system.json` `{"reference", "sizes", "weights", "colors"}`, colours sampled from real images.
    Concept: two or three first-screen page ideas (`omd imagegen --kind page`), truly different compositions;
@@ -144,7 +146,7 @@ not a real-time smoothness, latency or reference-motion claim. For load and scro
 choreography, run `omd render <page-or-reference-url> --motion [--out .omd/motion/<name>]` on
 the live reference and on the build, then look at `contact-sheet.png` and `timeline.json`: lead,
 beats, stagger, easing shape, triggered vs scrubbed scroll motion, pinning, layout jumps and the
-reduced-motion pass. It is observation, not a quota; report unobserved behavior honestly. A new landing or launch page moves (the request
+reduced-motion pass. Report unobserved behavior honestly. A new landing or launch page moves (the request
 need not say so): choreograph it from the content before styling: which element carries the promise
 and leads, which follow in overlapping beats, and whether one idea genuinely unfolds in steps on
 scroll. Build from `motion/recipes/hero-intro-sequence.md` and `motion/recipes/scroll-scene-timeline.md` rather
@@ -158,11 +160,10 @@ When its verdict is `distinguishable`, treat the recurring aiTells as repair tar
 imitating an anchor page and never by adding annotation decorations; re-run the first-render check, then compare again. It is advisory and
 never blocks completion; report the final judged-AI rate honestly at completion.
 
-The host defaults to model-led design. Understand the whole request, inspect the existing project,
-inspect strong finished-product visual references before inventing a new visual direction,
-use domain research where it helps, then build with ordinary scoped tools.
+The host defaults to model-led design: understand the request and project, study strong finished
+references before inventing a direction, then build with ordinary scoped tools.
 Discover broadly before narrowing: use multiple queries and source families, then inspect
-the actual complete screens behind promising leads. Compare materially different
+the complete screens behind promising leads. Compare materially different
 content-to-form relationships, not recolors of one familiar SaaS layout. One category's references,
 and gallery shots titled after it, share its default section sequence; take direction
 from finished sites whose craft this offer must show (a design tool: studios, foundries, editorial
@@ -170,7 +171,6 @@ sites). Widen the search when
 the candidates repeat the same generic composition. Narrow only after you can explain the
 winner's task fit and visible character against real alternatives; use the existing discovery
 records and normal working notes, not a new approval form or a universal candidate quota.
-Do not average the discovery pool into an incoherent product.
 Failed URLs and challenge pages are acquisition failures, not alternatives; recover a working source family.
 Match references to the requested surface: populated task screens for product UI,
 finished service websites for marketing/landing work, and populated reading/browsing
@@ -230,7 +230,6 @@ First resolve what the actual user asked the reference to do. A user-requested r
 or designated design target requires fidelity; a primary you discovered for a new product is
 study material, not permission or an obligation to recreate that service's identity.
 A faithful-reference task follows `guides/references.md` (Faithful reproduction).
-A reported primary is comparison material, not approval.
 For a new product, begin with its real content, task and representative imagery. In normal
 working notes, explain which relationships make the original work, which apply here and which
 belong to its own brand or content. Compose the destination as a whole before propagating parts:
