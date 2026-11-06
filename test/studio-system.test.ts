@@ -11,7 +11,7 @@ import { PNG } from 'pngjs';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
 import {
   observeSystemDrift, readStudioSystem, requireStudioSystem, studioPageSource, studioPending, studioReferenceDepth, studioStudies,
-  coupletHeadings, pairedSlogan, requestPhrases, studyStudioReferences, systemDriftFailures,
+  coupletHeadings, pairedSlogan, requestPhrases, sectionRhythm, studioReferenceSections, studyStudioReferences, systemDriftFailures,
 } from '../core/design/studio.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 
@@ -337,6 +337,7 @@ test('the build step names the designer method: system, key visual first, depth,
   assert.match(text, /Motion is part of the system.*the first screen arrives.*prefers-reduced-motion/);
   assert.match(text, /omd studio check --page/);
   assert.match(text, /beside the reference's first-screen\.png and full\.png/);
+  assert.match(text, /sets your sections beside the reference's, measured \(height, what leads each, words a screen\)/);
   assert.match(text, /typography-korean\.md/);
   // Five lazygit runs converged on the same paired slogan; the reviewer named the cadence as machine-made.
   assert.match(text, /never a paired slogan of two parallel clauses or an abstract promise of ease/);
@@ -376,4 +377,32 @@ test("a page is held to its reference's depth and to revealing on scroll when th
   const deep = await observeSystemDrift(page, system);
   assert.ok((deep.find(item => item.viewport === 'desktop')!.revealed ?? 0) > 0);
   assert.doesNotMatch(systemDriftFailures(deep, reference).join('\n'), /screens against|reveals/);
+});
+
+test('the build\'s sections are measured as the reference\'s and their rhythm is set beside it, never as a failure', { timeout: 120_000 }, async t => {
+  const root = project(t);
+  study(root, 'https://quiet.tools/', 'quiet-tools');
+  writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] }));
+  const shape = (height: number, largeMedia: number, words: number) => ({ top: 0, height, background: 'rgba(0, 0, 0, 0)', contentWidth: null, heading: '', largeMedia, words });
+  writeFileSync(join(root, '.omd/studio/refs/quiet-tools/study.json'), JSON.stringify({ requested: 'https://quiet.tools/',
+    sections: [shape(900, 2, 20), shape(1800, 4, 40), shape(900, 0, 30), { broken: true }] }));
+  assert.equal(studioReferenceSections(root).length, 3);
+  const page = join(root, 'index.html');
+  const words = (count: number) => Array.from({ length: count }, (_, index) => `word${index}`).join(' ');
+  writeFileSync(page, '<!doctype html><body style="margin:0;font:400 18px Arial">'
+    + `<section style="height:900px"><h2 style="font:600 48px Arial">Plan</h2><div data-product style="width:800px;height:500px;background:#ddd">${words(10)}</div></section>`
+    + '<section style="height:900px"><h2 style="font:600 48px Arial">Look</h2><svg width="600" height="400"><rect width="600" height="400"/></svg></section>'
+    + `<section style="height:900px"><h2 style="font:600 48px Arial">Why</h2><p>${words(120)}</p></section></body>`);
+  const observations = await observeSystemDrift(page, { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] });
+  const sections = observations.find(item => item.viewport === 'desktop')!.sections!;
+  assert.equal(observations.find(item => item.viewport === 'mobile')!.sections, undefined);
+  assert.deepEqual(sections.map(item => [item.heading, item.product, item.largeMedia > 0]), [['Plan', 1, false], ['Look', 0, true], ['Why', 0, false]]);
+  const rhythm = sectionRhythm(studioReferenceSections(root), sections)!;
+  assert.match(rhythm, /reference: 1\.0 picture 20w \| 2\.0 picture 20w \| 1\.0 text 30w/);
+  assert.match(rhythm, /this page: 1\.0 product \d+w \| 1\.0 picture \d+w \| 1\.0 text 1\d\dw/);
+  assert.match(rhythm, /reference 2 of 3 sections led by a picture or the product, 20 words a screen at the median; this page 2 of 3/);
+  // The rhythm is information for the comparison, not a refusal.
+  assert.doesNotMatch(systemDriftFailures(observations).join('\n'), /rhythm|words a screen/);
+  assert.equal(sectionRhythm([], sections), null);
+  assert.equal(sectionRhythm(studioReferenceSections(root), []), null);
 });
