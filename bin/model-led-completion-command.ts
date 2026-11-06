@@ -283,8 +283,8 @@ async function deliverStudioPage(input: StudioInput, route: StudioRoute, verific
   const entry = studioEntry(input.root);
   const target = resolve(input.root, entry);
   await requireStudioFloors(input.root, route, target);
-  await requireStudioSystemHeld(input.root, route, target);
   const writer = createProjectWriteAdapter(input.root, input.invocation);
+  await requireStudioSystemHeld(input.root, route, target, writer);
   const checked = await publishFirstRenderCheck(input.root, entry, undefined, writer, input.invocation);
   if (firstRenderMotionProjection(input.root, checked.reportSha256) === null) {
     await captureFirstRenderMotion(input.root, target, checked.reportSha256, writer).catch(() => undefined);
