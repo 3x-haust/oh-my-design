@@ -119,7 +119,13 @@ test('a project with no logo takes its identity from outside its category, not f
   palette([{ hex: '#10bf8b', from: 'https://spendee.example/' }]);
   assert.equal(studioPending(root, landing), 'system');
   assert.throws(() => requireStudioSystem(root, landing), /no logo or brand material, and every colour comes from a studied site.*omd ref browse search/);
+  // The studied shot kept again from the gallery is still the category.
+  painted('.omd/refs/design/shot.png', [178, 60, 129]);
+  writeFileSync(join(root, '.omd/refs/design/shot.json'), JSON.stringify({ sourceUrl: 'https://spendee.example/' }));
+  palette([{ hex: '#b23c81', from: '.omd/refs/design/shot.png' }]);
+  assert.throws(() => requireStudioSystem(root, landing), /every colour comes from a studied site or the primary reference/);
   // An accent kept from a graphic reference outside the category answers it; the studied site may still lend the rest.
+  writeFileSync(join(root, '.omd/refs/design/poster.json'), JSON.stringify({ sourceUrl: 'https://cosmos.example/e/poster' }));
   painted('.omd/refs/design/poster.png', [214, 72, 40]);
   palette([{ hex: '#d64828', from: '.omd/refs/design/poster.png' }, { hex: '#10bf8b', from: 'https://spendee.example/' }]);
   assert.equal(studioPending(root, landing), 'concept');
