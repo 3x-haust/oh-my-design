@@ -102,6 +102,33 @@ test('a new page waits for a study, then a system taken from a studied site with
   requireStudioSystem(root, landing);
 });
 
+test('a project with no logo takes its identity from outside its category, not from the studied sites', t => {
+  const root = project(t);
+  const landing = route('new-product', 'Build a budget app.');
+  const painted = (path: string, [r, g, b]: readonly number[]) => {
+    const image = new PNG({ width: 2, height: 2 });
+    for (let at = 0; at < image.data.length; at += 4) image.data.set([r!, g!, b!, 255], at);
+    mkdirSync(join(root, path, '..'), { recursive: true });
+    writeFileSync(join(root, path), PNG.sync.write(image));
+  };
+  study(root, 'https://spendee.example/', 'spendee-example');
+  painted('.omd/studio/refs/spendee-example/full.png', [16, 191, 139]);
+  writeFileSync(join(root, '.omd/studio/system.md'), notes);
+  const palette = (colors: readonly object[]) => writeFileSync(join(root, '.omd/studio/system.json'),
+    JSON.stringify({ reference: 'https://spendee.example/', sizes: [40, 28, 20, 16, 14], weights: [400, 600], colors }));
+  palette([{ hex: '#10bf8b', from: 'https://spendee.example/' }]);
+  assert.equal(studioPending(root, landing), 'system');
+  assert.throws(() => requireStudioSystem(root, landing), /no logo or brand material, and every colour comes from a studied site.*omd ref browse search/);
+  // An accent kept from a graphic reference outside the category answers it; the studied site may still lend the rest.
+  painted('.omd/refs/design/poster.png', [214, 72, 40]);
+  palette([{ hex: '#d64828', from: '.omd/refs/design/poster.png' }, { hex: '#10bf8b', from: 'https://spendee.example/' }]);
+  assert.equal(studioPending(root, landing), 'concept');
+  // A project with its own mark is not held: its identity is read from the mark.
+  palette([{ hex: '#10bf8b', from: 'https://spendee.example/' }]);
+  writeFileSync(join(root, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><circle r="4" fill="#10bf8b"/></svg>');
+  assert.equal(studioPending(root, landing), 'concept');
+});
+
 test('page source is any index.html or src file outside the design record, including a site in its own folder', () => {
   assert.equal(studioPageSource('index.html'), true);
   assert.equal(studioPageSource('website/src/App.tsx'), true);
