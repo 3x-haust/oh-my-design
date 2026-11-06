@@ -11,7 +11,7 @@ import { PNG } from 'pngjs';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
 import {
   observeSystemDrift, readStudioSystem, requireStudioSystem, studioPageSource, studioPending, studioReferenceDepth, studioStudies,
-  coupletHeadings, pairedSlogan, studyStudioReferences, systemDriftFailures,
+  coupletHeadings, pairedSlogan, requestPhrases, studyStudioReferences, systemDriftFailures,
 } from '../core/design/studio.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 
@@ -208,6 +208,23 @@ test('a headline of short sentences that end alike is named as a paired slogan; 
   assert.match(systemDriftFailures([{ ...observation, accents: ['#236747', '#a8264f'] }], null, palette).join('\n'),
     /desktop: accents outside the sampled palette #236747 \(the system samples #e0457b from mark\.svg\)/);
   assert.deepEqual(systemDriftFailures([{ ...observation, accents: ['#236747'] }]), [], 'a system without colors is not held to them');
+});
+
+test('a page that repeats the request that commissioned it is named; a page that only shares its words is not', { timeout: 120_000 }, async t => {
+  const request = '/skill:omd-ultradesign\n\n이 프로젝트를 소개하는 웹사이트 만들어줘.';
+  assert.deepEqual(requestPhrases(request).map(phrase => phrase.text), ['이 프로젝트를 소개하는 웹사이트 만들어줘.']);
+  assert.deepEqual(requestPhrases('/skill:omd-ultradesign\n\n만들어줘'), [], 'a few words are no sentence to find');
+  const root = project(t);
+  const page = join(root, 'index.html');
+  const system = { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] };
+  // test-336 set its own commission in the hero, quoted and broken over two lines.
+  writeFileSync(page, '<!doctype html><body style="font:400 18px Arial"><h1 style="font:600 48px Arial">Design</h1>'
+    + '<div data-product><p>이번 프로젝트의 요청</p><p>“이 프로젝트를 소개하는<br>웹사이트 만들어줘.”</p></div></body>');
+  const quoting = await observeSystemDrift(page, system, request);
+  assert.deepEqual(quoting.find(item => item.viewport === 'desktop')!.quoted, ['이 프로젝트를 소개하는 웹사이트 만들어줘.']);
+  assert.match(systemDriftFailures(quoting).join('\n'), /repeats the request that commissioned it "이 프로젝트를 소개하는 웹사이트 만들어줘\.".*representative example/);
+  writeFileSync(page, '<!doctype html><body style="font:400 18px Arial"><h1 style="font:600 48px Arial">프로젝트를 소개하는 웹사이트</h1></body>');
+  assert.doesNotMatch(systemDriftFailures(await observeSystemDrift(page, system, request)).join('\n'), /repeats the request/);
 });
 
 test('the build is measured against its system: off-system type, arrow glyphs and player chrome, never inside a recreated product', { timeout: 120_000 }, async t => {

@@ -496,6 +496,8 @@ export type SystemDriftObservation = Readonly<{
   headings?: readonly string[];
   /** Saturated colours the page paints its own links, buttons and headings in, outside data-product, as #rrggbb. */
   accents?: readonly string[];
+  /** Sentences of the commissioning request that the rendered page repeats verbatim. */
+  quoted?: readonly string[];
   /** Desktop only: the first screen holds a key visual built in code. */
   keyVisual?: boolean;
   /** Desktop only: something in the first screen animates as the page loads. */
@@ -523,7 +525,8 @@ export function studioReferenceDepth(root: string): StudioReferenceDepth | null 
   } catch { return null; }
 }
 
-const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number }>): Omit<SystemDriftObservation, 'viewport'> => {
+const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, noise }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number;
+  phrases: readonly Readonly<{ text: string; key: string }>[]; noise: string }>): Omit<SystemDriftObservation, 'viewport'> => {
   const visible = (element: Element) => {
     const box = element.getBoundingClientRect(), style = getComputedStyle(element);
     return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.05;
@@ -553,7 +556,10 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance }: Readonly<{ 
     text.selectNodeContents(element);
     if (box.width > 0 && box.width <= 24 && box.height <= 24 && box.left >= text.getBoundingClientRect().left + 8 && !arrows.includes(words)) arrows.push(`${words} [icon]`);
   }
-  return { offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
+  const body = [document.body.innerText, ...[...document.querySelectorAll('[alt], [aria-label], [title]')].map(element =>
+    ['alt', 'aria-label', 'title'].map(name => element.getAttribute(name) ?? '').join(' '))].join(' ').replace(new RegExp(noise, 'g'), '');
+  return { quoted: phrases.filter(phrase => body.includes(phrase.key)).map(phrase => phrase.text),
+    offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
     offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length,
     stillVideos: [...document.querySelectorAll('video')].filter(video => visible(video) && !(video.autoplay && video.muted && video.loop)).length,
@@ -629,7 +635,7 @@ async function observeFirstScreenMotion(page: import('playwright').Page, keyVisu
 }
 
 /** Measure the build against its system at desktop and mobile, scrolled through so revealed sections are seen. */
-export async function observeSystemDrift(target: string, system: StudioSystem): Promise<readonly SystemDriftObservation[]> {
+export async function observeSystemDrift(target: string, system: StudioSystem, request = ''): Promise<readonly SystemDriftObservation[]> {
   const { chromium } = await import('playwright');
   const resolved = await resolveRenderTarget(target);
   const browser = await chromium.launch({ headless: true });
@@ -648,7 +654,8 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
           screens: Math.round(height / size.height * 10) / 10,
           revealed: reading.animations.filter(item => item.scrollY > 0 && !item.loop).length + reading.scrollStyleChanges,
         };
-        observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE }), ...keyVisual, ...depth });
+        observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE,
+          phrases: requestPhrases(request), noise: QUOTE_NOISE.source }), ...keyVisual, ...depth });
       } finally { await page.close(); }
     }
     return observations;
@@ -658,13 +665,25 @@ export async function observeSystemDrift(target: string, system: StudioSystem): 
   }
 }
 
+/** Spacing, quotation marks and punctuation, ignored when a page is searched for the request's words. */
+const QUOTE_NOISE = /[\s"'“”‘’「」『』.,!?。，！？:;·…~-]/g;
+
+/**
+ * The request's sentences as a page could repeat them, without the skill line. Test-336 answered "show the real work" by
+ * putting its own commission ("이 프로젝트를 소개하는 웹사이트 만들어줘.") and its own review on the page.
+ */
+export function requestPhrases(request: string): readonly Readonly<{ text: string; key: string }>[] {
+  return request.split(/\n|(?<=[.!?。！？])\s+/).map(line => line.trim()).filter(line => line !== '' && !line.startsWith('/'))
+    .map(text => ({ text, key: text.replace(QUOTE_NOISE, '') })).filter(phrase => phrase.key.length >= 8);
+}
+
 /** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome, a paired slogan for a headline. */
 export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null,
   palette: readonly StudioColor[] = [], landing = true): readonly string[] {
   const failures: string[] = [];
   const hues = palette.map(color => hsl(color.hex)).filter(color => color.saturation >= 0.2).map(color => color.hue);
   const inFamily = (hex: string) => hues.some(hue => Math.min(Math.abs(hue - hsl(hex).hue), 360 - Math.abs(hue - hsl(hex).hue)) <= ACCENT_HUE_TOLERANCE);
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], ...shape } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], ...shape } of observations) {
     // Depth, a key visual, an arriving first screen and scroll reveals describe a landing; an app is held to its system, not made into one.
     const { keyVisual, arrives, performs, screens, revealed } = landing ? shape : {};
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
@@ -679,6 +698,8 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (stillVideos > 0) failures.push(`${viewport}: ${stillVideos} video${stillVideos === 1 ? ' waits' : 's wait'} for a click; a demo plays muted and looped on its own (autoplay muted loop playsinline), with no play button over it, and rests under prefers-reduced-motion`);
     const offPalette = palette.length === 0 ? [] : accents.filter(hex => !inFamily(hex));
     if (offPalette.length > 0) failures.push(`${viewport}: accents outside the sampled palette ${offPalette.slice(0, 4).join(', ')} (the system samples ${palette.map(color => `${color.hex} from ${color.from}`).join(', ')}); paint links, buttons and headings in a step of a sampled colour, or sample the colour you mean from real material`);
+    if (quoted.length > 0) failures.push(`the page repeats the request that commissioned it ${quoted.slice(0, 2).map(text => `"${text}"`).join(', ')}: `
+      + 'the request, this page\'s review and its making are not content; show the product on a representative example of its real use');
     const slogans = headings.filter(pairedSlogan);
     if (slogans.length > 0) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
     const couplets = coupletHeadings(headings);
@@ -695,7 +716,7 @@ export async function requireStudioSystemHeld(root: string, route: Route, target
   const system = readStudioSystem(root);
   if (system === null) return;
   const landing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
-  const failures = systemDriftFailures(await observeSystemDrift(target, system), studioReferenceDepth(root), system.colors ?? [], landing);
+  const failures = systemDriftFailures(await observeSystemDrift(target, system, route.request), studioReferenceDepth(root), system.colors ?? [], landing);
   if (failures.length > 0) {
     const keyVisualFirst = landing ? 'Build the key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving '
       + 'with real input, marked data-product. ' : '';

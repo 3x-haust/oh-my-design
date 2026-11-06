@@ -170,6 +170,11 @@ The instructions this harness gives are the usual source. Seen in its own runs:
 - **The brief's vocabulary verbatim.** Planning words (message, proof, persona, reference,
   system, concept, section, first screen, verified) used as headings or labels, and the
   brief's one message repeated in several places.
+- **The page's own making as its proof.** Told by a review to show real work instead of a
+  symbol, a site for a design tool put its own commission ("이 프로젝트를 소개하는 웹사이트
+  만들어줘.") in the hero and its own review finding in the next section. The request, the
+  review and the build log are the maker's; show the product on a representative example of
+  its real use, a brief and a result a visitor could have.
 - **An over-weighted detail.** One phrase from the request or a reference repeated in every
   section, or a prohibition turned into a promise ("직접 만들지 않습니다", "never a mock").
 
