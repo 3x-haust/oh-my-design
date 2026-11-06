@@ -498,6 +498,8 @@ export type SystemDriftObservation = Readonly<{
   accents?: readonly string[];
   /** Sentences of the commissioning request that the rendered page repeats verbatim. */
   quoted?: readonly string[];
+  /** The page's own headings repeated inside its data-product: the key visual frames this page. */
+  selfFramed?: readonly string[];
   /** Desktop only: the first screen holds a key visual built in code. */
   keyVisual?: boolean;
   /** Desktop only: something in the first screen animates as the page loads. */
@@ -558,7 +560,18 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, nois
   }
   const body = [document.body.innerText, ...[...document.querySelectorAll('[alt], [aria-label], [title]')].map(element =>
     ['alt', 'aria-label', 'title'].map(name => element.getAttribute(name) ?? '').join(' '))].join(' ').replace(new RegExp(noise, 'g'), '');
-  return { quoted: phrases.filter(phrase => body.includes(phrase.key)).map(phrase => phrase.text),
+  // Test-337 filled its key visual with a scaled copy of this page, its own closing heading and header logo included. A real interface may
+  // name a feature the way a heading does, so the copy is named only when it also carries the page's header logo.
+  const framed = [...document.querySelectorAll('[data-product]')].map(element => (element.textContent ?? '').replace(new RegExp(noise, 'g'), '')).join('|');
+  const headerLogos = new Set([...document.querySelectorAll('img')].filter(image => image.closest('[data-product]') === null
+    && image.getBoundingClientRect().top + scrollY < 160).map(image => image.src));
+  const framesLogo = [...document.querySelectorAll('[data-product] img')].some(image => headerLogos.has((image as HTMLImageElement).src));
+  const selfFramed = !framesLogo ? [] : [...document.querySelectorAll('h1, h2')].filter(element => element.closest('[data-product]') === null)
+    .map(element => (element.textContent ?? '').replace(/\s+/g, ' ').trim()).filter(text => {
+      const key = text.replace(new RegExp(noise, 'g'), '');
+      return key.length >= 6 && framed.includes(key);
+    });
+  return { quoted: phrases.filter(phrase => body.includes(phrase.key)).map(phrase => phrase.text), selfFramed: [...new Set(selfFramed)],
     offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
     offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length,
@@ -683,7 +696,7 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
   const failures: string[] = [];
   const hues = palette.map(color => hsl(color.hex)).filter(color => color.saturation >= 0.2).map(color => color.hue);
   const inFamily = (hex: string) => hues.some(hue => Math.min(Math.abs(hue - hsl(hex).hue), 360 - Math.abs(hue - hsl(hex).hue)) <= ACCENT_HUE_TOLERANCE);
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], ...shape } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], selfFramed = [], ...shape } of observations) {
     // Depth, a key visual, an arriving first screen and scroll reveals describe a landing; an app is held to its system, not made into one.
     const { keyVisual, arrives, performs, screens, revealed } = landing ? shape : {};
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
@@ -700,6 +713,8 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (offPalette.length > 0) failures.push(`${viewport}: accents outside the sampled palette ${offPalette.slice(0, 4).join(', ')} (the system samples ${palette.map(color => `${color.hex} from ${color.from}`).join(', ')}); paint links, buttons and headings in a step of a sampled colour, or sample the colour you mean from real material`);
     if (quoted.length > 0) failures.push(`the page repeats the request that commissioned it ${quoted.slice(0, 2).map(text => `"${text}"`).join(', ')}: `
       + 'the request, this page\'s review and its making are not content; show the product on a representative example of its real use');
+    if (selfFramed.length > 0) failures.push(`${viewport}: the key visual frames this page itself (it repeats ${selfFramed.slice(0, 2).map(text => `"${text}"`).join(', ')}): `
+      + 'a page shown inside itself proves nothing; a tool that makes pages shows one it made for another brief, built fully at its own scale');
     const slogans = headings.filter(pairedSlogan);
     if (slogans.length > 0) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
     const couplets = coupletHeadings(headings);

@@ -174,7 +174,9 @@ The instructions this harness gives are the usual source. Seen in its own runs:
   symbol, a site for a design tool put its own commission ("이 프로젝트를 소개하는 웹사이트
   만들어줘.") in the hero and its own review finding in the next section. The request, the
   review and the build log are the maker's; show the product on a representative example of
-  its real use, a brief and a result a visitor could have.
+  its real use, a brief and a result a visitor could have. The next run paraphrased the
+  commission ("구현 예시 · 프로젝트 소개 웹사이트") and framed a scaled copy of the page as its key
+  visual: the same leak. A tool that makes pages shows one it made for another brief.
 - **An over-weighted detail.** One phrase from the request or a reference repeated in every
   section, or a prohibition turned into a promise ("직접 만들지 않습니다", "never a mock").
 
