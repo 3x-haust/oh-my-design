@@ -724,6 +724,17 @@
       "notWhen": "Brands with no usable assets yet, where a new identity must be designed deliberately; co-branding or licensing rules that forbid reproducing partner assets; products whose existing look is the problem the redesign was hired to fix."
     },
     {
+      "id": "new-identity-not-the-category-default",
+      "surfaces": [
+        "any"
+      ],
+      "look": "A new product with no brand material whose name, colour and mark are the category's defaults: a budget app named with the category's stock word, painted in a well-known competitor's signature colour, a finance product in the leader's green or a developer tool in the leader's dark violet.",
+      "ask": "Where did this name and palette come from: a decision about this product's character, or the first thing the category or a competitor's screens suggested?",
+      "move": "State the product's character in specific words, name it as a person would for its audience, and take colour and type from a reference outside the category that carries that character; keep category references for the task structure only.",
+      "why": "Identity borrowed from the category leader makes a new product read as that leader's clone and lets every run of the same brief converge on one look; a deliberate identity is what a designer is hired to add when no brand exists.",
+      "notWhen": "Products with existing brand assets (read those instead); conventions with real meaning, such as red for errors or a market's convention for gains and losses; a user who asked for a named service's look."
+    },
+    {
       "id": "graphic-and-type-interlock",
       "surfaces": [
         "marketing"
