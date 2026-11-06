@@ -360,13 +360,27 @@ export function paletteIssue(root: string, system: StudioSystem, studies: readon
     if (held.every(value => value === null)) return `the colour ${hex} names ${from}; sample from a PNG or SVG`;
     if (!held.some(value => value === true)) return `the colour ${hex} is not in ${from}: sample it from the file's own pixels`;
   }
-  // With no logo to sample, the studied sites are the product's own category, and their colours make it a clone (test-334 took Spendee's green).
-  if (brandless(root) && colors.every(({ from }) => studies.some(item => sameSite(item.url, from)))) {
-    return 'the project has no logo or brand material, and every colour comes from a studied site, a service in its own category: decide the '
+  // With no logo to sample, the studied sites are the product's own category, and their colours make it a clone (test-334 took Spendee's green;
+  // test-335 kept the studied shot itself from the gallery and took its pink).
+  const category = (from: string) => [from, keptSource(root, from)].some(url => url !== null
+    && (sameSite(url, system.reference) || studies.some(item => sameSite(item.url, url))));
+  if (brandless(root) && colors.every(({ from }) => category(from))) {
+    return 'the project has no logo or brand material, and every colour comes from a studied site or the primary reference, its own category: decide the '
       + 'product\'s character in words, find a graphic reference outside the category that carries it (omd ref browse search cosmos|behance|notefolio '
       + '"<the character>", then keep it), and sample at least the accent from that saved PNG under .omd/refs; the studied sites give structure, not identity';
   }
   return null;
+}
+
+/** The page a kept gallery image was taken from, read from the record beside it. */
+function keptSource(root: string, from: string): string | null {
+  const record = join(root, normalize(from).replace(/\.png$/i, '.json'));
+  if (record === join(root, normalize(from)) || !existsSync(record)) return null;
+  try {
+    const kept: unknown = JSON.parse(readFileSync(record, 'utf8'));
+    const source = typeof kept === 'object' && kept !== null ? Reflect.get(kept, 'sourceUrl') ?? Reflect.get(kept, 'source') : undefined;
+    return typeof source === 'string' ? source : null;
+  } catch { return null; }
 }
 
 const brandless = (root: string): boolean =>
