@@ -59,7 +59,7 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
 4. Key visual first: the product's real look made in code (`data-product`), large and crisp, playing its real
    flow on its own; never a recording. Look at it alone and refine until it could sit on the reference.
 5. Build at the reference's rhythm and depth, compositions varied, real logo in the header. Subtract with
-   `omd studio check`; compare your page beside the reference and fix the biggest differences, three passes at most.
+   `omd studio check`, which measures your sections beside the reference's; fix the biggest differences, three passes at most.
 6. Finish: `omd lifecycle finish --json` builds, measures logo, 3D and system on the real page and compares the
    render once with the reference. Answer what it names once, structure first, and finish again.
 

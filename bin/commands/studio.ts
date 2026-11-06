@@ -16,13 +16,15 @@ async function cmdStudioRefs(opts: Opts): Promise<never> {
 
 async function cmdStudioCheck(opts: Opts): Promise<never> {
   const page = typeof opts.page === 'string' ? opts.page : 'dist/index.html';
-  const { observeSystemDrift, readStudioSystem, studioReferenceDepth, systemDriftFailures, STUDIO_SYSTEM_GUIDANCE } = await import('../../core/design/studio.ts');
+  const { observeSystemDrift, readStudioSystem, sectionRhythm, studioReferenceDepth, studioReferenceSections, systemDriftFailures, STUDIO_SYSTEM_GUIDANCE }
+    = await import('../../core/design/studio.ts');
   const system = readStudioSystem(process.cwd());
   if (system === null) throw new Error(`STUDIO_SYSTEM_MISSING: no system is written yet. ${STUDIO_SYSTEM_GUIDANCE}`);
   const observations = await observeSystemDrift(page, system);
   const failures = systemDriftFailures(observations, studioReferenceDepth(process.cwd()));
-  if (opts.json) await new Promise<void>(done => process.stdout.write(JSON.stringify({ page, system, observations, failures }), () => done()));
-  else console.log(failures.length === 0 ? `${page} holds the system` : failures.join('\n'));
+  const rhythm = sectionRhythm(studioReferenceSections(process.cwd()), observations.find(item => item.viewport === 'desktop')?.sections ?? []);
+  if (opts.json) await new Promise<void>(done => process.stdout.write(JSON.stringify({ page, system, observations, failures, rhythm }), () => done()));
+  else console.log([failures.length === 0 ? `${page} holds the system` : failures.join('\n'), ...rhythm === null ? [] : [rhythm]].join('\n'));
   process.exit(failures.length === 0 ? 0 : 1);
 }
 
@@ -30,7 +32,7 @@ export async function runStudio(args: string[]): Promise<never> {
   const sub = args[1];
   if (args.includes('--help')) {
     console.log('omd studio refs <url> [<url> ...] [--json]   study finished sites: first screen, whole page, section crops and their measured system\n'
-      + 'omd studio check [--page <file>] [--json]   measure the page against .omd/studio/system.json (sizes, weights, arrows, player chrome)');
+      + 'omd studio check [--page <file>] [--json]   measure the page against .omd/studio/system.json (sizes, weights, arrows, player chrome) and set its section rhythm beside the reference\'s');
     process.exit(0);
   }
   if (sub === 'refs') return cmdStudioRefs(parseArgs(args.slice(2)));

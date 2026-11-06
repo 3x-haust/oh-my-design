@@ -67,17 +67,47 @@ export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${
 
 export type StudioStudy = Readonly<{ url: string; dir: string; firstScreen: string; full: string; sha256: string }>;
 
+/** A section of a studied site or of the build, measured the same way so the two can be set side by side. */
+export type StudioSection = Readonly<{ top: number; height: number; background: string; contentWidth: number | null; heading: string; largeMedia: number;
+  words: number; product?: number; crop?: string }>;
+
 type Measured = Readonly<{
   url: string; pageHeight: number; screens: number;
   typeRamp: readonly Readonly<{ size: number; weight: number; tracking: string; lineHeight: string; family: string; count: number; example: string }>[];
   weights: readonly number[];
-  sections: readonly Readonly<{ top: number; height: number; background: string; contentWidth: number | null; heading: string; largeMedia: number; words: number; crop?: string }>[];
+  sections: readonly StudioSection[];
   visuals: readonly Readonly<{ tag: string; top: number; width: number; height: number; radius: string; shadow: string; playerControls: boolean }>[];
   buttons: readonly Readonly<{ text: string; height: number; padding: string; radius: string; size: string; weight: string; background: string }>[];
   backgrounds: readonly string[]; wordsPerScreen: number; arrows: number;
 }>;
 
-const measurePage = browserCallback((): Measured => {
+// The page's sections: blocks at least four fifths of the width and 240px tall, outermost first, with what leads each (large media,
+// a data-product frame) and its words. The study and the build are measured by this one callback so their rhythm compares.
+const measureSections = browserCallback((): readonly StudioSection[] => {
+  const visible = (element: Element) => {
+    const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+    return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.05;
+  };
+  const large = (element: Element) => { const box = element.getBoundingClientRect(); return box.width * box.height > 60_000; };
+  const all = [...document.querySelectorAll('body *')].filter(visible);
+  const pageHeight = document.documentElement.scrollHeight;
+  const blocks = all.filter(element => { const box = element.getBoundingClientRect(); return box.width >= innerWidth * 0.8 && box.height >= 240 && box.height < pageHeight * 0.9; })
+    .map(element => ({ element, top: Math.round(element.getBoundingClientRect().top + scrollY), height: Math.round(element.getBoundingClientRect().height) }))
+    .sort((a, b) => a.top - b.top || b.height - a.height);
+  const sections: StudioSection[] = [];
+  for (const { element, top, height } of blocks) {
+    if (sections.some(section => top >= section.top && top + height <= section.top + section.height + 2)) continue;
+    const inner = [...element.querySelectorAll('*')].filter(visible).map(child => child.getBoundingClientRect().width).filter(width => width > 200 && width < innerWidth - 20);
+    sections.push({ top, height, background: getComputedStyle(element).backgroundColor, contentWidth: inner.length > 0 ? Math.round(Math.max(...inner)) : null,
+      heading: ([...element.querySelectorAll('h1,h2,h3')].find(visible)?.textContent ?? '').trim().slice(0, 60),
+      largeMedia: [...element.querySelectorAll('img,video,canvas,svg,picture')].filter(visible).filter(large).length,
+      product: element.closest('[data-product]') !== null && large(element) ? 1 : [...element.querySelectorAll('[data-product]')].filter(visible).filter(large).length,
+      words: ((element as HTMLElement).innerText ?? '').split(/\s+/).filter(Boolean).length });
+  }
+  return sections;
+});
+
+const measurePage = browserCallback((): Omit<Measured, 'sections'> => {
   const round = (value: number) => Math.round(value * 10) / 10;
   const visible = (element: Element) => {
     const box = element.getBoundingClientRect(), style = getComputedStyle(element);
@@ -99,18 +129,6 @@ const measurePage = browserCallback((): Measured => {
     return { size: Number(size), weight: Number(weight), tracking: tracking ?? '0', lineHeight: lineHeight ?? '', family: family ?? '', ...entry };
   }).filter(entry => entry.count >= 2 || entry.size >= 24).sort((a, b) => b.size - a.size || b.count - a.count).slice(0, 24);
   const pageHeight = document.documentElement.scrollHeight;
-  const blocks = all.filter(element => { const box = element.getBoundingClientRect(); return box.width >= innerWidth * 0.8 && box.height >= 240 && box.height < pageHeight * 0.9; })
-    .map(element => ({ element, top: Math.round(element.getBoundingClientRect().top + scrollY), height: Math.round(element.getBoundingClientRect().height) }))
-    .sort((a, b) => a.top - b.top || b.height - a.height);
-  const sections: Measured['sections'][number][] = [];
-  for (const { element, top, height } of blocks) {
-    if (sections.some(section => top >= section.top && top + height <= section.top + section.height + 2)) continue;
-    const inner = [...element.querySelectorAll('*')].filter(visible).map(child => child.getBoundingClientRect().width).filter(width => width > 200 && width < innerWidth - 20);
-    sections.push({ top, height, background: getComputedStyle(element).backgroundColor, contentWidth: inner.length > 0 ? Math.round(Math.max(...inner)) : null,
-      heading: ([...element.querySelectorAll('h1,h2,h3')].find(visible)?.textContent ?? '').trim().slice(0, 60),
-      largeMedia: [...element.querySelectorAll('img,video,canvas,svg,picture')].filter(visible).filter(media => { const box = media.getBoundingClientRect(); return box.width * box.height > 60_000; }).length,
-      words: ((element as HTMLElement).innerText ?? '').split(/\s+/).filter(Boolean).length });
-  }
   const visuals = all.filter(element => /^(IMG|VIDEO|CANVAS|SVG|PICTURE)$/i.test(element.tagName))
     .map(element => ({ element, box: element.getBoundingClientRect() })).filter(({ box }) => box.width * box.height > 120_000).slice(0, 12)
     .map(({ element, box }) => {
@@ -139,7 +157,7 @@ const measurePage = browserCallback((): Measured => {
   }
   const text = document.body.innerText;
   return { url: location.href, pageHeight, screens: Math.round(pageHeight / innerHeight * 10) / 10, typeRamp,
-    weights: [...new Set(texts.map(element => Number(getComputedStyle(element).fontWeight)))].sort((a, b) => a - b), sections, visuals, buttons,
+    weights: [...new Set(texts.map(element => Number(getComputedStyle(element).fontWeight)))].sort((a, b) => a - b), visuals, buttons,
     backgrounds: [...areas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([color]) => color),
     wordsPerScreen: Math.round(text.split(/\s+/).filter(Boolean).length / (pageHeight / innerHeight)), arrows: (text.match(/[↗→↘]/g) ?? []).length };
 });
@@ -251,7 +269,7 @@ export async function studyStudioReferences(writer: ProjectWriteAdapter, urls: r
         const motion = motionSummary(arrival, await page.evaluate(readMotion), introEnd);
         await page.evaluate(() => window.scrollTo(0, 0));
         await page.waitForTimeout(800);
-        const measured = await page.evaluate(measurePage);
+        const measured: Measured = { ...await page.evaluate(measurePage), sections: await page.evaluate(measureSections) };
         const firstScreen = await page.screenshot();
         const fullShot = await page.screenshot({ fullPage: true, clip: { x: 0, y: 0, width: STUDY_VIEWPORT.width, height } });
         const dir = `${STUDIO_REFS_DIR}/${slug(url)}`;
@@ -504,6 +522,8 @@ export type SystemDriftObservation = Readonly<{
   diagonals?: readonly string[];
   /** Short captions under media that certify it ("실제 사용 영상", "original logo"). */
   certifying?: readonly string[];
+  /** Desktop only: the page's sections, measured as the reference's were, for the rhythm set beside the reference's. */
+  sections?: readonly StudioSection[];
   /** Desktop only: the first screen holds a key visual built in code. */
   keyVisual?: boolean;
   /** Desktop only: something in the first screen animates as the page loads. */
@@ -529,6 +549,38 @@ export function studioReferenceDepth(root: string): StudioReferenceDepth | null 
     const onScroll = typeof motion === 'object' && motion !== null ? Number(Reflect.get(motion, 'onScroll')) : 0;
     return Number.isFinite(screens) && screens > 0 ? { screens: Math.min(screens, STUDY_MAX_SCREENS), revealsOnScroll: onScroll >= REVEALING_REFERENCE } : null;
   } catch { return null; }
+}
+
+/** The primary study's measured sections, for the rhythm set beside the build's. */
+export function studioReferenceSections(root: string): readonly StudioSection[] {
+  const study = primaryStudy(root);
+  if (study === null) return [];
+  try {
+    const sections: unknown = Reflect.get(JSON.parse(readFileSync(join(root, study.dir, 'study.json'), 'utf8')) as object, 'sections');
+    return Array.isArray(sections) ? sections.filter((item): item is StudioSection => typeof item === 'object' && item !== null
+      && Number.isFinite(item.height) && Number.isFinite(item.words) && Number.isFinite(item.largeMedia)) : [];
+  } catch { return []; }
+}
+
+/**
+ * The build's sections set beside the reference's: each one's height in screens, what leads it and its words a screen. Test-341 held
+ * every system check while its middle was a request form, a quote card and command rows under a reference whose sections lead with
+ * large pictures of the product; a designer compares that rhythm by eye, so the comparison is measured and shown, not gated.
+ */
+export function sectionRhythm(reference: readonly StudioSection[], page: readonly StudioSection[]): string | null {
+  if (reference.length === 0 || page.length === 0) return null;
+  const screen = STUDY_VIEWPORT.height;
+  const lead = (section: StudioSection) => (section.product ?? 0) > 0 ? 'product' : section.largeMedia > 0 ? 'picture' : 'text';
+  const density = (section: StudioSection) => Math.round(section.words / Math.max(section.height / screen, 0.25));
+  const row = (section: StudioSection) => `${(section.height / screen).toFixed(1)} ${lead(section)} ${density(section)}w`;
+  const summary = (sections: readonly StudioSection[]) => {
+    const densities = sections.map(density).sort((a, b) => a - b);
+    return `${sections.filter(section => lead(section) !== 'text').length} of ${sections.length} sections led by a picture or the product, `
+      + `${densities[Math.floor(densities.length / 2)]} words a screen at the median`;
+  };
+  return [`section rhythm at desktop, in screens of ${screen}px (height, what leads it, words a screen):`,
+    `  reference: ${reference.map(row).join(' | ')}`, `  this page: ${page.map(row).join(' | ')}`,
+    `  reference ${summary(reference)}; this page ${summary(page)}. Where they differ, look at the reference's section crops and change what leads each section, not the spacing.`].join('\n');
 }
 
 const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, noise }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number;
@@ -686,6 +738,7 @@ export async function observeSystemDrift(target: string, system: StudioSystem, r
         const depth = reading === null ? {} : {
           screens: Math.round(height / size.height * 10) / 10,
           revealed: reading.animations.filter(item => item.scrollY > 0 && !item.loop).length + reading.scrollStyleChanges,
+          sections: await page.evaluate(measureSections),
         };
         observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE,
           phrases: requestPhrases(request), noise: QUOTE_NOISE.source }), ...keyVisual, ...depth });
