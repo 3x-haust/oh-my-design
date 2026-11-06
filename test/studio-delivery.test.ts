@@ -12,7 +12,10 @@ import { publishAdaptiveRoute } from '../core/route/adaptive-route-persistence.t
 import { readPersistedRoute } from '../core/route/index.ts';
 import { nextStageWork } from '../core/stage/next.ts';
 import { modelLedCompletionFingerprint } from '../core/runtime/model-led-execution.ts';
-import { stallMessage } from '../core/design/first-render-loop-state.ts';
+import { firstRenderLoopState, stallMessage } from '../core/design/first-render-loop-state.ts';
+import { runFirstRenderReview } from '../core/design/first-render-review.ts';
+import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
+import { createProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { currentStudioDelivery, requireStudioDelivery, STUDIO_REVIEW_ROUNDS, studioSite } from '../core/design/studio-delivery.ts';
 import { createModelLedRouteContext, modelLedInput } from './helpers/model-led.ts';
 
@@ -99,8 +102,15 @@ test('a new page is held to its system, compared once with its reference and del
   assert.equal(currentStudioDelivery(root, route), null);
   assert.match(nextStageWork(root, packRoot, invocation).instruction, /Answer what it named, once/);
 
-  // The answer ships without a second look.
+  // The answer ships without a second look. A check of it returns the one review and points at finish, never at
+  // restoring the reviewed page (test-333 followed a restore and shipped the critique untouched).
   writeFileSync(join(root, 'index.html'), page(2));
+  assert.equal(firstRenderLoopState(root, route).stalled, false);
+  await publishFirstRenderCheck(root, 'index.html', undefined, createProjectWriteAdapter(root, invocation), invocation);
+  const checked = await runFirstRenderReview(root, invocation);
+  assert.equal(checked.sha256, critiqued.firstRender?.sha256);
+  assert.equal(checked.next, 'omd lifecycle finish --json');
+  assert.match(checked.diagnostic?.message ?? '', /Answer what it named, once/);
   const delivered = await runModelLedCompletion({ root, packRoot, invocation, signal: t.signal });
   assert.equal(delivered.ok, true, JSON.stringify(delivered.diagnostic));
   assert.equal(delivered.studioDeliveryPath, '.omd/studio/delivery.json');

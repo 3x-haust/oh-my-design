@@ -14,6 +14,7 @@ import { readDesignBrief } from './design-brief.ts';
 import { latestBlindComparison } from './taste-comparison-record.ts';
 import { ideaImages, pageIdeaPreview } from './idea-image.ts';
 import { primaryStudy, STUDIO_REFERENCE_REVIEW_WIDTH } from './studio.ts';
+import { STUDIO_DELIVER_MESSAGE } from './studio-delivery.ts';
 import { MAX_BROKERED_EVIDENCE_BYTES } from '../runtime/evidence-proxy.ts';
 import { pageBasicsTells, proofShowsOutput, readPageBasics } from './page-basics.ts';
 import { parseReferenceCaptures, referenceComparisonBindings } from './first-render-reference-comparison.ts';
@@ -390,7 +391,7 @@ export async function runFirstRenderReview(root: string, invocation: ProjectRunI
     repairOwners: readonly string[];
     loop: FirstRenderLoopState | null;
     bestIterationId: string | null;
-    diagnostic?: Readonly<{ code: 'FIRST_RENDER_LOOP_STALLED' | 'FIRST_RENDER_REGRESSED'; message: string }>;
+    diagnostic?: Readonly<{ code: 'FIRST_RENDER_LOOP_STALLED' | 'FIRST_RENDER_REGRESSED' | 'FIRST_RENDER_VISUAL_REPAIR'; message: string }>;
   }> => {
     if (route === null) {
       return {
@@ -401,6 +402,12 @@ export async function runFirstRenderReview(root: string, invocation: ProjectRunI
       };
     }
     const loop = firstRenderLoopState(run.projectRoot, route);
+    // A new page has had its one comparison: the maker answers it in the source and finish delivers, whatever ran the review.
+    if (loop.studio && loop.exhausted) {
+      return { next: 'omd lifecycle finish --json', repairOwners: review.decision === 'retain' ? [] : ['coordinator'], loop,
+        bestIterationId: loop.bestIterationId,
+        ...(review.decision === 'retain' ? {} : { diagnostic: { code: 'FIRST_RENDER_VISUAL_REPAIR' as const, message: STUDIO_DELIVER_MESSAGE } }) };
+    }
     const diagnostic = loop.stalled ? {
       code: 'FIRST_RENDER_LOOP_STALLED' as const,
       message: stallMessage(loop),
@@ -430,6 +437,12 @@ export async function runFirstRenderReview(root: string, invocation: ProjectRunI
     && previous.bindings.designerJudgmentsSha256 === designerJudgmentProjection().sha256
     && previous.bindings.reportedFeedbackSha256 === qualitativeFeedbackProjection(root)?.context.sha256) {
     return { ...previous, path: FIRST_RENDER_REVIEW_PATH, ...next(previous) };
+  }
+  // A new page is reviewed once; a check of the answer returns that review rather than spending another round.
+  if (route !== null) {
+    const loop = firstRenderLoopState(run.projectRoot, route);
+    const spent = loop.studio && loop.exhausted ? readFirstRenderReview(run.projectRoot) : null;
+    if (spent !== null) return { ...spent, path: FIRST_RENDER_REVIEW_PATH, ...next(spent) };
   }
   const prepared = firstRenderReviewPacket(run.projectRoot, invocation);
   const roleResult = await runPiFirstRenderReviewer({

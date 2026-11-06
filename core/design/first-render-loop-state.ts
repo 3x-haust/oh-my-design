@@ -18,7 +18,7 @@ import {
 
 export type FirstRenderLoopState = Readonly<{
   stalled: boolean;
-  reasons: readonly ('four-non-improving-reviews' | 'persistent-findings' | 'rounds-spent')[];
+  reasons: readonly ('four-non-improving-reviews' | 'persistent-findings')[];
   bestIterationId: string | null;
   currentIterationId: string | null;
   currentProgress: FirstRenderProgress['verdict'] | null;
@@ -73,8 +73,8 @@ export function firstRenderLoopState(root: string, route: AdaptiveRouteRecord): 
   const studio = newSurface(route);
   const reviewed = history.iterations.filter(iteration => iteration.reviewSha256 !== null).length;
   const exhausted = reviewed >= (studio ? STUDIO_REVIEW_ROUNDS : FIRST_RENDER_REVIEW_CEILING);
-  const reasons = studio && exhausted && history.iterations.at(-1)?.decision !== 'retain'
-    ? Object.freeze([...new Set([...loopReasons(history.iterations), 'rounds-spent' as const])]) : loopReasons(history.iterations);
+  // A new page's one spent review is not a stall: the maker answers it and delivers (test-333 restored the reviewed page instead).
+  const reasons = loopReasons(history.iterations);
   const bestRestoreApplied = (() => {
     const path = firstRenderRestorePath(route);
     if (best === null || current === null || current.reviewSha256 === null
