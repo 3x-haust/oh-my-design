@@ -99,10 +99,9 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
   images are ideation only. Ship graphics as live three.js scenes on the page (look at one alone with
   `omd render <graphic> --graphic`): a rendered PNG of a scene is a picture of 3D, CSS cards are a diagram,
   a page shrunk into a frame is a thumbnail. Each graphic argues one claim with one protagonist made from
-  this product's real material. No invented example sites, placeholder shapes, captions or disclaimers on
-  the art. When the product runs, show it working with real footage (`omd record`) or the real UI, never a
-  redrawn mock. Show the logo the README shows, as shipped, never redrawn. Generic icons and placeholder
-  shapes are unfinished, not minimal.
+  this product's real material. No placeholder sites or shapes, captions or disclaimers on the art, never
+  this page inside itself: a tool that makes pages shows one it made for another brief, built fully. When the product runs, show it working with real footage (`omd record`) or the real UI, never a
+  redrawn mock. Show the logo the README shows, as shipped, never redrawn. Generic icons are unfinished, not minimal.
 
 ## Default native Pi workflow
 
@@ -135,7 +134,7 @@ Build with realistic fixtures first: long names and strings, empty/error/loading
 and localized text. For meaningful motion, inspect the corresponding live reference trigger
 and transition when available; a still original establishes no timing or interruption claim.
 Choose source→destination continuity, feedback or expression for the actual action and
-frequency. Equal-role controls may share timing; springs, tweens and immediate changes are
+frequency. Springs, tweens and immediate changes are
 options, not quality badges. Keep ready content readable and input usable during transitions.
 Try pointer-out, Escape, reversal and repeated input where they apply; verify focus return,
 final state and recovery rather than waiting through a decorative sequence. Honor reduced
@@ -150,8 +149,7 @@ reduced-motion pass. Report unobserved behavior honestly. A new landing or launc
 need not say so): choreograph it from the content before styling: which element carries the promise
 and leads, which follow in overlapping beats, and whether one idea genuinely unfolds in steps on
 scroll. Build from `motion/recipes/hero-intro-sequence.md` and `motion/recipes/scroll-scene-timeline.md` rather
-than a uniform fade on every block, and compare your timeline with the observed reference. A
-requested choreography that ships as one simultaneous fade is unfinished, not restrained.
+than a uniform fade on every block, and compare your timeline with the observed reference.
 `omd first-render check` records the same observation and the early reviewer judges it. After a regressed review, run
 `omd first-render restore --json` instead of patching forward. On
 `FIRST_RENDER_LOOP_STALLED`, follow its instruction: restore the best, then recompose, or report once it says the loop stops. Details: `omd pack protocol/first-render-repair-loop.md`.

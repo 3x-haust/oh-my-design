@@ -225,6 +225,20 @@ test('a page that repeats the request that commissioned it is named; a page that
   assert.match(systemDriftFailures(quoting).join('\n'), /repeats the request that commissioned it "이 프로젝트를 소개하는 웹사이트 만들어줘\.".*representative example/);
   writeFileSync(page, '<!doctype html><body style="font:400 18px Arial"><h1 style="font:600 48px Arial">프로젝트를 소개하는 웹사이트</h1></body>');
   assert.doesNotMatch(systemDriftFailures(await observeSystemDrift(page, system, request)).join('\n'), /repeats the request/);
+  // test-337 paraphrased the commission and framed a copy of this page as the key visual: its own closing heading sits inside data-product.
+  writeFileSync(join(root, 'logo.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20"/></svg>');
+  const framedPage = (demo: string) => '<!doctype html><body style="margin:0;font:400 18px Arial"><header><img src="logo.svg" alt="OMD"></header>'
+    + `<h1 style="font:600 48px Arial">사람처럼 디자인하는 AI</h1><div data-product>${demo}</div><h2 style="font:600 24px Arial">다음 디자인은, OMD와 함께.</h2></body>`;
+  writeFileSync(page, framedPage('<img src="logo.svg" alt="OMD"><p>구현 예시</p><p>다음 디자인은, OMD와 함께.</p>'));
+  const framed = await observeSystemDrift(page, system, request);
+  assert.deepEqual(framed.find(item => item.viewport === 'desktop')!.selfFramed, ['다음 디자인은, OMD와 함께.']);
+  assert.match(systemDriftFailures(framed).join('\n'), /desktop: the key visual frames this page itself \(it repeats "다음 디자인은, OMD와 함께\."\)/);
+  // A real interface that names a feature the way a heading does is not a copy of the page: it carries no header logo.
+  writeFileSync(page, framedPage('<p>메뉴</p><p>다음 디자인은, OMD와 함께.</p>'));
+  assert.deepEqual((await observeSystemDrift(page, system, request)).find(item => item.viewport === 'desktop')!.selfFramed, []);
+  // A demo of another brief shares no heading with the page around it.
+  writeFileSync(page, framedPage('<img src="logo.svg" alt=""><h2>독립 서점의 책 탐색</h2><p>이번 주의 추천</p>'));
+  assert.deepEqual((await observeSystemDrift(page, system, request)).find(item => item.viewport === 'desktop')!.selfFramed, []);
 });
 
 test('the build is measured against its system: off-system type, arrow glyphs and player chrome, never inside a recreated product', { timeout: 120_000 }, async t => {
