@@ -241,6 +241,30 @@ test('a page that repeats the request that commissioned it is named; a page that
   assert.deepEqual((await observeSystemDrift(page, system, request)).find(item => item.viewport === 'desktop')!.selfFramed, []);
 });
 
+test('diagonal arrows anywhere and captions that certify their media are named; plain captions and data-product are not', { timeout: 120_000 }, async t => {
+  const root = project(t);
+  const page = join(root, 'index.html');
+  const system = { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] };
+  const desktop = async (html: string) => {
+    writeFileSync(page, `<!doctype html><body style="font:400 18px Arial"><h1 style="font:600 48px Arial">Ledger</h1>${html}</body>`);
+    return (await observeSystemDrift(page, system)).find(item => item.viewport === 'desktop')!;
+  };
+  // test-339 set ↙ and ↗ beside its income labels; test-340 captioned the README video as its real footage.
+  const flagged = await desktop('<p><i>↙</i> 수입</p><p><i>↗</i> 수입 − 지출</p>'
+    + '<div><div><video width="320" height="180" muted autoplay loop></video></div><div style="font-size:12px"><span>프로젝트 README의 실제 사용 영상</span><span>밀어 보세요</span></div></div>'
+    + '<figure><img width="200" height="100" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><figcaption>Original project logo</figcaption></figure>');
+  assert.deepEqual(flagged.diagonals, ['↙ 수입', '↗ 수입 − 지출']);
+  assert.deepEqual(flagged.certifying, ['프로젝트 README의 실제 사용 영상', 'Original project logo']);
+  const failures = systemDriftFailures([flagged]).join('\n');
+  assert.match(failures, /desktop: diagonal arrow glyphs "↙ 수입", "↗ 수입 − 지출"/);
+  assert.match(failures, /desktop: captions certifying their media "프로젝트 README의 실제 사용 영상/);
+  const plain = await desktop('<p>→ 다음 달로</p><div data-product><span>↗ 3.2%</span><p>original</p></div>'
+    + '<figure><img width="200" height="100" src="data:image/gif;base64,R0lGODlhAQABAAAAACw="><figcaption>커밋 기록을 정리하는 화면</figcaption></figure>'
+    + '<p>실제 결제가 일어나지 않습니다.</p>');
+  assert.deepEqual(plain.diagonals, []);
+  assert.deepEqual(plain.certifying, []);
+});
+
 test('the build is measured against its system: off-system type, arrow glyphs and player chrome, never inside a recreated product', { timeout: 120_000 }, async t => {
   const root = project(t);
   const page = join(root, 'index.html');

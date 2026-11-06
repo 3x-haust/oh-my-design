@@ -500,6 +500,10 @@ export type SystemDriftObservation = Readonly<{
   quoted?: readonly string[];
   /** The page's own headings repeated inside its data-product: the key visual frames this page. */
   selfFramed?: readonly string[];
+  /** Diagonal arrow glyphs set anywhere outside data-product, not only on links. */
+  diagonals?: readonly string[];
+  /** Short captions under media that certify it ("실제 사용 영상", "original logo"). */
+  certifying?: readonly string[];
   /** Desktop only: the first screen holds a key visual built in code. */
   keyVisual?: boolean;
   /** Desktop only: something in the first screen animates as the page loads. */
@@ -571,7 +575,23 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, nois
       const key = text.replace(new RegExp(noise, 'g'), '');
       return key.length >= 6 && framed.includes(key);
     });
+  // Test-339 set ↙ and ↗ beside its income labels: a diagonal arrow reads as a link out wherever it sits.
+  const diagonals = texts.filter(element => /[↗↘↙↖]/.test([...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent).join('')))
+    .map(element => (element.parentElement?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40));
+  // Test-340 captioned the README's demo video "프로젝트 README의 실제 사용 영상": a rule worn as a qualifier on the media it describes.
+  const media = 'img, video, canvas, picture, svg, [data-product]';
+  const certifying = [...document.querySelectorAll('figcaption, p, span, small, div')].filter(visible).filter(element => element.closest('[data-product]') === null).filter(element => {
+    const words = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (words.length === 0 || words.length > 48 || element.querySelector(media) !== null) return false;
+    const follows = (node: Element | null) => node?.previousElementSibling != null
+      && (node.previousElementSibling.matches(media) || node.previousElementSibling.querySelector(media) !== null);
+    // A caption is set small under its media; a body paragraph after a picture may say 실제 for good reason.
+    const small = parseFloat(getComputedStyle(element).fontSize) <= 15;
+    const captions = element.tagName === 'FIGCAPTION' || (small && (follows(element) || (element.parentElement?.children.length !== 1 && follows(element.parentElement))));
+    return captions && /실제|원본|진짜|예시 데이터|샘플 데이터|\b(?:real|actual|original|genuine)\b/i.test(words);
+  }).filter((element, _, all) => !all.some(other => other !== element && element.contains(other))).map(element => (element.textContent ?? '').replace(/\s+/g, ' ').trim());
   return { quoted: phrases.filter(phrase => body.includes(phrase.key)).map(phrase => phrase.text), selfFramed: [...new Set(selfFramed)],
+    diagonals: [...new Set(diagonals)].slice(0, 8), certifying: [...new Set(certifying)].slice(0, 8),
     offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
     offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length,
@@ -696,7 +716,7 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
   const failures: string[] = [];
   const hues = palette.map(color => hsl(color.hex)).filter(color => color.saturation >= 0.2).map(color => color.hue);
   const inFamily = (hex: string) => hues.some(hue => Math.min(Math.abs(hue - hsl(hex).hue), 360 - Math.abs(hue - hsl(hex).hue)) <= ACCENT_HUE_TOLERANCE);
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], selfFramed = [], ...shape } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], selfFramed = [], diagonals = [], certifying = [], ...shape } of observations) {
     // Depth, a key visual, an arriving first screen and scroll reveals describe a landing; an app is held to its system, not made into one.
     const { keyVisual, arrives, performs, screens, revealed } = landing ? shape : {};
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
@@ -713,6 +733,10 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (offPalette.length > 0) failures.push(`${viewport}: accents outside the sampled palette ${offPalette.slice(0, 4).join(', ')} (the system samples ${palette.map(color => `${color.hex} from ${color.from}`).join(', ')}); paint links, buttons and headings in a step of a sampled colour, or sample the colour you mean from real material`);
     if (quoted.length > 0) failures.push(`the page repeats the request that commissioned it ${quoted.slice(0, 2).map(text => `"${text}"`).join(', ')}: `
       + 'the request, this page\'s review and its making are not content; show the product on a representative example of its real use');
+    if (diagonals.length > 0) failures.push(`${viewport}: diagonal arrow glyphs ${diagonals.slice(0, 4).map(text => `"${text}"`).join(', ')}: `
+      + 'a diagonal arrow reads as a link out; let the words, a sign or the colour carry direction');
+    if (certifying.length > 0) failures.push(`${viewport}: captions certifying their media ${certifying.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
+      + 'a caption names what is shown or says nothing; real, original and example are the maker\'s rules, not the visitor\'s information');
     if (selfFramed.length > 0) failures.push(`${viewport}: the key visual frames this page itself (it repeats ${selfFramed.slice(0, 2).map(text => `"${text}"`).join(', ')}): `
       + 'a page shown inside itself proves nothing; a tool that makes pages shows one it made for another brief, built fully at its own scale');
     const slogans = headings.filter(pairedSlogan);
