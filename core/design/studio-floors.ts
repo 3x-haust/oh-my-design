@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -23,6 +24,14 @@ const SKIPPED = new Set(['node_modules', '.git', '.omd', '.omc', 'dist', 'build'
 /** Where the agent saves the project's logo when the README only links it from the web, or says it has none. */
 export const STUDIO_LOGO = '.omd/studio/logo.png';
 export const STUDIO_NO_LOGO = '.omd/studio/no-logo';
+/** Where a new page records the source and licence of each image it ships that the project did not already have. */
+export const STUDIO_IMAGES = '.omd/studio/images.json';
+/** Licences an added image may carry: the project's own work, a render of the page's own code, or terms with no extra clauses. */
+const OPEN_IMAGE_LICENCES = new Set(['own', 'rendered', 'cc0-1.0', 'public-domain']);
+/** Photo sites whose own licences add clauses (no compiling a similar service, no selling unaltered copies): never CC0. */
+const STOCK_HOSTS = /(^|\.)(unsplash\.com|pexels\.com|pixabay\.com|freepik\.com|shutterstock\.com|istockphoto\.com|gettyimages\.com|stock\.adobe\.com)$/i;
+/** Below this size a raster is an icon or a texture tile, not an image the page shows. */
+const IMAGE_MIN_BYTES = 20_000;
 
 /** The request asks to see something in 3D. */
 export function requestsThreeD(request: string): boolean {
@@ -191,7 +200,53 @@ function sourceBytes(target: string, servedFrom: string, src: string): Buffer | 
   } catch { return null; }
 }
 
-export type StudioFloorFailure = Readonly<{ code: 'BRAND_MARK_NOT_SHOWN' | 'THREE_D_NOT_LIVE'; message: string }>;
+/** Git blob ids of every file the project had committed when the page was made: images it already owns. */
+function committedBlobs(root: string): ReadonlySet<string> {
+  const listed = spawnSync('git', ['ls-tree', '-r', 'HEAD'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  if (listed.status !== 0) return new Set();
+  return new Set(listed.stdout.split('\n').map(line => /^\d+ blob ([0-9a-f]{40})\t/.exec(line)?.[1]).filter((id): id is string => id !== undefined));
+}
+
+const blobId = (bytes: Buffer): string => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+
+type ImageRecord = Readonly<{ file: string; source: string; licence: string }>;
+
+function imageRecords(root: string): readonly ImageRecord[] {
+  try {
+    const value: unknown = JSON.parse(readFileSync(join(root, STUDIO_IMAGES), 'utf8'));
+    return Array.isArray(value) ? value.filter((row): row is ImageRecord => typeof row === 'object' && row !== null
+      && typeof row.file === 'string' && typeof row.source === 'string' && typeof row.licence === 'string') : [];
+  } catch { return []; }
+}
+
+const stockSource = (source: string): boolean => { try { return STOCK_HOSTS.test(new URL(source).hostname); } catch { return false; } };
+
+/**
+ * Rasters the page shows that the project did not have committed, with no record of an open source. Test-346 shipped the most
+ * familiar bookshelf photograph on Unsplash inside its example: a stock site's own licence adds clauses, and a stock picture is
+ * the template's picture.
+ */
+export function unrecordedImages(root: string, target: string, observed: StudioFloorObservation & Readonly<{ servedFrom: string }>): readonly string[] {
+  const committed = committedBlobs(root);
+  const records = imageRecords(root).flatMap(record => {
+    const path = join(root, record.file);
+    return existsSync(path) ? [{ ...record, sha256: sha256(readFileSync(path)) }] : [];
+  });
+  const named: string[] = [];
+  for (const src of observed.sources) {
+    if (src.startsWith('data:') || !/\.(jpe?g|png|webp|avif|gif)(\?|#|$)/i.test(src)) continue;
+    const bytes = sourceBytes(target, observed.servedFrom, src);
+    if (bytes === null || bytes.length < IMAGE_MIN_BYTES || committed.has(blobId(bytes))) continue;
+    const record = records.find(row => row.sha256 === sha256(bytes));
+    const file = decodeURIComponent(new URL(src).pathname.split('/').pop() ?? src);
+    if (record === undefined) named.push(`${file} (no record)`);
+    else if (stockSource(record.source)) named.push(`${file} (from ${new URL(record.source).hostname}, whose licence adds clauses)`);
+    else if (!OPEN_IMAGE_LICENCES.has(record.licence.toLowerCase())) named.push(`${file} (licence ${record.licence})`);
+  }
+  return [...new Set(named)];
+}
+
+export type StudioFloorFailure = Readonly<{ code: 'BRAND_MARK_NOT_SHOWN' | 'THREE_D_NOT_LIVE' | 'IMAGE_SOURCE_UNRECORDED'; message: string }>;
 
 /** `marks` from the README's logo when it shows one (`readme`), otherwise every mark the project ships. */
 export function studioFloorFailures(marks: readonly BrandMark[], wantsThreeD: boolean, target: string,
@@ -221,7 +276,7 @@ export function studioFloorFailures(marks: readonly BrandMark[], wantsThreeD: bo
   return failures;
 }
 
-/** Refusal boundary at the first render of a new page: its mark is the README's logo file (or a shipped mark) and asked-for 3D is live. */
+/** Refusal boundary at the first render of a new page: its mark is the README's logo file (or a shipped mark), asked-for 3D is live and every added image has an open source. */
 export async function requireStudioFloors(root: string, route: Route, target: string): Promise<void> {
   if (!newSurface(route)) return;
   const saved = existsSync(join(root, STUDIO_LOGO))
@@ -229,7 +284,15 @@ export async function requireStudioFloors(root: string, route: Route, target: st
   const logos = saved.length > 0 ? saved : readmeLogos(root);
   const marks = logos.length > 0 ? logos : projectBrandMarks(root);
   const wantsThreeD = requestsThreeD(route.request);
-  if (marks.length === 0 && !wantsThreeD) return;
-  const failures = studioFloorFailures(marks, wantsThreeD, target, await observeStudioFloors(target), logos.length > 0);
+  const observed = await observeStudioFloors(target);
+  const failures = [...studioFloorFailures(marks, wantsThreeD, target, observed, logos.length > 0)];
+  const images = unrecordedImages(root, target, observed);
+  if (images.length > 0) {
+    failures.push({ code: 'IMAGE_SOURCE_UNRECORDED', message: `IMAGE_SOURCE_UNRECORDED: the page ships ${images.slice(0, 4).join(', ')}, which the `
+      + 'project did not have. An image ships only when the project owns it, it is drawn or rendered from the page\'s own code, or its '
+      + `licence adds no clauses (CC0, public domain); record each in ${STUDIO_IMAGES} as [{"file": "<path in the project>", "source": "<url or `
+      + '"omd render <page>">", "licence": "own|rendered|CC0-1.0|public-domain"}]. Stock photo sites (Unsplash, Pexels, Pixabay) license '
+      + 'on terms of their own and their pictures are the template\'s pictures: draw the thing in code instead.' });
+  }
   if (failures.length > 0) throw Object.assign(new Error(failures.map(failure => failure.message).join('\n')), { code: failures[0]!.code });
 }
