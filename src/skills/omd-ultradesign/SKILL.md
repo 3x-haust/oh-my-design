@@ -86,9 +86,10 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
 - Open the exact pack when needed: forms/errors → `omd pack theory/forms.md`; flow/states →
   `omd pack theory/ux.md`; copy/voice → `omd pack theory/microcopy.md` and
   `omd pack theory/voice.md`; type → `omd pack theory/typography.md`, and before choosing families
-  `omd pack theory/font-pairing.md` (bundle-ready fonts, pairings, local files). Use only fonts free of
-  licence restrictions (OFL-1.1, files shipped in the project with their licence); never a font with
-  extra clauses, personal-use-only terms or an unconfirmed licence; any Korean text →
+  `omd pack theory/font-pairing.md` (bundle-ready fonts, pairings, local files). Use only fonts and images free of
+  licence restrictions (fonts OFL-1.1 shipped with their licence; images the project's own, drawn in code or
+  CC0, recorded in `.omd/studio/images.json`); never extra clauses, personal-use-only terms, an unconfirmed
+  licence or a stock site's own licence; any Korean text →
   `omd pack theory/typography-korean.md`; accessibility → `omd pack theory/accessibility.md`;
   marketing copy → `omd pack theory/web-copy.md`.
   Motion that materially affects the task or identity → `omd pack theory/motion.md`;
@@ -101,7 +102,7 @@ lifecycle manifests, feedback reports) is for existing work. Spend the time buil
   a page shrunk into a frame is a thumbnail. Each graphic argues one claim with one protagonist made from
   this product's real material. No placeholder sites or shapes, captions or disclaimers on the art, never
   this page inside itself: a tool that makes pages shows one it made for another brief, built fully. When the product runs, show it working with real footage (`omd record`) or the real UI, never a
-  redrawn mock. Show the logo the README shows, as shipped, never redrawn. Generic icons are unfinished, not minimal.
+  redrawn mock. Generic icons are unfinished, not minimal.
 
 ## Default native Pi workflow
 

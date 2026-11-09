@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { observeStudioFloors, projectBrandMarks, readmeLogos, requestsThreeD, studioFloorFailures } from '../core/design/studio-floors.ts';
+import { observeStudioFloors, projectBrandMarks, readmeLogos, requestsThreeD, studioFloorFailures, unrecordedImages } from '../core/design/studio-floors.ts';
 
 const MARK_PATH = 'M10 10h108v108H10z M32 32h64v64H32z M44 44h40v40H44z';
 const markSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><path fill="#ff5a1f" d="${MARK_PATH}"/></svg>`;
@@ -88,4 +90,34 @@ test('a redrawn logo and a picture of a scene are refused; the shipped mark and 
   assert.deepEqual(studioFloorFailures(marks, true, join(root, 'inline.html'), inline).map(failure => failure.code), ['THREE_D_NOT_LIVE']);
   // Without a 3D ask the scene is not owed.
   assert.deepEqual(studioFloorFailures(marks, false, join(root, 'inline.html'), inline), []);
+});
+
+test('an image the project did not have ships only with a recorded open source; stock sites never count as one', { timeout: 120_000 }, async t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-floor-images-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = (...args: string[]) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: root, encoding: 'utf8' });
+  git('init', '-q');
+  // A screenshot the project already had committed is its own; photos added while building need a record.
+  mkdirSync(join(root, 'docs'), { recursive: true });
+  const owned = randomBytes(30_000), shelf = randomBytes(30_000), poster = randomBytes(30_000), icon = randomBytes(2_000);
+  writeFileSync(join(root, 'docs/screen.png'), owned);
+  git('add', '-A'); git('commit', '-q', '-m', 'project');
+  mkdirSync(join(root, 'site/images'), { recursive: true });
+  writeFileSync(join(root, 'site/images/screen.png'), owned);
+  writeFileSync(join(root, 'site/images/shelf.jpg'), shelf);
+  writeFileSync(join(root, 'site/images/poster.jpg'), poster);
+  writeFileSync(join(root, 'site/images/icon.png'), icon);
+  const page = join(root, 'site/index.html');
+  writeFileSync(page, '<!doctype html><body>' + ['screen.png', 'shelf.jpg', 'poster.jpg', 'icon.png']
+    .map(name => `<img src="images/${name}" width="300" height="200">`).join('') + '</body>');
+  const named = async () => unrecordedImages(root, page, await observeStudioFloors(page));
+  assert.deepEqual(await named(), ['shelf.jpg (no record)', 'poster.jpg (no record)']);
+  const record = (rows: unknown[]) => { mkdirSync(join(root, '.omd/studio'), { recursive: true }); writeFileSync(join(root, '.omd/studio/images.json'), JSON.stringify(rows)); };
+  // Test-346: the Unsplash bookshelf, even when labelled CC0; a record with an open licence passes.
+  record([{ file: 'site/images/shelf.jpg', source: 'https://images.unsplash.com/photo-1507842217343', licence: 'CC0-1.0' },
+    { file: 'site/images/poster.jpg', source: 'https://example.org/archive/poster', licence: 'all rights reserved' }]);
+  assert.deepEqual(await named(), ['shelf.jpg (from images.unsplash.com, whose licence adds clauses)', 'poster.jpg (licence all rights reserved)']);
+  record([{ file: 'site/images/shelf.jpg', source: 'omd render graphics/shelf.html', licence: 'rendered' },
+    { file: 'site/images/poster.jpg', source: 'https://commons.wikimedia.org/wiki/File:Poster.jpg', licence: 'public-domain' }]);
+  assert.deepEqual(await named(), []);
 });
