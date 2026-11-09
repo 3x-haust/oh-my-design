@@ -339,6 +339,8 @@ test('the build step names the designer method: system, key visual first, depth,
   assert.match(text, /beside the reference's first-screen\.png and full\.png/);
   assert.match(text, /sets your sections beside the reference's, measured \(height, what leads each, words a screen\)/);
   assert.match(text, /typography-korean\.md/);
+  // Test-344's example bookshop carried every tell the page avoided; the shown work is held to the page.
+  assert.match(text, /A tool that makes pages shows a page it made for another, particular client, held to everything this page is/);
   // Five lazygit runs converged on the same paired slogan; the reviewer named the cadence as machine-made.
   assert.match(text, /never a paired slogan of two parallel clauses or an abstract promise of ease/);
 });
@@ -445,4 +447,18 @@ test('the reference the page was first measured against is kept; the drift refus
   await assert.rejects(requireStudioSystemHeld(root, landing, page, plainWriter(root)), /STUDIO_SYSTEM_DRIFT/);
   // Existing work is never held to a studio reference.
   await requireStudioSystemHeld(root, route('existing-product'), page, plainWriter(root));
+});
+
+test('text that runs out of the box painted behind it is named, inside a shown example too; fitted or clipped text is not', { timeout: 120_000 }, async t => {
+  const root = project(t);
+  const page = join(root, 'index.html');
+  const system = { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] };
+  const cover = (title: string, style = '') => `<div style="width:80px;height:60px;background:#c9a646;${style}"><span style="font:400 24px Arial">${title}</span></div>`;
+  writeFileSync(page, '<!doctype html><body style="margin:0;font:400 18px Arial"><h1 style="font:600 48px Arial">Books</h1>'
+    + `<div data-product>${cover('le petit prince le petit prince')}</div>${cover('Demian')}${cover('le petit prince le petit prince', 'overflow:hidden')}</body>`);
+  const observations = await observeSystemDrift(page, system);
+  assert.deepEqual(observations.map(item => item.spills), [['le petit prince le petit prince'], ['le petit prince le petit prince']]);
+  assert.match(systemDriftFailures(observations).join('\n'), /desktop: text runs out of its box "le petit prince le petit prince": set it to fit the box/);
+  writeFileSync(page, `<!doctype html><body style="margin:0;font:400 18px Arial"><h1 style="font:600 48px Arial">Books</h1>${cover('Demian')}</body>`);
+  assert.doesNotMatch(systemDriftFailures(await observeSystemDrift(page, system)).join('\n'), /runs out of its box/);
 });

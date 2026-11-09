@@ -15,7 +15,7 @@ export function composeGuidance(route: Route): string {
     return `${route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : ''}Build the page in the project as components on `
       + 'the system in .omd/studio/system.json. The key visual first: the one visual that carries the page, made in code at large size from the '
       + 'product\'s real look (for software, its own interface recreated crisply in its real colours, marked data-product), playing the product\'s '
-      + 'real flow on its own (states change, rows arrive, a cursor works) and answering real input; a screen recording is not a key visual. Shoot it alone (omd render <page> --out <png>), look, and refine '
+      + 'real flow on its own (states change, rows arrive, a cursor works) and answering real input; a screen recording is not a key visual. A tool that makes pages shows a page it made for another, particular client, held to everything this page is: its own name chosen from several, words in the page\'s language, its own palette and art, nothing standing in for an image, no line calling it fictional. Shoot it alone (omd render <page> --out <png>), look, and refine '
       + 'until it could sit on the reference\'s site. Then the sections at the reference\'s rhythm and depth: the few stories that make the case '
       + '(the moments the project itself leads with), each at full size with its real demo (muted, looped, no player chrome) and a composition of '
       + 'its own, the remaining capabilities gathered densely in one place rather than each given the same block; compositions varied (a full-bleed '
