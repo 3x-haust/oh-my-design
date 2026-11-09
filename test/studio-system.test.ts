@@ -10,7 +10,7 @@ import test from 'node:test';
 import { PNG } from 'pngjs';
 import { composeGuidance } from '../core/design/compose-guidance.ts';
 import {
-  observeSystemDrift, readStudioSystem, requireStudioSystem, studioPageSource, studioPending, studioReferenceDepth, studioStudies,
+  observeSystemDrift, readStudioSystem, requireStudioSystem, requireStudioSystemHeld, studioPageSource, studioPending, studioReferenceDepth, studioStudies,
   coupletHeadings, pairedSlogan, requestPhrases, sectionRhythm, studioReferenceSections, studyStudioReferences, systemDriftFailures,
 } from '../core/design/studio.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
@@ -405,4 +405,36 @@ test('the build\'s sections are measured as the reference\'s and their rhythm is
   assert.doesNotMatch(systemDriftFailures(observations).join('\n'), /rhythm|words a screen/);
   assert.equal(sectionRhythm([], sections), null);
   assert.equal(sectionRhythm(studioReferenceSections(root), []), null);
+});
+
+test('the reference the page was first measured against is kept; the drift refusal carries the section rhythm', { timeout: 180_000 }, async t => {
+  const root = project(t);
+  study(root, 'https://www.raycast.com/', 'raycast-com');
+  study(root, 'https://www.raycast.com/developers', 'raycast-com-developers');
+  const shape = (height: number, largeMedia: number, words: number) => ({ top: 0, height, background: 'rgba(0, 0, 0, 0)', contentWidth: null, heading: '', largeMedia, words });
+  writeFileSync(join(root, '.omd/studio/refs/raycast-com/study.json'), JSON.stringify({ requested: 'https://www.raycast.com/', screens: 14,
+    sections: [shape(1800, 2, 40), shape(1800, 3, 30)] }));
+  writeFileSync(join(root, '.omd/studio/refs/raycast-com-developers/study.json'), JSON.stringify({ requested: 'https://www.raycast.com/developers', screens: 3 }));
+  const system = (reference: string) => writeFileSync(join(root, '.omd/studio/system.json'),
+    JSON.stringify({ reference, sizes: [48, 24, 18, 14], weights: [400, 600] }));
+  const page = join(root, 'index.html');
+  writeFileSync(page, '<!doctype html><body style="margin:0;font:400 18px Arial"><section style="height:900px"><h2 style="font:600 48px Arial">Plan</h2>'
+    + '<p>One two three four five</p></section><section style="height:900px"><h2 style="font:600 48px Arial">Why</h2></section></body>');
+  const landing = route('new-marketing', '이 프로젝트를 소개하는 웹사이트 만들어줘.');
+  system('https://www.raycast.com/');
+  // Test-343: a short page held against a 14-screen reference is refused, and the refusal sets its sections beside the reference's.
+  await assert.rejects(requireStudioSystemHeld(root, landing, page, plainWriter(root)),
+    (error: Error) => /STUDIO_SYSTEM_DRIFT: .*screens against the reference's 14/s.test(error.message)
+      && /section rhythm at desktop[^]*reference: 2\.0 picture 20w \| 2\.0 picture 15w[^]*this page: 1\.0 text/.test(error.message));
+  assert.deepEqual(JSON.parse(readFileSync(join(root, '.omd/studio/held.json'), 'utf8')), { reference: 'https://www.raycast.com/' });
+  // Naming a shorter page of the same company as the reference does not move the measure; nothing is rewritten.
+  system('https://www.raycast.com/developers');
+  await assert.rejects(requireStudioSystemHeld(root, landing, page, plainWriter(root)),
+    /STUDIO_REFERENCE_CHANGED: the page was first measured against https:\/\/www\.raycast\.com\/ .*now names https:\/\/www\.raycast\.com\/developers/s);
+  assert.deepEqual(JSON.parse(readFileSync(join(root, '.omd/studio/held.json'), 'utf8')), { reference: 'https://www.raycast.com/' });
+  // The same reference written differently is the same reference; the page is measured again.
+  system('https://www.raycast.com');
+  await assert.rejects(requireStudioSystemHeld(root, landing, page, plainWriter(root)), /STUDIO_SYSTEM_DRIFT/);
+  // Existing work is never held to a studio reference.
+  await requireStudioSystemHeld(root, route('existing-product'), page, plainWriter(root));
 });

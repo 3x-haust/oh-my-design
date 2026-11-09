@@ -21,6 +21,8 @@ type Route = ReturnType<typeof readPersistedRoute>;
 export const STUDIO_REFS_DIR = `${STUDIO_DIR}/refs`;
 export const STUDIO_SYSTEM_RECORD = `${STUDIO_DIR}/system.json`;
 export const STUDIO_SYSTEM_NOTES = `${STUDIO_DIR}/system.md`;
+/** The reference the page was first measured against; the page answers to it from then on. */
+export const STUDIO_HELD_RECORD = `${STUDIO_DIR}/held.json`;
 
 const STUDY_VIEWPORT = { width: 1440, height: 900 } as const;
 const STUDY_MAX_SCREENS = 14;
@@ -63,7 +65,8 @@ export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${
   + 'product visuals, hover timing; write the durations and curves you take. Then write '
   + `${STUDIO_SYSTEM_RECORD} as {"reference": "<primary url>", "sizes": [px...], "weights": [n...], "colors": [{"hex": "#rrggbb", "from": "<PNG or SVG `
   + 'in the project, or a studied reference url>"}...]}; every size and weight the page renders comes from it, and every accent from the family of a colour '
-  + 'sampled where its from says (a darker or lighter step of it for contrast is the same colour).';
+  + 'sampled where its from says (a darker or lighter step of it for contrast is the same colour). '
+  + 'The reference is chosen here, before the page, and kept while the page is built: the page answers to it, it is not swapped for one the page already meets.';
 
 export type StudioStudy = Readonly<{ url: string; dir: string; firstScreen: string; full: string; sha256: string }>;
 
@@ -802,19 +805,43 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
   return [...new Set(failures)];
 }
 
+/**
+ * The reference the page was first measured against, recorded then and kept. Test-343 met "3.8 screens against the reference's 14" by
+ * studying a shorter page of the same company and naming it the reference: a designer changes the page, not the measure.
+ */
+function heldReference(root: string, system: StudioSystem, writer: ProjectWriteAdapter | null): string | null {
+  const path = join(root, STUDIO_HELD_RECORD);
+  if (existsSync(path)) {
+    try {
+      const held: unknown = Reflect.get(JSON.parse(readFileSync(path, 'utf8')) as object, 'reference');
+      if (typeof held === 'string') return sameSite(held, system.reference) ? null : held;
+    } catch { /* an unreadable record is written again */ }
+  }
+  writer?.write(STUDIO_HELD_RECORD, `${JSON.stringify({ reference: system.reference })}\n`);
+  return null;
+}
+
 /** Refusal boundary at the first render and finish of a new page: it renders the system it promised. */
-export async function requireStudioSystemHeld(root: string, route: Route, target: string): Promise<void> {
+export async function requireStudioSystemHeld(root: string, route: Route, target: string, writer: ProjectWriteAdapter | null = null): Promise<void> {
   if (!newSurface(route)) return;
   const system = readStudioSystem(root);
   if (system === null) return;
+  const held = heldReference(root, system, writer);
+  if (held !== null) {
+    throw Object.assign(new Error(`STUDIO_REFERENCE_CHANGED: the page was first measured against ${held} and ${STUDIO_SYSTEM_RECORD} now names `
+      + `${system.reference}. The reference is chosen before the page and kept while it is built: change the page to answer what it names, `
+      + `not the reference it is measured against. Put ${held} back as the reference.`), { code: 'STUDIO_REFERENCE_CHANGED' });
+  }
   const landing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
-  const failures = systemDriftFailures(await observeSystemDrift(target, system, route.request), studioReferenceDepth(root), system.colors ?? [], landing);
+  const observations = await observeSystemDrift(target, system, route.request);
+  const failures = systemDriftFailures(observations, studioReferenceDepth(root), system.colors ?? [], landing);
   if (failures.length > 0) {
     const keyVisualFirst = landing ? 'Build the key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving '
       + 'with real input, marked data-product. ' : '';
+    const rhythm = landing ? sectionRhythm(studioReferenceSections(root), observations.find(item => item.viewport === 'desktop')?.sections ?? []) : null;
     throw Object.assign(new Error(`STUDIO_SYSTEM_DRIFT: the page leaves the system in ${STUDIO_SYSTEM_RECORD}. ${failures.join('; ')}. ${keyVisualFirst}`
       + 'Set each element in one of the system\'s sizes and weights (or widen the system in its notes when the reference really has that step); a link '
       + 'or button says where it goes in words, without arrow glyphs; a demo video plays muted and looped with no player chrome. A recreated '
-      + 'product interface marked data-product keeps its own sizes.'), { code: 'STUDIO_SYSTEM_DRIFT' });
+      + `product interface marked data-product keeps its own sizes.${rhythm === null ? '' : `\n${rhythm}`}`), { code: 'STUDIO_SYSTEM_DRIFT' });
   }
 }

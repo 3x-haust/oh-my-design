@@ -459,7 +459,7 @@ async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<nev
   requireStudioSystem(process.cwd(), route);
   const { requireStudioFloors } = await import('../../core/design/studio-floors.ts');
   await requireStudioFloors(process.cwd(), route, String(opts.page));
-  await requireStudioSystemHeld(process.cwd(), route, String(opts.page));
+  await requireStudioSystemHeld(process.cwd(), route, String(opts.page), projectWriter(invocation));
   const checked = await publishFirstRenderCheck(process.cwd(), opts.page, undefined, projectWriter(invocation), invocation);
   // The reviewer judges choreography from this observation; a capture failure leaves the review static, not blocked.
   const { captureFirstRenderMotion } = await import('../../core/design/first-render-motion.ts');
