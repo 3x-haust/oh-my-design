@@ -299,6 +299,17 @@
       "notWhen": "Precise comparison tables and lists where equal size ensures fairness and scan efficiency should stay uniform; never weaken a continuous task for decorative rhythm."
     },
     {
+      "id": "split-header-explainer",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "Section after section opens the same way: a large headline on the left and a small explanatory paragraph floating in the right column, aligned to nothing in the section below it, so every section reads as a headline plus its gloss and the page's middle becomes one repeated header.",
+      "ask": "What does the second column hold: the thing this section claims, or another sentence about it?",
+      "move": "Give the section one message. Put the one sentence the visitor needs directly under the headline, or cut it, and give the space beside the headline to the product, its output or an element the visitor can operate. Keep a two-column header only where both columns align with the content below and the second carries something to look at or use.",
+      "why": "A headline with a gloss beside it is the default section header of generated landing pages; repeated down a page it turns each section into the same explanation and leaves the picture of the product out of the place where the eye lands.",
+      "notWhen": "The second column carries a visual, a live control or a real figure; editorial articles whose standfirst is set as a deliberate deck under one masthead; a single section where the split is the page's one considered contrast."
+    },
+    {
       "id": "concept-in-structure",
       "surfaces": [
         "marketing"

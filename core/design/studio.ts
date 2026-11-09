@@ -72,7 +72,7 @@ export type StudioStudy = Readonly<{ url: string; dir: string; firstScreen: stri
 
 /** A section of a studied site or of the build, measured the same way so the two can be set side by side. */
 export type StudioSection = Readonly<{ top: number; height: number; background: string; contentWidth: number | null; heading: string; largeMedia: number;
-  words: number; product?: number; crop?: string }>;
+  words: number; product?: number; splitHeader?: boolean; crop?: string }>;
 
 type Measured = Readonly<{
   url: string; pageHeight: number; screens: number;
@@ -92,6 +92,20 @@ const measureSections = browserCallback((): readonly StudioSection[] => {
     return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0.05;
   };
   const large = (element: Element) => { const box = element.getBoundingClientRect(); return box.width * box.height > 60_000; };
+  // A headline with a small paragraph floating beside it and nothing to look at in that row: the generated section header.
+  const splitHeader = (section: Element) => {
+    const heading = [...section.querySelectorAll('h1,h2,h3')].find(visible);
+    if (heading === undefined) return false;
+    const head = heading.getBoundingClientRect(), top = head.top, bottom = head.bottom + 40;
+    const beside = (box: DOMRect) => box.left >= head.right - 4 && box.top < bottom && box.bottom > top;
+    const gloss = [...section.querySelectorAll('p')].filter(visible).some(paragraph => {
+      const box = paragraph.getBoundingClientRect();
+      return beside(box) && box.width < innerWidth * 0.5 && parseFloat(getComputedStyle(paragraph).fontSize) <= 20;
+    });
+    const picture = [...section.querySelectorAll('img,video,canvas,svg,picture,[data-product],input,textarea,button,summary,details')].filter(visible)
+      .some(media => { const box = media.getBoundingClientRect(); return beside(box) && box.width * box.height > 20_000; });
+    return gloss && !picture;
+  };
   const all = [...document.querySelectorAll('body *')].filter(visible);
   const pageHeight = document.documentElement.scrollHeight;
   const blocks = all.filter(element => { const box = element.getBoundingClientRect(); return box.width >= innerWidth * 0.8 && box.height >= 240 && box.height < pageHeight * 0.9; })
@@ -105,7 +119,7 @@ const measureSections = browserCallback((): readonly StudioSection[] => {
       heading: ([...element.querySelectorAll('h1,h2,h3')].find(visible)?.textContent ?? '').trim().slice(0, 60),
       largeMedia: [...element.querySelectorAll('img,video,canvas,svg,picture')].filter(visible).filter(large).length,
       product: element.closest('[data-product]') !== null && large(element) ? 1 : [...element.querySelectorAll('[data-product]')].filter(visible).filter(large).length,
-      words: ((element as HTMLElement).innerText ?? '').split(/\s+/).filter(Boolean).length });
+      words: ((element as HTMLElement).innerText ?? '').split(/\s+/).filter(Boolean).length, splitHeader: splitHeader(element) });
   }
   return sections;
 });
@@ -575,15 +589,16 @@ export function sectionRhythm(reference: readonly StudioSection[], page: readonl
   const screen = STUDY_VIEWPORT.height;
   const lead = (section: StudioSection) => (section.product ?? 0) > 0 ? 'product' : section.largeMedia > 0 ? 'picture' : 'text';
   const density = (section: StudioSection) => Math.round(section.words / Math.max(section.height / screen, 0.25));
-  const row = (section: StudioSection) => `${(section.height / screen).toFixed(1)} ${lead(section)} ${density(section)}w`;
+  const row = (section: StudioSection) => `${(section.height / screen).toFixed(1)} ${lead(section)} ${density(section)}w${section.splitHeader === true ? ' split' : ''}`;
   const summary = (sections: readonly StudioSection[]) => {
     const densities = sections.map(density).sort((a, b) => a - b);
+    const split = sections.filter(section => section.splitHeader === true).length;
     return `${sections.filter(section => lead(section) !== 'text').length} of ${sections.length} sections led by a picture or the product, `
-      + `${densities[Math.floor(densities.length / 2)]} words a screen at the median`;
+      + `${densities[Math.floor(densities.length / 2)]} words a screen at the median${split > 0 ? `, ${split} opening on a headline with a small paragraph beside it` : ''}`;
   };
-  return [`section rhythm at desktop, in screens of ${screen}px (height, what leads it, words a screen):`,
+  return [`section rhythm at desktop, in screens of ${screen}px (height, what leads it, words a screen; split: a headline with a small paragraph beside it):`,
     `  reference: ${reference.map(row).join(' | ')}`, `  this page: ${page.map(row).join(' | ')}`,
-    `  reference ${summary(reference)}; this page ${summary(page)}. Where they differ, look at the reference's section crops and change what leads each section, not the spacing.`].join('\n');
+    `  reference ${summary(reference)}; this page ${summary(page)}. Where they differ, look at the reference's section crops and change what leads each section, not the spacing; a split header gives the place beside the headline to a gloss instead of the product.`].join('\n');
 }
 
 const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, noise }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number;
@@ -800,7 +815,7 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     const couplets = coupletHeadings(headings);
     if (couplets.length > 0) failures.push(`${couplets.length} of ${headings.length} headings take one two-part shape ${couplets.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
       + 'read the headings in a row and let them differ the way a person explaining the product would: a plain statement of what happens, the command '
-      + 'typed, a number, the question the visitor has; keep one couplet at most');
+      + 'typed, a number, the question the visitor has, all in the one voice the page speaks; keep one couplet at most');
   }
   return [...new Set(failures)];
 }

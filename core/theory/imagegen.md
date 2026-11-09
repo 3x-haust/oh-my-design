@@ -120,6 +120,13 @@ atmospheric background may ship generated pixels (see above). A graphic that shi
   brand colours stay saturated. Set `window.__ready = true` after the first frame and render with
   `omd render --graphic`. A few objects that belong to this product, one leading, read as designed; a
   scatter of generic icons does not.
+- **Specify the object before modelling it, then build it in passes.** Write what makes this object
+  this one and no similar object: its silhouette and main parts, the joins, edges and repeated parts that
+  give it structure, and the surface marks that give it material (a glaze pooling at the foot, a worn edge,
+  a stitched seam). "Make the vessel look good" describes any vessel; "a squat bowl whose glaze thins to bare
+  clay at the rim and pools darker at the foot" describes one. Build in passes: blockout of the silhouette,
+  then form, then material, then light, rendering front and three-quarter views after each pass and
+  setting them beside the kept reference; move on only when the pass reads as that object.
 - **Show one moment, large.** Real material is cropped to the single moment that proves the claim —
   one log line, one review comment, one before/after pair — at a size where its text reads. A whole
   page or screen shrunk into a browser or phone frame is a thumbnail: its text dies, it repeats what
