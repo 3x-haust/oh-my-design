@@ -813,6 +813,17 @@
       "notWhen": "A still screenshot of the shipped product already shows the action clearly; documentation, pricing and comparison sections where text or tables carry the information; features with no visible mechanism and no output to show (a policy, a guarantee), where a plain statement is more honest than an invented scene. Never redraw an existing product's interface as a mock: show the real one."
     },
     {
+      "id": "shown-work-is-real-work",
+      "surfaces": [
+        "marketing"
+      ],
+      "look": "A tool that makes pages, apps or decks shows an example of its work that carries every tell its own page avoids: a soft stock name with its romanisation beside it, a tagline in another language than the page, a two-part headline, a blob or flower standing in for an image, products drawn as flat rectangles with their titles typed on, the classics everyone picks, the category's default cream, sage and terracotta, and a line calling it fictional.",
+      "ask": "Would this example pass as a real studio's work for one particular client, so a visitor believes the tool could make it for them?",
+      "move": "Make the example the way the page itself was made: a particular client with details of its own (where it is, what it sells that others do not, who goes there), a name chosen from several, its own reference and palette, real-feeling content specific to that client, and one idea only that client could have. Draw its things with the care of the page's key visual, show it at a size where its craft reads, and say once beside it, in the page's words, that it was made with the tool.",
+      "why": "Visitors judge a making tool by the work it shows. An example assembled from defaults tells them the tool produces defaults, however carefully the page around it is made.",
+      "notWhen": "The example is the user's own real project or a real client's shipped work; a tool whose output is not a designed surface (a linter, a database), where its real output is shown instead."
+    },
+    {
       "id": "annotation-kit-is-not-personality",
       "surfaces": [
         "marketing"

@@ -539,6 +539,8 @@ export type SystemDriftObservation = Readonly<{
   diagonals?: readonly string[];
   /** Short captions under media that certify it ("실제 사용 영상", "original logo"). */
   certifying?: readonly string[];
+  /** Text that runs past the edge of the box painted behind it, inside data-product too. */
+  spills?: readonly string[];
   /** Desktop only: the page's sections, measured as the reference's were, for the rhythm set beside the reference's. */
   sections?: readonly StudioSection[];
   /** Desktop only: the first screen holds a key visual built in code. */
@@ -601,7 +603,7 @@ export function sectionRhythm(reference: readonly StudioSection[], page: readonl
     `  reference ${summary(reference)}; this page ${summary(page)}. Where they differ, look at the reference's section crops and change what leads each section, not the spacing; a split header gives the place beside the headline to a gloss instead of the product.`].join('\n');
 }
 
-const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, noise }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number;
+const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, noise, SPILL_PX }: Readonly<{ sizes: readonly number[]; weights: readonly number[]; tolerance: number; SPILL_PX: number;
   phrases: readonly Readonly<{ text: string; key: string }>[]; noise: string }>): Omit<SystemDriftObservation, 'viewport'> => {
   const visible = (element: Element) => {
     const box = element.getBoundingClientRect(), style = getComputedStyle(element);
@@ -646,6 +648,31 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, nois
       return key.length >= 6 && framed.includes(key);
     });
   // Test-339 set ↙ and ↗ beside its income labels: a diagonal arrow reads as a link out wherever it sits.
+  // Test-344's example bookshop set "le petit prince" on a book cover too small for it: the words ran out past the cover's edge.
+  // Inside data-product too: a shown piece of work is held to the craft of the page around it.
+  const paints = (style: CSSStyleDeclaration) => {
+    const alpha = /rgba?\(([^)]+)\)/.exec(style.backgroundColor)?.[1]?.split(',')[3];
+    return (/rgba?\(/.test(style.backgroundColor) && Number(alpha ?? 1) > 0.5) || style.backgroundImage !== 'none';
+  };
+  const spills = [...document.querySelectorAll('body *')].filter(visible).flatMap(element => {
+    const nodes = [...element.childNodes].filter(node => node.nodeType === 3 && (node.textContent ?? '').trim().length > 1);
+    if (nodes.length === 0) return [];
+    // The nearest ancestor that paints a box; a clipping ancestor on the way means the text is cut, not spilled.
+    let box: Element | null = null;
+    for (let at: Element | null = element; at !== null && at !== document.body; at = at.parentElement) {
+      const style = getComputedStyle(at);
+      if (style.overflowX !== 'visible' || style.overflowY !== 'visible') break;
+      if (paints(style)) { box = at; break; }
+    }
+    if (box === null || box.getBoundingClientRect().width >= innerWidth - 2) return [];
+    const edge = box.getBoundingClientRect();
+    return nodes.filter(node => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const text = range.getBoundingClientRect();
+      return Math.max(edge.left - text.left, text.right - edge.right, edge.top - text.top, text.bottom - edge.bottom) > SPILL_PX;
+    }).map(node => (node.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40));
+  });
   const diagonals = texts.filter(element => /[↗↘↙↖]/.test([...element.childNodes].filter(node => node.nodeType === 3).map(node => node.textContent).join('')))
     .map(element => (element.parentElement?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40));
   // Test-340 captioned the README's demo video "프로젝트 README의 실제 사용 영상": a rule worn as a qualifier on the media it describes.
@@ -661,7 +688,7 @@ const observeDrift = browserCallback(({ sizes, weights, tolerance, phrases, nois
     return captions && /실제|원본|진짜|예시 데이터|샘플 데이터|\b(?:real|actual|original|genuine)\b/i.test(words);
   }).filter((element, _, all) => !all.some(other => other !== element && element.contains(other))).map(element => (element.textContent ?? '').replace(/\s+/g, ' ').trim());
   return { quoted: phrases.filter(phrase => body.includes(phrase.key)).map(phrase => phrase.text), selfFramed: [...new Set(selfFramed)],
-    diagonals: [...new Set(diagonals)].slice(0, 8), certifying: [...new Set(certifying)].slice(0, 8),
+    diagonals: [...new Set(diagonals)].slice(0, 8), certifying: [...new Set(certifying)].slice(0, 8), spills: [...new Set(spills)].slice(0, 8),
     offSystemSizes: [...offSizes.entries()].map(([size, text]) => ({ size, example: text })),
     offSystemWeights: [...offWeights.entries()].map(([weight, text]) => ({ weight, example: text })),
     arrows: [...new Set(arrows)].slice(0, 12), playerControls: [...document.querySelectorAll('video')].filter(video => visible(video) && video.controls).length,
@@ -759,7 +786,7 @@ export async function observeSystemDrift(target: string, system: StudioSystem, r
           sections: await page.evaluate(measureSections),
         };
         observations.push({ viewport, ...await page.evaluate(observeDrift, { sizes: system.sizes, weights: system.weights, tolerance: SIZE_TOLERANCE,
-          phrases: requestPhrases(request), noise: QUOTE_NOISE.source }), ...keyVisual, ...depth });
+          phrases: requestPhrases(request), noise: QUOTE_NOISE.source, SPILL_PX }), ...keyVisual, ...depth });
       } finally { await page.close(); }
     }
     return observations;
@@ -768,6 +795,9 @@ export async function observeSystemDrift(target: string, system: StudioSystem, r
     await resolved.close();
   }
 }
+
+/** How far past the edge of the box that paints it a line of text may reach before it reads as spilled (italic overhang stays inside). */
+const SPILL_PX = 6;
 
 /** Spacing, quotation marks and punctuation, ignored when a page is searched for the request's words. */
 const QUOTE_NOISE = /[\s"'“”‘’「」『』.,!?。，！？:;·…~-]/g;
@@ -787,7 +817,7 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
   const failures: string[] = [];
   const hues = palette.map(color => hsl(color.hex)).filter(color => color.saturation >= 0.2).map(color => color.hue);
   const inFamily = (hex: string) => hues.some(hue => Math.min(Math.abs(hue - hsl(hex).hue), 360 - Math.abs(hue - hsl(hex).hue)) <= ACCENT_HUE_TOLERANCE);
-  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], selfFramed = [], diagonals = [], certifying = [], ...shape } of observations) {
+  for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], selfFramed = [], diagonals = [], certifying = [], spills = [], ...shape } of observations) {
     // Depth, a key visual, an arriving first screen and scroll reveals describe a landing; an app is held to its system, not made into one.
     const { keyVisual, arrives, performs, screens, revealed } = landing ? shape : {};
     if (reference !== null && screens !== undefined && screens < reference.screens * DEPTH_SHARE) failures.push(`${viewport}: the page is ${screens} screens against the reference's ${reference.screens}: its depth comes from showing each thing at full size; give the stories the project leads with full-size sections with their real demos, each in an arrangement of its own as the reference varies them (a full-bleed demo, a pair, a cropped detail), gather the remaining capabilities densely, not more whitespace, and never one demo block repeated down the page`);
@@ -808,6 +838,8 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
       + 'a diagonal arrow reads as a link out; let the words, a sign or the colour carry direction');
     if (certifying.length > 0) failures.push(`${viewport}: captions certifying their media ${certifying.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
       + 'a caption names what is shown or says nothing; real, original and example are the maker\'s rules, not the visitor\'s information');
+    if (spills.length > 0) failures.push(`${viewport}: text runs out of its box ${spills.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
+      + 'set it to fit the box at this width (a shorter line, a smaller step of the system, a wider box), inside a shown example as much as on the page');
     if (selfFramed.length > 0) failures.push(`${viewport}: the key visual frames this page itself (it repeats ${selfFramed.slice(0, 2).map(text => `"${text}"`).join(', ')}): `
       + 'a page shown inside itself proves nothing; a tool that makes pages shows one it made for another brief, built fully at its own scale');
     const slogans = headings.filter(pairedSlogan);
