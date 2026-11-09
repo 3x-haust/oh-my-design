@@ -58,6 +58,11 @@ outside this table may be used only after confirming its shipped licence file is
 | Instrument Serif + Pretendard | Studios and portfolios; English display and italic accents | EN H 400/72/−.01em/1.05; KO H 600/40/1.3 | Small English body; faux 700 |
 | Fraunces + SUIT | Consumer and creative products; English display | Fraunces 600/64/1.1, `opsz` auto, compare `WONK` 0/1 | Requesting axes the shipped file lacks |
 
+Instrument Serif italic accents and Fraunces display are among the most recognised defaults of generated
+landing pages (with a cream ground and a terracotta accent they read as the template, not a choice). Use them
+only when the brand's own material asks for that voice, and say what in it does. Emphasise a word in a headline
+with the headline's own family (its italic or a heavier weight), not by dropping a word from another face into it.
+
 Pairings to avoid: rotating Pretendard, SUIT and Spoqa Han Sans Neo across one role (only adds metric
 noise); pairing a Korean serif and a Latin serif by name alone; habitual −0.04em on SUIT body;
 squeezing a mobile heading onto one line with extreme negative tracking; leaving ₩, brackets and the

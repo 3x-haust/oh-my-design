@@ -392,15 +392,23 @@ test('the build\'s sections are measured as the reference\'s and their rhythm is
   writeFileSync(page, '<!doctype html><body style="margin:0;font:400 18px Arial">'
     + `<section style="height:900px"><h2 style="font:600 48px Arial">Plan</h2><div data-product style="width:800px;height:500px;background:#ddd">${words(10)}</div></section>`
     + '<section style="height:900px"><h2 style="font:600 48px Arial">Look</h2><svg width="600" height="400"><rect width="600" height="400"/></svg></section>'
-    + `<section style="height:900px"><h2 style="font:600 48px Arial">Why</h2><p>${words(120)}</p></section></body>`);
+    + `<section style="height:900px"><h2 style="font:600 48px Arial">Why</h2><p>${words(120)}</p></section>`
+    // A headline with a small paragraph floating beside it, once with nothing else in that row and once beside a live control.
+    + '<section style="height:900px;display:flex;justify-content:space-between;align-items:flex-start"><h2 style="font:600 48px Arial;margin:0">Split</h2>'
+    + '<p style="width:400px;font:400 16px Arial;margin:0">A gloss on the headline.</p></section>'
+    + '<section style="height:900px;display:flex;justify-content:space-between;align-items:flex-start"><h2 style="font:600 48px Arial;margin:0">Ask</h2>'
+    + '<div style="width:500px"><p style="font:400 16px Arial;margin:0">Questions people ask.</p><details style="height:200px"><summary>How?</summary>Like this.</details></div></section></body>');
   const observations = await observeSystemDrift(page, { reference: 'https://quiet.tools', sizes: [48, 24, 18, 14], weights: [400, 600] });
   const sections = observations.find(item => item.viewport === 'desktop')!.sections!;
   assert.equal(observations.find(item => item.viewport === 'mobile')!.sections, undefined);
-  assert.deepEqual(sections.map(item => [item.heading, item.product, item.largeMedia > 0]), [['Plan', 1, false], ['Look', 0, true], ['Why', 0, false]]);
+  assert.deepEqual(sections.map(item => [item.heading, item.product, item.largeMedia > 0, item.splitHeader]),
+    [['Plan', 1, false, false], ['Look', 0, true, false], ['Why', 0, false, false], ['Split', 0, false, true], ['Ask', 0, false, false]]);
   const rhythm = sectionRhythm(studioReferenceSections(root), sections)!;
   assert.match(rhythm, /reference: 1\.0 picture 20w \| 2\.0 picture 20w \| 1\.0 text 30w/);
-  assert.match(rhythm, /this page: 1\.0 product \d+w \| 1\.0 picture \d+w \| 1\.0 text 1\d\dw/);
-  assert.match(rhythm, /reference 2 of 3 sections led by a picture or the product, 20 words a screen at the median; this page 2 of 3/);
+  assert.match(rhythm, /this page: 1\.0 product \d+w \| 1\.0 picture \d+w \| 1\.0 text 1\d\dw \|/);
+  assert.match(rhythm, /reference 2 of 3 sections led by a picture or the product, 20 words a screen at the median; this page 2 of 5/);
+  assert.match(rhythm, /1\.0 text \d+w split \|/);
+  assert.match(rhythm, /1 opening on a headline with a small paragraph beside it/);
   // The rhythm is information for the comparison, not a refusal.
   assert.doesNotMatch(systemDriftFailures(observations).join('\n'), /rhythm|words a screen/);
   assert.equal(sectionRhythm([], sections), null);
