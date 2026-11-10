@@ -109,9 +109,9 @@ code. The full contract is `protocol/domain-analysis.md`.
 ## Stack routing
 
 Default new web source to React + Vite + strict TypeScript, landings and marketing pages included,
-unless the user names another stack. Start it with `omd scaffold`, which copies the official Vite template
-into the route scope without touching material folders; hand-written `index.html`, Vite and TypeScript config
-drift apart and break the build. `core/guides/code.md` owns its folder layout and conventions. Write it the way a product team would review it: one component per
+unless the user names another stack. Start it from the official Vite React + TypeScript template's files, written into the route scope without
+touching material folders, so `index.html`, the Vite config and the TypeScript configs agree from the first
+build. `core/guides/code.md` owns its folder layout and conventions. Write it the way a product team would review it: one component per
 section or reusable part in its own file, styles beside the components that own them, constants and copy
 kept out of markup logic, a package manifest whose `dev`, `build`, `typecheck` and `test` scripts call the
 real toolchain (Vite, `tsc`, Vitest with Testing Library rendering the components) rather than hand-rolled build scripts or a

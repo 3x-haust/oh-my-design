@@ -45,6 +45,9 @@ const studied = (root: string, url: string) => {
   const image = new PNG({ width: 4, height: 4 });
   writeFileSync(join(dir, 'first-screen.png'), PNG.sync.write(image));
   writeFileSync(join(dir, 'full.png'), PNG.sync.write(image));
+  writeFileSync(join(root, '.omd/studio/concept.json'), JSON.stringify({ idea: 'The mark cast as one glass object that holds the page together.', object: 'a glass mark', from: 'mark',
+    claim: 'One quiet tool does the whole job.', devices: ['the glass returns as a section ground', 'a cropped edge divides the chapters'],
+    dropped: ['a paper bridge', 'two rings', 'a loom', 'a split stone', 'clay hands'].map(object => ({ object, because: 'any tool in the category could use it' })) }));
   writeFileSync(join(root, '.omd/studio/mark.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#2f5bd3"/></svg>');
   writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: url, sizes: [14, 18, 24, 32], weights: [400, 700],
     colors: [{ hex: '#2f5bd3', from: '.omd/studio/mark.svg' }] }));

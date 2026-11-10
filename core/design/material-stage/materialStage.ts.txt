@@ -1,0 +1,324 @@
+// Material stage: a lit product-photography set for one authored object.
+// You supply the shape (the real mark's SVG path, or any path the page's idea calls for) and the brand colour;
+// the stage supplies the studio environment, the material, tone mapping, soft shadows on the page's own paper,
+// an entrance, an idle and a rest state. Installed by `omd studio rig`; needs `three` (MIT) and `@types/three`.
+import * as THREE from 'three';
+import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+
+export type StageMaterial = 'glass' | 'clay' | 'porcelain' | 'ink-metal';
+
+export type StageShape = {
+  /** SVG path data (`d`), in any coordinate size; several subpaths and holes are kept. */
+  path: string;
+  material?: StageMaterial;
+  /** The object's colour; defaults to the stage colour. */
+  color?: string;
+  /** Thickness as a share of the shape's larger side (default 0.3). */
+  depth?: number;
+  /** Height in stage units after normalising (default 2). */
+  size?: number;
+  /** Where it rests, in stage units: x right, y up, z toward the camera. */
+  position?: [number, number, number];
+  /** Resting rotation in radians. */
+  rotation?: [number, number, number];
+};
+
+export type StageFrame = { t: number; idle: number; objects: readonly THREE.Group[]; camera: THREE.PerspectiveCamera };
+
+export type StageOptions = {
+  shapes: StageShape[];
+  /** The page's background colour: the stage renders exactly this, so the canvas has no visible edge. */
+  paper: string;
+  /** The brand colour, sampled from the project's real material. */
+  color: string;
+  material?: StageMaterial;
+  /** How the objects arrive: rising out of the paper, dropping in, or already there. */
+  entrance?: 'rise' | 'drop' | 'none';
+  /** What they do at rest. */
+  idle?: 'float' | 'turn' | 'none';
+  /** The camera leans a little with the pointer. */
+  pointer?: boolean;
+  /** Share of the shorter side of the canvas the objects fill (default 0.6). */
+  fill?: number;
+  /** Where the objects sit in the canvas, as shares of its width and height from the centre, for a wide and a tall canvas. */
+  offset?: { wide?: [number, number]; tall?: [number, number] };
+  /** Your choreography: runs every frame after the built-in motion, with seconds since arrival. */
+  onFrame?: (frame: StageFrame) => void;
+};
+
+export type MaterialStage = { objects: readonly THREE.Group[]; scene: THREE.Scene; render: () => void; dispose: () => void };
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+export const ease = {
+  outQuint: (t: number) => 1 - Math.pow(1 - clamp01(t), 5),
+  inOutCubic: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
+};
+/** Progress of t through [from, from + duration]. */
+export const span = (t: number, from: number, duration: number) => clamp01((t - from) / duration);
+/** A damped spring's answer to a step at 0: reaches 1 with a little overshoot. */
+export function spring(t: number, frequency = 1.6, damping = 0.5) {
+  if (t <= 0) return 0;
+  const w = 2 * Math.PI * frequency;
+  return 1 - Math.exp(-damping * w * t) * Math.cos(w * Math.sqrt(1 - damping * damping) * t);
+}
+
+/** A photographer's studio as the environment: grey sweep, a big softbox upper left, strip lights for the rims, a warm bounce. */
+function studioEnvironment(renderer: THREE.WebGLRenderer) {
+  const set = new THREE.Scene();
+  set.add(new THREE.Mesh(new THREE.SphereGeometry(20, 32, 16), new THREE.MeshBasicMaterial({ color: '#8d8a86', side: THREE.BackSide })));
+  const panel = (width: number, height: number, color: string, power: number, position: [number, number, number]) => {
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(power), side: THREE.DoubleSide }));
+    mesh.position.set(...position);
+    mesh.lookAt(0, 0, 0);
+    set.add(mesh);
+  };
+  panel(9, 7, '#ffffff', 5.5, [-8, 9, 7]);
+  panel(1.4, 14, '#ffffff', 7, [11, 2, -2]);
+  panel(1.2, 12, '#ffffff', 4, [-11, 1, -5]);
+  panel(10, 3, '#ffe2c4', 1.6, [0, -6, 9]);
+  panel(6, 3, '#ffffff', 2.5, [3, 10, -9]);
+  panel(12, 4, '#ffffff', 3.2, [1, 9, 13]);
+  panel(14, 5, '#ffffff', 2.2, [-5, -2.2, 13.5]);
+  panel(2, 12, '#ffffff', 6, [6, -1, -10]);
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const texture = pmrem.fromScene(set, 0.02).texture;
+  pmrem.dispose();
+  return texture;
+}
+
+/** Khronos PBR Neutral tone map for one linear colour, inverted below so the backdrop comes out as the exact paper. */
+function neutral(color: [number, number, number]): [number, number, number] {
+  const start = 0.76, desaturation = 0.15;
+  let [r, g, b] = color;
+  const low = Math.min(r, g, b);
+  const offset = low < 0.08 ? low - 6.25 * low * low : 0.04;
+  r -= offset; g -= offset; b -= offset;
+  const peak = Math.max(r, g, b);
+  if (peak < start) return [r, g, b];
+  const d = 1 - start;
+  const next = 1 - (d * d) / (peak + d - start);
+  r *= next / peak; g *= next / peak; b *= next / peak;
+  const k = 1 - 1 / (desaturation * (peak - next) + 1);
+  return [r + (next - r) * k, g + (next - g) * k, b + (next - b) * k];
+}
+function beforeToneMap(hex: string) {
+  const target = new THREE.Color(hex);
+  const want: [number, number, number] = [target.r, target.g, target.b];
+  const value: [number, number, number] = [...want];
+  for (let i = 0; i < 200; i++) {
+    const out = neutral(value);
+    for (let k = 0; k < 3; k++) value[k] = value[k]! + (want[k]! - out[k]!) * 0.8;
+  }
+  return new THREE.Color(value[0], value[1], value[2]);
+}
+
+function material(kind: StageMaterial, hex: string): THREE.MeshPhysicalMaterial {
+  const color = new THREE.Color(hex);
+  if (kind === 'glass') {
+    // Coloured glass reads by its depth of colour: light is absorbed over a short distance, so thick parts go deep and edges stay bright.
+    return new THREE.MeshPhysicalMaterial({ color: new THREE.Color('#ffffff').lerp(color, 0.18), transmission: 1, thickness: 2.4, ior: 1.52, roughness: 0.06,
+      clearcoat: 1, clearcoatRoughness: 0.02, attenuationColor: color, attenuationDistance: 0.38, specularIntensity: 1, envMapIntensity: 2.1 });
+  }
+  if (kind === 'clay') return new THREE.MeshPhysicalMaterial({ color, roughness: 0.82, sheen: 0.6, sheenRoughness: 0.7, sheenColor: color.clone().lerp(new THREE.Color('#ffffff'), 0.6), envMapIntensity: 0.75 });
+  if (kind === 'porcelain') return new THREE.MeshPhysicalMaterial({ color, roughness: 0.36, clearcoat: 0.8, clearcoatRoughness: 0.2, envMapIntensity: 1 });
+  // Ink metal: near-black with a breath of the brand colour, read through its reflections of the studio.
+  return new THREE.MeshPhysicalMaterial({ color: new THREE.Color('#101012').lerp(color, 0.1), metalness: 1, roughness: 0.24, clearcoat: 0.7, clearcoatRoughness: 0.12, envMapIntensity: 1.8 });
+}
+
+/** Extrude an SVG path into a centred object of the asked height, edges rounded so they catch a highlight. */
+function extrude(shape: StageShape, kind: StageMaterial, hex: string): THREE.Group {
+  const parsed = new SVGLoader().parse(`<svg xmlns="http://www.w3.org/2000/svg"><path d="${shape.path}"/></svg>`);
+  const shapes = parsed.paths.flatMap(path => SVGLoader.createShapes(path));
+  if (shapes.length === 0) throw new Error('material stage: the path has no closed shape to extrude');
+  const flat = new THREE.ShapeGeometry(shapes);
+  flat.computeBoundingBox();
+  const bounds = flat.boundingBox!;
+  const side = Math.max(bounds.max.x - bounds.min.x, bounds.max.y - bounds.min.y);
+  flat.dispose();
+  const bevel = side * 0.035;
+  const geometry = new THREE.ExtrudeGeometry(shapes, { depth: side * (shape.depth ?? 0.3), curveSegments: 48, bevelEnabled: true, bevelThickness: bevel,
+    bevelSize: bevel, bevelOffset: -bevel, bevelSegments: 10 });
+  geometry.center();
+  const mesh = new THREE.Mesh(geometry, material(kind, hex));
+  // SVG's y axis points down; flipping at the mesh keeps the faces the right way out.
+  const height = bounds.max.y - bounds.min.y;
+  const scale = (shape.size ?? 2) / height;
+  mesh.scale.set(scale, -scale, scale);
+  mesh.castShadow = kind !== 'glass';
+  mesh.receiveShadow = true;
+  const group = new THREE.Group();
+  group.add(mesh);
+  if (kind === 'glass') group.add(tintedShadow(hex, shape.size ?? 2));
+  return group;
+}
+
+/** Light that has passed through glass lands coloured: a soft patch of the glass's colour on the paper behind it. */
+function tintedShadow(hex: string, size: number): THREE.Mesh {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 256;
+  const context = canvas.getContext('2d')!;
+  const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.7)');
+  gradient.addColorStop(0.45, 'rgba(255,255,255,0.3)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 256, 256);
+  const patch = new THREE.Mesh(new THREE.PlaneGeometry(size * 1.5, size * 1.5),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), color: hex, transparent: true, depthWrite: false, toneMapped: false }));
+  patch.userData.tintedShadow = true;
+  return patch;
+}
+
+export function createMaterialStage(canvas: HTMLCanvasElement, options: StageOptions): MaterialStage {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // ?t=1.2 holds the stage at that second, to look at the entrance frame by frame.
+  const held = new URLSearchParams(location.search).get('t');
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.VSMShadowMap;
+
+  const scene = new THREE.Scene();
+  scene.environment = studioEnvironment(renderer);
+  scene.environmentIntensity = 0.75;
+  scene.background = beforeToneMap(options.paper);
+  const key = new THREE.DirectionalLight('#fff3e4', 1.3);
+  key.position.set(-3.5, 6.5, 14);
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.radius = 6;
+  key.shadow.blurSamples = 16;
+  key.shadow.bias = -0.0004;
+  Object.assign(key.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: 1, far: 50 });
+  scene.add(key, new THREE.HemisphereLight('#ffffff', '#f2efea', 1.1));
+  // The paper behind the objects: it shows only the shadows that fall on it, so the page's colour stays exact.
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(80, 60), new THREE.ShadowMaterial({ opacity: 0.3 }));
+  wall.receiveShadow = true;
+  scene.add(wall);
+
+  const lightDirection = key.position.clone().normalize().negate();
+  const objects = options.shapes.map(shape => {
+    const kind = shape.material ?? options.material ?? 'porcelain';
+    const group = extrude(shape, kind, shape.color ?? options.color);
+    const [x, y, z] = shape.position ?? [0, 0, 0.9];
+    group.userData.home = new THREE.Vector3(x, y, Math.max(z, 0.2));
+    group.userData.turn = new THREE.Euler(...(shape.rotation ?? [0.1, 0.14, -0.04]));
+    for (const child of group.children) {
+      if (child.userData.tintedShadow === true) child.userData.reach = Math.max(z, 0.2);
+    }
+    scene.add(group);
+    return group;
+  });
+
+  const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 200);
+  const target = new THREE.Vector3();
+  const extent = new THREE.Box3();
+  for (const group of objects) extent.union(new THREE.Box3().setFromObject(group.children[0]!).translate(group.userData.home as THREE.Vector3));
+  const radius = Math.max(extent.getSize(new THREE.Vector3()).length() / 2, 1);
+  extent.getCenter(target);
+
+  const frameTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+  const composer = new EffectComposer(renderer, frameTarget);
+  composer.addPass(new RenderPass(scene, camera));
+  // The threshold sits above the paper's brightness, so only highlights on the object bloom and the page stays flat.
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.3, 1.5));
+  composer.addPass(new OutputPass());
+
+  let distance = 12;
+  const layout = () => {
+    const width = Math.max(canvas.clientWidth, 1), height = Math.max(canvas.clientHeight, 1);
+    renderer.setSize(width, height, false);
+    composer.setPixelRatio(renderer.getPixelRatio());
+    composer.setSize(width, height);
+    const tall = height > width;
+    camera.aspect = width / height;
+    camera.fov = tall ? 34 : 26;
+    const fill = options.fill ?? 0.6;
+    const vertical = THREE.MathUtils.degToRad(camera.fov) / 2;
+    const narrow = Math.atan(Math.tan(vertical) * Math.min(camera.aspect, 1));
+    distance = radius / Math.sin(narrow) / Math.max(fill, 0.2) * 0.72;
+    const [dx, dy] = (tall ? options.offset?.tall : options.offset?.wide) ?? [0, 0];
+    camera.setViewOffset(width, height, -dx * width, dy * height, width, height);
+    camera.updateProjectionMatrix();
+  };
+
+  const pointer = { x: 0, y: 0, sx: 0, sy: 0 };
+  const onPointer = (event: PointerEvent) => { pointer.x = (event.clientX / innerWidth) * 2 - 1; pointer.y = (event.clientY / innerHeight) * 2 - 1; };
+  if (options.pointer !== false && !reduced) window.addEventListener('pointermove', onPointer);
+
+  const pose = (t: number) => {
+    const idle = reduced ? 0 : clamp01(t - 1.8);
+    objects.forEach((group, index) => {
+      const home = group.userData.home as THREE.Vector3, turn = group.userData.turn as THREE.Euler;
+      const at = t - 0.15 - index * 0.12;
+      const arrive = options.entrance === 'none' ? 1 : spring(at, 1.15, 0.55);
+      group.position.copy(home);
+      if (options.entrance === 'drop') group.position.y += (1 - arrive) * 3;
+      else group.position.z = home.z * arrive;
+      group.scale.setScalar(options.entrance === 'none' ? 1 : Math.max(1e-3, ease.outQuint(span(at, 0, 0.7))));
+      const float = options.idle === 'none' ? 0 : idle;
+      group.position.y += Math.sin(t * 1.05 + index * 1.7) * 0.07 * float;
+      group.rotation.set(turn.x * arrive + Math.sin(t * 0.8 + index) * 0.03 * float,
+        turn.y * arrive + (options.idle === 'turn' ? Math.sin(t * 0.45 + index) * 0.5 : Math.sin(t * 0.5 + index) * 0.07) * float, turn.z * arrive);
+      for (const child of group.children) {
+        if (child.userData.tintedShadow !== true) continue;
+        // Keep the coloured light on the paper, slid along the key light, facing the camera whatever the object does.
+        const reach = group.position.z;
+        child.position.set(lightDirection.x * reach * 0.6, lightDirection.y * reach * 0.6, -reach + 0.01);
+        child.quaternion.copy(group.quaternion).invert();
+        ((child as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = clamp01(arrive) * 0.8;
+      }
+    });
+    pointer.sx += (pointer.x - pointer.sx) * 0.04;
+    pointer.sy += (pointer.y - pointer.sy) * 0.04;
+    camera.position.set(target.x + distance * 0.3 + pointer.sx * 0.7 * idle, target.y + distance * 0.1 - pointer.sy * 0.4 * idle, target.z + distance * 0.9);
+    camera.lookAt(target);
+    options.onFrame?.({ t, idle, objects, camera });
+  };
+
+  let start = -1, raf = 0, visible = true, stamped = -1;
+  const render = () => composer.render();
+  const frame = (now: number) => {
+    if (start < 0) start = now;
+    const t = reduced ? 30 : held !== null ? Number(held) : (now - start) / 1000;
+    pose(t);
+    render();
+    // The stage's clock, readable from CSS and from outside: type and page motion can keep time with the object.
+    if (Math.floor(t * 4) !== stamped) { stamped = Math.floor(t * 4); canvas.style.setProperty('--stage-t', t.toFixed(2)); }
+    if (!reduced && held === null && visible) raf = requestAnimationFrame(frame);
+  };
+  const onResize = () => { layout(); if (reduced || held !== null) requestAnimationFrame(frame); };
+  window.addEventListener('resize', onResize);
+  const watcher = new IntersectionObserver(entries => {
+    const now = entries.some(entry => entry.isIntersecting);
+    if (now && !visible) { visible = true; raf = requestAnimationFrame(frame); } else visible = now;
+  });
+  watcher.observe(canvas);
+  layout();
+  raf = requestAnimationFrame(frame);
+
+  return {
+    objects, scene, render,
+    dispose() {
+      cancelAnimationFrame(raf);
+      watcher.disconnect();
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('pointermove', onPointer);
+      scene.traverse(node => {
+        if (!(node instanceof THREE.Mesh)) return;
+        node.geometry.dispose();
+        for (const item of Array.isArray(node.material) ? node.material : [node.material]) item.dispose();
+      });
+      scene.environment?.dispose();
+      frameTarget.dispose();
+      renderer.dispose();
+    },
+  };
+}

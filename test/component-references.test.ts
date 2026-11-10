@@ -112,13 +112,13 @@ test('the compose step names the copy, layout and motion knowledge for a landing
     sourceContract: { referenceDiscovery: { taskNeed } } }) as unknown as Parameters<typeof composeGuidance>[0];
   // A landing built to a Figma target is not a studio page; it still gets the copy, layout and composition knowledge.
   const landing = composeGuidance(route('new-marketing', '이 피그마대로 랜딩 페이지 만들어줘 https://www.figma.com/design/AbC123/Site?node-id=1-2'));
-  for (const pack of ['omd scaffold', 'theory/web-copy.md', 'theory/voice.md', 'theory/layout.md', 'composition/typographic-hero.md', 'theory/typography-korean.md']) {
+  for (const pack of ['guides/code.md', 'theory/web-copy.md', 'theory/voice.md', 'theory/layout.md', 'composition/typographic-hero.md', 'theory/typography-korean.md']) {
     assert.ok(landing.includes(pack), pack);
   }
   // A new page builds its picked concept and goes to finish; no hero-only review round, no composition catalogue.
   const studio = composeGuidance(route('new-marketing', '이 프로젝트를 소개하는 랜딩 페이지 만들어줘'));
-  assert.ok(studio.includes('omd scaffold') && studio.includes('system.json') && studio.includes('omd lifecycle finish'));
+  assert.ok(studio.includes('guides/code.md') && !studio.includes('omd scaffold') && studio.includes('system.json') && studio.includes('omd lifecycle finish'));
   assert.ok(!studio.includes('composition/') && !studio.includes('first-render check') && studio.includes('typography-korean'));
   const product = composeGuidance(route('existing-product-change', 'Add a settings page', 'existing'));
-  assert.ok(product.includes('theory/ux.md') && !product.includes('omd scaffold') && !product.includes('typography-korean'));
+  assert.ok(product.includes('theory/ux.md') && !product.includes('guides/code.md') && !product.includes('typography-korean'));
 });

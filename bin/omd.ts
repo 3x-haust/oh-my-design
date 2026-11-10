@@ -34,9 +34,8 @@ async function main(): Promise<never> {
   }
   if (command === 'taste') return (await import('./commands/taste.ts')).runTaste(args);
   if (command === 'studio') return (await import('./commands/studio.ts')).runStudio(args);
-  if (command === 'scaffold') return (await import('./commands/scaffold.ts')).runScaffold(args);
-  if (command === 'brief') return (await import('./commands/scaffold.ts')).runBrief(args);
-  if (command === 'imagegen') return (await import('./commands/scaffold.ts')).runImagegen(args);
+  if (command === 'brief') return (await import('./commands/brief.ts')).runBrief(args);
+  if (command === 'imagegen') return (await import('./commands/brief.ts')).runImagegen(args);
   if (['pack', 'doctor', 'browser', 'coach', 'learn', 'usage', 'hash'].includes(command)) {
     return (await import('./commands/tooling.ts')).runTooling(args);
   }

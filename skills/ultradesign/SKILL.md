@@ -17,12 +17,11 @@ for a new product; validate, classify, then run `omd stage next --json` for the 
 Inspect the actual project and full request before choosing the work; never ask which mode to use.
 
 - **No product source yet (files to read are material):** greenfield. Build the complete requested product from
-  scratch (route `projectMode: greenfield`): start with `omd scaffold` (the official React + Vite + strict
-  TypeScript template), structured per `guides/code.md`. Inspect strong references before inventing a direction.
+  scratch (route `projectMode: greenfield`): React + Vite + strict TypeScript from the official
+  Vite template, structured per `guides/code.md`. Inspect strong references before inventing a direction.
 - **Existing project:** read its stack, routes, components, tokens and current renders first, then do
   what the request actually asks. A new feature or surface extends the existing system. A redesign
-  first captures the current desktop/mobile screens as the baseline, keeps every function, route
-  and data contract, and changes the visual and structural system. A fix stays local. Do not
+  follows the redesign track below. A fix stays local. Do not
   restyle untouched areas, replace the stack or drop behavior unless the request says so.
 - **Figma link in the request:** the frames are the target. Follow `omd pack guides/figma.md`.
   After implementation, repeat `omd figma diff <frame-id> <page> --json` then
@@ -36,32 +35,41 @@ Inspect the actual project and full request before choosing the work; never ask 
   compare them, not only the resting screen.
 
 Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`,
-`guides/figma.md`, `guides/copy.md`, `guides/code.md`, `guides/landing-basics.md` (basics designers keep), `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
+`guides/figma.md`, `guides/copy.md`, `guides/code.md`, `guides/landing-basics.md`, `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
 
-## New pages: work like a designer
+## New work: one method, three tracks
 
-A new product or landing (taskNeed `new-product` or `new-marketing`) follows this section, "Words, type, and
-flow" and the graphic bullet only. The rest of this file (reference ledgers, `ref context`, cases and judgments,
-lifecycle manifests, feedback reports) is for existing work. Spend the time building, looking and cutting.
-1. Truth: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom, its
-   personality (logo, README voice), the one message (what it does, for whom, in concrete words, not two parallel clauses), the user's exact asks word for word. List every documented
-   capability with the demo that shows it: the page's material. Keep the README's logo and all not asked away. An empty project has no logo or voice: list names, choose one
-   a person would remember, never your first or the category's stock word; say its character.
-2. Study: name the project's character from its own material, look broadly for sites sharing it (not the
-   category's best-known site), study two or three with `omd studio refs <url>... --json`.
-3. System: borrow ONE site's measured system in `.omd/studio/system.md` (type ramp, at most three weights,
-   rhythm, product framing, motion, its signature) with identity from the project's logo and voice (empty project: from a reference outside the category that
-   carries the character, never a competitor's colours), carrying at
-   least one of its devices (ground, typeface character, colour blocks, illustration) in this project's material, and
-   `.omd/studio/system.json` `{"reference", "sizes", "weights", "colors"}`, colours sampled from real images.
-   Concept: two or three first-screen page ideas (`omd imagegen --kind page`), truly different compositions;
-   choose one before writing source.
-4. Key visual first: the product's real look made in code (`data-product`), large and crisp, playing its real
-   flow on its own; never a recording. Look at it alone and refine until it could sit on the reference.
-5. Build at the reference's rhythm and depth, compositions varied, real logo in the header. Subtract with
-   `omd studio check`, which measures your sections beside the reference's; fix the biggest differences, three passes at most.
-6. Finish: `omd lifecycle finish --json` builds, measures logo, 3D and system on the real page and compares the
-   render once with the reference. Answer what it names once, structure first, and finish again.
+New work (taskNeed `new-product`, `new-marketing`) and redesigns follow this section and "Words, type, and flow";
+the rest of this file is for other existing work. Make, look, compare with captured originals, choose yourself.
+Truth first, always: read the project, README first, and write `.omd/studio/brief.md`: what it really does, for whom,
+its personality (logo, README voice), the one message in concrete words, the user's exact asks, every
+capability with its demo. Keep the README's logo. An empty project: choose a memorable name,
+not the category's stock word.
+
+**Marketing page** (`omd pack guides/marketing.md`):
+1. Idea before any reference: `.omd/studio/concept.json`, one visual idea only this project could own, from its
+   name, mark, mechanism or material, kept from six or more rough ideas that differ in what the object IS.
+2. References by job: layout rhythm (primary), material and light, type. `omd studio refs <url>... --json`, look
+   at the captures, `omd studio blueprint` for the primary's skeleton. Then `.omd/studio/system.md` and
+   `system.json` `{"reference", "sizes", "weights", "colors"}`, colours sampled from real images, and two or
+   three first-screen ideas (`omd imagegen --kind page`).
+3. Key asset first, alone: the idea made in code inside `data-product`, large, moving by itself; no recording.
+   An object: `omd studio rig` (`guides/material-stage.md`). Refine it against a crop of the bar before any page.
+4. Compose the page around the asset: type and graphic interlock, the device returns down the page, sections at
+   the reference's rhythm with varied composition, real logo in the header.
+5. Add detail (states, motion choreography, type refinement), then subtract. `omd studio look` sets the build
+   beside the reference; `omd studio check` names defects and the defaults the page leaves. A default the idea
+   breaks on purpose goes in `system.json` `"deviations"` with its reason, then applied everywhere.
+6. `omd lifecycle finish --json`; answer what it names, structure first.
+
+**Multi-screen product** (`omd pack guides/product.md`): object model and flows first; study populated task
+screens for density and component craft; one system file every screen obeys; a screen inventory with empty,
+loading, error, success states and realistic data; `omd studio check --mode product <screen>...` until one
+role is built one way everywhere.
+
+**Redesign** (`omd pack guides/redesign.md`): `omd studio baseline <url>...` on every existing screen; write
+`.omd/studio/ledger.json` (what is kept: equity, routes, behaviour, data contracts; what changes and why);
+rebuild; `omd studio check --mode redesign` sets old beside new and fails a lost control or route.
 
 ## Words, type, and flow ship with the pixels
 

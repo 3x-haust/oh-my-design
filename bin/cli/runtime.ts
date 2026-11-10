@@ -162,6 +162,7 @@ export interface Opts {
   production?: string;
   /** Page to compare against the committed tokens (`omd tokens check --page <page>`). */
   page?: string;
+  origin?: string;
   /** Optional native view-state input for a translated feedback destination. */
   state?: string;
   /** Lighthouse report path for `omd award score --lighthouse <report.json>`. */

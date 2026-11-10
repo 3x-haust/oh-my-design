@@ -6,10 +6,10 @@ can add a section or a page without moving everything else. Build only what this
 
 ## Layout
 
-Start with `omd scaffold`: it runs the official Vite React + TypeScript template in a temporary folder and
-copies the files the route allows into the project, never replacing or deleting anything (`npm create vite`
-with `--overwrite` empties a non-empty folder, material included). Do not hand-write `index.html`,
-`vite.config.ts` or the tsconfig files. Then replace the template demo and keep its conventions:
+Start from the official Vite React + TypeScript template: run `npm create vite@latest <tmp> -- --template react-ts`
+in a temporary folder outside the project and copy its files in, never replacing or deleting anything
+(`npm create vite` with `--overwrite` empties a non-empty folder, material included). Keep its `index.html`,
+`vite.config.ts` and tsconfig files as generated, set `strict` on, then replace the template demo and keep its conventions:
 
 ```text
 index.html

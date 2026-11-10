@@ -6,6 +6,7 @@ import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts
 import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
+import { STUDIO_IDEA_GUIDANCE } from '../design/studio-concept.ts';
 import { STUDIO_CONCEPT_GUIDANCE, STUDIO_STUDY_GUIDANCE, STUDIO_SYSTEM_GUIDANCE, studioPending } from '../design/studio.ts';
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import { newSurface } from '../design/new-surface-advisories.ts';
@@ -78,10 +79,10 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     return {
       ...base(routeSha256),
       stage: 'concepts',
-      action: studio === 'study' ? 'study-studio-references' : studio === 'system' ? 'write-studio-system' : 'draw-page-ideas',
-      next: studio === 'study' ? 'omd studio refs <url> <url> --json' : studio === 'system' ? 'omd guard production --json'
+      action: studio === 'idea' ? 'decide-visual-idea' : studio === 'study' ? 'study-studio-references' : studio === 'system' ? 'write-studio-system' : 'draw-page-ideas',
+      next: studio === 'idea' ? 'omd guard production --json' : studio === 'study' ? 'omd studio refs <url> <url> --json' : studio === 'system' ? 'omd guard production --json'
         : 'omd imagegen --kind page --name hero-1 --prompt "<composition>"',
-      instruction: studio === 'study' ? STUDIO_STUDY_GUIDANCE : studio === 'system' ? STUDIO_SYSTEM_GUIDANCE : STUDIO_CONCEPT_GUIDANCE,
+      instruction: studio === 'idea' ? STUDIO_IDEA_GUIDANCE : studio === 'study' ? STUDIO_STUDY_GUIDANCE : studio === 'system' ? STUDIO_SYSTEM_GUIDANCE : STUDIO_CONCEPT_GUIDANCE,
     };
   }
   // Until the first render exists, the work is composing the page; name the knowledge for that.
