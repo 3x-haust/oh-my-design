@@ -121,7 +121,7 @@ test('write classification rejects traversal and symlink escapes and read comman
   symlinkSync(external, join(root, '.omd/.cache'));
   for (const path of ['../outside', '.omd/.cache/route-input.json']) assert.equal(classifyPiWrite(root, path).kind, 'blocked');
   // A new page's designer writes its own notes and system; the studies and the delivery stay CLI-published.
-  for (const path of ['.omd/studio/system.json', '.omd/studio/system.md', '.omd/studio/brief.md', '.omd/studio/no-logo'])
+  for (const path of ['.omd/studio/system.json', '.omd/studio/concept.json', '.omd/studio/ledger.json', '.omd/studio/system.md', '.omd/studio/brief.md', '.omd/studio/no-logo'])
     assert.equal(classifyPiWrite(root, path).kind, 'authoring', path);
   for (const path of ['.omd/studio/delivery.json', '.omd/studio/refs/quiet-tools/study.json']) assert.equal(classifyPiWrite(root, path).kind, 'blocked', path);
   for (const command of ['pwd', 'ls -al', 'git status --short']) assert.equal(isPreproductionReadCommand(command), true);
