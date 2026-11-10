@@ -73,8 +73,8 @@ export function classifyPiWrite(root: string, input: unknown): WriteClassificati
     return { kind: 'blocked', path, reason: 'host-published study artifact; use omd study with an authored input, not direct writes' };
   }
   // Studio sketches and notes are authored directly; their renders and records are CLI-owned.
-  // A new page's notes, its system and the no-logo marker are the designer's own record; refs and delivery stay CLI-published.
-  if (/^\.omd\/studio\/(?:[a-z0-9-]+\.md|system\.json|no-logo)$/.test(path)) return { kind: 'authoring', path };
+  // A new page's notes, its idea, its system, a redesign's keep/change ledger and the no-logo marker are the designer's own record; refs and delivery stay CLI-published.
+  if (/^\.omd\/studio\/(?:[a-z0-9-]+\.md|system\.json|concept\.json|ledger\.json|no-logo)$/.test(path)) return { kind: 'authoring', path };
   // Inputs and directly authored documents only. CLI-owned pointers, authority, research receipts,
   // check history, final evidence, and locks cannot be hand-written to make a gate turn green.
   if (/^\.omd\/(?:\.cache\/|docs\/)/.test(path)
