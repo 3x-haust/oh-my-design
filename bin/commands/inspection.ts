@@ -85,7 +85,7 @@ async function cmdRender(opts: Opts): Promise<never> {
 
   if (opts.graphic) {
     // A graphic built in code becomes a shipped image: 2x pixels, optionally one element, optionally
-    // with a transparent background. Generated images are ideation only; this is the production path.
+    // with a transparent background. A chosen generated asset ships through omd studio asset instead.
     const { renderGraphic } = await import('../../core/render/index.ts');
     const out = opts.out ?? 'graphic.png';
     const adapter = projectWriterFromActivation(opts, 'omd render');

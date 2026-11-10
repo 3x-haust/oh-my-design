@@ -26,7 +26,8 @@ test('an idea image lands in the design record with its prompt, numbered per sec
   assert.deepEqual([first.path, second.path], ['.omd/ideas/hero-1.png', '.omd/ideas/hero-2.png']);
   assert.equal(readFileSync(join(root, first.path), 'utf8'), 'image 1');
   assert.deepEqual(JSON.parse(readFileSync(join(root, '.omd/ideas/hero-1.json'), 'utf8')).references, ['kept.png']);
-  assert.match(seen[0]!.instruction, /will not ship[\s\S]*kept references[\s\S]*Idea: The OMD mark/);
+  assert.match(seen[0]!.instruction, /may be cut out and shipped[\s\S]*kept references[\s\S]*No real people[\s\S]*Idea: The OMD mark/);
+  assert.deepEqual(JSON.parse(readFileSync(join(root, '.omd/ideas/hero-1.json'), 'utf8')).tool, 'codex exec (image_generation)');
   assert.equal(seen[0]!.references[0], join(root, 'kept.png'));
   // Inside a sandboxed host the model cannot copy the image; the runner hands back where Codex stored it.
   const stored = join(root, 'stored.png');

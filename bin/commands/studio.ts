@@ -100,10 +100,69 @@ async function cmdStudioRig(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+async function cmdStudioBoard(opts: Opts): Promise<never> {
+  const writer = projectWriter(invocationFromActivation(opts, 'omd studio board'));
+  const { composeBoard } = await import('../../core/design/studio-sheets.ts');
+  const board = await composeBoard(process.cwd(), writer);
+  await out(opts, board, [`${board.image}: ${board.items.length} images on one sheet. Kept, and what each is for:`,
+    ...Object.entries(board.groups).flatMap(([forWhat, jobs]) => [`  ${forWhat}`, ...jobs.map(job => `    - ${job}`)]),
+    'Look at the sheet before generating concept boards from it.'].join('\n'));
+  process.exit(0);
+}
+
+async function cmdStudioSheet(opts: Opts): Promise<never> {
+  const members = opts._.map(String);
+  const bag = opts as unknown as Record<string, unknown>;
+  const viewport = bag.viewport ?? 'desktop';
+  if (typeof bag.name !== 'string' || members.length < 2 || (viewport !== 'desktop' && viewport !== 'mobile')) {
+    throw new Error('usage: omd studio sheet --name <name> <image|page> <image|page> [...] [--viewport desktop|mobile] [--json]');
+  }
+  const writer = projectWriter(invocationFromActivation(opts, 'omd studio sheet'));
+  const { composeSheet } = await import('../../core/design/studio-sheets.ts');
+  const sheet = await composeSheet(process.cwd(), writer, bag.name, members, viewport);
+  await out(opts, sheet, [`${sheet.image.path}: ${sheet.members.map(member => `${member.label} ${member.source}`).join(', ')}${sheet.board === null ? '' : ', beside the reference board'}`,
+    'Look at it, compare two at a time, and record the choice with its reason.'].join('\n'));
+  process.exit(0);
+}
+
+async function cmdStudioAsset(opts: Opts): Promise<never> {
+  const bag = opts as unknown as Record<string, unknown>;
+  const candidate = opts._[0];
+  const usage = 'usage: omd studio asset <.omd/ideas/<set>-<n>.png> --out <public/assets/name.png | folder with --split> [--cut] [--split auto|<columns>x<rows>] [--names a,b,...] [--tolerance <n>] [--json]';
+  if (candidate === undefined || opts._.length !== 1 || typeof bag.out !== 'string') throw new Error(usage);
+  const { parseSplit } = await import('../../core/design/asset-cut.ts');
+  const writer = projectWriter(invocationFromActivation(opts, 'omd studio asset'));
+  const { publishAsset } = await import('../../core/design/studio-images.ts');
+  const tolerance = bag.tolerance === undefined ? undefined : Number(bag.tolerance);
+  if (tolerance !== undefined && !(tolerance > 0 && tolerance < 200)) throw new Error(usage);
+  const result = publishAsset(process.cwd(), writer, { candidate: String(candidate), out: bag.out, cut: bag.cut === true, split: parseSplit(bag.split),
+    ...(typeof bag.names === 'string' ? { names: bag.names.split(',').map(name => name.trim()).filter(Boolean) } : {}), tolerance });
+  await out(opts, result, [`shipped ${result.files.length} file${result.files.length === 1 ? '' : 's'} from ${candidate}: ${result.files.join(', ')}`,
+    'Provenance (prompt, tool, candidate) is recorded in .omd/studio/images.json. Look at each file on the page\'s ground before using it.'].join('\n'));
+  process.exit(0);
+}
+
+async function cmdStudioImage(opts: Opts): Promise<never> {
+  const bag = opts as unknown as Record<string, unknown>;
+  const file = opts._[0];
+  if (file === undefined || opts._.length !== 1 || typeof bag.source !== 'string' || typeof bag.licence !== 'string') {
+    throw new Error('usage: omd studio image <path in the project> --source <url | "omd render <page>" | own> --licence own|rendered|CC0-1.0|public-domain [--json]');
+  }
+  const writer = projectWriter(invocationFromActivation(opts, 'omd studio image'));
+  const { recordImage } = await import('../../core/design/studio-images.ts');
+  const row = recordImage(process.cwd(), writer, { file: String(file), source: bag.source, licence: bag.licence });
+  await out(opts, row, `recorded ${row.file} (${row.licence}, from ${row.source}) in .omd/studio/images.json`);
+  process.exit(0);
+}
+
 export async function runStudio(args: string[]): Promise<never> {
   const sub = args[1];
   if (args.includes('--help')) {
     console.log('omd studio refs <url> [<url> ...] [--json]   study finished sites: first screen, whole page, section crops and their measured system\n'
+      + 'omd studio board [--json]   compose .omd/studio/board.json (image-level references, one job each, per screen or element) into one sheet\n'
+      + 'omd studio sheet --name <name> <image|page> <image|page> [...] [--viewport mobile]   candidates side by side, labelled, beside the reference board\n'
+      + 'omd studio asset <.omd/ideas/...png> --out <path|folder> [--cut] [--split auto|CxR] [--names a,b]   ship a chosen generated asset: cut, split, provenance recorded\n'
+      + 'omd studio image <path> --source <url|own> --licence own|rendered|CC0-1.0|public-domain   record any other added image in .omd/studio/images.json\n'
       + 'omd studio blueprint [<url>] [--json]   the primary reference\'s skeleton (section order, heights, what leads each) with no copy, colour or image\n'
       + 'omd studio rig [--out src/stage] [--json]   install the material stage: a lit, tone-mapped three.js rig that turns the mark\'s SVG path into a glass, clay, porcelain or ink-metal object\n'
       + 'omd studio look [--page <file|url>] [--json]   shoot the build screen by screen at desktop and phone width and set it beside the primary reference\n'
@@ -119,5 +178,9 @@ export async function runStudio(args: string[]): Promise<never> {
   if (sub === 'blueprint') return cmdStudioBlueprint(parseArgs(args.slice(2)));
   if (sub === 'baseline') return cmdStudioBaseline(parseArgs(args.slice(2)));
   if (sub === 'rig') return cmdStudioRig(parseArgs(args.slice(2)));
+  if (sub === 'board') return cmdStudioBoard(parseArgs(args.slice(2)));
+  if (sub === 'sheet') return cmdStudioSheet(parseArgs(args.slice(2)));
+  if (sub === 'asset') return cmdStudioAsset(parseArgs(args.slice(2)));
+  if (sub === 'image') return cmdStudioImage(parseArgs(args.slice(2)));
   throw new Error(`unknown command studio${sub ? ` ${sub}` : ''}; run omd help`);
 }

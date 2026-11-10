@@ -14,6 +14,7 @@ import {
   coupletHeadings, pairedSlogan, requestPhrases, sectionRhythm, studioReferenceSections, studyStudioReferences, systemDriftFailures,
 } from '../core/design/studio.ts';
 import type { ProjectWriteAdapter } from '../core/runtime/project-write.ts';
+import { chooseDirection, pinBoard, shipAssets } from './helpers/studio-stages.ts';
 
 type Route = Parameters<typeof composeGuidance>[0];
 const route = (taskNeed: string, request = 'Build a landing page for this project.') =>
@@ -57,6 +58,13 @@ test('a new page waits for a study, then a system taken from a studied site with
   assert.throws(() => requireStudioSystem(root, landing), /STUDIO_STUDY_MISSING: .*omd studio refs <url> <url> --json/);
   study(root, 'https://quiet.tools/', 'quiet-tools');
   assert.equal(studioStudies(root)[0]?.url, 'https://quiet.tools/');
+  // Then image-level references on one board, and a direction chosen among concept boards, before the system.
+  assert.equal(studioPending(root, landing), 'board');
+  assert.throws(() => requireStudioSystem(root, landing), /STUDIO_BOARD_MISSING: .*omd studio board --json/);
+  pinBoard(root);
+  assert.equal(studioPending(root, landing), 'direction');
+  assert.throws(() => requireStudioSystem(root, landing), /STUDIO_DIRECTION_MISSING: 0 concept boards drawn.*omd imagegen --kind board/);
+  chooseDirection(root);
   assert.throws(() => requireStudioSystem(root, landing), /STUDIO_SYSTEM_MISSING: no system is written yet/);
   // A system needs a few sizes and at most three weights.
   writeFileSync(join(root, '.omd/studio/system.json'), JSON.stringify({ reference: 'https://quiet.tools', sizes: [72, 48, 24, 18], weights: [300, 400, 500, 700] }));
@@ -96,10 +104,17 @@ test('a new page waits for a study, then a system taken from a studied site with
   idea('mark-1', 'graphic');
   assert.throws(() => requireStudioSystem(root, landing), /1 of 2 page ideas drawn/);
   idea('hero-2', 'page');
+  // Then the owned assets, picked among candidates and shipped through the publisher.
+  assert.equal(studioPending(root, landing), 'assets');
+  assert.throws(() => requireStudioSystem(root, landing), /STUDIO_ASSETS_MISSING: 0 asset candidates drawn.*omd imagegen --kind asset/);
+  shipAssets(root);
   assert.equal(studioPending(root, landing), null);
-  rmSync(join(root, '.omd/ideas'), { recursive: true });
+  // Without an image tool the boards and page ideas are recorded as unavailable and the assets fall back to the rig, in writing.
+  for (const path of ['.omd/ideas', '.omd/studio/direction.json', '.omd/studio/assets.json']) rmSync(join(root, path), { recursive: true });
   mkdirSync(join(root, '.omd/ideas'));
   writeFileSync(join(root, '.omd/ideas/unavailable.json'), '{"reason":"no image tool"}');
+  assert.equal(studioPending(root, landing), 'assets');
+  writeFileSync(join(root, '.omd/studio/skips.json'), JSON.stringify({ assets: { instead: 'rig', because: 'no image tool works in this environment' } }));
   assert.equal(studioPending(root, landing), null);
   // A README that links its logo from the web holds the page until the logo is saved, or the project says it has none.
   writeFileSync(join(root, 'README.md'), '<p align="center"><img width="536" src="https://user-images.example.com/174470852.png"></p>\n# Tool\n');
@@ -121,6 +136,8 @@ test('a project with no logo takes its identity from outside its category, not f
     writeFileSync(join(root, path), PNG.sync.write(image));
   };
   study(root, 'https://spendee.example/', 'spendee-example');
+  pinBoard(root);
+  chooseDirection(root);
   painted('.omd/studio/refs/spendee-example/full.png', [16, 191, 139]);
   writeFileSync(join(root, '.omd/studio/system.md'), notes);
   const palette = (colors: readonly object[]) => writeFileSync(join(root, '.omd/studio/system.json'),

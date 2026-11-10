@@ -32,7 +32,7 @@ export type StudioConcept = Readonly<{
 
 export const STUDIO_IDEA_GUIDANCE = `Before any reference or layout, decide the page's one visual idea and write ${STUDIO_CONCEPT_RECORD}. Read the `
   + 'project first (its name, its mark, what it actually does, what its output looks like) and sketch many rough ideas in words or quick renders '
-  + `(omd imagegen is ideation only): at least ${STUDIO_ROUGH_IDEAS}, each a different OBJECT, not the same object from another angle or in another `
+  + `(omd imagegen for quick renders): at least ${STUDIO_ROUGH_IDEAS}, each a different OBJECT, not the same object from another angle or in another `
   + 'colour. An idea comes from the name (a letter or word made into a thing), the mark (its shape built as an object and put to work), the mechanism '
   + '(the thing the product does, acted out by objects) or the material (the product\'s own output used as the picture). Keep the one that still reads '
   + 'with the logo removed and that argues one claim about the product without words. Record {"idea": "<one sentence>", "object": "<what the key '

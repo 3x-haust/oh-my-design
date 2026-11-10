@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
+import { chooseDirection, pinBoard, shipAssets } from './helpers/studio-stages.ts';
 import test from 'node:test';
 import { PNG } from 'pngjs';
 import { runModelLedCompletion } from '../bin/model-led-completion-command.ts';
@@ -58,6 +59,10 @@ const studied = (root: string, url: string) => {
     writeFileSync(join(root, `.omd/ideas/${name}.json`), JSON.stringify({ prompt: 'first screen', kind: 'page' }));
   }
   writeFileSync(join(root, '.omd/studio/system.md'), `${'Borrowed from Quiet Tools: 32/18 type, two weights, generous rhythm. '.repeat(8)}`);
+  // The reference board, the chosen direction and the shipped owned assets, as their publishers leave them.
+  pinBoard(root);
+  chooseDirection(root);
+  shipAssets(root);
 };
 const fixture = (t: { after: (fn: () => void) => void }, values: Record<string, string>) => {
   for (const [name, value] of Object.entries(values)) {

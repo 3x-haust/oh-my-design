@@ -12,11 +12,16 @@ lose nothing they rely on.
    filters were three clicks away from the list they filter"}]}`. Keep the product's equity (mark, colours,
    names people know), its routes, behaviour and data contracts. Each change names the control or route in
    the old screen's own words, what replaces it, and the problem it solves for the person using it.
-3. **Redesign the system, then the screens.** Follow `guides/product.md` for the system file and states.
-   Diagnose the old screens first: say what is wrong in terms of hierarchy, density, grouping and flow, not
-   in terms of style.
-4. **Same screen, before and after.** `omd studio check --mode redesign [--origin http://localhost:71xx]`
+3. **References, direction, owned assets.** Follow `guides/assets.md`: a reference board per screen and
+   element, concept boards of the redesigned product (kept equity from the ledger in every board) and one
+   direction chosen, then the product's own assets as candidate sets, picked in pairs and shipped with
+   `omd studio asset`. The build is refused until these exist; a change that is not a redesign records why
+   in `.omd/studio/skips.json` (`{"redesign": {"because": "..."}}`).
+4. **Redesign the system, then the screens.** Follow `guides/product.md` for the system file, states and
+   key-screen variants around the assets. Diagnose the old screens first: say what is wrong in terms of
+   hierarchy, density, grouping and flow, not in terms of style.
+5. **Same screen, before and after.** `omd studio check --mode redesign [--origin http://localhost:71xx]`
    opens every baseline screen at the same route, writes old beside new to `.omd/studio/redesign/`, and
    fails when a control or route from the old screen is gone and the ledger does not record the change.
    Look at every pair: the new one must be better at the same job, at the same size, on the same data.
-5. **Flow regression.** Walk each flow in the brief on the new build, start to finish, in a real browser.
+6. **Flow regression.** Walk each flow in the brief on the new build, start to finish, in a real browser.

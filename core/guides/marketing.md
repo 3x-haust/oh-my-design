@@ -7,8 +7,8 @@ around it. Work in this order; each step produces something you can look at.
 ## 1. The idea, before any reference
 
 Read the project (name, mark, what it does, what its output looks like) and write
-`.omd/studio/concept.json`. Sketch at least six rough ideas in words or quick renders (`omd imagegen` is for
-thinking only; nothing generated ships). Each must be a different object, not one object from another angle.
+`.omd/studio/concept.json`. Sketch at least six rough ideas in words or quick renders (`omd imagegen`). Each
+must be a different object, not one object from another angle.
 An idea comes from one of four places:
 
 - **name**: a letter or word of the name made into a thing and put to work.
@@ -28,14 +28,21 @@ one for material and light when the idea is an object, one for type. Record the 
 `omd studio blueprint` writes the primary's skeleton (section order, heights, what leads each) with no copy,
 colour or image, as slots for this project's content.
 
-## 3. The key asset first, alone
+## 3. Reference board, direction, then the key asset alone
 
-Build the asset before any page exists, in code, inside an element marked `data-product`, at least half the
-first screen wide. When it is an object, `omd studio rig` gives a lit stage (see `guides/material-stage.md`).
-Shoot it alone and put it beside a crop of the best work you studied. Refine it until the crop does not
-embarrass it: silhouette first, then material, then light, then motion. Only then compose.
+Follow `guides/assets.md`: pin image-level references per section and element (`omd studio board`),
+generate concept boards and choose one direction, then generate the key asset (the object the idea names,
+and any icon set or badges the page needs) as several candidate sets, compare them in pairs and ship the
+winner with `omd studio asset`. Or build the object in code: `omd studio rig` gives a lit stage (see
+`guides/material-stage.md`); record that choice in `.omd/studio/skips.json`.
+
+Put the asset inside an element marked `data-product`, at least half the first screen wide, before any
+page exists. Shoot it alone and put it beside a crop of the best work you studied. Refine it until the
+crop does not embarrass it: silhouette first, then material, then light, then motion. Only then compose.
 
 ## 4. Compose around the asset
+
+Several first screens that differ in structure, set side by side with `omd studio sheet`, then one.
 
 - Type and graphic interlock: the headline and the object share an edge, overlap, or answer each other's
   shape. A headline above a centred picture is two things stacked.

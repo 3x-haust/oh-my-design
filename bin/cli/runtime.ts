@@ -201,7 +201,7 @@ export interface Opts {
   purpose?: string;
 }
 
-const FLAGS = new Set(['help', 'graphic', 'transparent', 'current', 'json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'motion', 'no-scroll', 'no-reduced', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish', 'consent']);
+const FLAGS = new Set(['help', 'graphic', 'transparent', 'current', 'json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'motion', 'no-scroll', 'no-reduced', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish', 'consent', 'cut']);
 
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
