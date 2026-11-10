@@ -16,34 +16,6 @@ export async function runBrief(args: readonly string[]): Promise<never> {
   process.exit(0);
 }
 
-/** `omd scaffold [--json]`: start a new React + Vite + TypeScript project from the official template. */
-export async function runScaffold(args: readonly string[]): Promise<never> {
-  const opts = parseArgs(args.slice(1));
-  if (opts.help) {
-    console.log('usage: omd scaffold [--json]\n  Starts a new React + Vite + strict TypeScript project from the official template: it runs in a temporary '
-      + 'folder and copies only the files the route allows, never replacing or deleting anything.');
-    process.exit(0);
-  }
-  if (opts._.length) throw new Error('usage: omd scaffold [--json]');
-  const invocation = invocationFromActivation(opts, 'omd scaffold');
-  const { readPersistedRoute } = await import('../../core/route/index.ts');
-  const { scaffoldReactProject } = await import('../../core/design/react-scaffold.ts');
-  const route = readPersistedRoute(process.cwd(), invocation);
-  const result = scaffoldReactProject(process.cwd(), route, projectWriter(invocation));
-  const { motionRequired } = await import('../../core/design/new-surface-advisories.ts');
-  // A landing's section graphics are lit three.js objects rendered to images.
-  const next = `npm install${motionRequired(route) ? ', npm install three' : ''}, then npm install -D vitest @testing-library/react @testing-library/jest-dom jsdom prettier; `
-    + 'replace the template demo (App.tsx, App.css, assets) with the page, structured per omd pack guides/code.md';
-  if (opts.json) process.stdout.write(`${JSON.stringify({ ...result, next })}\n`);
-  else {
-    console.log(`scaffolded ${result.template}: ${result.written.length} files written`);
-    for (const path of result.kept) console.log(`  kept existing ${path}`);
-    for (const path of result.outsideScope) console.log(`  skipped outside route scope ${path}`);
-    console.log(`next: ${next}`);
-  }
-  process.exit(0);
-}
-
 /** `omd imagegen [--kind page] --name <section> --prompt <idea> [--reference <kept image>]... [--json]`: an idea image, never shipped. */
 export async function runImagegen(args: readonly string[]): Promise<never> {
   const opts = parseArgs(args.slice(1));

@@ -12,7 +12,17 @@ export function composeGuidance(route: Route): string {
   const korean = /[ㄱ-ㆎ가-힣]/.test(route.request);
   // A new page already has its system from the studied reference; building, looking and cutting is the work, not more reading.
   if (newSurface(route)) {
-    return `${route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : ''}Build the page in the project as components on `
+    const marketingPage = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
+    // A page is composed around its one idea; a product is many screens held to one system.
+    const track = marketingPage
+      ? 'The page is built around the idea in .omd/studio/concept.json (omd pack guides/marketing.md): the object it names is the key visual, type '
+        + 'and graphic interlock around it, and it returns down the page in the places the record lists. When the idea is one authored object, omd '
+        + 'studio rig installs a lit material stage for the mark\'s real path (omd pack guides/material-stage.md). omd studio blueprint gives the '
+        + 'reference\'s skeleton to fill with this project\'s content. '
+      : 'A product is many screens in one hand (omd pack guides/product.md): the object model and flows first, one system file every screen obeys, '
+        + 'every screen with its empty, loading, error and success states on realistic data, then omd studio check --mode product <screen> <screen> '
+        + '... until each role is built one way everywhere. ';
+    return `${route.projectMode === 'greenfield' ? 'Start the source as a React + Vite + strict TypeScript project laid out per omd pack guides/code.md. ' : ''}${track}Build the page in the project as components on `
       + 'the system in .omd/studio/system.json. The key visual first: the one visual that carries the page, made in code at large size from the '
       + 'product\'s real look (for software, its own interface recreated crisply in its real colours, marked data-product), playing the product\'s '
       + 'real flow on its own (states change, rows arrive, a cursor works) and answering real input; a screen recording is not a key visual. A tool that makes pages shows a page it made for another, particular client, held to everything this page is: its own name chosen from several, words in the page\'s language, its own palette and art, nothing standing in for an image, no line calling it fictional. Shoot it alone (omd render <page> --out <png>), look, and refine '
@@ -24,7 +34,7 @@ export function composeGuidance(route: Route): string {
       + 'Motion is part of the system, as the reference moves: the first screen arrives (what leads, from what, how long, which curve), sections '
       + 'reveal on scroll with its curve and stagger, hover in its timing, everything at rest under prefers-reduced-motion; omd pack '
       + 'motion/recipes/hero-intro-sequence.md and motion/recipes/scroll-reveal.md. Subtract: omd studio check --page <build>/index.html, and cut arrow glyphs, small uppercase labels, tiny captions, tabs and badges that '
-      + 'do no job; it also sets your sections beside the reference\'s, measured (height, what leads each, words a screen). Compare: shoot the '
+      + 'do no job; it also sets your sections beside the reference\'s, measured (height, what leads each, words a screen), names defects, and lists the defaults the page leaves: follow each, or record a deviation with its reason in system.json when the idea needs it and apply it everywhere. Before subtracting, a pass that adds: hover, focus and pressed states, the motion\'s order and timing, type refinement (tracking, line breaks, optical alignment). Compare: omd studio look shoots the build screen by screen and sets it beside the reference; or shoot the '
       + 'page (--full-page) and put it beside the reference\'s first-screen.png and full.png; fix the biggest '
       + 'differences in scale, whitespace, type, the visual, rhythm and finish, at most three passes. omd pack guides/landing-basics.md once for '
       + 'the basics a designer keeps (a header in reach, plain-word navigation, one primary action, real head metadata, no dead links or invented '
@@ -33,7 +43,7 @@ export function composeGuidance(route: Route): string {
       + `repeats from section to section. ${korean ? 'Korean text: omd pack theory/typography-korean.md. ' : ''}Then build and run omd lifecycle finish --json.`;
   }
   const marketing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
-  const start = route.projectMode === 'greenfield' ? 'Start the source with omd scaffold. ' : '';
+  const start = route.projectMode === 'greenfield' ? 'Start the source as a React + Vite + strict TypeScript project laid out per omd pack guides/code.md. ' : '';
   const words = marketing
     ? 'Write the words before the layout, from the brief: omd pack theory/web-copy.md (lead with the reader\'s decision) and '
       + 'omd pack theory/voice.md (one sentence, one job; write the content, never narrate the page\'s structure); no kicker, tag row '

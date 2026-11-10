@@ -263,15 +263,6 @@ function footageScratchException(filePath: string, source: string, mutations: re
   return 'disposable raw footage recording (fixed OS temp prefix; exact directory removed in finally)';
 }
 
-function scaffoldScratchException(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): string | undefined {
-  if (filePath !== 'core/design/react-scaffold.ts'
-    || mutations.map(m => m.operation).sort().join(',') !== 'mkdtempSync,rmSync'
-    || !source.includes("const work = mkdtempSync(join(tmpdir(), 'omd-scaffold-'));")
-    || !source.includes('writer.write(path, readFileSync(join(app, path)));')
-    || !source.includes('rmSync(work, { recursive: true, force: true });')) return undefined;
-  return 'disposable template scaffold (fixed OS temp prefix; project files written only through the guarded writer; exact directory removed in finally)';
-}
-
 function ideaScratchException(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): string | undefined {
   if (filePath !== 'core/design/idea-image.ts'
     || mutations.map(m => m.operation).sort().join(',') !== 'mkdtempSync,rmSync'
@@ -661,7 +652,6 @@ export function inventoryProjectRunMutations(
     const nativePiAdapterException = nativePiWriterException(filePath, source, directMutations)
       ?? zoomProfileException(filePath, source, directMutations)
       ?? footageScratchException(filePath, source, directMutations)
-      ?? scaffoldScratchException(filePath, source, directMutations)
       ?? ideaScratchException(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')

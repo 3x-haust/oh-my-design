@@ -9,7 +9,9 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { ideaImages, ideationUnavailable, pageIdeaPreview } from './idea-image.ts';
 import { newSurface } from './new-surface-advisories.ts';
 import { projectBrandMarks, readmeLogos, STUDIO_LOGO, STUDIO_NO_LOGO } from './studio-floors.ts';
+import { readStudioConcept, STUDIO_IDEA_GUIDANCE } from './studio-concept.ts';
 import { STUDIO_DIR } from './studio-paths.ts';
+import { parseDeviations, type StudioConvention, type StudioDeviation } from './studio-page-check.ts';
 
 type Route = ReturnType<typeof readPersistedRoute>;
 
@@ -47,8 +49,8 @@ const slug = (url: string): string => {
 export const STUDIO_STUDY_GUIDANCE = 'A new page starts from finished sites, studied the way a designer studies them. First write the project\'s '
   + 'character in .omd/studio/brief.md in a few words taken from its own material (its logo, its README\'s voice and humour, who uses it). Then look '
   + 'broadly (omd ref browse search cosmos|dribbble|behance|notefolio "<that character>", and sites you know) for pages that share that character, '
-  + 'not the best-known site of the product\'s category: four lazygit runs all studied zed.dev and all came out alike. Pick two or three whose '
-  + 'craft you want, run omd studio refs <url> <url> --json, and look at each first-screen.png, full.png and '
+  + 'not the best-known site of the product\'s category: four lazygit runs all studied zed.dev and all came out alike. Pick two or three, each for a job: one for '
+  + 'layout rhythm (the primary), one for material and light where the idea is an object, one for type. Run omd studio refs <url> <url> --json, and look at each first-screen.png, full.png and '
   + 'section crop under .omd/studio/refs/<site>/ beside its measured study.json (type ramp, weights, sections, how it frames its product).';
 
 export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${STUDIO_SYSTEM_NOTES}: the type ramp you take from its measurements `
@@ -66,7 +68,10 @@ export const STUDIO_SYSTEM_GUIDANCE = `Choose ONE primary reference and write ${
   + `${STUDIO_SYSTEM_RECORD} as {"reference": "<primary url>", "sizes": [px...], "weights": [n...], "colors": [{"hex": "#rrggbb", "from": "<PNG or SVG `
   + 'in the project, or a studied reference url>"}...]}; every size and weight the page renders comes from it, and every accent from the family of a colour '
   + 'sampled where its from says (a darker or lighter step of it for contrast is the same colour). '
-  + 'The reference is chosen here, before the page, and kept while the page is built: the page answers to it, it is not swapped for one the page already meets.';
+  + 'The reference is chosen here, before the page, and kept while the page is built: the page answers to it, it is not swapped for one the page already meets. '
+  + 'Optional: "jobs": {"material": "<url or kept image the object\'s material and light come from>", "type": "<url the type comes from>"}, and '
+  + '"deviations": [{"convention": "<id from omd studio check>", "instead": "<what the page does>", "because": "<the reason, from the page\'s idea>"}] '
+  + 'for a default the idea breaks on purpose; the check then holds the page to the choice, not the default.';
 
 export type StudioStudy = Readonly<{ url: string; dir: string; firstScreen: string; full: string; sha256: string }>;
 
@@ -329,7 +334,10 @@ export function studioStudies(root: string): readonly StudioStudy[] {
 }
 
 export type StudioColor = Readonly<{ hex: string; from: string }>;
-export type StudioSystem = Readonly<{ reference: string; sizes: readonly number[]; weights: readonly number[]; colors?: readonly StudioColor[] }>;
+/** A reference kept for one job beside the primary: where the material and light, or the type, were studied. */
+export type StudioJobs = Readonly<{ material?: string; type?: string }>;
+export type StudioSystem = Readonly<{ reference: string; sizes: readonly number[]; weights: readonly number[]; colors?: readonly StudioColor[];
+  jobs?: StudioJobs; deviations?: readonly StudioDeviation[] }>;
 
 const STUDIO_MAX_COLORS = 6;
 /** How close (RGB distance) a sampled pixel must be to the recorded colour. */
@@ -450,14 +458,21 @@ export function readStudioSystem(root: string): StudioSystem | null {
   if (!numbers(weights) || (weights as number[]).length === 0 || new Set(weights as number[]).size > STUDIO_SYSTEM_WEIGHTS) {
     return invalid(`needs one to ${STUDIO_SYSTEM_WEIGHTS} weights`);
   }
+  let deviations: readonly StudioDeviation[];
+  try { deviations = parseDeviations(Reflect.get(value, 'deviations')); } catch (error) { return invalid(error instanceof Error ? error.message : String(error)); }
+  const jobsValue: unknown = Reflect.get(value, 'jobs');
+  const job = (name: string) => { const url: unknown = typeof jobsValue === 'object' && jobsValue !== null ? Reflect.get(jobsValue, name) : undefined; return typeof url === 'string' && url.trim() !== '' ? url : undefined; };
+  const material = job('material'), type = job('type');
+  const extra = { ...(deviations.length > 0 ? { deviations } : {}),
+    ...(material !== undefined || type !== undefined ? { jobs: { ...(material !== undefined ? { material } : {}), ...(type !== undefined ? { type } : {}) } } : {}) };
   const colors = Reflect.get(value, 'colors');
-  if (colors === undefined) return { reference, sizes: sizes as number[], weights: weights as number[] };
+  if (colors === undefined) return { reference, sizes: sizes as number[], weights: weights as number[], ...extra };
   if (!Array.isArray(colors) || colors.length === 0 || colors.length > STUDIO_MAX_COLORS || !colors.every(color => typeof color === 'object' && color !== null
     && typeof Reflect.get(color, 'hex') === 'string' && /^#[0-9a-f]{6}$/i.test(Reflect.get(color, 'hex')) && typeof Reflect.get(color, 'from') === 'string')) {
     return invalid(`colors needs one to ${STUDIO_MAX_COLORS} {"hex": "#rrggbb", "from": "<file or studied url>"} entries`);
   }
   return { reference, sizes: sizes as number[], weights: weights as number[],
-    colors: colors.map(color => ({ hex: String(Reflect.get(color, 'hex')).toLowerCase(), from: String(Reflect.get(color, 'from')) })) };
+    colors: colors.map(color => ({ hex: String(Reflect.get(color, 'hex')).toLowerCase(), from: String(Reflect.get(color, 'from')) })), ...extra };
 }
 
 /** Page ideas a new surface draws before its source, so the build starts from a chosen composition instead of a default one. */
@@ -469,8 +484,10 @@ export const STUDIO_CONCEPT_GUIDANCE = `Before the page source, draw ${STUDIO_PA
   + 'A mobile app\'s ideas are its main screen at phone size: add --viewport mobile. The images are ideation only and never ship; where no image tool works, omd imagegen records that and the page proceeds.';
 
 /** What a new surface still owes before its page is built: a study of finished sites, the system taken from one of them, then page ideas. */
-export function studioPending(root: string, route: Route): 'study' | 'system' | 'concept' | null {
+export function studioPending(root: string, route: Route): 'idea' | 'study' | 'system' | 'concept' | null {
   if (!newSurface(route)) return null;
+  // A marketing page decides its own visual idea before it looks at anyone else's page.
+  if (route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing' && readStudioConcept(root) === null) return 'idea';
   const studies = studioStudies(root);
   if (studies.length === 0) return 'study';
   const system = readStudioSystem(root);
@@ -501,6 +518,9 @@ export function studioPageSource(path: string): boolean {
 /** Refusal boundary at page-source writes, the first render and finish: a new surface is built on a system taken from a studied site. */
 export function requireStudioSystem(root: string, route: Route): void {
   const pending = studioPending(root, route);
+  if (pending === 'idea') {
+    throw Object.assign(new Error(`STUDIO_IDEA_MISSING: the page has no visual idea of its own yet. ${STUDIO_IDEA_GUIDANCE}`), { code: 'STUDIO_IDEA_MISSING' });
+  }
   if (pending === 'study') {
     throw Object.assign(new Error(`STUDIO_STUDY_MISSING: study finished sites before the page. ${STUDIO_STUDY_GUIDANCE}`), { code: 'STUDIO_STUDY_MISSING' });
   }
@@ -813,8 +833,10 @@ export function requestPhrases(request: string): readonly Readonly<{ text: strin
 
 /** What a designer would mark up on the build: a page much shallower than its reference or still where it reveals, no key visual or a still one, a first screen that does not arrive, type outside the promised system, arrow glyphs on links and buttons, player chrome, a paired slogan for a headline. */
 export function systemDriftFailures(observations: readonly SystemDriftObservation[], reference: StudioReferenceDepth | null = null,
-  palette: readonly StudioColor[] = [], landing = true): readonly string[] {
+  palette: readonly StudioColor[] = [], landing = true, deviations: readonly StudioDeviation[] = []): readonly string[] {
   const failures: string[] = [];
+  // A convention the system records a deviation for is the page's own choice; defects and the promised system stay held.
+  const kept = (convention: StudioConvention) => !deviations.some(deviation => deviation.convention === convention);
   const hues = palette.map(color => hsl(color.hex)).filter(color => color.saturation >= 0.2).map(color => color.hue);
   const inFamily = (hex: string) => hues.some(hue => Math.min(Math.abs(hue - hsl(hex).hue), 360 - Math.abs(hue - hsl(hex).hue)) <= ACCENT_HUE_TOLERANCE);
   for (const { viewport, offSystemSizes, offSystemWeights, arrows, playerControls, stillVideos = 0, headings = [], accents = [], quoted = [], selfFramed = [], diagonals = [], certifying = [], spills = [], ...shape } of observations) {
@@ -827,14 +849,14 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (keyVisual === false) failures.push(`${viewport}: no key visual built in code in the first screen (an element marked data-product, at least half the width, made of the product's live interface or a large drawn canvas/svg; a recording or screenshot in a frame is not one)`);
     if (offSystemSizes.length > 0) failures.push(`${viewport}: sizes outside the system ${offSystemSizes.slice(0, 6).map(item => `${item.size}px ("${item.example}")`).join(', ')}`);
     if (offSystemWeights.length > 0) failures.push(`${viewport}: weights outside the system ${offSystemWeights.slice(0, 4).map(item => `${item.weight} ("${item.example}")`).join(', ')}`);
-    if (arrows.length > 0) failures.push(`${viewport}: arrow glyphs or trailing icons on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
-    if (playerControls > 0) failures.push(`${viewport}: ${playerControls} video${playerControls === 1 ? '' : 's'} with visible player controls`);
-    if (stillVideos > 0) failures.push(`${viewport}: ${stillVideos} video${stillVideos === 1 ? ' waits' : 's wait'} for a click; a demo plays muted and looped on its own (autoplay muted loop playsinline), with no play button over it, and rests under prefers-reduced-motion`);
+    if (arrows.length > 0 && kept('link-arrows')) failures.push(`${viewport}: arrow glyphs or trailing icons on links or buttons ${arrows.slice(0, 6).map(text => `"${text}"`).join(', ')}`);
+    if (playerControls > 0 && kept('video-chrome')) failures.push(`${viewport}: ${playerControls} video${playerControls === 1 ? '' : 's'} with visible player controls`);
+    if (stillVideos > 0 && kept('video-chrome')) failures.push(`${viewport}: ${stillVideos} video${stillVideos === 1 ? ' waits' : 's wait'} for a click; a demo plays muted and looped on its own (autoplay muted loop playsinline), with no play button over it, and rests under prefers-reduced-motion`);
     const offPalette = palette.length === 0 ? [] : accents.filter(hex => !inFamily(hex));
-    if (offPalette.length > 0) failures.push(`${viewport}: accents outside the sampled palette ${offPalette.slice(0, 4).join(', ')} (the system samples ${palette.map(color => `${color.hex} from ${color.from}`).join(', ')}); paint links, buttons and headings in a step of a sampled colour, or sample the colour you mean from real material`);
+    if (offPalette.length > 0 && kept('sampled-accents')) failures.push(`${viewport}: accents outside the sampled palette ${offPalette.slice(0, 4).join(', ')} (the system samples ${palette.map(color => `${color.hex} from ${color.from}`).join(', ')}); paint links, buttons and headings in a step of a sampled colour, or sample the colour you mean from real material`);
     if (quoted.length > 0) failures.push(`the page repeats the request that commissioned it ${quoted.slice(0, 2).map(text => `"${text}"`).join(', ')}: `
       + 'the request, this page\'s review and its making are not content; show the product on a representative example of its real use');
-    if (diagonals.length > 0) failures.push(`${viewport}: diagonal arrow glyphs ${diagonals.slice(0, 4).map(text => `"${text}"`).join(', ')}: `
+    if (diagonals.length > 0 && kept('link-arrows')) failures.push(`${viewport}: diagonal arrow glyphs ${diagonals.slice(0, 4).map(text => `"${text}"`).join(', ')}: `
       + 'a diagonal arrow reads as a link out; let the words, a sign or the colour carry direction');
     if (certifying.length > 0) failures.push(`${viewport}: captions certifying their media ${certifying.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
       + 'a caption names what is shown or says nothing; real, original and example are the maker\'s rules, not the visitor\'s information');
@@ -843,9 +865,9 @@ export function systemDriftFailures(observations: readonly SystemDriftObservatio
     if (selfFramed.length > 0) failures.push(`${viewport}: the key visual frames this page itself (it repeats ${selfFramed.slice(0, 2).map(text => `"${text}"`).join(', ')}): `
       + 'a page shown inside itself proves nothing; a tool that makes pages shows one it made for another brief, built fully at its own scale');
     const slogans = headings.filter(pairedSlogan);
-    if (slogans.length > 0) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
+    if (slogans.length > 0 && kept('paired-headline')) failures.push(`paired slogans ${slogans.slice(0, 3).map(text => `"${text}"`).join(', ')}: a headline names a concrete thing the product does or a real moment of using it, in the project's own words`);
     const couplets = coupletHeadings(headings);
-    if (couplets.length > 0) failures.push(`${couplets.length} of ${headings.length} headings take one two-part shape ${couplets.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
+    if (couplets.length > 0 && kept('paired-headline')) failures.push(`${couplets.length} of ${headings.length} headings take one two-part shape ${couplets.slice(0, 3).map(text => `"${text}"`).join(', ')}: `
       + 'read the headings in a row and let them differ the way a person explaining the product would: a plain statement of what happens, the command '
       + 'typed, a number, the question the visitor has, all in the one voice the page speaks; keep one couplet at most');
   }
@@ -881,7 +903,7 @@ export async function requireStudioSystemHeld(root: string, route: Route, target
   }
   const landing = route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const observations = await observeSystemDrift(target, system, route.request);
-  const failures = systemDriftFailures(observations, studioReferenceDepth(root), system.colors ?? [], landing);
+  const failures = systemDriftFailures(observations, studioReferenceDepth(root), system.colors ?? [], landing, system.deviations ?? []);
   if (failures.length > 0) {
     const keyVisualFirst = landing ? 'Build the key visual first: the product\'s own look recreated in HTML/CSS (or drawn) at large size, moving '
       + 'with real input, marked data-product. ' : '';

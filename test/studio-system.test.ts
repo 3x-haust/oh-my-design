@@ -37,6 +37,13 @@ const study = (root: string, url: string, name: string) => {
   writeFileSync(join(dir, 'first-screen.png'), PNG.sync.write(new PNG({ width: 2, height: 2 })));
   writeFileSync(join(dir, 'full.png'), PNG.sync.write(new PNG({ width: 2, height: 2 })));
 };
+/** The page's own visual idea, decided before any reference; every marketing fixture below starts from it. */
+const decideIdea = (root: string) => {
+  mkdirSync(join(root, '.omd/studio'), { recursive: true });
+  writeFileSync(join(root, '.omd/studio/concept.json'), JSON.stringify({ idea: 'The mark cast as one glass object that holds the page together.', object: 'a glass mark', from: 'mark',
+  claim: 'One quiet tool does the whole job.', devices: ['the glass returns as a section ground', 'a cropped edge divides the chapters'],
+  dropped: ['a paper bridge', 'two rings', 'a loom', 'a split stone', 'clay hands'].map(object => ({ object, because: 'any tool in the category could use it' })) }));
+};
 const notes = 'Primary reference Quiet Tools, measured: 72/48/24/18/14 px, weights 400 and 600, 1200 container, 160px section rhythm. '
   .repeat(5);
 
@@ -44,6 +51,8 @@ test('a new page waits for a study, then a system taken from a studied site with
   const root = project(t);
   const landing = route('new-marketing');
   assert.equal(studioPending(root, route('existing-feature')), null);
+  assert.equal(studioPending(root, landing), 'idea');
+  decideIdea(root);
   assert.equal(studioPending(root, landing), 'study');
   assert.throws(() => requireStudioSystem(root, landing), /STUDIO_STUDY_MISSING: .*omd studio refs <url> <url> --json/);
   study(root, 'https://quiet.tools/', 'quiet-tools');
