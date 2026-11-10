@@ -198,7 +198,7 @@ export async function runTasteGraphic(root: string, invocation: ProjectRunInvoca
   const landing = (() => { try { return motionRequired(readPersistedRoute(run.projectRoot, invocation)); } catch { return false; } })();
   if (landing && !ideationRecorded(run.projectRoot)) {
     return fail('explore the graphic before building it: generate a few idea images with omd imagegen --name <section> --prompt "<claim, '
-      + 'protagonist object, material, light>" --reference <kept image path> (ideation only), choose the strongest, then build it in three.js');
+      + 'protagonist object, material, light>" --reference <kept image path>, choose the strongest, then build it in three.js or ship the chosen one with omd studio asset');
   }
   const graphic = projectGraphic(run.projectRoot, options.graphic, landing);
   const against = [...new Set(options.against)];

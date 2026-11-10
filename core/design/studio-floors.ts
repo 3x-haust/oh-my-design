@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { browserCallback } from '../ref/browser-evaluation.ts';
 import { resolveRenderTarget } from '../render/serve.ts';
 import type { readPersistedRoute } from '../route/index.ts';
+import { ideaImages, MOCKUP_KINDS } from './idea-image.ts';
 import { newSurface } from './new-surface-advisories.ts';
+import { STUDIO_IMAGES } from './studio-paths.ts';
 
 type Route = ReturnType<typeof readPersistedRoute>;
 
@@ -24,10 +26,12 @@ const SKIPPED = new Set(['node_modules', '.git', '.omd', '.omc', 'dist', 'build'
 /** Where the agent saves the project's logo when the README only links it from the web, or says it has none. */
 export const STUDIO_LOGO = '.omd/studio/logo.png';
 export const STUDIO_NO_LOGO = '.omd/studio/no-logo';
-/** Where a new page records the source and licence of each image it ships that the project did not already have. */
-export const STUDIO_IMAGES = '.omd/studio/images.json';
-/** Licences an added image may carry: the project's own work, a render of the page's own code, or terms with no extra clauses. */
-const OPEN_IMAGE_LICENCES = new Set(['own', 'rendered', 'cc0-1.0', 'public-domain']);
+/**
+ * Where a new page records the source and licence of each image it ships that the project did not already have. CLI-published:
+ * omd studio asset writes the row for a generated asset it cuts out, omd studio image for any other image.
+ */
+/** Licences an added image may carry: the project's own work (generated for it included), a render of the page's own code, or terms with no extra clauses. */
+export const OPEN_IMAGE_LICENCES: ReadonlySet<string> = new Set(['own', 'rendered', 'cc0-1.0', 'public-domain']);
 /** Photo sites whose own licences add clauses (no compiling a similar service, no selling unaltered copies): never CC0. */
 const STOCK_HOSTS = /(^|\.)(unsplash\.com|pexels\.com|pixabay\.com|freepik\.com|shutterstock\.com|istockphoto\.com|gettyimages\.com|stock\.adobe\.com)$/i;
 /** Below this size a raster is an icon or a texture tile, not an image the page shows. */
@@ -209,9 +213,11 @@ function committedBlobs(root: string): ReadonlySet<string> {
 
 const blobId = (bytes: Buffer): string => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 
-type ImageRecord = Readonly<{ file: string; source: string; licence: string }>;
+/** How a generated image was made and chosen: the tool, the prompt, the candidate it was cut from and the set it belongs to. */
+export type GeneratedProvenance = Readonly<{ tool: string; prompt: string; candidate: string; kind: string; set: string }>;
+export type ImageRecord = Readonly<{ file: string; source: string; licence: string; sha256?: string; generated?: GeneratedProvenance }>;
 
-function imageRecords(root: string): readonly ImageRecord[] {
+export function imageRecords(root: string): readonly ImageRecord[] {
   try {
     const value: unknown = JSON.parse(readFileSync(join(root, STUDIO_IMAGES), 'utf8'));
     return Array.isArray(value) ? value.filter((row): row is ImageRecord => typeof row === 'object' && row !== null
@@ -219,7 +225,7 @@ function imageRecords(root: string): readonly ImageRecord[] {
   } catch { return []; }
 }
 
-const stockSource = (source: string): boolean => { try { return STOCK_HOSTS.test(new URL(source).hostname); } catch { return false; } };
+export const stockSource = (source: string): boolean => { try { return STOCK_HOSTS.test(new URL(source).hostname); } catch { return false; } };
 
 /**
  * Rasters the page shows that the project did not have committed, with no record of an open source. Test-346 shipped the most
@@ -232,14 +238,25 @@ export function unrecordedImages(root: string, target: string, observed: StudioF
     const path = join(root, record.file);
     return existsSync(path) ? [{ ...record, sha256: sha256(readFileSync(path)) }] : [];
   });
+  const ideas = ideaImages(root);
+  // A generated page or concept board is a draft of the whole surface: shipped as a picture it stands in for the built page.
+  const mockups = new Set(ideas.filter(idea => MOCKUP_KINDS.has(idea.kind)).flatMap(idea => {
+    try { return [sha256(readFileSync(join(root, idea.path)))]; } catch { return []; }
+  }));
   const named: string[] = [];
   for (const src of observed.sources) {
     if (src.startsWith('data:') || !/\.(jpe?g|png|webp|avif|gif)(\?|#|$)/i.test(src)) continue;
     const bytes = sourceBytes(target, observed.servedFrom, src);
-    if (bytes === null || bytes.length < IMAGE_MIN_BYTES || committed.has(blobId(bytes))) continue;
-    const record = records.find(row => row.sha256 === sha256(bytes));
+    if (bytes === null) continue;
     const file = decodeURIComponent(new URL(src).pathname.split('/').pop() ?? src);
+    if (mockups.has(sha256(bytes))) { named.push(`${file} (a generated page or concept board: a draft never ships as a picture of the page; build it in HTML)`); continue; }
+    if (bytes.length < IMAGE_MIN_BYTES || committed.has(blobId(bytes))) continue;
+    const record = records.find(row => row.sha256 === sha256(bytes));
+    const candidate = record?.generated === undefined ? undefined : ideas.find(idea => idea.path === record.generated!.candidate);
     if (record === undefined) named.push(`${file} (no record)`);
+    else if (record.generated !== undefined && (candidate === undefined || MOCKUP_KINDS.has(candidate.kind))) {
+      named.push(`${file} (generated, but its candidate ${record.generated.candidate} is not an asset or graphic on record in .omd/ideas)`);
+    }
     else if (stockSource(record.source)) named.push(`${file} (from ${new URL(record.source).hostname}, whose licence adds clauses)`);
     else if (!OPEN_IMAGE_LICENCES.has(record.licence.toLowerCase())) named.push(`${file} (licence ${record.licence})`);
   }
@@ -289,10 +306,11 @@ export async function requireStudioFloors(root: string, route: Route, target: st
   const images = unrecordedImages(root, target, observed);
   if (images.length > 0) {
     failures.push({ code: 'IMAGE_SOURCE_UNRECORDED', message: `IMAGE_SOURCE_UNRECORDED: the page ships ${images.slice(0, 4).join(', ')}, which the `
-      + 'project did not have. An image ships only when the project owns it, it is drawn or rendered from the page\'s own code, or its '
-      + `licence adds no clauses (CC0, public domain); record each in ${STUDIO_IMAGES} as [{"file": "<path in the project>", "source": "<url or `
-      + '"omd render <page>">", "licence": "own|rendered|CC0-1.0|public-domain"}]. Stock photo sites (Unsplash, Pexels, Pixabay) license '
-      + 'on terms of their own and their pictures are the template\'s pictures: draw the thing in code instead.' });
+      + 'project did not have. An image ships only when the project owns it (a generated asset published with omd studio asset counts), it is '
+      + 'drawn or rendered from the page\'s own code, or its licence adds no clauses (CC0, public domain). Publish a generated candidate with '
+      + '`omd studio asset <.omd/ideas/...png> --out <path> [--cut] [--split auto]`, and record any other image with `omd studio image <path> '
+      + `--source <url | "omd render <page>" | own> --licence own|rendered|CC0-1.0|public-domain\`; both write ${STUDIO_IMAGES}. Stock photo sites (Unsplash, `
+      + 'Pexels, Pixabay) license on terms of their own and their pictures are the template\'s pictures. A generated page or concept board never ships.' });
   }
   if (failures.length > 0) throw Object.assign(new Error(failures.map(failure => failure.message).join('\n')), { code: failures[0]!.code });
 }

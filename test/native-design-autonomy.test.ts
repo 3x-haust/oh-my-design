@@ -17,6 +17,8 @@ import { publishAdaptiveRoute, readPersistedRoute } from '../core/route/index.ts
 import { createProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
 import { inputSkeleton, modelLedRouteInput } from '../core/schema/inputs.ts';
+import { PNG } from 'pngjs';
+import { chooseDirection, idea, pinBoard, shipAssets } from './helpers/studio-stages.ts';
 
 const request = 'Create a populated support inbox with a detail panel.';
 type MutableRouteInput = Record<string, unknown> & {
@@ -118,6 +120,33 @@ test('ordinary native production preserves outcomes and scope without intermedia
   assert.equal(existsSync(join(f.root, '.omd/frame.md')), false);
   assert.equal(existsSync(join(f.root, '.omd/composition.md')), false);
   assert.equal(checkProductionReadiness(f.root, f.invocation, pack, 'outside.ts').ok, false);
+});
+
+test('a new product\'s source is refused until its board, direction and owned assets exist, then authorized', t => {
+  const input = routeInput();
+  const f = fixture(t, false, input.request);
+  capturePiRequest(f.root, input.request);
+  observePiReviewPurpose(f.root, input.request, 'pi-rpc');
+  publishAdaptiveRoute(f.root, input, createProjectWriteAdapter(f.root, f.invocation), f.invocation);
+  const pack = fileURLToPath(new URL('../core', import.meta.url));
+  const blockers = () => checkProductionReadiness(f.root, f.invocation, pack, 'index.html').blockers.map(blocker => blocker.split(':').slice(0, 2).join(':'));
+  const png = (seed: number) => { const image = new PNG({ width: 4, height: 4 }); for (let at = 0; at < image.data.length; at += 4) image.data.set([seed, 24, 8, 255], at); return PNG.sync.write(image); };
+  mkdirSync(join(f.root, '.omd/studio/refs/inbox-example'), { recursive: true });
+  writeFileSync(join(f.root, '.omd/studio/refs/inbox-example/study.json'), JSON.stringify({ requested: 'https://inbox.example/' }));
+  for (const name of ['first-screen.png', 'full.png']) writeFileSync(join(f.root, '.omd/studio/refs/inbox-example', name), png(1));
+  assert.deepEqual(blockers(), ['studio: STUDIO_BOARD_MISSING']);
+  pinBoard(f.root);
+  assert.deepEqual(blockers(), ['studio: STUDIO_DIRECTION_MISSING']);
+  const [chosen] = chooseDirection(f.root);
+  writeFileSync(join(f.root, '.omd/studio/system.md'), 'Primary reference inbox.example, measured: 32/24/16/14 px, weights 400 and 600. '.repeat(8));
+  writeFileSync(join(f.root, '.omd/studio/system.json'), JSON.stringify({ reference: 'https://inbox.example/', sizes: [32, 24, 16, 14], weights: [400, 600],
+    colors: [{ hex: '#281808', from: chosen }] }));
+  for (const name of ['inbox-1', 'inbox-2']) idea(f.root, name, 'page', 3);
+  assert.deepEqual(blockers(), ['studio: STUDIO_ASSETS_MISSING']);
+  assert.equal(existsSync(join(f.root, 'index.html')), false, 'a refused stage writes no source');
+  shipAssets(f.root);
+  assert.deepEqual(blockers(), []);
+  assert.equal(checkProductionReadiness(f.root, f.invocation, pack, 'index.html').sourceAuthoring, 'model');
 });
 
 test('the model-led route starter selects results and verification rather than a design ceremony', () => {

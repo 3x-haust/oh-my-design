@@ -5,9 +5,11 @@
  *   1. (default) User-provided assets, optionally treated with a duotone filter
  *      (see `core/graphics/duotone-image-presets.md`) for visual unification.
  *   2. (conditional) AI-generated imagery — only when the host environment
- *      declares image-generation capability, and only for abstract/atmospheric
- *      zones. Factual carriers (team photos, product screenshots, real people,
- *      logos) may never be satisfied by AI-generated imagery.
+ *      declares image-generation capability, for the product's own assets
+ *      (icon sets, objects, characters, badges, key visuals: the `owned` zone)
+ *      and abstract/atmospheric zones. Factual carriers (team photos, product
+ *      screenshots, real people, logos) may never be satisfied by AI-generated
+ *      imagery, and a generated page or board mockup never ships.
  *   3. (additive) WebGL/3D — gated on hand precedence (explicit user request OR
  *      greenfield concept necessity), a declared performance budget, and a
  *      non-canvas semantic fallback.
@@ -20,7 +22,7 @@
  * permitted, never executes it. AI image generation IS wired at the agent
  * layer: on a host that provides an image-generation capability (Codex,
  * Claude Code), the composer/hand invoke it per `core/theory/imagegen.md`
- * for image-first concept drafts and for abstract/atmospheric shipped assets,
+ * for image-first concept drafts and for owned, abstract or atmospheric shipped assets,
  * with this module as the admissibility gate and committed provenance recorded
  * via `omd decision`. What remains environment-dependent is 3D/WebGL
  * performance MEASUREMENT (render tracing, Lighthouse-style budgets): those
@@ -49,7 +51,10 @@ export {
   type CommittedAiAssetDecision,
 } from './ai-decision.ts';
 
-export type AssetZone = 'factual' | 'abstract' | 'atmospheric' | 'structural';
+/** `owned`: an asset the product owns and generated for itself (icon set, object, character, badge, key visual). */
+export type AssetZone = 'factual' | 'owned' | 'abstract' | 'atmospheric' | 'structural';
+/** Zones a generated image may fill. */
+export const AI_IMAGE_ZONES: ReadonlySet<AssetZone> = new Set(['owned', 'abstract', 'atmospheric']);
 
 export type AssetStrategy =
   | 'user-asset-duotone'
@@ -94,7 +99,7 @@ export function decideAssetStrategy(inputs: AssetStrategyInputs): AssetStrategyD
   // Factual carriers (team photos, product screenshots, real people, logos)
   // may never be satisfied by AI-generated imagery, regardless of host
   // capability. See `validateAiImageUsage` for the corresponding gate.
-  const aiImageEligibleZone = zone === 'abstract' || zone === 'atmospheric';
+  const aiImageEligibleZone = AI_IMAGE_ZONES.has(zone);
   if (zone !== 'factual' && aiImageEligibleZone && hostHasImageGen) {
     return {
       strategy: 'ai-image',
@@ -149,8 +154,8 @@ export function validateAiImageUsage(inputs: AiImageUsageInputs): AiImageUsageVa
 
   if (inputs.zone === 'factual') {
     violations.push('factual carrier: AI-generated imagery is never permitted for factual slots (team photos, product screenshots, real people, logos).');
-  } else if (inputs.zone !== 'abstract' && inputs.zone !== 'atmospheric') {
-    violations.push(`ineligible zone: AI-generated imagery is only permitted in abstract or atmospheric zones, not "${inputs.zone}".`);
+  } else if (!AI_IMAGE_ZONES.has(inputs.zone)) {
+    violations.push(`ineligible zone: AI-generated imagery is only permitted for owned assets and abstract or atmospheric zones, not "${inputs.zone}".`);
   }
 
   if (!inputs.hostHasImageGen) {

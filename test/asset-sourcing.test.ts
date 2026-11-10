@@ -49,6 +49,11 @@ test('decideAssetStrategy: atmospheric zone with host image-gen capability yield
   assert.equal(decision.strategy, 'ai-image');
 });
 
+test('decideAssetStrategy: an owned asset (icon set, object, character, badge) with host image-gen capability yields ai-image', () => {
+  const decision = decideAssetStrategy({ hasUserAsset: false, hostHasImageGen: true, zone: 'owned' });
+  assert.equal(decision.strategy, 'ai-image');
+});
+
 test('decideAssetStrategy: factual zone never resolves to ai-image, even with host capability', () => {
   const decision = decideAssetStrategy({
     hasUserAsset: false,

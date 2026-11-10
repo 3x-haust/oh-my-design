@@ -6,16 +6,17 @@ an OMD-native synthesis bound to OMD's evidence and anti-fabrication rules — n
 
 Use `art-direction.md` to define the communication job, shot/crop system, rights status, and final-asset plan before choosing generation.
 
-**A generated image is a design reference, never a shipped asset.** It plays the exact role a Figma
-export or a hand mockup plays: a visual contract the build implements against. You transfer its layout
-grammar, token relationships, and
-composition decisions, not pixels. A generated mockup never ships as a page `<img>`. Shipped imagery
-still obeys `asset-sourcing`: a factual carrier (team photo, product screenshot, real person, logo)
-is NEVER AI-generated. An abstract or atmospheric zone (a background photo or texture, a mood
-field) may ship generated imagery when its provenance is committed and named in the report. Graphics
-that explain the product — illustrations, UI scenes, objects — are built in code and rendered to
-images; generated images only explore their ideas (see
-[Graphics](#graphics)).
+**A generated page is a draft; a generated asset may ship.** A generated page idea or concept board plays
+the role a Figma export or a hand mockup plays: a visual contract the build implements against. You
+transfer its layout grammar, token relationships and composition decisions, not pixels, and it never
+ships as a page `<img>`. The product's own assets are different: an icon set, an object, a character,
+a badge, a key visual generated for this product may ship once it was chosen among several candidates
+and published with `omd studio asset`, which cuts it out and records the prompt, the tool and the
+candidate in `.omd/studio/images.json`. A factual carrier (a real product screenshot, a real person, a
+logo, a team photo) is NEVER generated. Graphics that explain the product with its real interface or
+output are built in code; the code-rendered material rig (`omd studio rig`) stays available as the
+alternative to a generated object. The procedure for references, concept boards and asset sets is
+`guides/assets.md`.
 
 ## Draft seeding and the shipped surface
 
@@ -65,11 +66,12 @@ interaction at actual viewports. Do not replace the visual direction with an eas
 
 ## Graphics
 
-Ideate from references; ship rendered code.
+Ideate from references; ship either a chosen generated asset or rendered code.
 
-Generated images are ideation for graphics, never the shipped graphic; only an abstract or
-atmospheric background may ship generated pixels (see above). A graphic that ships is built in code
-(HTML/CSS/SVG, WebGL for an occasional accent) and rendered to an image that the page places.
+A graphic that ships is a generated asset picked among candidates and published with `omd studio
+asset` (an object, a character, a badge, an icon set: see `guides/assets.md`), or it is built in code
+(HTML/CSS/SVG, WebGL) and rendered to an image the page places. A graphic that shows the product's
+real interface or output is always built from the real thing, never generated.
 
 - **A graphic explains.** It is there because the idea is hard to say in words: it shows what the
   product does so the visitor understands before reading. Work out from this brief what the product
@@ -100,8 +102,8 @@ atmospheric background may ship generated pixels (see above). A graphic that shi
   kept references to explore protagonist, composition and light: `omd imagegen --name <section>
   --prompt "<claim, protagonist object, material, light, framing>" --reference <kept image path>`
   (Codex image generation; the host's own image tool works too). Vary the protagonist and framing
-  between ideas, then choose the strongest. They are ideation only and stay in `.omd/ideas`; without
-  Codex, sketch the idea directly in code. Either way the idea is a starting point, not an asset.
+  between ideas, then choose the strongest. They stay in `.omd/ideas`; the chosen one either ships through
+  `omd studio asset` or guides a build in code. Without an image tool, sketch the idea directly in code.
 - **Build and render.** Make each graphic one page or element in code using the product's real
   vocabulary, then render it: `omd render graphics/review.html --graphic --selector .art
   --transparent --out public/graphics/review.png`. Place the image with alt text that states what it
@@ -308,9 +310,9 @@ source waits for at least one page idea, or a recorded unavailability where no i
 first-render reviewer sees the latest drafts to catch what the build lost; the build may still depart
 from them and improve on them.
 
-Not shipping a generated image is not a reason to skip image-first thinking. The draft is decision
-material by definition. Select or skip the method for the actual visual uncertainty, current supplied
-direction, and host capability; keep that decision separate from whether any generated asset ships.
+A page draft is decision material by definition and never ships; that is no reason to skip it. Select
+or skip the method for the actual visual uncertainty, current supplied direction, and host capability;
+keep that decision separate from whether a generated asset ships.
 
 ## Choose a concept that survives implementation
 

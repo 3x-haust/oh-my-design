@@ -9,7 +9,7 @@ import { failAdaptiveRoute, type AdaptiveStrategyDecision } from './adaptive-flo
 
 export type AdaptiveAiAsset = Readonly<{
   assetId: string;
-  zone: 'abstract' | 'atmospheric';
+  zone: 'owned' | 'abstract' | 'atmospheric';
   prompt: string;
   provider: string;
   decision: AiAssetDecisionReference;
@@ -43,7 +43,7 @@ function parse(value: unknown): AdaptiveAiAsset {
   const assetId = item.get('assetId');
   const zone = item.get('zone');
   if (typeof assetId !== 'string' || !ID.test(assetId)
-    || (zone !== 'abstract' && zone !== 'atmospheric')) {
+    || (zone !== 'owned' && zone !== 'abstract' && zone !== 'atmospheric')) {
     return failAdaptiveRoute('AI_ASSET_DECISION_INVALID');
   }
   try {

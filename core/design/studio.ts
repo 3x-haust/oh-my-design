@@ -11,6 +11,11 @@ import { newSurface } from './new-surface-advisories.ts';
 import { projectBrandMarks, readmeLogos, STUDIO_LOGO, STUDIO_NO_LOGO } from './studio-floors.ts';
 import { readStudioConcept, STUDIO_IDEA_GUIDANCE } from './studio-concept.ts';
 import { STUDIO_DIR } from './studio-paths.ts';
+import { STUDIO_LEDGER_GUIDANCE } from './studio-redesign.ts';
+import {
+  assetsIssue, boardIssue, directionIssue, redesignPending, redesignTrack,
+  STUDIO_ASSETS_GUIDANCE, STUDIO_BOARD_GUIDANCE, STUDIO_DIRECTION_GUIDANCE,
+} from './studio-stages.ts';
 import { parseDeviations, type StudioConvention, type StudioDeviation } from './studio-page-check.ts';
 
 type Route = ReturnType<typeof readPersistedRoute>;
@@ -481,19 +486,31 @@ export const STUDIO_CONCEPT_GUIDANCE = `Before the page source, draw ${STUDIO_PA
   + 'hero-<n> --prompt "<the exact headline and copy, what sits where and how large, the key visual made from the product\'s real look, the '
   + 'type and the devices the system takes, the sampled colours>". Make each a genuinely different composition (a different arrangement of '
   + 'words, key visual and action, not a colour variant), look at them, choose one and write in system.md what must survive into the HTML. '
-  + 'A mobile app\'s ideas are its main screen at phone size: add --viewport mobile. The images are ideation only and never ship; where no image tool works, omd imagegen records that and the page proceeds.';
+  + 'A mobile app\'s ideas are its key screens at phone size: add --viewport mobile. Page ideas are drafts that never ship as a picture of the page; '
+  + 'where no image tool works, omd imagegen records that and the page proceeds.';
 
-/** What a new surface still owes before its page is built: a study of finished sites, the system taken from one of them, then page ideas. */
-export function studioPending(root: string, route: Route): 'idea' | 'study' | 'system' | 'concept' | null {
+export type StudioStage = 'idea' | 'study' | 'board' | 'direction' | 'system' | 'concept' | 'assets' | 'baseline' | 'ledger';
+
+/**
+ * What a new surface or a redesign still owes before its screens are built, in order. A marketing page: its idea, a study of
+ * finished sites, the reference board, a direction chosen among concept boards, the system, first-screen ideas, the owned
+ * assets. A product: the same without the idea record. A redesign: the screens as they are, the keep/change ledger, the
+ * reference board, the direction and the assets.
+ */
+export function studioPending(root: string, route: Route): StudioStage | null {
+  if (redesignTrack(root, route)) return redesignPending(root);
   if (!newSurface(route)) return null;
   // A marketing page decides its own visual idea before it looks at anyone else's page.
   if (route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing' && readStudioConcept(root) === null) return 'idea';
   const studies = studioStudies(root);
   if (studies.length === 0) return 'study';
+  if (boardIssue(root) !== null) return 'board';
+  if (directionIssue(root) !== null) return 'direction';
   const system = readStudioSystem(root);
   if (system === null || !studies.some(study => sameSite(study.url, system.reference))) return 'system';
   if (notesThin(root) || logoUnsaved(root) || paletteIssue(root, system, studies) !== null) return 'system';
-  return ideationUnavailable(root) || ideaImages(root).filter(idea => idea.kind === 'page').length >= STUDIO_PAGE_IDEAS ? null : 'concept';
+  if (!ideationUnavailable(root) && ideaImages(root).filter(idea => idea.kind === 'page').length < STUDIO_PAGE_IDEAS) return 'concept';
+  return assetsIssue(root) === null ? null : 'assets';
 }
 
 const notesThin = (root: string): boolean =>
@@ -515,7 +532,7 @@ export function studioPageSource(path: string): boolean {
   return /(?:^|\/)index\.html$/.test(normalized) || (/(?:^|\/)src\//.test(normalized) && /\.(?:tsx?|jsx?|css|html)$/.test(normalized));
 }
 
-/** Refusal boundary at page-source writes, the first render and finish: a new surface is built on a system taken from a studied site. */
+/** Refusal boundary at page-source writes, the first render and finish: every stage the track owes is done before its screens are built. */
 export function requireStudioSystem(root: string, route: Route): void {
   const pending = studioPending(root, route);
   if (pending === 'idea') {
@@ -537,6 +554,15 @@ export function requireStudioSystem(root: string, route: Route): void {
     const drawn = ideaImages(root).filter(idea => idea.kind === 'page').length;
     throw Object.assign(new Error(`STUDIO_CONCEPT_MISSING: ${drawn} of ${STUDIO_PAGE_IDEAS} page ideas drawn. ${STUDIO_CONCEPT_GUIDANCE}`), { code: 'STUDIO_CONCEPT_MISSING' });
   }
+  const refuse = (code: string, reason: string, guidance: string): never => { throw Object.assign(new Error(`${code}: ${reason}. ${guidance}`), { code }); };
+  if (pending === 'board') refuse('STUDIO_BOARD_MISSING', boardIssue(root)!, STUDIO_BOARD_GUIDANCE);
+  if (pending === 'direction') refuse('STUDIO_DIRECTION_MISSING', directionIssue(root)!, STUDIO_DIRECTION_GUIDANCE);
+  if (pending === 'assets') refuse('STUDIO_ASSETS_MISSING', assetsIssue(root)!, STUDIO_ASSETS_GUIDANCE);
+  if (pending === 'baseline') {
+    refuse('STUDIO_BASELINE_MISSING', 'a redesign starts from the screens as they are, and none is captured', 'Run omd studio baseline <url> [<url> ...] on '
+      + 'every existing screen the work touches, before changing it. When this change is not a redesign, write .omd/studio/skips.json {"redesign": {"because": "<why>"}}.');
+  }
+  if (pending === 'ledger') refuse('STUDIO_LEDGER_MISSING', 'the redesign has no keep/change ledger', STUDIO_LEDGER_GUIDANCE);
 }
 
 export type SystemDriftObservation = Readonly<{

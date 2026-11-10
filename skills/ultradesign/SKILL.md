@@ -31,10 +31,8 @@ Inspect the actual project and full request before choosing the work; never ask 
   delivery target, inspiration, domain evidence or rejected result. A requested target governs
   fidelity; inspiration informs the new design; a rejected result is a comparison baseline, never
   a direction to reproduce. Never swap a usable user target for discovery, nor make every attachment a target.
-- **Interaction states** (hover, focus, pressed, open) carry much of a reference's craft: capture and
-  compare them, not only the resting screen.
 
-Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`,
+Internal guides, read only when they apply (`omd pack <path>`): `guides/references.md`, `guides/assets.md`,
 `guides/figma.md`, `guides/copy.md`, `guides/code.md`, `guides/landing-basics.md`, `guides/critique.md`, `guides/audit.md`, `guides/coach.md`.
 
 ## New work: one method, three tracks
@@ -46,30 +44,32 @@ its personality (logo, README voice), the one message in concrete words, the use
 capability with its demo. Keep the README's logo. An empty project: choose a memorable name,
 not the category's stock word.
 
-**Marketing page** (`omd pack guides/marketing.md`):
-1. Idea before any reference: `.omd/studio/concept.json`, one visual idea only this project could own, from its
-   name, mark, mechanism or material, kept from six or more rough ideas that differ in what the object IS.
-2. References by job: layout rhythm (primary), material and light, type. `omd studio refs <url>... --json`, look
-   at the captures, `omd studio blueprint` for the primary's skeleton. Then `.omd/studio/system.md` and
-   `system.json` `{"reference", "sizes", "weights", "colors"}`, colours sampled from real images, and two or
-   three first-screen ideas (`omd imagegen --kind page`).
-3. Key asset first, alone: the idea made in code inside `data-product`, large, moving by itself; no recording.
-   An object: `omd studio rig` (`guides/material-stage.md`). Refine it against a crop of the bar before any page.
-4. Compose the page around the asset: type and graphic interlock, the device returns down the page, sections at
-   the reference's rhythm with varied composition, real logo in the header.
-5. Add detail (states, motion choreography, type refinement), then subtract. `omd studio look` sets the build
-   beside the reference; `omd studio check` names defects and the defaults the page leaves. A default the idea
-   breaks on purpose goes in `system.json` `"deviations"` with its reason, then applied everywhere.
-6. `omd lifecycle finish --json`; answer what it names, structure first.
+Before screens, every track owes (`omd pack guides/assets.md`; `omd stage next` names the due stage; source,
+first render and finish are refused until done):
+- **Reference board**: image-level references per screen and element, one job each (`omd ref browse search
+  dribbble|behance|pinterest`, `keep`), listed in `.omd/studio/board.json`, composed by `omd studio board`.
+  Say back what you kept and what each is for; no count is required.
+- **Direction**: three or more concept boards (`omd imagegen --kind board`), sheeted (`omd studio sheet`), one
+  chosen by you in `.omd/studio/direction.json`.
+- **Owned assets**: several candidate sets per asset (`omd imagegen --kind asset`), sheeted, compared in pairs,
+  recorded in `.omd/studio/assets.json`; the winner ships only through `omd studio asset <png> --out <path> --cut`,
+  which writes `.omd/studio/images.json`. No working image tool, or a code-built object won: `.omd/studio/skips.json`
+  `{"assets": {"instead": "rig", "because"}}` and `omd studio rig`.
+- **Key screens around the asset**: it changes their structure, not decoration; sheet several structurally
+  different variants (`omd studio sheet`), pick one.
 
-**Multi-screen product** (`omd pack guides/product.md`): object model and flows first; study populated task
-screens for density and component craft; one system file every screen obeys; a screen inventory with empty,
-loading, error, success states and realistic data; `omd studio check --mode product <screen>...` until one
-role is built one way everywhere.
+**Marketing page** (`omd pack guides/marketing.md`): idea first (`.omd/studio/concept.json`, one object only this
+project could own, kept from six or more rough ideas); sites by job (`omd studio refs`, `blueprint`); board; direction; `.omd/studio/system.md` and `system.json` (colours sampled from real images or the
+chosen board); first-screen ideas (`omd imagegen --kind page`); assets; the key asset alone in `data-product`;
+the page around it; detail, then subtraction (`omd studio look`, `omd studio check`, `"deviations"`).
 
-**Redesign** (`omd pack guides/redesign.md`): `omd studio baseline <url>...` on every existing screen; write
-`.omd/studio/ledger.json` (what is kept: equity, routes, behaviour, data contracts; what changes and why);
-rebuild; `omd studio check --mode redesign` sets old beside new and fails a lost control or route.
+**Multi-screen product** (`omd pack guides/product.md`): objects and flows; populated task screens; board;
+direction at phone size; one system file; key screen ideas (`--viewport mobile`); assets; screens rebuilt around
+them with every state on realistic data; `omd studio check --mode product <screen>...`.
+
+**Redesign** (`omd pack guides/redesign.md`): `omd studio baseline <url>...`; `.omd/studio/ledger.json` (kept,
+changed, why); board; direction; assets; rebuild; `omd studio check --mode
+redesign`. Not a redesign: `.omd/studio/skips.json` `{"redesign": {"because"}}`.
 
 ## Words, type, and flow ship with the pixels
 
@@ -95,19 +95,20 @@ rebuild; `omd studio check --mode redesign` sets old beside new and fails a lost
   `omd pack theory/ux.md`; copy/voice → `omd pack theory/microcopy.md` and
   `omd pack theory/voice.md`; type → `omd pack theory/typography.md`, and before choosing families
   `omd pack theory/font-pairing.md` (bundle-ready fonts, pairings, local files). Use only fonts and images free of
-  licence restrictions (fonts OFL-1.1 shipped with their licence; images the project's own, drawn in code or
-  CC0, recorded in `.omd/studio/images.json`); never extra clauses, personal-use-only terms, an unconfirmed
-  licence or a stock site's own licence; any Korean text →
+  licence restrictions (fonts OFL-1.1 shipped with their licence; images the project's own, generated for it,
+  drawn in code or CC0); never extra clauses, personal-use-only terms, an unconfirmed licence or a stock site's
+  own licence. `.omd/studio/images.json` is written only by `omd studio asset` (generated) and `omd studio image
+  <path> --source <url|own> --licence <id>` (anything else); any Korean text →
   `omd pack theory/typography-korean.md`; accessibility → `omd pack theory/accessibility.md`;
   marketing copy → `omd pack theory/web-copy.md`.
   Motion that materially affects the task or identity → `omd pack theory/motion.md`;
   inspect only the matching `motion/recipes/<name>.md` mechanism, not an effects checklist.
 - A marketing or launch page needs a graphic language of its own, decided from evidence before
   sections are styled. Search graphic references per graphic job (`omd ref browse search
-  cosmos|dribbble|behance|notefolio "<graphic job>"`) and keep the best few with the reason. Generated
-  images are ideation only. Ship graphics as live three.js scenes on the page (look at one alone with
-  `omd render <graphic> --graphic`): a rendered PNG of a scene is a picture of 3D, CSS cards are a diagram,
-  a page shrunk into a frame is a thumbnail. Each graphic argues one claim with one protagonist made from
+  cosmos|dribbble|behance|notefolio "<graphic job>"`) and keep the best few with the reason. A graphic
+  ships as a chosen generated asset (`omd studio asset`) or a live three.js scene (look at one alone with
+  `omd render <graphic> --graphic`); a generated page or concept board never ships, CSS cards are a diagram,
+  a page shrunk into a frame is a thumbnail. Real people and product screenshots are never generated. Each graphic argues one claim with one protagonist made from
   this product's real material. No placeholder sites or shapes, captions or disclaimers on the art, never
   this page inside itself: a tool that makes pages shows one it made for another brief, built fully. When the product runs, show it working with real footage (`omd record`) or the real UI, never a
   redrawn mock. Generic icons are unfinished, not minimal.

@@ -1,5 +1,6 @@
 import type { readPersistedRoute } from '../route/index.ts';
 import { newSurface } from './new-surface-advisories.ts';
+import { redesignRequested } from './studio-stages.ts';
 
 type Route = ReturnType<typeof readPersistedRoute>;
 
@@ -22,7 +23,7 @@ export function composeGuidance(route: Route): string {
       : 'A product is many screens in one hand (omd pack guides/product.md): the object model and flows first, one system file every screen obeys, '
         + 'every screen with its empty, loading, error and success states on realistic data, then omd studio check --mode product <screen> <screen> '
         + '... until each role is built one way everywhere. ';
-    return `${route.projectMode === 'greenfield' ? 'Start the source as a React + Vite + strict TypeScript project laid out per omd pack guides/code.md. ' : ''}${track}Build the page in the project as components on `
+    return `${route.projectMode === 'greenfield' ? 'Start the source as a React + Vite + strict TypeScript project laid out per omd pack guides/code.md. ' : ''}${track}${ASSET_COMPOSITION}Build the page in the project as components on `
       + 'the system in .omd/studio/system.json. The key visual first: the one visual that carries the page, made in code at large size from the '
       + 'product\'s real look (for software, its own interface recreated crisply in its real colours, marked data-product), playing the product\'s '
       + 'real flow on its own (states change, rows arrive, a cursor works) and answering real input; a screen recording is not a key visual. A tool that makes pages shows a page it made for another, particular client, held to everything this page is: its own name chosen from several, words in the page\'s language, its own palette and art, nothing standing in for an image, no line calling it fictional. Shoot it alone (omd render <page> --out <png>), look, and refine '
@@ -59,13 +60,21 @@ export function composeGuidance(route: Route): string {
     : 'Compose with omd pack theory/layout.md and theory/color.md; omd pack composition/app-shell-workbench.md, composition/crud-list-detail.md '
       + 'and composition/filterable-data-table.md are starting hypotheses; the states, targets and shipping basics in omd pack guides/landing-basics.md apply here too. ';
   const type = korean ? 'Korean text: omd pack theory/typography-korean.md beside theory/font-pairing.md. ' : '';
+  // A redesign has passed its board, direction and assets before its source; the rebuilt screens are composed around them.
+  const redesign = redesignRequested(route.request) ? `${ASSET_COMPOSITION}Keep everything the ledger keeps; omd studio check --mode redesign sets old beside new. ` : '';
   // The hero sets the page's idea; reviewing it alone, before the rest exists, is cheaper than repairing a whole page.
   const order = marketing ? 'Build the header and hero first, run omd first-render check on them, settle the hero, then build the rest and check again. '
     + 'The hero carries the proof the brief names in heroProof: real output or the working product goes there, large enough to read; a built '
     + '3D graphic then serves the section whose claim it acts out, not the entry. Only a concept-graphic hero puts the graphic first.'
     : 'Then build and run omd first-render check --page dist/index.html --json.';
-  return `${start}${words}${structure}${type}${order}`;
+  return `${start}${words}${structure}${redesign}${type}${order}`;
 }
+
+/** The owned assets change the key screens' structure; one variant polished is not a choice (omd pack guides/assets.md). */
+export const ASSET_COMPOSITION = 'Compose around the owned assets shipped from .omd/studio/assets.json, in the direction chosen in .omd/studio/direction.json: '
+  + 'let an asset change the structure of the key screens, not decorate a finished layout (a lesson list rebuilt as a path of blocks you climb). For '
+  + 'each key screen build several structurally different variants, set them side by side with omd studio sheet --name <screen> <url> <url> '
+  + '[--viewport mobile], pick one and say why. ';
 
 /** Said whenever the early reviewer asks for repair or a repair regressed: diagnose by cause before changing pixels. */
 export const REPAIR_KNOWLEDGE = 'Diagnose by cause before changing pixels: omd pack guides/landing-basics.md for the basics a designer keeps, theory/craft.md (diagnose by cause) and '

@@ -7,7 +7,9 @@ import { isModelLedProcess } from '../route/process-policy.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { readFirstRenderReview } from '../design/first-render-review.ts';
 import { STUDIO_IDEA_GUIDANCE } from '../design/studio-concept.ts';
-import { STUDIO_CONCEPT_GUIDANCE, STUDIO_STUDY_GUIDANCE, STUDIO_SYSTEM_GUIDANCE, studioPending } from '../design/studio.ts';
+import { STUDIO_CONCEPT_GUIDANCE, STUDIO_STUDY_GUIDANCE, STUDIO_SYSTEM_GUIDANCE, studioPending, type StudioStage } from '../design/studio.ts';
+import { STUDIO_ASSETS_GUIDANCE, STUDIO_BOARD_GUIDANCE, STUDIO_DIRECTION_GUIDANCE } from '../design/studio-stages.ts';
+import { STUDIO_LEDGER_GUIDANCE } from '../design/studio-redesign.ts';
 import { composeGuidance, REPAIR_KNOWLEDGE } from '../design/compose-guidance.ts';
 import { newSurface } from '../design/new-surface-advisories.ts';
 import { currentStudioDelivery, STUDIO_DELIVER_MESSAGE, STUDIO_REVIEW_ROUNDS, studioReviewRounds } from '../design/studio-delivery.ts';
@@ -16,6 +18,19 @@ import {
   stallMessage,
   firstRenderReviewMatchesCurrentRoute,
 } from '../design/first-render-checkpoint.ts';
+
+/** Each stage a track owes before its screens: the action, the command that does it and what to do. */
+const STUDIO_STAGE_WORK: Readonly<Record<StudioStage, Readonly<{ action: string; next: string; instruction: string }>>> = {
+  idea: { action: 'decide-visual-idea', next: 'omd guard production --json', instruction: STUDIO_IDEA_GUIDANCE },
+  study: { action: 'study-studio-references', next: 'omd studio refs <url> <url> --json', instruction: STUDIO_STUDY_GUIDANCE },
+  board: { action: 'compose-reference-board', next: 'omd studio board --json', instruction: STUDIO_BOARD_GUIDANCE },
+  direction: { action: 'choose-concept-direction', next: 'omd imagegen --kind board --name concept-a --prompt "<the product, key screens, palette, type, asset style>" --reference .omd/studio/board.png --json', instruction: STUDIO_DIRECTION_GUIDANCE },
+  system: { action: 'write-studio-system', next: 'omd guard production --json', instruction: STUDIO_SYSTEM_GUIDANCE },
+  concept: { action: 'draw-page-ideas', next: 'omd imagegen --kind page --name hero-1 --prompt "<composition>"', instruction: STUDIO_CONCEPT_GUIDANCE },
+  assets: { action: 'make-asset-sets', next: 'omd imagegen --kind asset --name <set> --prompt "<items, one shared style, plain background>" --reference <chosen concept board> --json', instruction: STUDIO_ASSETS_GUIDANCE },
+  baseline: { action: 'capture-redesign-baseline', next: 'omd studio baseline <url> <url> --json', instruction: 'A redesign starts from the screens as they are: run omd studio baseline on every existing screen the work touches (omd pack guides/redesign.md).' },
+  ledger: { action: 'write-redesign-ledger', next: 'omd guard production --json', instruction: STUDIO_LEDGER_GUIDANCE },
+};
 
 const base = (routeSha256: string | null) => ({
   schema: 'stage-next-v2' as const,
@@ -73,18 +88,9 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       instruction: 'Repair the current authority, scope, design-language, or unresolved reframe blocker, then rerun the production guard.',
     };
   }
-  // A new product or landing starts from studied finished sites and the system taken from one of them.
+  // A new product, a landing or a redesign passes its references, direction and owned assets before its screens.
   const studio = studioPending(root, route);
-  if (studio !== null) {
-    return {
-      ...base(routeSha256),
-      stage: 'concepts',
-      action: studio === 'idea' ? 'decide-visual-idea' : studio === 'study' ? 'study-studio-references' : studio === 'system' ? 'write-studio-system' : 'draw-page-ideas',
-      next: studio === 'idea' ? 'omd guard production --json' : studio === 'study' ? 'omd studio refs <url> <url> --json' : studio === 'system' ? 'omd guard production --json'
-        : 'omd imagegen --kind page --name hero-1 --prompt "<composition>"',
-      instruction: studio === 'idea' ? STUDIO_IDEA_GUIDANCE : studio === 'study' ? STUDIO_STUDY_GUIDANCE : studio === 'system' ? STUDIO_SYSTEM_GUIDANCE : STUDIO_CONCEPT_GUIDANCE,
-    };
-  }
+  if (studio !== null) return { ...base(routeSha256), stage: 'concepts', ...STUDIO_STAGE_WORK[studio] };
   // Until the first render exists, the work is composing the page; name the knowledge for that.
   if (!existsSync(resolve(root, '.omd/first-render'))) {
     return {
