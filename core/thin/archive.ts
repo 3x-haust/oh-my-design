@@ -112,3 +112,28 @@ export function archiveCycle(writer: ProjectWriteAdapter, cycle: number, survivo
   put(writer, `${dir}/manifest.json`, `${JSON.stringify({ schema: 'omd-thin-archive-v1', cycle, survivors, ...summary }, null, 2)}\n`);
   return summary;
 }
+
+/** The latest archive holding a cycle's work, or null. */
+export function findArchivedCycle(root: string, cycle: number): string | null {
+  const base = join(root, THIN_ARCHIVE);
+  const suffix = (name: string): number => name === `cycle-${cycle}` ? 1
+    : /^-\d+$/.test(name.slice(`cycle-${cycle}`.length)) ? Number(name.slice(`cycle-${cycle}-`.length)) : 0;
+  const latest = (existsSync(base) ? readdirSync(base) : [])
+    .filter(name => suffix(name) > 0 && existsSync(join(base, name, 'manifest.json')))
+    .sort((a, b) => suffix(a) - suffix(b))
+    .at(-1);
+  return latest === undefined ? null : `${THIN_ARCHIVE}/${latest}`;
+}
+
+/**
+ * Put an archived cycle's work back over the starting state: its files where they were, and the starting files it had
+ * deleted removed again. The archive itself stays.
+ */
+export function restoreArchive(writer: ProjectWriteAdapter, dir: string): string[] {
+  const root = writer.projectRoot;
+  const summary = JSON.parse(readFileSync(join(root, dir, 'manifest.json'), 'utf8')) as ArchiveSummary;
+  for (const file of summary.archived) put(writer, file, readFileSync(join(root, dir, 'files', file)));
+  const archived = new Set(summary.archived);
+  for (const file of summary.restored) if (!archived.has(file) && existsSync(join(root, file))) writer.remove(file);
+  return summary.archived;
+}

@@ -60,13 +60,13 @@ export const isThinEyeRun = (args: readonly string[]): boolean => args[0] === 't
  */
 export async function runThinEye(context: ThinContext, cli: (args: readonly string[]) => Promise<{ text: string }>, signal?: AbortSignal): Promise<string> {
   if (context.model === undefined) throw new Error('OMD_THIN_EYE: the session has no model to inherit');
-  const packet = JSON.parse((await cli(['thin', 'packet', '--json'])).text) as { dir: string; result: string[]; reference: string[] };
+  const packet = JSON.parse((await cli(['thin', 'packet', '--json'])).text) as { dir: string; result: string[]; other?: string[]; reference: string[] };
   const entry = process.env.OMD_PI_CLI ?? process.argv[1];
   if (!entry) throw new Error('OMD_THIN_EYE: the Pi entrypoint is unknown');
   const answer = await runPiColdEye({ node: process.execPath, cli: entry, provider: context.model.provider, model: context.model.id },
     join(context.cwd, packet.dir), signal);
   const saved = (await cli(['thin', 'eye', '--record', answer])).text;
-  return `The cold eye saw only ${packet.dir} (${packet.result.length} result, ${packet.reference.length} reference images). `
+  return `The cold eye saw only ${packet.dir} (${packet.result.length} result, ${packet.other?.length ?? 0} other, ${packet.reference.length} reference images). `
     + `Its answer (${saved.trim()}):\n\n${answer}`;
 }
 

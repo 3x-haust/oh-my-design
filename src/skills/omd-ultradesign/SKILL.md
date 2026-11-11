@@ -13,7 +13,8 @@ carries what was learned, and the next cycle starts from scratch carrying only t
 ## Workflow
 
 Run OMD commands with `omd` (on Pi, through `omd_cli`). They are yours to run; the human only ever types this skill's
-name and their words. Start with `omd thin status`; it says where the loop is.
+name and their words. Only the `omd thin` commands and the tools named in this skill belong to this loop; no other
+`omd` command is part of it. Start with `omd thin status`; it says where the loop is.
 
 - **No loop yet.** Read the request and the folder. No product source: a new marketing page or a new multi-screen
   product, by what the request asks for. An existing service whose screens the request changes: a redesign. Then
@@ -31,9 +32,11 @@ name and their words. Start with `omd thin status`; it says where the loop is.
   Then follow "Next cycle due". A question is answered and the loop stays stopped.
 
 When `omd thin close` stops the loop, show the human, in this order: where the result is and how to open it; the cold
-eye's answer, verbatim; this cycle's memo; and what the next cycle would throw away and rebuild (`omd thin status`
-lists it). Then name the replies, typed after this skill's name: "one more" runs one cycle and stops again,
-"continue" runs on until the cold eye finds no tell or cycle 3 is reached. End your turn.
+eye's answer, verbatim; whether this cycle was better or not better than the previous one (when not, the previous
+cycle's work was restored as the result and this one archived); this cycle's memo; and what the next cycle would
+throw away and rebuild (`omd thin status` lists all of it). Then name the replies, typed after this skill's name:
+"one more" runs one cycle and stops again, "continue" runs on until the cold eye finds no tell, a cycle is not better
+than the one before, or cycle 3 is reached. End your turn.
 
 ## A cycle
 
@@ -41,9 +44,11 @@ This work is yours. It ships under your name and you will maintain it. If what y
 it: throw it away and recompose. The target: the key screens of the request, built in the project's real code (React,
 Vite and strict TypeScript for new work), that a senior designer would sign, rendered at desktop and phone width.
 
-If `.omd/thin/memo.md` holds earlier cycles, read it first; the last cycle's largest tell is what this one rebuilds
-around, not a spot to patch. It is all that survives of them, together with the assets it names, the chosen work in
-`.omd/thin/reference/` and, for a redesign, `.omd/thin/before/`. Do not try to recover anything else.
+Every cycle starts again from the request and the project's real material, and solves the request anew. If
+`.omd/thin/memo.md` holds earlier cycles, read it first as knowledge of how to work, what to avoid and what survives,
+never as content: nothing from the memo, the cold eye or this loop's history appears on the page or in its copy unless
+the request asks for it. The memo is all that survives of earlier cycles, together with the assets it names, the
+chosen work in `.omd/thin/reference/` and, for a redesign, `.omd/thin/before/`. Do not try to recover anything else.
 
 Work in a designer's order. Read the project's real material: README, logo, words, data, the product itself. For a
 redesign, capture the before state first (`omd thin shoot <url> --before` for every screen the work touches) and write
@@ -71,8 +76,8 @@ When the screens are done:
    `omd-internal-cold-eye` agent (the session's model; never name one) with only the packet folder path, and save its
    answer verbatim with `omd thin eye --record "<answer>"`. Do not explain the work to it.
 4. Add this cycle to `.omd/thin/memo.md` under `## Cycle <n>`, in a few lines: what was learned, which assets survive,
-   what not to do again. Put the cold eye's largest tell in your own words as what the next cycle rebuilds around; its
-   smaller tells and verdict are context, not a fix list.
+   what not to do again. Put the cold eye's largest tell in your own words as a way of working to avoid; its smaller
+   tells and comparison are context, not a fix list.
 5. `omd thin close --keep <each surviving asset> --open "<how to open the result>"`, then continue with the Workflow.
 
 ## Rules

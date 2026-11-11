@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PUBLIC_COMMANDS } from './cli/public-surface.ts';
 import { ROOT, bootstrapNativeArgs } from './cli/runtime.ts';
@@ -14,7 +14,9 @@ async function main(): Promise<never> {
     process.exit(0);
   }
   if (command === 'help' || command === '--help' || command === '-h') {
-    return (await import('./commands/help.ts')).printUsage(0);
+    const help = await import('./commands/help.ts');
+    if (!args.includes('--all') && existsSync(join(process.cwd(), '.omd/thin/state.json'))) return help.printThinUsage();
+    return help.printUsage(0);
   }
   if (command === undefined) return (await import('./commands/help.ts')).printUsage();
 

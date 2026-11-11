@@ -4,11 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { parse } from 'yaml';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import { packetDir, put, resultDir, THIN_REFERENCE, ThinError } from './state.ts';
+import { comparePath, packetDir, put, resultDir, THIN_REFERENCE, ThinError } from './state.ts';
 
 /**
- * The cold eye's packet: captures of the result and captures of the chosen real work, nothing else. No brief, notes,
- * memo or rationale, and neutral file names, so the reader brings no context. A capture much taller than it is wide is
+ * The cold eye's packet: captures of the result, from cycle 2 on the captures of the standing earlier result under
+ * other/ (a name that does not say which is newer), and captures of the chosen real work, nothing else. No brief, notes,
+ * memo or rationale, and neutral file names, so the reader brings no context. Which cycle other/ holds is recorded
+ * outside the packet. A capture much taller than it is wide is
  * cut into consecutive parts, top to bottom, so a reader that shrinks large images still sees it at a legible size.
  *
  * The cold eye's question has one source: the omd-internal-cold-eye agent's instructions. The Pi eye and
@@ -21,7 +23,8 @@ const IMAGE = /\.(?:png|jpe?g|webp)$/i;
 /** A part is at most this many times as tall as it is wide: about two desktop screens, or one and a bit phone screens. */
 const maxPartRatio = (width: number): number => width >= 800 ? 1.25 : 2.4;
 
-export type Packet = { dir: string; result: string[]; reference: string[] };
+export type Packet = { dir: string; result: string[]; other: string[]; reference: string[] };
+const SIDES = ['result', 'other', 'reference'] as const;
 
 const images = (root: string, dir: string): string[] => existsSync(join(root, dir))
   ? readdirSync(join(root, dir)).filter(name => IMAGE.test(name) && !name.startsWith('.')).sort() : [];
@@ -53,14 +56,15 @@ function copyCapture(writer: ProjectWriteAdapter, source: string, targetDir: str
   return [name];
 }
 
-/** Rebuild the packet for one cycle from its result captures and the chosen reference captures. */
-export function assemblePacket(writer: ProjectWriteAdapter, cycle: number): Packet {
+/** Rebuild the packet for one cycle from its result captures, the earlier result it is compared with, and the reference captures. */
+export function assemblePacket(writer: ProjectWriteAdapter, cycle: number, against: number | null = null): Packet {
   const root = writer.projectRoot;
   const result = images(root, resultDir(cycle));
   if (result.length === 0) {
     throw new ThinError(`no captures in ${resultDir(cycle)}; render the result at desktop and phone width into it first`);
   }
   const reference = images(root, THIN_REFERENCE);
+  const other = against === null ? [] : images(root, resultDir(against));
   const dir = packetDir(cycle);
   // Rebuilt from nothing each time, so no stray note or stale capture rides along.
   for (const entry of existsSync(join(root, dir)) ? readdirSync(join(root, dir), { withFileTypes: true }) : []) {
@@ -68,16 +72,19 @@ export function assemblePacket(writer: ProjectWriteAdapter, cycle: number): Pack
     for (const name of readdirSync(join(root, dir, entry.name))) writer.remove(`${dir}/${entry.name}/${name}`);
     writer.removeEmptyDirectory(`${dir}/${entry.name}`);
   }
-  const packet: Packet = { dir, result: [], reference: [] };
-  for (const [side, names, from] of [['result', result, resultDir(cycle)], ['reference', reference, THIN_REFERENCE]] as const) {
+  const packet: Packet = { dir, result: [], other: [], reference: [] };
+  const sources = [['result', result, resultDir(cycle)], ['other', other, against === null ? '' : resultDir(against)], ['reference', reference, THIN_REFERENCE]] as const;
+  for (const [side, names, from] of sources) {
+    if (side === 'other' && names.length === 0) continue;
     writer.mkdir(`${dir}/${side}`);
     names.forEach((name, index) => { packet[side].push(...copyCapture(writer, join(root, from, name), `${dir}/${side}`, index).map(file => `${side}/${file}`)); });
   }
+  put(writer, comparePath(cycle), `${JSON.stringify({ result: cycle, other: packet.other.length === 0 ? null : against }, null, 2)}\n`);
   return packet;
 }
 
 /** Every image in a packet folder (assembled here or by hand), result first, as absolute paths. */
 export function packetImages(dir: string): string[] {
-  return (['result', 'reference'] as const).flatMap(side => existsSync(join(dir, side))
+  return SIDES.flatMap(side => existsSync(join(dir, side))
     ? readdirSync(join(dir, side)).filter(name => IMAGE.test(name)).sort().map(name => join(dir, side, name)) : []);
 }
