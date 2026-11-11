@@ -481,7 +481,10 @@ export default function omdExtension(pi: PortablePiApi, options: OmdExtensionOpt
     name: OMD_TOOL_NAME,
     label: 'OMD CLI',
     description: 'Run the packaged Oh My Design CLI in the current project with structured arguments.',
-    promptSnippet: 'Use omd_cli without external --activation. Start work with no product source yet with schema product-route-input; existing/bounded work with schema route-input. route validate --json groups current input errors; repair all named fields, validate, then route classify and stage next. Do not run completion before classification or request a host activation file. Finish with lifecycle finish.',
+    // The design loop's skill names its own commands; only the retired gated workflow is told to route and stage.
+    promptSnippet: options.legacyGatedEntry === true
+      ? 'Use omd_cli without external --activation. Start work with no product source yet with schema product-route-input; existing/bounded work with schema route-input. route validate --json groups current input errors; repair all named fields, validate, then route classify and stage next. Do not run completion before classification or request a host activation file. Finish with lifecycle finish.'
+      : 'Use omd_cli without external --activation, for the OMD commands the active skill names; no other OMD command is part of its work.',
     parameters: Type.Object({
       args: Type.Array(Type.String(), { minItems: 1 }),
     }, { additionalProperties: false }),

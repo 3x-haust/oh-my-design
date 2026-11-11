@@ -2,10 +2,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { invocationFromActivation, projectWriter, type Opts } from '../cli/runtime.ts';
 import type { ProjectWriteAdapter } from '../../core/runtime/project-write.ts';
-import { archiveCycle, plannedArchive, projectRelative, snapshotBaseline } from '../../core/thin/archive.ts';
+import { archiveCycle, findArchivedCycle, plannedArchive, projectRelative, restoreArchive, snapshotBaseline } from '../../core/thin/archive.ts';
 import { assemblePacket, COLD_EYE_QUESTION } from '../../core/thin/packet.ts';
 import {
-  appendMemo, beginCycle, put, cycleDir, closeCycle, eyeAnswerPath, eyeVerdict, goOn, newThinState, readThinState, requireThinState, resultDir,
+  againstOf, appendMemo, beginCycle, put, cycleDir, closeCycle, eyeAnswerPath, eyeComparison, eyeVerdict, goOn, newThinState, readThinState, requireThinState, resultDir,
   THIN_BEFORE, THIN_KINDS, THIN_MEMO, THIN_REFERENCE, ThinError, writeThinState, type ThinKind, type ThinState,
 } from '../../core/thin/state.ts';
 
@@ -57,7 +57,8 @@ function phaseLine(state: ThinState): string {
   const mode = state.mode === 'continue' ? `continue, up to cycle ${state.until}` : 'one cycle at a time';
   const phase = state.phase === 'making' ? 'being made'
     : state.phase === 'next' ? 'closed; the next cycle starts in a fresh session'
-      : `stopped (${state.reason === 'no-tell' ? 'the cold eye found no tell' : state.reason === 'cap' ? `cycle ${state.until} reached` : 'one cycle was asked for'})`;
+      : `stopped (${state.reason === 'no-tell' ? 'the cold eye found no tell' : state.reason === 'cap' ? `cycle ${state.until} reached`
+        : state.reason === 'lost' ? `cycle ${state.cycle} did not beat cycle ${state.best}` : 'one cycle was asked for'})`;
   return `cycle ${state.cycle} (${mode}): ${phase}`;
 }
 
@@ -67,12 +68,24 @@ function nextStep(state: ThinState): string {
   return 'show the human the result, the cold eye\'s finding and the memo; they reply "one more" (omd thin go) or "continue" (omd thin go --continue) after omd-ultradesign';
 }
 
+/** This cycle against the one before it, in words. */
+function comparisonLine(state: ThinState): string {
+  const record = state.cycles?.find(entry => entry.cycle === state.cycle);
+  const against = record?.against ?? againstOf(state, state.cycle);
+  if (against === null) return 'first cycle: nothing to compare with';
+  if (record === undefined || record.beat === null) return `not compared with cycle ${against} yet`;
+  return record.beat ? `better than cycle ${against}` : `not better than cycle ${against}; cycle ${against}'s work is restored as the result and cycle ${state.cycle} is archived`;
+}
+
 function statusOf(root: string, state: ThinState) {
   const planned = plannedArchive(root, state.survivors);
+  const standing = state.phase === 'making' ? state.cycle : state.best ?? state.cycle;
   return {
     state, memo: THIN_MEMO, reference: { dir: THIN_REFERENCE, captures: count(root, THIN_REFERENCE) },
     ...(state.kind === 'redesign' ? { before: THIN_BEFORE } : {}),
     result: { dir: resultDir(state.cycle), captures: count(root, resultDir(state.cycle)) },
+    standing: { cycle: standing, dir: resultDir(standing) },
+    comparison: comparisonLine(state),
     eye: { path: eyeAnswerPath(state.cycle), verdict: eyeVerdict(root, state.cycle), firstLine: firstLine(root, eyeAnswerPath(state.cycle)) },
     nextCycleWouldArchive: planned.changed, nextCycleWouldRestore: planned.deleted,
     next: nextStep(state),
@@ -91,7 +104,9 @@ async function printStatus(root: string, state: ThinState, json: boolean): Promi
     `reference: ${THIN_REFERENCE} (${status.reference.captures} captures)`,
     ...(state.kind === 'redesign' ? [`before-state and behaviour contract: ${THIN_BEFORE}`] : []),
     `result captures: ${status.result.dir} (${status.result.captures})`,
+    ...(status.standing.cycle === state.cycle ? [] : [`the result is cycle ${status.standing.cycle}'s work: ${status.standing.dir}`]),
     `cold eye: ${status.eye.firstLine === null ? `not asked yet (${status.eye.path})` : `${status.eye.path}: ${status.eye.firstLine}`}`,
+    `against the previous cycle: ${status.comparison}`,
     `surviving assets: ${state.survivors.length === 0 ? 'none named' : state.survivors.join(', ')}`,
     ...(state.open === undefined ? [] : [`open the result: ${state.open}`]),
     `the next cycle would archive ${archive.length} file${archive.length === 1 ? '' : 's'} and rebuild from the starting state${archive.length === 0 ? '' : `: ${archive.slice(0, 20).join(', ')}${archive.length > 20 ? ', ...' : ''}`}`,
@@ -190,9 +205,9 @@ export async function runThin(args: readonly string[]): Promise<never> {
   if (sub === 'packet') {
     const cycle = one(parsed, 'cycle') === undefined ? state.cycle : Number(one(parsed, 'cycle'));
     if (!Number.isSafeInteger(cycle) || cycle < 1 || cycle > state.cycle) throw new ThinError(`--cycle must be 1..${state.cycle}`);
-    const packet = assemblePacket(writer(), cycle);
+    const packet = assemblePacket(writer(), cycle, againstOf(state, cycle));
     if (json) await emit(packet);
-    else console.log([`cold-eye packet: ${packet.dir} (${packet.result.length} result, ${packet.reference.length} reference images, nothing else)`,
+    else console.log([`cold-eye packet: ${packet.dir} (${packet.result.length} result, ${packet.other.length} other, ${packet.reference.length} reference images, nothing else)`,
       ...(packet.reference.length === 0 ? [`no reference captures in ${THIN_REFERENCE}: the eye looks without a measure`] : []),
       `answer goes verbatim to ${eyeAnswerPath(cycle)}`].join('\n'));
     process.exit(0);
@@ -205,7 +220,17 @@ export async function runThin(args: readonly string[]): Promise<never> {
       return relative;
     });
     const verdict = eyeVerdict(root, state.cycle);
-    const closed = writeThinState(writer(), closeCycle(state, verdict, { survivors, open: one(parsed, 'open') }));
+    const next = closeCycle(state, verdict, { survivors, open: one(parsed, 'open'), beat: eyeComparison(root, state.cycle) });
+    const write = writer();
+    if (next.reason === 'lost') {
+      // The losing cycle is archived, not deleted, and the earlier work it lost to stands again as the result.
+      const earlier = findArchivedCycle(root, next.best!);
+      if (earlier === null) throw new ThinError(`cycle ${state.cycle} did not beat cycle ${next.best}, but no archive of cycle ${next.best} exists to restore`);
+      const archived = archiveCycle(write, state.cycle, survivors);
+      restoreArchive(write, earlier);
+      if (!json) console.log(`cycle ${state.cycle} did not beat cycle ${next.best}: archived to ${archived.dir}; cycle ${next.best}'s work restored from ${earlier}`);
+    }
+    const closed = writeThinState(write, next);
     if (!json && verdict === 'missing') console.log(`no cold-eye answer at ${eyeAnswerPath(state.cycle)}; closed without one`);
     await printStatus(root, closed, json);
     process.exit(0);
@@ -223,13 +248,14 @@ export async function runThin(args: readonly string[]): Promise<never> {
   if (sub === 'begin') {
     const next = beginCycle(state);
     const write = writer();
-    const archive = archiveCycle(write, state.cycle, state.survivors);
+    // The tree holds the standing result: this cycle's work, or the earlier work restored after this one lost.
+    const archive = archiveCycle(write, state.best ?? state.cycle, state.survivors);
     const begun = writeThinState(write, next);
     write.mkdir(resultDir(begun.cycle));
     const carried = [THIN_MEMO, THIN_REFERENCE, ...begun.survivors, ...(begun.kind === 'redesign' ? [THIN_BEFORE] : [])];
     if (json) await emit({ state: begun, archive, carried });
     else console.log([phaseLine(begun),
-      `cycle ${state.cycle} archived to ${archive.dir} (${archive.archived.length} files; never read it), starting state restored`,
+      `cycle ${state.best ?? state.cycle}'s work archived to ${archive.dir} (${archive.archived.length} files; never read it), starting state restored`,
       ...(archive.unrestorable.length === 0 ? [] : [`could not restore (too large for the baseline): ${archive.unrestorable.join(', ')}`]),
       `carried: ${carried.join(', ')}`,
       `next: ${nextStep(begun)}`].join('\n'));

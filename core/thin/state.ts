@@ -30,8 +30,12 @@ export type ThinState = {
   until: number;
   cycle: number;
   phase: ThinPhase;
-  /** Why the loop stopped: one cycle was asked for, the cold eye found no tell, or the cycle cap. */
-  reason?: 'one-cycle' | 'no-tell' | 'cap';
+  /** Why the loop stopped: one cycle was asked for, the cold eye found no tell, the cycle cap, or a cycle that did not beat the one before. */
+  reason?: 'one-cycle' | 'no-tell' | 'cap' | 'lost';
+  /** The cycle whose work stands as the result: the latest, unless a later cycle lost to it and it was restored. */
+  best?: number;
+  /** Per closed cycle: the cycle it was compared with and whether the cold eye found it closer to senior work (null: not compared). */
+  cycles?: CycleRecord[];
   /** Project paths that survive into the next cycle (assets), never archived. */
   survivors: string[];
   /** How to open the latest result, in the maker's words. */
@@ -39,10 +43,22 @@ export type ThinState = {
   updatedAt: string;
 };
 
+export type CycleRecord = { cycle: number; against: number | null; beat: boolean | null; open?: string };
+
 export const cycleDir = (cycle: number): string => `${THIN_DIR}/cycles/${cycle}`;
 export const resultDir = (cycle: number): string => `${cycleDir(cycle)}/result`;
 export const packetDir = (cycle: number): string => `${cycleDir(cycle)}/packet`;
 export const eyeAnswerPath = (cycle: number): string => `${cycleDir(cycle)}/eye.md`;
+/** Which cycle the packet's other/ holds; kept outside the packet so the eye cannot see it. */
+export const comparePath = (cycle: number): string => `${cycleDir(cycle)}/compare.json`;
+
+/** The cycle a cycle is compared with: the standing result before it, or none for the first. */
+export function againstOf(state: ThinState, cycle: number): number | null {
+  const recorded = state.cycles?.find(entry => entry.cycle === cycle);
+  if (recorded !== undefined) return recorded.against;
+  const previous = cycle === state.cycle ? state.best ?? cycle - 1 : cycle - 1;
+  return previous >= 1 ? previous : null;
+}
 
 export class ThinError extends Error {}
 
@@ -85,6 +101,17 @@ export function eyeVerdict(root: string, cycle: number): 'tell' | 'none' | 'miss
   return /^[*_\s>"']*no tell\b/i.test(answer) ? 'none' : 'tell';
 }
 
+/**
+ * The comparison line, "Closer: result" or "Closer: other": whether the work under result/ (this cycle) beat the work
+ * under other/ (the cycle before). Null when the answer holds no comparison.
+ */
+export function eyeComparison(root: string, cycle: number): boolean | null {
+  const path = join(root, eyeAnswerPath(cycle));
+  if (!existsSync(path)) return null;
+  const match = /^[*_\s>"'-]*closer[*_\s]*:[*_\s`"']*(result|other)\b/im.exec(readFileSync(path, 'utf8'));
+  return match === null ? null : match[1]!.toLowerCase() === 'result';
+}
+
 export function appendMemo(writer: ProjectWriteAdapter, text: string): void {
   const path = join(writer.projectRoot, THIN_MEMO);
   const previous = existsSync(path) ? readFileSync(path, 'utf8') : '';
@@ -99,12 +126,26 @@ export function newThinState(input: Readonly<{ request: string; kind: ThinKind; 
   };
 }
 
-/** After a cycle: stop for the human, or let the next cycle start in a fresh session. */
+/**
+ * After a cycle: stop for the human, or let the next cycle start in a fresh session. A cycle the eye found further
+ * from senior work than the one before it loses: the loop stops and the earlier work stands as the result.
+ */
 export function closeCycle(state: ThinState, verdict: 'tell' | 'none' | 'missing',
-  input: Readonly<{ survivors: readonly string[]; open?: string | undefined }>): ThinState {
+  input: Readonly<{ survivors: readonly string[]; open?: string | undefined; beat?: boolean | null }>): ThinState {
   if (state.phase !== 'making') throw new ThinError(`cycle ${state.cycle} is already closed (${state.phase})`);
-  const base: ThinState = { ...state, survivors: [...input.survivors], ...(input.open === undefined ? {} : { open: input.open }) };
+  const against = againstOf(state, state.cycle);
+  const beat = against === null ? null : input.beat ?? null;
+  const open = input.open ?? state.open;
+  const record: CycleRecord = { cycle: state.cycle, against, beat, ...(open === undefined ? {} : { open }) };
+  const cycles = [...(state.cycles ?? []).filter(entry => entry.cycle !== state.cycle), record];
+  const base: ThinState = { ...state, survivors: [...input.survivors], cycles, best: state.cycle, ...(open === undefined ? {} : { open }) };
   delete base.reason;
+  if (beat === false && against !== null) {
+    const standing = cycles.find(entry => entry.cycle === against)?.open;
+    const lost: ThinState = { ...base, best: against, phase: 'stopped', reason: 'lost' };
+    if (standing === undefined) delete lost.open; else lost.open = standing;
+    return lost;
+  }
   if (state.mode === 'step') return { ...base, phase: 'stopped', reason: 'one-cycle' };
   if (verdict === 'none') return { ...base, phase: 'stopped', reason: 'no-tell' };
   if (state.cycle >= state.until) return { ...base, phase: 'stopped', reason: 'cap' };

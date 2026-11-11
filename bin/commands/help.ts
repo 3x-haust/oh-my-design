@@ -8,6 +8,25 @@ export function printLifecycleHelp(): never {
   process.exit(0);
 }
 
+/**
+ * Inside a design loop (a project with .omd/thin/state.json) help names only the loop's own commands, so the maker is
+ * not invited into the retired staged workflow; `omd help --all` still lists everything.
+ */
+export function printThinUsage(): never {
+  console.log([
+    'usage: omd <command>   (this project is in an omd-ultradesign loop; only these commands belong to it)',
+    '',
+    '  thin start|status|shoot|refs|check|packet|eye|close|go|begin   (omd thin help for the forms)',
+    '  imagegen --kind asset --name <name> --prompt <idea> [--reference <image>]... [--json]',
+    '  studio asset <candidate> --out <path> [--cut] [--json]',
+    '  studio sheet --name <sheet> <image>... [--json]',
+    '  measure --entry <local.html|URL> [--scope <scope.json>] [--json]',
+    '',
+    '  omd help --all lists every other command; none of them is part of this loop.',
+  ].join('\n'));
+  process.exit(0);
+}
+
 export function printUsage(exitCode = 1): never {
   const message = [
     'usage: omd <command>',
