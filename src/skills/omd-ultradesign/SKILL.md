@@ -56,8 +56,9 @@ the behaviour contract in `.omd/thin/before/contract.md`: screens, routes, data,
 screens, routes, data contract and behaviour stay unless the request says otherwise.
 
 Gather references at image level, one job per image: a type pairing, a grid, an object treatment, a way of showing
-data. Look through galleries and real sites (`omd thin refs dribbble|behance|pinterest "<one job>"` shows the results
-as one image; `omd thin refs keep <image-url> --job "<the job>"` keeps one). In cycle 1, choose one real finished work
+data. Look through real products' own sites and galleries (`omd thin refs dribbble|cosmos|siteinspire "<one job>"` shows
+the results as one image; `omd thin refs keep <image-url> --job "<the job>"` keeps one). A site whose robots.txt asks AI
+agents to stay out stays closed; `omd thin` refuses it, so take another source. In cycle 1, choose one real finished work
 and capture it (`omd thin shoot <url> --reference`). Keep it beside your own to the end.
 
 Decide your own idea and your own assets: an object family that code cannot draw well, recurring across the screens.
@@ -65,7 +66,10 @@ Generated images may ship as assets (`omd imagegen --kind asset`, then cut the b
 `omd studio asset <candidate> --out public/assets/<name>.png --cut`); logos, UI chrome and per-row data stay code.
 Compose the key screens around the asset so it changes their structure, not their decoration. Render, and look at
 your screens beside the chosen work at desktop and mobile (`omd thin shoot <page>`,
-`omd studio sheet --name beside <yours.png> <theirs.png>`, `omd measure`). Subtract.
+`omd studio sheet --name beside <yours.png> <theirs.png>`, `omd measure`). Subtract. What a template would have put
+there goes first: English or all-caps labels over headings, section numbers, a headline's second line in another colour,
+arrow glyphs on links, captions that explain or excuse the work, props tilted for effect. One stays only when this
+page's content needs it. Korean words stay whole at line ends.
 
 When the screens are done:
 
