@@ -5,7 +5,7 @@ import { readRoleProfiles, PROFILE_SOURCE_ROOT } from '../core/brief/profiles.ts
 
 export const AGENT_PROMPT_BUDGETS: Readonly<Record<string, number>> = {
   eye: 350,
-  'internal-cold-eye': 350,
+  'internal-cold-eye': 450,
 };
 /** The one user-facing skill holds the whole loop and its cycle, in about two pages. */
 export const SKILL_PROMPT_BUDGETS: Readonly<Record<string, number>> = {
