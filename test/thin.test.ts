@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { PNG } from 'pngjs';
 import omdExtension, { type PortablePiHook } from '../extensions/omd.ts';
-import { isThinPrompt, registerThin, ThinSessions, THIN_NEXT_COMMAND } from '../extensions/omd-thin.ts';
+import { ENTRY_COMMAND, isThinPrompt, registerThin, ThinSessions } from '../extensions/omd-thin.ts';
 import { coldEyeArgs, runPiColdEye } from '../core/thin/eye.ts';
 import { beginCycle, closeCycle, goOn, newThinState, type ThinState } from '../core/thin/state.ts';
 
@@ -136,7 +136,7 @@ test('the cold eye on Pi gets only the packet images, from a neutral folder, on 
   assert.equal(args[args.indexOf('--model') + 1], 'session-model');
 });
 
-test('a thin session is not gated, while the workflow skill still is', async () => {
+test('a session started from omd-ultradesign is not gated, captures no workflow request and is never continued', async () => {
   const hooks = new Map<string, PortablePiHook>();
   const calls: string[][] = [];
   omdExtension({
@@ -145,19 +145,40 @@ test('a thin session is not gated, while the workflow skill still is', async () 
     exec: async (_command, args) => { calls.push(args.slice(1)); return { stdout: '{"ok":false}', stderr: '', code: 1, killed: false }; },
   });
   const cwd = mkdtempSync(join(tmpdir(), 'omd-thin-pi-'));
-  const emit = (name: string, event: Parameters<PortablePiHook>[0]) => hooks.get(name)!(event, { cwd });
+  const legacy = mkdtempSync(join(tmpdir(), 'omd-thin-pi-legacy-'));
+  const emit = (name: string, event: Parameters<PortablePiHook>[0], root = cwd) => hooks.get(name)!(event, { cwd: root });
+  const final = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Cycle 1 is closed.' }] };
   try {
-    await emit('before_agent_start', { prompt: '/skill:omd-thin a launch page for Kiln' });
+    // An earlier gated run left a route behind; the entry still runs ungated.
+    mkdirSync(join(cwd, '.omd'), { recursive: true });
+    writeFileSync(join(cwd, '.omd/route.json'), '{}');
+    const text = '/skill:omd-ultradesign a launch page for Kiln';
+    assert.equal(await emit('input', { source: 'interactive', text }), undefined);
+    assert.equal(await emit('before_agent_start', { prompt: `<skill name="omd-ultradesign" location="/x">\n</skill>\n\n${text}` }), undefined);
+    for (const [toolName, input] of [['write', { path: 'src/main.tsx' }], ['bash', { command: 'npm run build' }], ['request_user_input', {}]] as const) {
+      assert.equal(await emit('tool_call', { toolName, input }), undefined, toolName);
+    }
+    assert.equal(await emit('message_end', { message: final }), undefined);
+    assert.equal(await emit('input', { source: 'interactive', text: 'one more' }), undefined, 'a plain reply stays in the loop');
     assert.equal(await emit('tool_call', { toolName: 'write', input: { path: 'src/main.tsx' } }), undefined);
     assert.deepEqual(calls, []);
-    await emit('before_agent_start', { prompt: 'omd-ultradesign Build an app' });
-    assert.equal((await emit('tool_call', { toolName: 'write', input: { path: 'src/main.tsx' } }) as { block?: boolean }).block, true);
-  } finally { rmSync(cwd, { recursive: true, force: true }); }
-  assert.equal(isThinPrompt('<skill name="omd-thin-make" location="/x">'), true);
-  assert.equal(isThinPrompt('/skill:omd-ultradesign build it'), false);
+    assert.equal(existsSync(join(cwd, '.omd/request-source.json')), false);
+    // The /ultradesign alias is the same entry.
+    assert.deepEqual(await emit('input', { source: 'interactive', text: '/ultradesign one more' }), { action: 'transform', text: '/skill:omd-ultradesign one more' });
+
+    // The older gates still guard a session that never invoked the entry, in a project with a route.
+    mkdirSync(join(legacy, '.omd'), { recursive: true });
+    writeFileSync(join(legacy, '.omd/route.json'), '{}');
+    await emit('before_agent_start', { prompt: 'fix the header' }, legacy);
+    assert.equal((await emit('tool_call', { toolName: 'write', input: { path: 'src/main.tsx' } }, legacy) as { block?: boolean }).block, true);
+  } finally { rmSync(cwd, { recursive: true, force: true }); rmSync(legacy, { recursive: true, force: true }); }
+  assert.equal(isThinPrompt('/skill:omd-ultradesign build it'), true);
+  assert.equal(isThinPrompt('$omd-ultradesign continue'), true);
+  assert.equal(isThinPrompt('/ultradesign'), true);
+  assert.equal(isThinPrompt('build me a page'), false);
 });
 
-test('on Pi a closed cycle opens one fresh session that invokes the thin skill', async t => {
+test('on Pi a closed cycle opens one fresh session that invokes the entry skill', async t => {
   const root = project(t);
   write(root, '.omd/thin/state.json', JSON.stringify({ ...newThinState({ request: 'r', kind: 'product', continueMode: true }), phase: 'next' }));
   const hooks = new Map<string, (event: unknown, context: { cwd: string }) => Promise<unknown>>();
@@ -166,22 +187,37 @@ test('on Pi a closed cycle opens one fresh session that invokes the thin skill',
   const sessions = new ThinSessions();
   registerThin({
     on: (name, hook) => { hooks.set(name, hook); },
-    registerCommand: (name, definition) => { assert.equal(name, THIN_NEXT_COMMAND); command = definition; },
+    registerCommand: (name, definition) => { assert.equal(name, 'omd-ultradesign'); command = definition; },
     sendUserMessage: text => { sent.push(text); },
   }, sessions);
   await hooks.get('agent_settled')!({}, { cwd: root });
   await new Promise(resolve => setTimeout(resolve, 5));
-  assert.deepEqual(sent, [], 'a session that never ran the thin skill is left alone');
-  sessions.observe(root, '/skill:omd-thin one more');
+  assert.deepEqual(sent, [], 'a session that never ran the entry is left alone');
+  sessions.observe(root, '/skill:omd-ultradesign one more');
   await hooks.get('agent_settled')!({}, { cwd: root });
   await hooks.get('agent_settled')!({}, { cwd: root });
   await new Promise(resolve => setTimeout(resolve, 5));
-  assert.deepEqual(sent, [`/${THIN_NEXT_COMMAND}`]);
+  assert.deepEqual(sent, [`/${ENTRY_COMMAND}`]);
   const fresh: string[] = [];
-  await command!.handler('', { cwd: root, waitForIdle: async () => {},
+  const context = { cwd: root, waitForIdle: async () => {},
     newSession: async (options: { withSession(context: unknown): Promise<void> }) => {
       await options.withSession({ sendUserMessage: async (text: string) => { fresh.push(text); } });
       return { cancelled: false };
-    } });
-  assert.deepEqual(fresh, ['/skill:omd-thin fresh session: begin cycle 2']);
+    } };
+  await command!.handler('', context);
+  assert.deepEqual(fresh, ['/skill:omd-ultradesign fresh session: begin cycle 2']);
+  // Typed with words, the same name hands them to the skill in this session.
+  await command!.handler('continue', context);
+  assert.deepEqual(sent.at(-1), '/skill:omd-ultradesign continue');
+});
+
+test('the user sees one skill; the loop internals are folded in or named internal', () => {
+  const root = new URL('..', import.meta.url).pathname;
+  assert.deepEqual(readdirSync(join(root, 'src/skills')), ['omd-ultradesign']);
+  const skill = readFileSync(join(root, 'src/skills/omd-ultradesign/SKILL.md'), 'utf8');
+  assert.doesNotMatch(skill, /omd-thin|thin-make|omd-cold-eye/);
+  assert.match(skill, /`omd-internal-cold-eye`/);
+  for (const doc of ['README.md', 'README.ko.md']) {
+    assert.doesNotMatch(readFileSync(join(root, doc), 'utf8'), /omd-thin|thin-make|cold-eye|omd thin/, doc);
+  }
 });

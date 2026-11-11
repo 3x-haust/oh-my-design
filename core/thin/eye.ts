@@ -8,7 +8,7 @@ import { ThinError } from './state.ts';
 /**
  * The cold eye on Pi: a separate, ephemeral Pi process on the session's own provider and model, with no tools, skills,
  * extensions, context files or session history. It receives the packet images (copied to a neutral temporary folder)
- * and the one question, and nothing else. Claude Code and Codex spawn the omd-cold-eye agent on the same packet instead.
+ * and the one question, and nothing else. Claude Code and Codex spawn the omd-internal-cold-eye agent on the same packet instead.
  */
 export type PiHost = Readonly<{ node: string; cli: string; provider: string; model: string }>;
 

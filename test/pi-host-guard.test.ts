@@ -6,6 +6,7 @@ import test from 'node:test';
 import omdExtension, { type PortablePiApi, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
 import { classifyPiWrite, isMutatingOmdCommand, isPreproductionReadCommand } from '../extensions/omd-guard.ts';
 
+// These cover the retired gated workflow; the user-facing omd-ultradesign entry runs ungated (test/thin.test.ts).
 function harness(exec?: PortablePiApi['exec']) {
   const hooks = new Map<string, PortablePiHook>();
   const calls: Array<{ args: readonly string[]; cwd: string }> = [];
@@ -22,7 +23,7 @@ function harness(exec?: PortablePiApi['exec']) {
         stderr: '', code: pass ? 0 : 1, killed: false,
       };
     }),
-  });
+  }, { legacyGatedEntry: true });
   const cwd = mkdtempSync(join(tmpdir(), 'omd-pi-guard-'));
   return {
     cwd, calls, tool, hooks, pass: () => { pass = true; },

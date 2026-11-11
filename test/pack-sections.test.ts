@@ -20,6 +20,7 @@ const SOURCES = [
     .filter((file) => file.endsWith('.agent.yaml'))
     .map((file) => join('src', 'agents', file)),
   join('src', 'skills', 'omd-ultradesign', 'SKILL.md'),
+  join('src', 'legacy', 'ultradesign-gated.md'),
 ];
 
 /** `omd pack <file> --section "<heading>"` and bare `--section "<heading>"` continuations. */

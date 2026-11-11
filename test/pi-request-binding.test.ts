@@ -56,7 +56,7 @@ function host(cwd: string, afterExec?: () => void) {
       afterExec?.();
       return { stdout: result.stdout ?? '', stderr: result.stderr ?? '', code: result.status ?? 1, killed: result.signal !== null };
     },
-  });
+  }, { legacyGatedEntry: true });
   const emit = (name: string, event: InputEvent) => hooks.get(name)?.(event, { cwd });
   return { emit, inputs, sent,
     async start(request = original) {

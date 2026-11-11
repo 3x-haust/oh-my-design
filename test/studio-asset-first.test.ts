@@ -226,9 +226,10 @@ test('a product passes board, direction and assets before its source; a redesign
   assert.equal(studioPending(misread, redesign), null);
 });
 
+// The studio records belong to the retired gated workflow; its prompt is kept in src/legacy beside the guides it cites.
 test('every record the skill and guides tell the designer to write is writable in Pi or has a publisher the skill names', () => {
   const read = (path: string) => readFileSync(fileURLToPath(new URL(`../${path}`, import.meta.url)), 'utf8');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const skill = read('src/legacy/ultradesign-gated.md');
   const texts = [skill, ...['assets', 'marketing', 'product', 'redesign', 'material-stage'].map(name => read(`core/guides/${name}.md`))];
   const published: Readonly<Record<string, string>> = {
     '.omd/studio/images.json': 'omd studio asset', '.omd/studio/board.png': 'omd studio board', '.omd/studio/refs': 'omd studio refs',

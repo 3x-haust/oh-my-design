@@ -27,11 +27,19 @@ import { isThinEyeRun, registerThin, runThinEye, ThinSessions } from './omd-thin
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
-export default function omdExtension(pi: PortablePiApi): void {
+export type OmdExtensionOptions = Readonly<{
+  /**
+   * Tests of the retired gated workflow only: route an `omd-ultradesign` prompt into that workflow instead of the
+   * design loop. Pi never passes it, so the user-facing entry always runs the ungated loop.
+   */
+  legacyGatedEntry?: boolean;
+}>;
+
+export default function omdExtension(pi: PortablePiApi, options: OmdExtensionOptions = {}): void {
   const designPolicy = captureDesignExecutionPolicy(process.env);
   const queues = new Map<string, Promise<unknown>>();
   const managed = new Set<string>();
-  const thinSessions = new ThinSessions();
+  const thinSessions = new ThinSessions(options.legacyGatedEntry !== true);
   const touched = new Set<string>();
   const productionAttempted = new Set<string>();
   const repairLoop = new RepairLoop();
@@ -145,7 +153,8 @@ export default function omdExtension(pi: PortablePiApi): void {
     });
   };
   const pendingFeedback = new Set<string>();
-  // A thin design session (omd-thin) runs its own ungated loop; the workflow gates apply only outside it.
+  // A session started from the entry skill (omd-ultradesign) runs its own ungated design loop. The older workflow
+  // machinery below (request capture, route entry, write gates, automatic continuation) never applies to it.
   const guarded = (cwd: string) => !thinSessions.has(cwd) && (managed.has(cwd) || hasPiRoute(cwd));
   const hook = 'on' in pi ? pi.on : undefined;
   const on = typeof hook === 'function' ? hook.bind(pi) : undefined;
@@ -167,6 +176,10 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
       const realInput = (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string';
       const alias = realInput ? normalizeOmdAlias(event.text!) : undefined;
+      if (typeof event.text === 'string') thinSessions.observe(context.cwd, alias ?? event.text);
+      if (thinSessions.has(context.cwd)) {
+        return alias === undefined ? undefined : { action: 'transform', text: alias, ...(event.images === undefined ? {} : { images: event.images }) };
+      }
       if (realInput && event.text!.trim() && hasPiRoute(context.cwd)
         && extractOmdWorkflowRequest(alias ?? event.text!) === undefined) {
         if (!lastStops.has(context.cwd)) lastStops.set(context.cwd, 'session-restored');
@@ -197,6 +210,8 @@ export default function omdExtension(pi: PortablePiApi): void {
     });
     on('before_agent_start', async (event, context) => {
       nativeRuns.observe(context);
+      thinSessions.observe(context.cwd, event.prompt ?? '');
+      if (thinSessions.has(context.cwd)) return;
       const directionAnswered = requests.activate(context.cwd, event.prompt ?? '');
       if (directionAnswered) { workflowStarted.add(context.cwd); touched.add(context.cwd); rememberWorkflow(context.cwd); }
       const source = requests.current(context.cwd);
@@ -206,8 +221,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         workflowStarted.add(context.cwd); touched.add(context.cwd);
       }
       if (requests.classificationGranted(context.cwd)) ownedWork.activate(context.cwd, event.prompt ?? '');
-      thinSessions.observe(context.cwd, event.prompt ?? '');
-      if (/omd-ultradesign|skill:omd-(?!thin\b)/i.test(event.prompt ?? '')) managed.add(context.cwd);
+      if (options.legacyGatedEntry === true && /omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
       const judgmentGuidance = source !== undefined && requests.classificationGranted(context.cwd)
         ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-intent', source: '.omd/request-source.json', requestSha256: source.requestSha256, starter: 'omd schema ai-judgment --purpose workflow-intent', input: '.omd/.cache/ai-judgment-workflow-intent.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-intent.json --json' })}. Quote the real captured request. The explicit skill invocation starts implementation by default; if you judge inspect/research-only, publish that decision and the host will stop automatic build continuation. Missing judgment is advisory, never a refusal of a plain implementation request. For a target market, publish target-market quoting this source; without it the market is unspecified.`
@@ -220,6 +234,7 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('message_start', async (event, context) => {
       if (event.message?.role !== 'user') return;
       nativeRuns.observe(context);
+      if (thinSessions.has(context.cwd)) return;
       const text = event.message.content?.filter(part => part.type === 'text').map(part => part.text ?? '').join('');
       if (text !== undefined) {
         if (requests.activate(context.cwd, text)) { workflowStarted.add(context.cwd); touched.add(context.cwd); rememberWorkflow(context.cwd); }
@@ -374,6 +389,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (context.browserConsentHome) consentHomes.set(context.cwd, context.browserConsentHome);
       const message = event.message;
       if (message?.role === 'assistant' && message.stopReason === 'stop') lastStops.set(context.cwd, randomBytes(16).toString('hex'));
+      if (thinSessions.has(context.cwd)) return;
       if (paused.has(context.cwd)) return { message };
       // Todo/goal bookkeeping may discard the owned-work token before the model's final
       // stop. The authenticated full-workflow request, not that transient token, authorizes

@@ -1,7 +1,7 @@
 {
   "name": "oh-my-design",
   "version": "0.20.0",
-  "description": "Design cognition loop for coding agents — frame the problem, study measured references, commit to a structure, look at what actually rendered, and let what you see rewrite the problem.",
+  "description": "One command, ultradesign: designs a marketing page, a multi-screen product or a redesign from a one-line request, one cycle at a time. Each cycle makes the work, has a cold outside eye look at it, and stops to show you; reply \"one more\" or \"continue\".",
   "author": {
     "name": "3x-haust",
     "url": "https://github.com/3x-haust"
@@ -13,7 +13,7 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Oh My Design",
-    "shortDescription": "Design cognition loop — frame, diverge, see, reframe",
+    "shortDescription": "One design command: ultradesign makes, has a cold eye look, and stops to show you",
     "category": "design",
     "websiteURL": "https://github.com/3x-haust/oh-my-design"
   }

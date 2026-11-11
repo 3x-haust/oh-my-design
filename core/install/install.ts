@@ -251,6 +251,13 @@ function installCodex(d: Detected, version: string, distributionRoot: string, ch
   const agentsDir = join(d.home, 'agents');
   mkdirSync(agentsDir, { recursive: true });
   const srcAgentsDir = join(distributionRoot, 'dist', 'codex', 'agents');
+  // A retired OMD agent or skill must not outlive the build that stopped emitting it.
+  const shippedAgents = new Set(readdirSafe(srcAgentsDir));
+  for (const file of readdirSafe(agentsDir)) {
+    if (!file.startsWith('omd-') || !file.endsWith('.toml') || shippedAgents.has(file)) continue;
+    rmSync(join(agentsDir, file), { force: true });
+    changes.push(`codex: removed retired agent ${file}`);
+  }
   const agentNames: string[] = [];
   for (const file of readdirSafe(srcAgentsDir)) {
     if (!file.endsWith('.toml')) continue;
@@ -262,6 +269,12 @@ function installCodex(d: Detected, version: string, distributionRoot: string, ch
   const skillsSrc = join(distributionRoot, 'dist', 'codex', 'skills');
   const skillsDest = join(d.home, 'skills');
   if (existsSync(skillsSrc)) {
+    const shippedSkills = new Set(readdirSafe(skillsSrc));
+    for (const name of readdirSafe(skillsDest)) {
+      if (!name.startsWith('omd-') || shippedSkills.has(name)) continue;
+      rmSync(join(skillsDest, name), { recursive: true, force: true });
+      changes.push(`codex: removed retired skill ${name}`);
+    }
     mkdirSync(skillsDest, { recursive: true });
     cpSync(skillsSrc, skillsDest, { recursive: true });
     changes.push(`codex: installed skills -> ${skillsDest}`);

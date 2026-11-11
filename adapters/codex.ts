@@ -168,12 +168,12 @@ export function emitCodex({
   files['.codex-plugin/plugin.json'] = {
     name: 'oh-my-design',
     version,
-    description: 'Design cognition loop — frame, diverge, see, reframe',
+    description: 'One design command: ultradesign makes, has a cold eye look, and stops to show you',
     skills: './skills/',
     mcpServers: './.mcp.json',
     interface: {
       displayName: 'Oh My Design',
-      shortDescription: 'Design cognition loop — frame, diverge, see, reframe',
+      shortDescription: 'One design command: ultradesign makes, has a cold eye look, and stops to show you',
       capabilities: ['Hooks', 'Skills', 'Subagents', 'Design Lint'],
     },
     ...(buildIdentity === undefined ? {} : { buildIdentity }),

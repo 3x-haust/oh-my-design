@@ -180,7 +180,9 @@ async function main(): Promise<void> {
   if (cmd === 'install') {
     for (const line of await install(hosts, { cliBinDir })) console.log(line);
     console.log(`\nInstalled for: ${hosts.map((h) => h.host).join(', ')}.`);
-    console.log('Open a session there and type /ultradesign.');
+    const entry: Record<string, string> = { claude: '/oh-my-design:ultradesign <request>', codex: '$omd-ultradesign <request>' };
+    console.log(`Open a session there and type ${hosts.map((h) => entry[h.host] ?? 'omd-ultradesign <request>').join(' or ')}.`);
+    console.log('It makes one cycle and stops; reply "one more" or "continue" after the same name.');
     return;
   }
 
