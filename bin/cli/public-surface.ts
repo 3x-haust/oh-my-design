@@ -1,7 +1,7 @@
 export const PUBLIC_COMMANDS = [
   '--version', 'help', 'lifecycle', 'route', 'schema', 'stage', 'guard', 'ref',
   'feedback', 'language', 'ai-judgment', 'locale', 'first-render', 'render', 'record', 'check',
-  'probe', 'slop', 'lighthouse', 'measure', 'figma', 'target', 'taste', 'studio', 'brief', 'imagegen', 'pack', 'doctor',
+  'probe', 'slop', 'lighthouse', 'measure', 'figma', 'target', 'taste', 'studio', 'brief', 'imagegen', 'thin', 'pack', 'doctor',
   'browser', 'coach', 'learn', 'usage', 'hash',
 ] as const;
 

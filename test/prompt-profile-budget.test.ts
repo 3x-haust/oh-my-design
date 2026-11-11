@@ -29,5 +29,5 @@ test('profile identity changes build identity without replacing source skill ide
   const changed = createBuildIdentity(packageVersion(promptRoot), agents, skills, profiles.map((p, index) => index ? p : { ...p, source: `${p.source}\nChanged trusted profile bytes.\n` }));
   assert.notEqual(changed.buildSha256, baseline.buildSha256);
   assert.equal(changed.sourceSkillSha256, baseline.sourceSkillSha256);
-  assert.equal(agents.length, 1); assert.ok(agents.every(a => a.model === undefined));
+  assert.deepEqual(agents.map(a => a.name).sort(), ['omd-cold-eye', 'omd-eye']); assert.ok(agents.every(a => a.model === undefined));
 });

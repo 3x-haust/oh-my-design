@@ -19,7 +19,8 @@ type Grammar = Readonly<{
 
 function sources(): readonly string[] {
   return [
-    join(root, 'src/skills/omd-ultradesign/SKILL.md'),
+    ...readdirSync(join(root, 'src/skills'))
+      .map(name => join(root, 'src/skills', name, 'SKILL.md')),
     ...readdirSync(join(root, 'core/guides'))
       .filter(name => name.endsWith('.md'))
       .map(name => join(root, 'core/guides', name)),

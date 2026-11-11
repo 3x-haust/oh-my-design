@@ -44,6 +44,7 @@ export function printUsage(exitCode = 1): never {
     '  taste compare|graphic [--anchor <url>] [<rendered.png> --against <image.path>] [--skip <reason>] [--json]',
     '  studio refs|blueprint|rig|look|baseline|check [<url>...] [--page <file>] [--mode marketing|product|redesign] [--json]',
     '  studio board|sheet|asset|image [<image|page|candidate>...] [--name <sheet>] [--out <path>] [--cut] [--split auto] [--source <url> --licence <id>] [--json]',
+    '  thin start|status|shoot|refs|check|packet|eye|close|go|begin [--kind marketing|product|redesign] [--request <text>] [--continue] [--keep <path>]... [--json]',
     '  pack dir|list|<relpath> [--section <heading>]',
     '  doctor',
     '  browser setup|login|skip|status|forget',

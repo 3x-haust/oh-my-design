@@ -36,6 +36,7 @@ async function main(): Promise<never> {
   if (command === 'studio') return (await import('./commands/studio.ts')).runStudio(args);
   if (command === 'brief') return (await import('./commands/brief.ts')).runBrief(args);
   if (command === 'imagegen') return (await import('./commands/brief.ts')).runImagegen(args);
+  if (command === 'thin') return (await import('./commands/thin.ts')).runThin(args);
   if (['pack', 'doctor', 'browser', 'coach', 'learn', 'usage', 'hash'].includes(command)) {
     return (await import('./commands/tooling.ts')).runTooling(args);
   }
