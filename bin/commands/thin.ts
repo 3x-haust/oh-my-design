@@ -14,7 +14,7 @@ const USAGE = [
   'usage: omd thin start --kind marketing|product|redesign --request "<request>" [--continue]',
   '       omd thin status [--json]',
   '       omd thin shoot <page|url> [--name <name>] [--reference | --before | --out <dir>] [--json]',
-  '       omd thin refs <dribbble|behance|pinterest|https-url> "<one job>" [--json]',
+  '       omd thin refs <dribbble|cosmos|siteinspire|https-url> "<one job>" [--json]',
   '       omd thin refs keep <image-url> --job "<one job>"',
   '       omd thin check <page|url>... [--json]',
   '       omd thin packet [--cycle <n>] [--json]',
