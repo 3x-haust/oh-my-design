@@ -8,7 +8,9 @@ import { PNG } from 'pngjs';
 import omdExtension, { type PortablePiHook } from '../extensions/omd.ts';
 import { ENTRY_COMMAND, isThinPrompt, registerThin, ThinSessions } from '../extensions/omd-thin.ts';
 import { coldEyeArgs, runPiColdEye } from '../core/thin/eye.ts';
-import { beginCycle, closeCycle, goOn, newThinState, type ThinState } from '../core/thin/state.ts';
+import { COLD_EYE_QUESTION } from '../core/thin/packet.ts';
+import { beginCycle, closeCycle, eyeAnswerPath, eyeVerdict, goOn, newThinState, type ThinState } from '../core/thin/state.ts';
+import { readBuildAgents } from '../adapters/build-identity.ts';
 
 const cli = join(new URL('..', import.meta.url).pathname, 'bin', 'omd.ts');
 const omd = (cwd: string, ...args: string[]) => {
@@ -75,7 +77,7 @@ test('omd thin: start, packet, close, go and begin archive the cycle and carry o
   assert.equal(parts[0], '01.png');
   assert.ok(parts.length > 2 && parts.slice(1).every(name => /^02-\d+\.png$/.test(name)), parts.join(','));
 
-  writeFileSync(join(root, '.omd/thin/cycles/1/eye.md'), 'Tell: the hero type is a template default.\n');
+  writeFileSync(join(root, '.omd/thin/cycles/1/eye.md'), 'Tell: every section is the same card formula (result/01-1.png, 01-2.png, 02.png).\n- the hero type is a template default (01-1.png)\nVerdict: no\n');
   const closed = omd(root, 'close', '--keep', 'public/assets/kiln.png', '--open', 'npm run dev', '--json');
   assert.equal(closed.status, 0, closed.stderr);
   const status = closed.json() as { state: ThinState; eye: { verdict: string }; nextCycleWouldArchive: string[] };
@@ -115,6 +117,24 @@ test('a redesign restarts from its own before-state, including deleted files', t
   assert.equal(readFileSync(join(root, 'src/App.tsx'), 'utf8'), 'export const App = () => null;\n');
   assert.equal(readFileSync(join(root, 'src/routes.ts'), 'utf8'), 'export const routes = ["/", "/orders"];\n');
   assert.equal(readFileSync(join(root, '.omd/thin/archive/cycle-1/files/src/App.tsx'), 'utf8'), 'export const App = () => "new";\n');
+});
+
+test('the cold eye asks one question from one source, whole before part, and its answer still reads as tell or none', t => {
+  const repo = new URL('..', import.meta.url).pathname;
+  const agent = readBuildAgents(repo).find(a => a.name === 'omd-internal-cold-eye')!;
+  assert.equal(COLD_EYE_QUESTION, agent.instructions.trim(), 'the CLI and Pi prompt are the agent\'s own words');
+  const printed = spawnSync(process.execPath, [cli, 'thin', 'eye', '--prompt'], { cwd: project(t), encoding: 'utf8' });
+  assert.equal(printed.stdout.trim(), COLD_EYE_QUESTION);
+  assert.match(COLD_EYE_QUESTION, /whole before the parts/);
+  assert.match(COLD_EYE_QUESTION, /^Tell: .*files where it shows/m);
+  assert.match(COLD_EYE_QUESTION, /at most three smaller tells, one line each/);
+  assert.match(COLD_EYE_QUESTION, /^Verdict: pass, close or no/m);
+  assert.match(COLD_EYE_QUESTION, /"No tell\."/);
+  const root = project(t);
+  const answer = (text: string) => { write(root, eyeAnswerPath(1), text); return eyeVerdict(root, 1); };
+  assert.equal(answer('Tell: one formula stamped on every section (result/01-1.png, 02-1.png).\n- pale metadata (03.png)\nVerdict: no\n'), 'tell');
+  assert.equal(answer('No tell.\nVerdict: pass\n'), 'none');
+  assert.equal(answer('**No tell.**\n'), 'none');
 });
 
 test('the cold eye on Pi gets only the packet images, from a neutral folder, on the session model', async t => {

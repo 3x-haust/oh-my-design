@@ -41,9 +41,9 @@ This work is yours. It ships under your name and you will maintain it. If what y
 it: throw it away and recompose. The target: the key screens of the request, built in the project's real code (React,
 Vite and strict TypeScript for new work), that a senior designer would sign, rendered at desktop and phone width.
 
-If `.omd/thin/memo.md` holds earlier cycles, read it first. It is all that survives of them, together with the assets
-it names, the chosen work in `.omd/thin/reference/` and, for a redesign, `.omd/thin/before/`. Do not try to recover
-anything else.
+If `.omd/thin/memo.md` holds earlier cycles, read it first; the last cycle's largest tell is what this one rebuilds
+around, not a spot to patch. It is all that survives of them, together with the assets it names, the chosen work in
+`.omd/thin/reference/` and, for a redesign, `.omd/thin/before/`. Do not try to recover anything else.
 
 Work in a designer's order. Read the project's real material: README, logo, words, data, the product itself. For a
 redesign, capture the before state first (`omd thin shoot <url> --before` for every screen the work touches) and write
@@ -71,7 +71,8 @@ When the screens are done:
    `omd-internal-cold-eye` agent (the session's model; never name one) with only the packet folder path, and save its
    answer verbatim with `omd thin eye --record "<answer>"`. Do not explain the work to it.
 4. Add this cycle to `.omd/thin/memo.md` under `## Cycle <n>`, in a few lines: what was learned, which assets survive,
-   what not to do again. Keep the cold eye's point in your own words if it changes what you would do next.
+   what not to do again. Put the cold eye's largest tell in your own words as what the next cycle rebuilds around; its
+   smaller tells and verdict are context, not a fix list.
 5. `omd thin close --keep <each surviving asset> --open "<how to open the result>"`, then continue with the Workflow.
 
 ## Rules

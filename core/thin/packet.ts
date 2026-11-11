@@ -1,6 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { extname, join } from 'node:path';
+import { dirname, extname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
+import { parse } from 'yaml';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { packetDir, put, resultDir, THIN_REFERENCE, ThinError } from './state.ts';
 
@@ -8,17 +10,12 @@ import { packetDir, put, resultDir, THIN_REFERENCE, ThinError } from './state.ts
  * The cold eye's packet: captures of the result and captures of the chosen real work, nothing else. No brief, notes,
  * memo or rationale, and neutral file names, so the reader brings no context. A capture much taller than it is wide is
  * cut into consecutive parts, top to bottom, so a reader that shrinks large images still sees it at a legible size.
+ *
+ * The cold eye's question has one source: the omd-internal-cold-eye agent's instructions. The Pi eye and
+ * omd thin eye --prompt use these same words.
  */
-export const COLD_EYE_QUESTION = [
-  'The folder you are given holds two sets of images and nothing else. Under result/ are captures of one piece of work,',
-  'at desktop and phone width; a tall page is cut into consecutive parts (01-1, 01-2, ...), top to bottom. Under reference/',
-  'are captures of a real finished work, there only as a measure. You know nothing else about either, on purpose.',
-  '',
-  'Where does the work under result/ give away that a senior designer did not make it?',
-  '',
-  'Answer with the single largest tell, described by what you see and where (which image, which part). If you find none,',
-  'say plainly "No tell." Begin your answer with "Tell:" or "No tell." Do not list fixes, score, or praise.',
-].join('\n');
+export const COLD_EYE_SOURCE = join(dirname(fileURLToPath(import.meta.url)), '../../src/agents/internal-cold-eye.agent.yaml');
+export const COLD_EYE_QUESTION: string = (parse(readFileSync(COLD_EYE_SOURCE, 'utf8')) as { instructions: string }).instructions.trim();
 
 const IMAGE = /\.(?:png|jpe?g|webp)$/i;
 /** A part is at most this many times as tall as it is wide: about two desktop screens, or one and a bit phone screens. */
