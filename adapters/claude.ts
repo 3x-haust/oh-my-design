@@ -148,7 +148,7 @@ export function emitClaude({
 // flavor is a second, parallel emission: same agents, same MCP server, but names stripped
 // of their "omd-" prefix and cross-references rewritten to the "oh-my-design:" plugin form.
 
-const AGENT_REF = /\bomd-(eye|ultradesign|humanize|critique|coach|figma)\b/g;
+const AGENT_REF = /\bomd-(cold-eye|eye|thin-make|thin|ultradesign|humanize|critique|coach|figma)\b/g;
 
 const pluginizeRefs = (text: string): string => text.replace(
   AGENT_REF,

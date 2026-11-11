@@ -23,6 +23,7 @@ import { captureDesignExecutionPolicy, designExecutionGuidance } from '../core/c
 import { registerDeveloperEvaluation } from './omd-developer-evaluation.ts';
 import { resolveDeveloperEvaluationHome } from '../core/coach/developer-evaluation-store.ts';
 import { qualitativeFeedbackMessage } from '../core/design/qualitative-feedback.ts';
+import { isThinEyeRun, registerThin, runThinEye, ThinSessions } from './omd-thin.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -30,6 +31,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const designPolicy = captureDesignExecutionPolicy(process.env);
   const queues = new Map<string, Promise<unknown>>();
   const managed = new Set<string>();
+  const thinSessions = new ThinSessions();
   const touched = new Set<string>();
   const productionAttempted = new Set<string>();
   const repairLoop = new RepairLoop();
@@ -143,13 +145,14 @@ export default function omdExtension(pi: PortablePiApi): void {
     });
   };
   const pendingFeedback = new Set<string>();
-  const guarded = (cwd: string) => managed.has(cwd) || hasPiRoute(cwd);
+  // A thin design session (omd-thin) runs its own ungated loop; the workflow gates apply only outside it.
+  const guarded = (cwd: string) => !thinSessions.has(cwd) && (managed.has(cwd) || hasPiRoute(cwd));
   const hook = 'on' in pi ? pi.on : undefined;
   const on = typeof hook === 'function' ? hook.bind(pi) : undefined;
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
     on('session_start', async (_event, context) => {
-      epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); pendingQuestions.clear(); browserConsentGranted.clear(); shownQuestions.clear(); observedAnswers.clear(); consentHomes.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); lastStops.clear(); realTurns.clear(); judgedIntents.clear(); paused.clear(); nativeRuns.clear(); routeEntry.clear();
+      thinSessions.clear(); epochs.clear(); pendingFeedback.clear(); repairLoop.clear(); pendingReferenceWork.clear(); pendingQuestions.clear(); browserConsentGranted.clear(); shownQuestions.clear(); observedAnswers.clear(); consentHomes.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); lastStops.clear(); realTurns.clear(); judgedIntents.clear(); paused.clear(); nativeRuns.clear(); routeEntry.clear();
       const { clearBrowserSessionSkip } = await import('../core/ref/browser-consent.ts');
       clearBrowserSessionSkip(context.browserConsentHome);
     });
@@ -203,7 +206,8 @@ export default function omdExtension(pi: PortablePiApi): void {
         workflowStarted.add(context.cwd); touched.add(context.cwd);
       }
       if (requests.classificationGranted(context.cwd)) ownedWork.activate(context.cwd, event.prompt ?? '');
-      if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
+      thinSessions.observe(context.cwd, event.prompt ?? '');
+      if (/omd-ultradesign|skill:omd-(?!thin\b)/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
       const judgmentGuidance = source !== undefined && requests.classificationGranted(context.cwd)
         ? `\nJudgment request packet: ${JSON.stringify({ schema: 'omd-workflow-judgment-request-v1', purpose: 'workflow-intent', source: '.omd/request-source.json', requestSha256: source.requestSha256, starter: 'omd schema ai-judgment --purpose workflow-intent', input: '.omd/.cache/ai-judgment-workflow-intent.json', action: 'omd ai-judgment publish --input .omd/.cache/ai-judgment-workflow-intent.json --json' })}. Quote the real captured request. The explicit skill invocation starts implementation by default; if you judge inspect/research-only, publish that decision and the host will stop automatic build continuation. Missing judgment is advisory, never a refusal of a plain implementation request. For a target market, publish target-market quoting this source; without it the market is unspecified.`
@@ -472,6 +476,10 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (!Array.isArray(params.args) || params.args.length === 0 || params.args.some((arg) => typeof arg !== 'string')) {
         throw new Error('OMD_CLI_ARGS_INVALID: args must be a non-empty string array');
       }
+      if (isThinEyeRun(params.args)) {
+        const text = await runThinEye(context, args => run(args, context.cwd, signal), signal);
+        return { content: [{ type: 'text', text }], details: { code: 0, killed: false } };
+      }
       const browserEvidence = consentAnswer(context.cwd, params.args);
       if (params.args[0] === 'browser' && ['setup', 'login', 'skip'].includes(params.args[1] ?? '')
         && !(browserEvidence && (params.args[1] === 'skip' || params.args.includes('--consent'))
@@ -604,6 +612,7 @@ export default function omdExtension(pi: PortablePiApi): void {
     },
   });
 
+  registerThin(pi as unknown as Parameters<typeof registerThin>[0], thinSessions);
   registerDoctorCommand(pi, cwd => run(['doctor'], cwd), hooksAvailable);
   registerDeveloperEvaluation(pi, designPolicy, resolveDeveloperEvaluationHome(process.env));
 }

@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) thin-make"
+  short_description: "One cycle of the thin design loop."
