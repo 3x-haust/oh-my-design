@@ -1,6 +1,6 @@
 ---
-name: cold-eye
-description: "Looks only at captures of a piece of work and of one real finished work, and names the single largest tell that a senior designer did not make it."
+name: internal-cold-eye
+description: "Internal to ultradesign, which spawns it with one packet folder; not for direct use. Looks only at captures of a piece of work and of one real finished work, and names the single largest tell that a senior designer did not make it."
 model: inherit
 effort: high
 disallowedTools: Write, Edit, apply_patch, Bash

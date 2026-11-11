@@ -43,7 +43,7 @@ test('reported qualitative rejection preserves exact pixels without creating hum
   assert.equal(blind?.renders[0]?.pngBase64, png.toString('base64'));
   const hooks = new Map<string, PortablePiHook>();
   omdExtension({ on(name, hook) { hooks.set(name, hook); }, registerTool() {}, registerCommand() {},
-    async exec() { throw new Error('This direct-author delivery must not invoke a maker or shell.'); } });
+    async exec() { throw new Error('This direct-author delivery must not invoke a maker or shell.'); } }, { legacyGatedEntry: true });
   const delivered = await hooks.get('before_agent_start')!({ prompt: '/skill:omd-ultradesign' }, { cwd: root });
   assert.equal(typeof delivered, 'object');
   const message = Reflect.get(delivered as object, 'message');

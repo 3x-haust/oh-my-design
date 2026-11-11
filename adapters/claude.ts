@@ -130,7 +130,7 @@ export function emitClaude({
 
   files['.claude-plugin/plugin.json'] = {
     name: 'oh-my-design',
-    description: 'Design cognition loop — frame, diverge, see, reframe',
+    description: 'One design command: ultradesign makes, has a cold eye look, and stops to show you',
     skills: './skills/',
     agents: './agents/',
     mcpServers: './.mcp.json',
@@ -148,7 +148,7 @@ export function emitClaude({
 // flavor is a second, parallel emission: same agents, same MCP server, but names stripped
 // of their "omd-" prefix and cross-references rewritten to the "oh-my-design:" plugin form.
 
-const AGENT_REF = /\bomd-(cold-eye|eye|thin-make|thin|ultradesign|humanize|critique|coach|figma)\b/g;
+const AGENT_REF = /\bomd-(internal-cold-eye|eye|ultradesign|humanize|critique|coach|figma)\b/g;
 
 const pluginizeRefs = (text: string): string => text.replace(
   AGENT_REF,

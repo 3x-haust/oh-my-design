@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "oh-my-design",
-      "description": "The design cognition loop: doubt the brief, measure real references (type and motion included), build once, look at the render, reframe. Plus a deterministic slop linter and a de-AI copy pass.",
+      "description": "One command, ultradesign: designs a marketing page, a multi-screen product or a redesign from a one-line request, one cycle at a time. Each cycle makes the work, has a cold outside eye look at it, and stops to show you; reply \"one more\" or \"continue\".",
       "version": "0.20.0",
       "author": {
         "name": "3x-haust"
@@ -20,11 +20,9 @@
       "tags": [
         "design",
         "ui",
-        "slop-linter",
         "references",
         "typography",
-        "motion",
-        "humanize"
+        "motion"
       ]
     }
   ]

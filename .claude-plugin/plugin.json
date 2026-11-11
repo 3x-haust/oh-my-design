@@ -1,7 +1,7 @@
 {
   "name": "oh-my-design",
   "version": "0.20.0",
-  "description": "Design cognition loop for coding agents — frame the problem, study measured references, commit to a structure, look at what actually rendered, and let what you see rewrite the problem. Ships a slop linter that makes 'looks AI-generated' a checkable claim.",
+  "description": "One command, ultradesign: designs a marketing page, a multi-screen product or a redesign from a one-line request, one cycle at a time. Each cycle makes the work, has a cold outside eye look at it, and stops to show you; reply \"one more\" or \"continue\".",
   "author": {
     "name": "3x-haust",
     "url": "https://github.com/3x-haust"
@@ -12,8 +12,6 @@
   "keywords": [
     "design",
     "ui",
-    "slop",
-    "lint",
     "references",
     "typography",
     "claude-code"

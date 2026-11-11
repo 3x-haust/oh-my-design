@@ -5,13 +5,11 @@ import { readRoleProfiles, PROFILE_SOURCE_ROOT } from '../core/brief/profiles.ts
 
 export const AGENT_PROMPT_BUDGETS: Readonly<Record<string, number>> = {
   eye: 350,
-  'cold-eye': 350,
+  'internal-cold-eye': 350,
 };
-/** The thin family stays at about one page per skill. */
+/** The one user-facing skill holds the whole loop and its cycle, in about two pages. */
 export const SKILL_PROMPT_BUDGETS: Readonly<Record<string, number>> = {
-  ultradesign: 5000,
-  thin: 900,
-  'thin-make': 1000,
+  ultradesign: 2000,
 };
 export const estimatedTokens = (source: string): number => Math.ceil((source.trim().match(/\S+/gu)?.length ?? 0) * 1.35);
 export function promptBudget(sourceRoot = PROFILE_SOURCE_ROOT) {

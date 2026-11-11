@@ -9,7 +9,7 @@ import {
   THIN_BEFORE, THIN_KINDS, THIN_MEMO, THIN_REFERENCE, ThinError, writeThinState, type ThinKind, type ThinState,
 } from '../../core/thin/state.ts';
 
-/** `omd thin`: the cycle mechanics of the thin design loop (state, memo, packet, archive). No stage records. */
+/** `omd thin`: the cycle mechanics the omd-ultradesign skill calls (state, memo, packet, archive). Internal: the human never types it. No stage records. */
 const USAGE = [
   'usage: omd thin start --kind marketing|product|redesign --request "<request>" [--continue]',
   '       omd thin status [--json]',
@@ -63,8 +63,8 @@ function phaseLine(state: ThinState): string {
 
 function nextStep(state: ThinState): string {
   if (state.phase === 'making') return `make cycle ${state.cycle}; when done: captures into ${resultDir(state.cycle)}, omd thin packet, the cold eye, the memo, omd thin close`;
-  if (state.phase === 'next') return 'in a fresh session, invoke the thin skill again: it runs omd thin begin and makes the next cycle';
-  return 'show the human the result, the cold eye\'s finding and the memo; they reply "one more" (omd thin go) or "continue" (omd thin go --continue)';
+  if (state.phase === 'next') return 'in a fresh session, run omd-ultradesign again: it runs omd thin begin and makes the next cycle';
+  return 'show the human the result, the cold eye\'s finding and the memo; they reply "one more" (omd thin go) or "continue" (omd thin go --continue) after omd-ultradesign';
 }
 
 function statusOf(root: string, state: ThinState) {
@@ -124,7 +124,7 @@ export async function runThin(args: readonly string[]): Promise<never> {
 
   if (sub === 'eye') {
     if (parsed.flags.has('run')) {
-      throw new ThinError('omd thin eye --run runs inside Pi (through omd_cli), on the session\'s own model. On Claude Code or Codex, spawn the omd-cold-eye agent with only the packet folder; any other reviewer can be given the packet folder and omd thin eye --prompt.');
+      throw new ThinError('omd thin eye --run runs inside Pi (through omd_cli), on the session\'s own model. On Claude Code or Codex, spawn the omd-internal-cold-eye agent with only the packet folder; any other reviewer can be given the packet folder and omd thin eye --prompt.');
     }
     const answer = one(parsed, 'record')?.trim();
     if (answer !== undefined) {

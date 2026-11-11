@@ -323,6 +323,23 @@ test('Claude doctor rejects a duplicate direct install and a legacy OMD hook', a
   }
 });
 
+test('Codex install removes retired OMD skills and agents and leaves only the one entry skill', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-codex-retired-'));
+  try {
+    mkdirSync(join(home, 'skills', 'omd-thin'), { recursive: true });
+    mkdirSync(join(home, 'skills', 'my-own'), { recursive: true });
+    mkdirSync(join(home, 'agents'), { recursive: true });
+    writeFileSync(join(home, 'agents', 'omd-cold-eye.toml'), 'name = "omd-cold-eye"\n');
+    await install([{ host: 'codex' as const, home }], UNSUPPORTED_BROWSER);
+    assert.ok(!existsSync(join(home, 'skills', 'omd-thin')), 'retired skill pruned');
+    assert.ok(!existsSync(join(home, 'agents', 'omd-cold-eye.toml')), 'retired agent pruned');
+    assert.ok(existsSync(join(home, 'skills', 'my-own')), 'the user\'s own skill stays');
+    assert.deepEqual(readdirSync(join(home, 'skills')).filter(name => name.startsWith('omd-')), ['omd-ultradesign']);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
 test('Codex doctor requires the retained Eye agent file and registration', async () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-codex-install-'));
   const detected = { host: 'codex' as const, home };
