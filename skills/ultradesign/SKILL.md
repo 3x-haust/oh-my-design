@@ -52,16 +52,23 @@ chosen work in `.omd/thin/reference/` and, for a redesign, `.omd/thin/before/`. 
 
 Work in a designer's order. Read the project's real material: README, logo, words, data, the product itself. For a
 redesign, capture the before state first (`omd thin shoot <url> --before` for every screen the work touches) and write
-the behaviour contract in `.omd/thin/before/contract.md`: screens, routes, data, what every control does. The existing
-screens, routes, data contract and behaviour stay unless the request says otherwise.
+the behaviour contract in `.omd/thin/before/contract.md`: screens, routes, data, what every control does, and the look
+that makes the product itself (its type, colour, rules, image treatment, tone). The existing screens, routes, data
+contract, behaviour and look stay unless the request says otherwise. A redesign fixes what the request says is wrong
+inside the product's own visual language: hierarchy, flow, entry points, density, empty and loading states, the phone.
+A new palette, typeface or component style is a restyle, and only a request for one allows it. Its people know this
+product by sight; someone who knew the before should recognise the after at a glance and find it easier.
 
 Gather references at image level, one job per image: a type pairing, a grid, an object treatment, a way of showing
 data. Look through real products' own sites and galleries (`omd thin refs dribbble|cosmos|siteinspire "<one job>"` shows
 the results as one image; `omd thin refs keep <image-url> --job "<the job>"` keeps one). A site whose robots.txt asks AI
 agents to stay out stays closed; `omd thin` refuses it, so take another source. In cycle 1, choose one real finished work
-and capture it (`omd thin shoot <url> --reference`). Keep it beside your own to the end.
+and capture it (`omd thin shoot <url> --reference`). Keep it beside your own to the end. For a redesign, choose a real
+product that solves the same problem well and learn how it organises the work; its look does not transfer, the
+product's own does.
 
-Decide your own idea and your own assets: an object family that code cannot draw well, recurring across the screens.
+For a redesign, the product's own imagery and assets carry over; add one only where the fix needs it. For new work,
+decide your own idea and your own assets: an object family that code cannot draw well, recurring across the screens.
 Generated images may ship as assets (`omd imagegen --kind asset`, then cut the background with
 `omd studio asset <candidate> --out public/assets/<name>.png --cut`); logos, UI chrome and per-row data stay code.
 Compose the key screens around the asset so it changes their structure, not their decoration. Render, and look at
