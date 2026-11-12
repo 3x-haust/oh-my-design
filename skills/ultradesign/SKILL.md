@@ -42,7 +42,9 @@ than the one before, or cycle 3 is reached. End your turn.
 
 This work is yours. It ships under your name and you will maintain it. If what you made is ordinary, do not polish
 it: throw it away and recompose. The target: the key screens of the request, built in the project's real code (React,
-Vite and strict TypeScript for new work), that a senior designer would sign, rendered at desktop and phone width.
+Vite and strict TypeScript for new work), that a senior designer would sign, rendered at desktop and phone width. For a
+redesign, the screens are every screen of what the request names; "the service" or "these screens" with nothing
+narrower means all of its screens and flows: lists, creation steps, detail views, editors, settings, empty states.
 
 Every cycle starts again from the request and the project's real material, and solves the request anew. If
 `.omd/thin/memo.md` holds earlier cycles, read it first as knowledge of how to work, what to avoid and what survives,
@@ -58,6 +60,12 @@ contract, behaviour and look stay unless the request says otherwise. A redesign 
 inside the product's own visual language: hierarchy, flow, entry points, density, empty and loading states, the phone.
 A new palette, typeface or component style is a restyle, and only a request for one allows it. Its people know this
 product by sight; someone who knew the before should recognise the after at a glance and find it easier.
+
+Before changing a redesign, use the product as its people do: carry each main task through from the first screen to
+its result, at desktop and on the phone, and write in the contract where it is hard: what you could not find, what took
+steps it should not, what you had to guess, what the phone hid. That list is what the redesign answers, by changing
+the structure: what comes first, what a screen is for, which steps merge or disappear, where the next action waits. A
+heading and a line of explanation over the same structure answers none of it.
 
 Gather references at image level, one job per image: a type pairing, a grid, an object treatment, a way of showing
 data. Look through real products' own sites and galleries (`omd thin refs dribbble|cosmos|siteinspire "<one job>"` shows
