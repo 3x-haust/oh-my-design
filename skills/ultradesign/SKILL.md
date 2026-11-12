@@ -41,10 +41,9 @@ than the one before, or cycle 3 is reached. End your turn.
 ## A cycle
 
 This work is yours. It ships under your name and you will maintain it. If what you made is ordinary, do not polish
-it: throw it away and recompose. The target: the key screens of the request, built in the project's real code (React,
-Vite and strict TypeScript for new work), that a senior designer would sign, rendered at desktop and phone width. For a
-redesign, the screens are every screen of what the request names; "the service" or "these screens" with nothing
-narrower means all of its screens and flows: lists, creation steps, detail views, editors, settings, empty states.
+it: throw it away and recompose. The target: the key screens of the request (for a redesign, every screen and flow of
+what it names: lists, creation steps, details, editors, settings, empty states), built in the project's real code
+(React, Vite and strict TypeScript for new work), that a senior designer would sign, at desktop and phone width.
 
 Every cycle starts again from the request and the project's real material, and solves the request anew. If
 `.omd/thin/memo.md` holds earlier cycles, read it first as knowledge of how to work, what to avoid and what survives,
@@ -53,30 +52,24 @@ the request asks for it. The memo is all that survives of earlier cycles, togeth
 chosen work in `.omd/thin/reference/` and, for a redesign, `.omd/thin/before/`. Do not try to recover anything else.
 
 Work in a designer's order. Read the project's real material: README, logo, words, data, the product itself. For a
-redesign, capture the before state first (`omd thin shoot <url> --before` for every screen the work touches) and write
-the behaviour contract in `.omd/thin/before/contract.md`: screens, routes, data, what every control does, and the look
-that makes the product itself (its type, colour, rules, image treatment, tone). The existing screens, routes, data
-contract, behaviour and look stay unless the request says otherwise. A redesign fixes what the request says is wrong
-inside the product's own visual language: hierarchy, flow, entry points, density, empty and loading states, the phone.
-A new palette, typeface or component style is a restyle, and only a request for one allows it. Its people know this
-product by sight; someone who knew the before should recognise the after at a glance and find it easier.
-
-Before changing a redesign, use the product as its people do: carry each main task through from the first screen to
-its result, at desktop and on the phone, and write in the contract where it is hard: what you could not find, what took
-steps it should not, what you had to guess, what the phone hid. That list is what the redesign answers, by changing
-the structure: what comes first, what a screen is for, which steps merge or disappear, where the next action waits. A
-heading and a line of explanation over the same structure answers none of it.
+redesign, capture the before state first (`omd thin shoot <url> --before` for every screen the work touches), then use
+the product as its people do: each main task from first screen to result, desktop and phone. Write
+`.omd/thin/before/contract.md`: screens, routes, data, what every control does, the product's look (type, colour,
+rules, image treatment, tone), and where use is hard (what you could not find, needless steps, guesses, what the phone
+hid). All of it stays except that last list, which the redesign answers by changing structure: what comes first, what
+a screen is for, which steps merge or go, where the next action waits. Headings over the same structure answer
+nothing; a new palette, typeface or component style is a restyle only a request allows. Someone who knew the before
+should recognise the after at a glance and find it easier.
 
 Gather references at image level, one job per image: a type pairing, a grid, an object treatment, a way of showing
 data. Look through real products' own sites and galleries (`omd thin refs dribbble|cosmos|siteinspire "<one job>"` shows
 the results as one image; `omd thin refs keep <image-url> --job "<the job>"` keeps one). A site whose robots.txt asks AI
 agents to stay out stays closed; `omd thin` refuses it, so take another source. In cycle 1, choose one real finished work
-and capture it (`omd thin shoot <url> --reference`). Keep it beside your own to the end. For a redesign, choose a real
-product that solves the same problem well and learn how it organises the work; its look does not transfer, the
-product's own does.
+and capture it (`omd thin shoot <url> --reference`). Keep it beside your own to the end; for a redesign, a
+product that organises the same work well, whose look does not transfer.
 
-For a redesign, the product's own imagery and assets carry over; add one only where the fix needs it. For new work,
-decide your own idea and your own assets: an object family that code cannot draw well, recurring across the screens.
+For a redesign, the product's own imagery carries over. For new work, decide your own idea and your own assets: an
+object family that code cannot draw well, recurring across the screens.
 Generated images may ship as assets (`omd imagegen --kind asset`, then cut the background with
 `omd studio asset <candidate> --out public/assets/<name>.png --cut`); logos, UI chrome and per-row data stay code.
 Compose the key screens around the asset so it changes their structure, not their decoration. Render, and look at
