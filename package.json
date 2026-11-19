@@ -1,6 +1,6 @@
 {
   "name": "@3xhaust/oh-my-design",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "One design command for Codex, Claude Code, and Pi-compatible agents: omd-ultradesign",
   "keywords": [
     "pi-package",
