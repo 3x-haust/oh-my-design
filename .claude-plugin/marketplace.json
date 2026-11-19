@@ -5,12 +5,12 @@
   "owner": {
     "name": "3x-haust"
   },
-  "version": "0.20.0",
+  "version": "0.21.0",
   "plugins": [
     {
       "name": "oh-my-design",
       "description": "One command, ultradesign: designs a marketing page, a multi-screen product or a redesign from a one-line request, one cycle at a time. Each cycle makes the work, has a cold outside eye look at it, and stops to show you; reply \"one more\" or \"continue\".",
-      "version": "0.20.0",
+      "version": "0.21.0",
       "author": {
         "name": "3x-haust"
       },
